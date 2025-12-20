@@ -48,7 +48,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages project create cyberbase --production-branch=main
+          command: pages project create cyberbase-testing --production-branch=main
         continue-on-error: true  # Ignore if project already exists
 
       - name: Deploy to Cloudflare Pages
@@ -58,7 +58,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy site/dist --project-name=cyberbase --commit-dirty=true
+          command: pages deploy site/dist --project-name=cyberbase-testing --commit-dirty=true
 
       # For PRs, just build and report success
       - name: Build status
