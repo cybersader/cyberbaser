@@ -20,32 +20,32 @@ This document defines testing workflows for Cyberbase development:
 
 ```bash
 cd site
-npm install
+bun install
 ```
 
 ### Available Commands
 
 | Command | Purpose |
 |---------|---------|
-| `npm run dev` | Start dev server with hot reload (http://localhost:4321) |
-| `npm run test:build` | Build site, report success/failure |
-| `npm run test:local` | Build + preview production build locally |
-| `npm run preview` | Preview existing build (must run `build` first) |
+| `bun run dev` | Start dev server with hot reload (http://localhost:4321) |
+| `bun run test:build` | Build site, report success/failure |
+| `bun run test:local` | Build + preview production build locally |
+| `bun run preview` | Preview existing build (must run `build` first) |
 
 ### Workflow: Before Committing
 
 ```bash
 # 1. Start dev server to see changes live
 cd site
-npm run dev
+bun run dev
 
 # 2. Make changes, verify in browser at http://localhost:4321
 
 # 3. Test production build before committing
-npm run test:build
+bun run test:build
 
 # 4. (Optional) Preview production build
-npm run test:local
+bun run test:local
 # Visit http://localhost:4321 to verify
 ```
 
@@ -141,8 +141,8 @@ This will:
 ```bash
 # Clear cache and rebuild
 rm -rf site/node_modules site/.astro
-cd site && npm install
-npm run build
+cd site && bun install
+bun run build
 ```
 
 ### Site not updating after deploy
