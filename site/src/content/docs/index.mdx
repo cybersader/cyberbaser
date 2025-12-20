@@ -1,0 +1,44 @@
+---
+title: Welcome to Cyberbase
+description: A contributable cyber knowledge wiki
+template: splash
+hero:
+  tagline: A modern, distributed knowledge base for cybersecurity and beyond
+  image:
+    file: ../../assets/houston.webp
+  actions:
+    - text: Explore Knowledge Base
+      link: /kb/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/cybersader/cyberbase
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## What is Cyberbase?
+
+Cyberbase is a **contributable knowledge wiki** built on Obsidian, designed to make it easy for anyone to contribute to a growing body of cybersecurity knowledge.
+
+<CardGrid stagger>
+	<Card title="Contribute Easily" icon="pencil">
+		Click "Edit this page" to propose changes via GitHub. No local setup required.
+	</Card>
+	<Card title="Obsidian Native" icon="document">
+		Content is authored in Obsidian with wikilinks, callouts, and rich formatting.
+	</Card>
+	<Card title="Open Source" icon="github">
+		All content is open source on GitHub. Fork, contribute, or start your own.
+	</Card>
+	<Card title="Modern Stack" icon="rocket">
+		Built with Astro, Starlight, and deployed on Cloudflare for speed.
+	</Card>
+</CardGrid>
+
+## Getting Started
+
+- **Browse**: Explore the knowledge base using the sidebar
+- **Search**: Use the search bar to find specific topics
+- **Contribute**: Click "Edit this page" on any article to propose changes

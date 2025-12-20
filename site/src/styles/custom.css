@@ -1,0 +1,26 @@
+/* Cyberbase Custom Styles */
+
+/* Override primary accent color */
+:root {
+  --sl-color-accent-low: #0d2847;
+  --sl-color-accent: #1a73e8;
+  --sl-color-accent-high: #4a9eff;
+}
+
+/* Dark mode overrides */
+:root[data-theme='dark'] {
+  --sl-color-accent-low: #0d2847;
+  --sl-color-accent: #1a73e8;
+  --sl-color-accent-high: #4a9eff;
+}
+
+/* Custom callout styles for Obsidian-like callouts */
+.callout {
+  padding: 1rem;
+  border-radius: 0.5rem;
+  margin: 1rem 0;
+  border-left: 4px solid var(--sl-color-accent);
+}
+
+/* Future: Graph view styles */
+/* Future: Wikilink styles */

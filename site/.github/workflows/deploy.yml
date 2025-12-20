@@ -1,0 +1,56 @@
+name: Deploy to Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: # Allow manual trigger
+
+# Set permissions for GITHUB_TOKEN
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history for git-based features
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'site/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: ./site
+        run: npm ci
+
+      # Future: Add translation layer steps here
+      # - name: Transform Obsidian content
+      #   run: npm run transform
+
+      - name: Build site
+        working-directory: ./site
+        run: npm run build
+
+      - name: Deploy to Cloudflare Pages
+        # Only deploy on push to main (not PRs)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy site/dist --project-name=cyberbase
+
+      # For PRs, just build and report success
+      - name: Build status
+        if: github.event_name == 'pull_request'
+        run: echo "Build successful! Ready for merge."

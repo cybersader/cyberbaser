@@ -1,0 +1,63 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+.astro/
+
+# Environment variables - NEVER COMMIT
+.env
+.env.*
+!.env.example
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Cache
+.cache/
+.parcel-cache/
+
+# Testing
+coverage/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Secrets and credentials - NEVER COMMIT
+*.pem
+*.key
+credentials.json
+secrets.json
+.secrets/
+
+# Local config that may contain secrets
+*.local.json
+*.local.yaml
+*.local.yml
+
+# Cloudflare
+.wrangler/
+wrangler.toml.local
+
+# Decap CMS local backend
+.decap/
+
+# Local development
+.netlify/
