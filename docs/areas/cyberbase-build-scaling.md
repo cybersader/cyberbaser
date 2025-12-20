@@ -225,6 +225,66 @@ Add to CI:
 
 ---
 
+## Quick Reference: Enabling Hybrid Mode
+
+When ready to switch from full static to hybrid (static + on-demand):
+
+### 1. Install Cloudflare Adapter
+
+```bash
+cd site
+bun add @astrojs/cloudflare
+```
+
+### 2. Update Astro Config
+
+```js
+// astro.config.mjs
+import { defineConfig } from 'astro/config';
+import starlight from '@astrojs/starlight';
+import cloudflare from '@astrojs/cloudflare';
+
+export default defineConfig({
+  output: 'hybrid',  // Static by default, opt-in to SSR per page
+  adapter: cloudflare(),
+  // ... rest of config
+});
+```
+
+### 3. Mark Pages for On-Demand Rendering (Optional)
+
+For pages that should render on request instead of at build time:
+
+```astro
+---
+// In any .astro file
+export const prerender = false;  // This page renders on request
+---
+```
+
+### 4. Deploy
+
+No changes needed to workflow - Cloudflare Pages automatically:
+- Serves static pages from CDN
+- Routes dynamic pages to Workers
+
+### Cost
+
+- Cloudflare Workers: 100,000 requests/day free
+- Beyond that: $5/month for 10 million requests
+
+### When to Use
+
+| Page Type | Prerender | Why |
+|-----------|-----------|-----|
+| Homepage | Yes (default) | High traffic, rarely changes |
+| Popular KB pages | Yes | Frequently accessed |
+| Long-tail content | No | Rarely accessed, not worth build time |
+| User-specific views | No | Must be dynamic |
+| Search results | No | Query-dependent |
+
+---
+
 ## Related
 
 - `cyberbase-deployment-architecture.md` - Deployment options
