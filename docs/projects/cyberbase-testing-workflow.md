@@ -31,6 +31,10 @@ bun install
 | `bun run test:build` | Build site, report success/failure |
 | `bun run test:local` | Build + preview production build locally |
 | `bun run preview` | Preview existing build (must run `build` first) |
+| `bun run test:e2e` | Run Playwright E2E tests locally |
+| `bun run test:e2e:ui` | Run tests with Playwright UI |
+| `bun run test:e2e:headed` | Run tests in visible browser |
+| `bun run test:deploy` | Run deployment tests against live site |
 
 ### Workflow: Before Committing
 
@@ -56,6 +60,59 @@ bun run test:local
 - [ ] Navigation works
 - [ ] New/modified content appears
 - [ ] No console errors in browser
+
+---
+
+## E2E Testing with Playwright
+
+### Setup (first time)
+```bash
+cd site
+bun add -d @playwright/test
+bunx playwright install chromium
+```
+
+### Running Tests
+
+```bash
+# Build first, then run tests
+bun run build
+bun run test:e2e
+
+# Or with visible browser
+bun run test:e2e:headed
+
+# Or with interactive UI
+bun run test:e2e:ui
+```
+
+### Test Against Live Site
+```bash
+# Test the deployed testing environment
+bun run test:deploy
+
+# Test any URL
+TEST_URL=https://your-site.com bun run test:e2e
+```
+
+### Test Files
+
+| File | Purpose |
+|------|---------|
+| `tests/smoke.spec.ts` | Basic functionality (navigation, search, theme) |
+| `tests/deployment.spec.ts` | Live site verification (status, assets, meta) |
+
+### Writing New Tests
+
+```typescript
+// tests/example.spec.ts
+import { test, expect } from '@playwright/test';
+
+test('my feature works', async ({ page }) => {
+  await page.goto('/my-page');
+  await expect(page.locator('h1')).toContainText('Expected Title');
+});
+```
 
 ---
 

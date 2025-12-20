@@ -9,6 +9,10 @@
     "preview": "astro preview",
     "test:build": "astro build && echo 'Build successful!'",
     "test:local": "astro build && astro preview",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:deploy": "TEST_URL=https://test.cyberbaser.com playwright test tests/deployment.spec.ts",
     "astro": "astro"
   },
   "dependencies": {
@@ -16,5 +20,8 @@
     "astro": "^5.6.1",
     "astro-loader-obsidian": "^0.10.0",
     "sharp": "^0.34.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.57.0"
   }
 }
