@@ -153,6 +153,58 @@ jobs:
 
 ---
 
+## Custom Domains
+
+### Automatic URL
+
+Every Cloudflare Pages project gets a free `*.pages.dev` subdomain:
+- Project "cyberbase" → `cyberbase.pages.dev`
+- Project "cyberbase-test" → `cyberbase-test.pages.dev`
+
+Each deployment also gets a unique URL (e.g., `3adb062d.cyberbase.pages.dev`) for previewing specific commits.
+
+### Adding a Custom Domain
+
+1. **Cloudflare Dashboard**: Pages → [Project] → Custom domains → Set up a custom domain
+2. **Enter domain**: e.g., `test.cyberbaser.com` or `wiki.yourdomain.com`
+3. **DNS Configuration**:
+   - **If domain is in Cloudflare**: Auto-configured (CNAME added automatically)
+   - **If domain is external**: Add CNAME record pointing to `<project>.pages.dev`
+
+### DNS Records (External Domain)
+
+```
+Type    Name    Target                  TTL
+CNAME   test    cyberbase.pages.dev     Auto
+CNAME   wiki    cyberbase.pages.dev     Auto
+```
+
+For apex/root domains (`cyberbaser.com` without subdomain), use Cloudflare's DNS or a provider that supports CNAME flattening.
+
+### Project Naming Strategy
+
+Consider using separate Cloudflare Pages projects for different environments:
+
+| Environment | Project Name | Domain | Purpose |
+|------------|--------------|--------|---------|
+| Production | `cyberbase` | `cyberbase.wiki` | Live site |
+| Testing | `cyberbase-test` | `test.cyberbaser.com` | Testing deployments |
+| Staging | `cyberbase-staging` | `staging.cyberbase.wiki` | Pre-production review |
+
+To use different projects, update `--project-name` in `.github/workflows/deploy.yml`:
+```yaml
+command: pages deploy site/dist --project-name=cyberbase-test
+```
+
+### Multiple Domains
+
+A single project can have multiple custom domains pointing to it. All will serve the same content:
+- `cyberbase.wiki`
+- `www.cyberbase.wiki`
+- `cyberbase.com` (if owned)
+
+---
+
 ## Future Architecture: Distributed Model
 
 When moving to a distributed knowledge network, the model changes significantly:
