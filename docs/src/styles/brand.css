@@ -148,31 +148,35 @@
 }
 
 /* On splash pages, the content-panel that contains the hero has a
- * 24px padding-top from Starlight's defaults — zero it out so the
- * hero sits flush under the banner. */
+ * 24px padding-top from Starlight's defaults — zero JUST the top
+ * (not horizontal) so the hero sits flush under the banner without
+ * killing mobile side-padding on the rest of the page content. */
 main .content-panel:has(.cb-hero) {
-  padding: 0 !important;
-  margin: 0 !important;
+  padding-top: 0 !important;
+  margin-top: 0 !important;
 }
-/* AND collapse the empty "title panel" that Starlight renders before
- * the hero panel (its PageTitle is hidden via our component override,
- * but the wrapping content-panel still has padding). Target: a
- * content-panel that is immediately followed by a content-panel
- * containing .cb-hero. */
+/* Collapse the empty "title panel" that Starlight renders before the
+ * hero panel (its PageTitle is hidden via our component override, but
+ * the wrapping content-panel still has padding). */
 main .content-panel:has(+ .content-panel .cb-hero) {
   display: none !important;
 }
-/* Kill any bottom margin/padding on the announcement banner container */
+/* Kill any bottom margin on the announcement banner container — leaves
+ * horizontal padding alone since it's set elsewhere for the banner
+ * content itself. */
 .sl-announcements-container {
-  margin: 0 !important;
-  padding: 0 !important;
+  margin-bottom: 0 !important;
+  padding-bottom: 0 !important;
 }
-/* And the outer wrappers between main and the panel */
+/* Zero only the TOP margin/padding of the markdown content on splash
+ * pages — horizontal padding is preserved so cards and content below
+ * the hero still have breathing room on mobile. */
 .sl-markdown-content:has(> .cb-hero) {
-  padding: 0 !important;
-  margin: 0 !important;
+  padding-top: 0 !important;
+  margin-top: 0 !important;
 }
-/* Zero any gap between main and the content-panel on splash pages */
+/* Zero the gap between main and the content-panel on splash pages
+ * (top only, not all margins). */
 .main-pane:has(.cb-hero) > * {
   margin-top: 0 !important;
 }
