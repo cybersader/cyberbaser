@@ -103,80 +103,142 @@ sidebar:
 
 </div>
 
-<div class="cb-flow-wrapper">
+<div class="cb-stack-wrapper">
 
-  <svg class="cb-flow-svg" viewBox="0 0 880 280" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Three contribution paths converge on a single GitHub vault and publish to a web wiki">
+  <svg class="cb-stack-svg" viewBox="0 0 920 640" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Vertical architecture cross-section: readers consume the web wiki, which is rendered by the translation layer from the GitHub vault, which is authored from multiple surfaces — Obsidian, Web CMS, inline edit, GitHub direct, and APIs.">
     <defs>
-      <linearGradient id="cb-edge" x1="0" y1="0" x2="1" y2="0">
+      <linearGradient id="cbs-hot" x1="0" y1="0" x2="1" y2="0">
         <stop offset="0" stop-color="#8b94a3"/>
-        <stop offset="1" stop-color="#10b981"/>
-      </linearGradient>
-      <linearGradient id="cb-edge-out" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0" stop-color="#10b981"/>
+        <stop offset="0.5" stop-color="#10b981"/>
         <stop offset="1" stop-color="#8b94a3"/>
       </linearGradient>
-      <filter id="cb-glow">
-        <feGaussianBlur stdDeviation="4" result="b"/>
+      <linearGradient id="cbs-hot-fill" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="rgba(16,185,129,0.18)"/>
+        <stop offset="1" stop-color="rgba(16,185,129,0.04)"/>
+      </linearGradient>
+      <filter id="cbs-glow">
+        <feGaussianBlur stdDeviation="6" result="b"/>
         <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
       </filter>
-
-      {/* Left paths: 3 entry points → vault */}
-      <path id="cbL1" d="M180,70  C300,70  380,140  450,140" fill="none"/>
-      <path id="cbL2" d="M180,140 C320,140 380,140  450,140" fill="none"/>
-      <path id="cbL3" d="M180,210 C300,210 380,140  450,140" fill="none"/>
-
-      {/* Right paths: vault → publish targets */}
-      <path id="cbR1" d="M510,140 C600,140 640,90  720,90"  fill="none"/>
-      <path id="cbR2" d="M510,140 C600,140 640,190 720,190" fill="none"/>
+      <marker id="cbs-arrow-up" viewBox="0 0 10 10" refX="5" refY="2" markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M0,10 L5,0 L10,10 Z" fill="#10b981"/>
+      </marker>
+      <marker id="cbs-arrow-down" viewBox="0 0 10 10" refX="5" refY="8" markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M0,0 L5,10 L10,0 Z" fill="#8b94a3"/>
+      </marker>
     </defs>
 
-    {/* Section labels */}
-    <text class="cb-sv-label" x="30" y="22">CONTRIBUTION PATHS</text>
-    <text class="cb-sv-label" x="850" y="22" text-anchor="end">READERS</text>
-
-    {/* Left entry items */}
-    <g class="cb-sv-item">
-      <rect x="30" y="55" width="150" height="30" rx="6"/>
-      <text x="105" y="75" text-anchor="middle">Web CMS (Decap)</text>
+    {/* ═══ LAYER 1: READERS (consumers at top) ═══ */}
+    <text class="cbs-rail-label" x="460" y="25" text-anchor="middle">CONSUMED BY</text>
+    <g class="cbs-reader">
+      <circle cx="300" cy="60" r="22"/>
+      <text class="cbs-reader-icon" x="300" y="67" text-anchor="middle">🧑‍💻</text>
+      <text class="cbs-reader-name" x="300" y="104" text-anchor="middle">practitioner</text>
     </g>
-    <g class="cb-sv-item">
-      <rect x="30" y="125" width="150" height="30" rx="6"/>
-      <text x="105" y="145" text-anchor="middle">Obsidian + Git</text>
+    <g class="cbs-reader">
+      <circle cx="400" cy="60" r="22"/>
+      <text class="cbs-reader-icon" x="400" y="67" text-anchor="middle">🎓</text>
+      <text class="cbs-reader-name" x="400" y="104" text-anchor="middle">student</text>
     </g>
-    <g class="cb-sv-item">
-      <rect x="30" y="195" width="150" height="30" rx="6"/>
-      <text x="105" y="215" text-anchor="middle">Direct GitHub</text>
+    <g class="cbs-reader">
+      <circle cx="500" cy="60" r="22"/>
+      <text class="cbs-reader-icon" x="500" y="67" text-anchor="middle">🔍</text>
+      <text class="cbs-reader-name" x="500" y="104" text-anchor="middle">searcher</text>
+    </g>
+    <g class="cbs-reader">
+      <circle cx="600" cy="60" r="22"/>
+      <text class="cbs-reader-icon" x="600" y="67" text-anchor="middle">🤝</text>
+      <text class="cbs-reader-name" x="600" y="104" text-anchor="middle">colleague</text>
     </g>
 
-    {/* Edges in */}
-    <use href="#cbL1" class="cb-sv-edge-in"/>
-    <use href="#cbL2" class="cb-sv-edge-in"/>
-    <use href="#cbL3" class="cb-sv-edge-in"/>
+    {/* Arrow: readers → web wiki */}
+    <path d="M460,115 L460,148" class="cbs-flow-up"/>
+    <text class="cbs-flow-label" x="470" y="136">reads</text>
 
-    {/* Center hub: GitHub vault */}
-    <g class="cb-sv-hub" filter="url(#cb-glow)">
-      <rect x="430" y="110" width="100" height="60" rx="10"/>
-      <text x="480" y="135" text-anchor="middle">cybersader/</text>
-      <text x="480" y="155" text-anchor="middle">cyberbase</text>
+    {/* ═══ LAYER 2: WEB WIKI ═══ */}
+    <g class="cbs-layer">
+      <rect x="120" y="150" width="680" height="60" rx="10"/>
+      <text class="cbs-layer-title" x="460" y="180" text-anchor="middle">WEB WIKI</text>
+      <text class="cbs-layer-sub" x="460" y="198" text-anchor="middle">cyberbase.wiki · search · backlinks · graph view · mobile</text>
     </g>
-    <text class="cb-sv-hub-label" x="480" y="195" text-anchor="middle">single source of truth</text>
 
-    {/* Edges out */}
-    <use href="#cbR1" class="cb-sv-edge-out"/>
-    <use href="#cbR2" class="cb-sv-edge-out"/>
+    {/* Arrow: web wiki → translation */}
+    <path d="M460,215 L460,248" class="cbs-flow-up"/>
+    <text class="cbs-flow-label" x="470" y="236">rendered by</text>
 
-    {/* Right items */}
-    <g class="cb-sv-item-out">
-      <rect x="720" y="75" width="130" height="30" rx="6"/>
-      <text x="785" y="95" text-anchor="middle">cyberbase.wiki</text>
+    {/* ═══ LAYER 3: TRANSLATION LAYER (HOT SPOT) ═══ */}
+    <g class="cbs-layer-hot" filter="url(#cbs-glow)">
+      <rect x="80" y="250" width="760" height="90" rx="14" fill="url(#cbs-hot-fill)" stroke="url(#cbs-hot)" stroke-width="2.5"/>
+      <text class="cbs-layer-title-hot" x="460" y="282" text-anchor="middle">TRANSLATION LAYER</text>
+      <text class="cbs-layer-sub" x="460" y="302" text-anchor="middle">wikilinks · callouts · embeds · math · mermaid · backlinks</text>
+      <text class="cbs-layer-sub-mini" x="460" y="322" text-anchor="middle">remark + rehype plugins — guarantees round-trip fidelity</text>
     </g>
-    <g class="cb-sv-item-out">
-      <rect x="720" y="175" width="130" height="30" rx="6"/>
-      <text x="785" y="195" text-anchor="middle">Obsidian vault</text>
+
+    {/* Bidirectional arrows: translation ↔ vault */}
+    <path d="M440,345 L440,380" class="cbs-flow-up"/>
+    <path d="M480,380 L480,345" class="cbs-flow-down"/>
+    <text class="cbs-flow-label" x="496" y="368">reads / writes back</text>
+
+    {/* ═══ LAYER 4: GITHUB VAULT ═══ */}
+    <g class="cbs-layer cbs-layer-vault">
+      <rect x="120" y="382" width="680" height="78" rx="10"/>
+      <text class="cbs-layer-title-vault" x="460" y="412" text-anchor="middle">cybersader/cyberbase</text>
+      <text class="cbs-layer-sub" x="460" y="430" text-anchor="middle">GitHub · markdown files · git history · single source of truth</text>
+      <text class="cbs-layer-sub-mini" x="460" y="448" text-anchor="middle">your vault — you own it, you can leave with it</text>
+    </g>
+
+    {/* Arrows from 5 authoring surfaces up to the vault */}
+    <path d="M130,530 L165,465" class="cbs-flow-up cbs-contrib-arrow"/>
+    <path d="M305,530 L320,465" class="cbs-flow-up cbs-contrib-arrow"/>
+    <path d="M475,530 L475,465" class="cbs-flow-up cbs-contrib-arrow cbs-contrib-hot"/>
+    <path d="M645,530 L605,465" class="cbs-flow-up cbs-contrib-arrow"/>
+    <path d="M810,530 L780,465" class="cbs-flow-up cbs-contrib-arrow"/>
+
+    {/* ═══ LAYER 5: AUTHORING SURFACES (perspectives) ═══ */}
+    <text class="cbs-rail-label" x="460" y="500" text-anchor="middle">AUTHORED FROM</text>
+
+    <g class="cbs-surface">
+      <rect x="40" y="530" width="180" height="84" rx="10"/>
+      <text class="cbs-surf-title" x="130" y="554" text-anchor="middle">Obsidian (local)</text>
+      <text class="cbs-surf-sub" x="130" y="575" text-anchor="middle">power users</text>
+      <text class="cbs-surf-mini" x="130" y="596" text-anchor="middle">full Obsidian fidelity</text>
+      <text class="cbs-surf-mini" x="130" y="610" text-anchor="middle">git push / PR</text>
+    </g>
+
+    <g class="cbs-surface">
+      <rect x="240" y="530" width="150" height="84" rx="10"/>
+      <text class="cbs-surf-title" x="315" y="554" text-anchor="middle">Web CMS</text>
+      <text class="cbs-surf-sub" x="315" y="575" text-anchor="middle">casual contributors</text>
+      <text class="cbs-surf-mini" x="315" y="596" text-anchor="middle">Decap · form editor</text>
+      <text class="cbs-surf-mini" x="315" y="610" text-anchor="middle">Open Authoring PRs</text>
+    </g>
+
+    <g class="cbs-surface cbs-surf-hot">
+      <rect x="405" y="530" width="140" height="84" rx="10" fill="rgba(16,185,129,0.08)" stroke="#10b981" stroke-width="1.5"/>
+      <text class="cbs-surf-title" x="475" y="554" text-anchor="middle">Inline edit</text>
+      <text class="cbs-surf-sub" x="475" y="575" text-anchor="middle">readers → authors</text>
+      <text class="cbs-surf-mini" x="475" y="596" text-anchor="middle">click 'edit' in-page</text>
+      <text class="cbs-surf-mini" x="475" y="610" text-anchor="middle">WYSIWYG</text>
+    </g>
+
+    <g class="cbs-surface">
+      <rect x="560" y="530" width="150" height="84" rx="10"/>
+      <text class="cbs-surf-title" x="635" y="554" text-anchor="middle">GitHub direct</text>
+      <text class="cbs-surf-sub" x="635" y="575" text-anchor="middle">developers</text>
+      <text class="cbs-surf-mini" x="635" y="596" text-anchor="middle">raw markdown</text>
+      <text class="cbs-surf-mini" x="635" y="610" text-anchor="middle">PR workflow</text>
+    </g>
+
+    <g class="cbs-surface">
+      <rect x="725" y="530" width="160" height="84" rx="10"/>
+      <text class="cbs-surf-title" x="805" y="554" text-anchor="middle">API / script</text>
+      <text class="cbs-surf-sub" x="805" y="575" text-anchor="middle">automation · teams</text>
+      <text class="cbs-surf-mini" x="805" y="596" text-anchor="middle">bots · pipelines</text>
+      <text class="cbs-surf-mini" x="805" y="610" text-anchor="middle">collaborative sync</text>
     </g>
   </svg>
 
-  <p class="cb-flow-caption">Three independent contribution paths converge on a single GitHub repo, which is then published to the web wiki <em>and</em> remains a fully-functional Obsidian vault. Round-trip editability everywhere.</p>
+  <p class="cb-stack-caption">The stack: readers consume the web wiki, which is rendered by the translation layer from the GitHub vault. <strong>Contribution flows upward from five surfaces</strong> — each serving a different perspective, from solo power users to in-page readers to team-wide automation. <em>Inline editing</em> closes the loop: any reader becomes an author without leaving the page.</p>
 </div>
 
 ---

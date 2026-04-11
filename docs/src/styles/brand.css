@@ -555,96 +555,209 @@ main .content-panel:has(+ .content-panel .cb-hero) {
  * all viewport widths without needing a layout decision in JS. */
 
 /* ────────────────────────────────────────────────────────────────────────
- * Splash flow diagram (home index.mdx)
- * The SVG uses .cb-sv-* class names; rules defined here (not inline in
- * the MDX <style> block) so they actually apply to nested SVG children.
+ * Splash architecture stack (home index.mdx)
+ * Vertical cross-section: readers at top, web wiki, translation layer
+ * (the hot spot), GitHub vault, authoring surfaces at the bottom.
+ * Rules live here in brand.css (not inline MDX) so they actually apply
+ * to SVG descendants — :global() doesn't work in MDX <style> blocks.
  * ──────────────────────────────────────────────────────────────────────── */
-.cb-flow-wrapper {
-  max-width: 960px;
-  margin: 0 auto 4rem;
+.cb-stack-wrapper {
+  max-width: 980px;
+  margin: 1.5rem auto 4rem;
   padding: 0 1rem;
 }
-.cb-flow-svg {
+.cb-stack-svg {
   width: 100%;
   height: auto;
   display: block;
 }
-.cb-flow-caption {
+.cb-stack-caption {
   text-align: center;
-  font-size: 0.85rem;
+  font-size: 0.88rem;
   color: var(--sl-color-gray-2);
-  line-height: 1.55;
-  margin-top: 1rem;
-  max-width: 48rem;
+  line-height: 1.65;
+  margin-top: 1.25rem;
+  max-width: 52rem;
   margin-left: auto;
   margin-right: auto;
 }
+.cb-stack-caption strong { color: var(--sl-color-white); font-weight: 600; }
+.cb-stack-caption em { color: var(--sl-color-accent-high); font-style: italic; }
 
-.sl-markdown-content .cb-sv-label,
-.cb-flow-svg .cb-sv-label {
+/* ── Labels (small uppercase rail labels) ─────────────────────── */
+.cb-stack-svg .cbs-rail-label {
   fill: var(--sl-color-gray-3);
   font-size: 10px;
-  letter-spacing: 0.15em;
+  letter-spacing: 0.2em;
   font-family: system-ui, sans-serif;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
 }
+.cb-stack-svg .cbs-flow-label {
+  fill: var(--sl-color-gray-3);
+  font-size: 9.5px;
+  font-family: system-ui, sans-serif;
+  font-style: italic;
+}
 
-.cb-flow-svg .cb-sv-item rect {
+/* ── Reader circles at the top ───────────────────────────────── */
+.cb-stack-svg .cbs-reader circle {
   fill: var(--sl-color-gray-6);
   stroke: var(--sl-color-gray-4);
-  stroke-width: 1;
+  stroke-width: 1.3;
+  transition: stroke 0.3s ease;
 }
-.cb-flow-svg .cb-sv-item text {
-  fill: var(--sl-color-gray-1);
-  font-size: 12px;
+.cb-stack-svg .cbs-reader:hover circle {
+  stroke: var(--sl-color-accent);
+}
+.cb-stack-svg .cbs-reader-icon {
+  font-size: 18px;
+  dominant-baseline: middle;
+}
+.cb-stack-svg .cbs-reader-name {
+  fill: var(--sl-color-gray-2);
+  font-size: 10px;
   font-family: system-ui, sans-serif;
   font-weight: 500;
 }
 
-.cb-flow-svg .cb-sv-item-out rect {
-  fill: var(--sl-color-gray-6);
-  stroke: var(--sl-color-accent);
-  stroke-width: 1.3;
-}
-.cb-flow-svg .cb-sv-item-out text {
-  fill: var(--sl-color-white);
-  font-size: 12px;
-  font-family: system-ui, sans-serif;
-  font-weight: 600;
-}
-
-.cb-flow-svg .cb-sv-hub rect {
+/* ── Standard layer boxes (web wiki, github vault) ────────────── */
+.cb-stack-svg .cbs-layer rect {
   fill: var(--sl-color-gray-5);
-  stroke: url(#cb-edge);
-  stroke-width: 2;
+  stroke: var(--sl-color-gray-4);
+  stroke-width: 1.3;
+  transition: stroke 0.3s ease, fill 0.3s ease;
 }
-.cb-flow-svg .cb-sv-hub text {
+.cb-stack-svg .cbs-layer-vault rect {
+  fill: var(--sl-color-gray-5);
+  stroke: #10b981;
+  stroke-width: 1.8;
+}
+.cb-stack-svg .cbs-layer-title {
   fill: var(--sl-color-white);
-  font-size: 13px;
-  font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
-  font-weight: 600;
+  font-size: 16px;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.08em;
 }
-.cb-flow-svg .cb-sv-hub-label {
+.cb-stack-svg .cbs-layer-title-vault {
+  fill: var(--sl-color-white);
+  font-size: 15px;
+  font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
+  font-weight: 700;
+}
+.cb-stack-svg .cbs-layer-title-hot {
+  fill: var(--sl-color-accent-high);
+  font-size: 18px;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+.cb-stack-svg .cbs-layer-sub {
+  fill: var(--sl-color-gray-2);
+  font-size: 11px;
+  font-family: system-ui, sans-serif;
+  font-weight: 400;
+}
+.cb-stack-svg .cbs-layer-sub-mini {
   fill: var(--sl-color-gray-3);
   font-size: 10px;
   font-family: system-ui, sans-serif;
   font-style: italic;
-  letter-spacing: 0.05em;
 }
 
-.cb-flow-svg .cb-sv-edge-in {
-  fill: none;
-  stroke: url(#cb-edge);
-  stroke-width: 1.6;
-  stroke-dasharray: 4 4;
-  opacity: 0.85;
+/* ── Translation layer (HOT SPOT) — gentle breathing pulse ───── */
+.cb-stack-svg .cbs-layer-hot rect {
+  animation: cbs-hot-pulse 5s ease-in-out infinite;
 }
-.cb-flow-svg .cb-sv-edge-out {
+@keyframes cbs-hot-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.15));
+  }
+  50% {
+    filter: drop-shadow(0 0 16px rgba(16, 185, 129, 0.42));
+  }
+}
+
+/* ── Authoring surface boxes at the bottom ────────────────────── */
+.cb-stack-svg .cbs-surface rect {
+  fill: var(--sl-color-gray-6);
+  stroke: var(--sl-color-gray-4);
+  stroke-width: 1;
+  transition: stroke 0.3s ease, fill 0.3s ease;
+}
+.cb-stack-svg .cbs-surface:hover rect {
+  stroke: var(--sl-color-accent);
+  fill: var(--sl-color-gray-5);
+}
+.cb-stack-svg .cbs-surf-title {
+  fill: var(--sl-color-white);
+  font-size: 12.5px;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-weight: 600;
+}
+.cb-stack-svg .cbs-surface.cbs-surf-hot .cbs-surf-title {
+  fill: var(--sl-color-accent-high);
+}
+.cb-stack-svg .cbs-surf-sub {
+  fill: var(--sl-color-gray-2);
+  font-size: 10px;
+  font-family: system-ui, sans-serif;
+  font-style: italic;
+}
+.cb-stack-svg .cbs-surf-mini {
+  fill: var(--sl-color-gray-3);
+  font-size: 9px;
+  font-family: system-ui, sans-serif;
+}
+
+/* The "inline edit" highlight surface gets its own gentle pulse */
+.cb-stack-svg .cbs-surf-hot rect {
+  animation: cbs-inline-pulse 3.6s ease-in-out infinite;
+}
+@keyframes cbs-inline-pulse {
+  0%, 100% { filter: drop-shadow(0 0 3px rgba(16, 185, 129, 0.25)); }
+  50%      { filter: drop-shadow(0 0 10px rgba(16, 185, 129, 0.55)); }
+}
+
+/* ── Flow arrows (between layers) ─────────────────────────────── */
+.cb-stack-svg .cbs-flow-up {
   fill: none;
-  stroke: url(#cb-edge-out);
-  stroke-width: 1.6;
-  opacity: 0.85;
+  stroke: url(#cbs-hot);
+  stroke-width: 1.8;
+  marker-end: url(#cbs-arrow-up);
+}
+.cb-stack-svg .cbs-flow-down {
+  fill: none;
+  stroke: #8b94a3;
+  stroke-width: 1.3;
+  stroke-dasharray: 3 3;
+  marker-end: url(#cbs-arrow-down);
+}
+
+/* Contribution-path arrows — dashed, with animated offset so they
+ * visually "flow" upward (toward the vault). Subtle but alive. */
+.cb-stack-svg .cbs-contrib-arrow {
+  stroke-dasharray: 5 4;
+  animation: cbs-flow-dash 1.6s linear infinite;
+}
+@keyframes cbs-flow-dash {
+  0%   { stroke-dashoffset: 18; }
+  100% { stroke-dashoffset: 0; }
+}
+/* The "inline edit" contribution arrow gets a faster, brighter flow */
+.cb-stack-svg .cbs-contrib-hot {
+  stroke-width: 2.2;
+  animation-duration: 1.1s;
+}
+
+/* Honor reduced-motion preferences — suspend all animations. */
+@media (prefers-reduced-motion: reduce) {
+  .cb-stack-svg .cbs-layer-hot rect,
+  .cb-stack-svg .cbs-surf-hot rect,
+  .cb-stack-svg .cbs-contrib-arrow {
+    animation: none;
+  }
 }
 
 /* ────────────────────────────────────────────────────────────────────────

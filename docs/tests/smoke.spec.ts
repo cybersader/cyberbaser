@@ -10,8 +10,8 @@ test.describe('Smoke', () => {
     await expect(page.locator('.cb-rotate-wrap')).toBeVisible();
     // CTA buttons render
     await expect(page.getByRole('link', { name: /Read the vision/i })).toBeVisible();
-    // Flow SVG renders
-    await expect(page.locator('.cb-flow-svg')).toBeVisible();
+    // Architecture stack SVG renders
+    await expect(page.locator('.cb-stack-svg')).toBeVisible();
   });
 
   test('announcement banner renders', async ({ page }) => {
