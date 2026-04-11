@@ -14,50 +14,121 @@ sidebar:
 
   <script is:inline>{`
     (function() {
+      var headline = document.querySelector('.cb-hero-headline');
       var wrap = document.querySelector('.cb-rotate-wrap');
       var rotate = document.querySelector('.cb-rotate');
       var words = document.querySelectorAll('.cb-rotate > span');
-      if (!wrap || !rotate || !words.length) return;
+      if (!headline || !wrap || !rotate || !words.length) return;
+
+      // words[last] is a duplicate of words[0] so the scroll animation has
+      // a smooth target before snapping back. Only cycle through 0..n-1.
       var n = words.length - 1;
       var i = 0;
-      var widths = [];
 
-      function setWidths() {
-        var test = document.createElement('span');
-        test.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;';
-        test.className = wrap.className;
-        wrap.parentNode.appendChild(test);
-        var newWidths = [];
-        for (var j = 0; j <= n; j++) {
-          test.textContent = words[j].textContent;
-          newWidths.push(Math.ceil(test.getBoundingClientRect().width) + 8);
-        }
-        wrap.parentNode.removeChild(test);
-        widths = newWidths;
-        wrap.style.width = widths[i] + 'px';
+      // Helper: build a hidden measurement span that inherits headline font
+      function makeTest() {
+        var t = document.createElement('span');
+        t.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;font:inherit;';
+        return t;
       }
 
+      // Measure the widest word (used as the locked wrap width — no more
+      // width animation per tick means no layout shifts).
+      function measureMaxWord() {
+        var test = makeTest();
+        test.className = wrap.className; // inherit .cb-rotate-wrap font/gradient
+        headline.appendChild(test);
+        var max = 0;
+        for (var j = 0; j <= n; j++) {
+          test.textContent = words[j].textContent;
+          var w = test.getBoundingClientRect().width;
+          if (w > max) max = w;
+        }
+        headline.removeChild(test);
+        return Math.ceil(max) + 8; // fudge for kerning + rounding
+      }
+
+      // Walk backward from wrap to the nearest <br/> (or start of headline),
+      // collecting text nodes. That's the prefix on the SAME visual line.
+      function measurePrefixOnSameLine() {
+        var text = '';
+        var node = wrap.previousSibling;
+        while (node) {
+          if (node.nodeName === 'BR') break;
+          if (node.nodeType === Node.TEXT_NODE) text = node.textContent + text;
+          node = node.previousSibling;
+        }
+        var test = makeTest();
+        test.textContent = text;
+        headline.appendChild(test);
+        var w = test.getBoundingClientRect().width;
+        headline.removeChild(test);
+        return w;
+      }
+
+      // Same idea forward — the suffix text that sits after the wrap on
+      // the same visual line, until the next <br/> or end of headline.
+      function measureSuffixOnSameLine() {
+        var text = '';
+        var node = wrap.nextSibling;
+        while (node) {
+          if (node.nodeName === 'BR') break;
+          if (node.nodeType === Node.TEXT_NODE) text += node.textContent;
+          node = node.nextSibling;
+        }
+        var test = makeTest();
+        test.textContent = text;
+        headline.appendChild(test);
+        var w = test.getBoundingClientRect().width;
+        headline.removeChild(test);
+        return w;
+      }
+
+      // Layout decision: does (prefix + widest word + suffix) fit on one
+      // line inside the headline container? If yes → keep the rotate wrap
+      // inline with "that ... can contribute to." on the same line. If no
+      // → add .cb-headline-stacked which breaks the wrap onto its own line.
+      function layoutCheck(maxWordWidth) {
+        var container = headline.getBoundingClientRect().width;
+        var prefix = measurePrefixOnSameLine();
+        var suffix = measureSuffixOnSameLine();
+        var needed = prefix + maxWordWidth + suffix + 24; // 24px safety
+        if (needed > container) {
+          headline.classList.add('cb-headline-stacked');
+        } else {
+          headline.classList.remove('cb-headline-stacked');
+        }
+      }
+
+      // Lock the wrap width to the widest word (in non-stacked mode) so
+      // rotation never causes the line to reflow. In stacked mode the CSS
+      // overrides this to display:block; width:auto.
+      function applyLayout() {
+        var maxW = measureMaxWord();
+        wrap.style.width = maxW + 'px';
+        layoutCheck(maxW);
+      }
+
+      // Rotate one word forward. Pure transform — no width change.
       function tick() {
         i = (i + 1) % (n + 1);
-        wrap.style.width = widths[i] + 'px';
         rotate.style.transform = 'translateY(-' + (i * 1.15) + 'em)';
         if (i === n) {
+          // Landed on the duplicate word — snap back to index 0 without
+          // animation so the next tick moves smoothly forward again.
           setTimeout(function() {
             rotate.style.transition = 'none';
-            wrap.style.transition = 'none';
             rotate.style.transform = 'translateY(0)';
-            wrap.style.width = widths[0] + 'px';
             i = 0;
-            void rotate.offsetHeight;
+            void rotate.offsetHeight; // force reflow
             rotate.style.transition = '';
-            wrap.style.transition = '';
           }, 550);
         }
       }
 
       function start() {
         requestAnimationFrame(function() {
-          setWidths();
+          applyLayout();
           setInterval(tick, 2500);
         });
       }
@@ -65,7 +136,7 @@ sidebar:
       var resizeTimer = null;
       window.addEventListener('resize', function() {
         clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(setWidths, 150);
+        resizeTimer = setTimeout(applyLayout, 150);
       });
 
       if (document.fonts && document.fonts.ready) {

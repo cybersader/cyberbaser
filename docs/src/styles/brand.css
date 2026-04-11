@@ -441,22 +441,47 @@
   overflow: hidden;
   height: 1.15em;
   line-height: 1.15em;
-  transition: width 0.35s cubic-bezier(0.5, 0, 0.2, 1);
-  /* Silver → emerald gradient clipped to the text shape */
-  background: var(--cb-gradient-primary-soft);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
+  /* No width transition — the wrap width is locked to the widest word by
+   * JS at load time, so each tick is pure translateY. Previous design
+   * animated width per tick and caused the whole headline to reflow. */
+  text-align: center;
 }
 .cb-rotate {
   display: block;
   transition: transform 0.4s cubic-bezier(0.5, 0, 0.2, 1);
 }
-.cb-rotate > span {
+/* Specificity bumped (cb-hero-headline ancestor) to beat any
+ * Starlight/Nova default span rules that clobber the gradient.
+ *
+ * Uses background-image: directly (not `background:` shorthand) and a
+ * literal gradient (not var()). The shorthand + var combo was silently
+ * resolving to empty in Chromium — the var is defined on :root but the
+ * shorthand parser was discarding the whole declaration when the var
+ * value didn't round-trip through its validator. Direct longhand works. */
+.sl-markdown-content .cb-hero-headline .cb-rotate > span,
+.cb-hero-headline .cb-rotate > span {
   display: block;
   line-height: 1.15em;
   white-space: nowrap;
+  background-image: linear-gradient(135deg, #c7ced9 0%, #10b981 100%) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+}
+:root[data-theme='light'] .sl-markdown-content .cb-hero-headline .cb-rotate > span,
+:root[data-theme='light'] .cb-hero-headline .cb-rotate > span {
+  background-image: linear-gradient(135deg, #64748b 0%, #059669 100%) !important;
+}
+
+/* Stacked mode — the JS adds .cb-headline-stacked to .cb-hero-headline
+ * when the widest rotating word would overflow the line alongside
+ * "that ... can contribute to." Forces the wrap onto its own line so
+ * the rest of the sentence stays put. */
+.cb-hero-headline.cb-headline-stacked .cb-rotate-wrap {
+  display: block;
+  width: auto !important; /* override the JS-locked pixel width */
+  margin: 0 auto;
 }
 
 /* ────────────────────────────────────────────────────────────────────────
