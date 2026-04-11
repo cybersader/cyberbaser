@@ -136,8 +136,12 @@
  * ──────────────────────────────────────────────────────────────────────── */
 .cb-hero {
   position: relative;
-  padding: 0 1rem 3rem;
-  margin-top: -3rem;
+  padding: 2rem 1rem 3rem;
+  /* No negative margin — previous -3rem tuned for "announcement banner
+   * present" broke when the banner was dismissed, yanking the eyebrow
+   * pill up against the nav bar. Internal padding-top (2rem) gives the
+   * hero breathing room regardless of banner state. */
+  margin-top: 0;
   text-align: center;
   background: var(--cb-gradient-glow);
   overflow: hidden;
@@ -149,6 +153,14 @@
 main .content-panel:has(.cb-hero) {
   padding: 0 !important;
   margin: 0 !important;
+}
+/* AND collapse the empty "title panel" that Starlight renders before
+ * the hero panel (its PageTitle is hidden via our component override,
+ * but the wrapping content-panel still has padding). Target: a
+ * content-panel that is immediately followed by a content-panel
+ * containing .cb-hero. */
+main .content-panel:has(+ .content-panel .cb-hero) {
+  display: none !important;
 }
 /* Kill any bottom margin/padding on the announcement banner container */
 .sl-announcements-container {
@@ -469,12 +481,31 @@ main .content-panel:has(.cb-hero) {
  * The wrap gets the silver→emerald gradient via background-clip:text; its
  * parent headline has a solid color, so nothing needs to be unset.
  * ──────────────────────────────────────────────────────────────────────── */
-/* Group that keeps "A" glued to the rotating word so they never wrap
+/* Group that keeps "A" glued to the rotating chip so they never wrap
  * independently. On narrow viewports the whole group breaks as one
  * unit to the next line — "A" stays with its word. */
 .cb-rotate-group {
   display: inline-block;
   white-space: nowrap;
+}
+
+/* Pill container around the rotating wrap — makes the rotating word
+ * read as a "chip" / UI element, not just colored text. Border +
+ * subtle emerald tint + padding. Applied to an outer span so the
+ * rotation math inside .cb-rotate-wrap stays untouched. */
+.cb-rotate-chip {
+  display: inline-block;
+  padding: 0.15em 0.7em;
+  margin: 0 0.1em;
+  border: 1px solid var(--cb-emerald-border);
+  border-radius: 99px;
+  background: var(--cb-emerald-glow);
+  vertical-align: baseline;
+  line-height: 1;
+}
+:root[data-theme='light'] .cb-rotate-chip {
+  border-color: rgba(5, 150, 105, 0.35);
+  background: rgba(5, 150, 105, 0.07);
 }
 .cb-rotate-wrap {
   display: inline-block;
