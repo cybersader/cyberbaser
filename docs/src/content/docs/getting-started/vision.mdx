@@ -1,0 +1,74 @@
+---
+title: Vision
+description: What cyberbaser feels like from each stakeholder's perspective once it's working. Not features — user journeys.
+sidebar:
+  order: 10
+status: research
+tags: [vision]
+---
+
+:::caution[Scaffolded — research-phase content]
+This page is an early draft. The scenarios below are reasoned forward from the principles, not from lived experience. Each one will get sharper as the translation layer and contribution workflows get implemented.
+:::
+
+## In one paragraph
+
+Cyberbaser turns an Obsidian cybersecurity knowledge vault into a living, contributable public wiki — one that anyone can read on the web, edit via a zero-git CMS, or extend from their own Obsidian vault, without any of those paths corrupting the others. GitHub is the single source of truth. Obsidian semantics round-trip. Contribution is frictionless at every skill level.
+
+## From a reader's perspective
+
+A junior analyst lands on `cyberbase.wiki/dns-tunneling/` from a Google search. The page loads fast (static HTML, Cloudflare Pages). It reads like a well-maintained wiki — clean typography, code blocks with syntax highlighting, callouts for gotchas, cross-links to related pages. At the bottom: an "Edit this page" link. Next to each heading: a tiny anchor to copy a direct link. A "last updated" date that matches the git commit. They bookmark it, copy a paragraph into their notes, move on.
+
+They don't know or care that it came from an Obsidian vault.
+
+## From an Obsidian-native contributor's perspective
+
+Cybersader notices a gap in the DNS tunneling page — a detection technique isn't mentioned. Opens Obsidian, finds the file in the vault, adds a `> [!tip]` callout with the technique, wikilinks it to the detection overview page. Commits via the obsidian-git plugin. Push happens automatically. Within a minute, the Cloudflare Pages build completes and the change is live on `cyberbase.wiki`.
+
+Friction points that should NOT happen: losing the Obsidian link graph; the new callout rendering as plain text on the web; the translation layer dropping the wikilink.
+
+## From a zero-git contributor's perspective
+
+A compliance manager at an enterprise reads the NIST 800-53 mapping page and spots an outdated reference. Clicks "Suggest edit" on the page. GitHub's OAuth modal appears; they sign in with their work GitHub account. A Decap CMS editor opens, pre-loaded with the page's markdown (rendered in a rich editor, not raw). They fix the reference, write a one-line commit message, click Submit. Behind the scenes: Decap forks the repo to their GitHub, makes the commit on a branch, opens a PR to `cybersader/cyberbase` with an auto-generated title.
+
+They never clone anything. They never learn git. Their edit shows up as a PR in Cybersader's GitHub notifications, gets reviewed, merged, and goes live.
+
+## From a direct-GitHub contributor's perspective
+
+A developer who knows git but has never used Obsidian reads a page and wants to fix a typo. Clicks "Edit this page" → lands in GitHub's web editor with the raw markdown. They see `[[DNS filtering]]` syntax and wonder what it is, but GitHub renders it as plain text and they ignore it. They fix the typo, commit via the web UI, open a PR. It merges. Their edit is live.
+
+The wikilink they ignored still resolves correctly on the wiki because the translation layer handles it at build time. The direct-GitHub path is lossy but additive-safe — you can't break anything by being a git-native editor.
+
+## From Cybersader's perspective (the maintainer)
+
+Most changes arrive as PRs. Each PR auto-generates a Cloudflare Pages preview deployment so Cybersader can see the change rendered before merging. Trusted contributors (a small list in a config file) get auto-merge on trivial diffs (typo fixes, reference updates). Non-trivial changes get a quick review in the Obsidian vault locally — the PR branch is checked out, the file looks right in Obsidian, merge. The entire review loop takes 60–90 seconds.
+
+Critically: the maintainer never has to leave Obsidian as their primary authoring surface. Web contributions flow into the same file the maintainer edits by hand. No parallel systems to keep in sync.
+
+## A day in the life
+
+On a Tuesday, three things happen without anyone coordinating:
+
+1. **09:14** — A reader in Berlin finds a typo in the TLS downgrade page and fixes it via the Web CMS. Decap opens a PR. Preview deploy finishes in 2 minutes. Cybersader merges on their phone during coffee.
+2. **11:47** — A consultant in Austin pushes a commit directly to main from their Obsidian vault: three new pages about Kerberoasting detection, fully wikilinked to existing content. The build deploys. The new pages are immediately discoverable via search on the wiki.
+3. **16:22** — A grad student opens a PR via GitHub web with one-line code block fixes across four pages. They've never used Obsidian. Their PR passes preview. Merged.
+
+None of these contributors know the others exist. None of them had to pick a "correct" entry point. All three paths produced identical-quality edits to the same vault.
+
+## Anti-features (what this deliberately does NOT do)
+
+- **Does not host the Obsidian vault.** The vault lives in `cybersader/cyberbase`. Cyberbaser reads from it.
+- **Does not support realtime collaborative editing.** Conflicts resolve via git, not CRDT. That's fine — the contribution rate is low and async.
+- **Does not replace Obsidian as a primary authoring tool.** Maintainers still use Obsidian locally; the Web CMS is for contributors who don't.
+- **Does not try to be a general-purpose Obsidian publisher.** It's built for cyber content first; generalization is a stretch goal, not a design goal.
+- **Does not solve search in the vault itself.** Wiki search uses Pagefind (Starlight default). In-vault search stays in Obsidian.
+
+## Non-goals for v1
+
+These might happen later but are explicitly not v1:
+
+- Comments/discussion on pages (out of scope; GitHub Issues is the fallback)
+- User accounts beyond GitHub OAuth
+- Versioning / diffing UI on the reader surface (git history is the fallback)
+- Multi-vault publishing from the same pipeline
+- Paid hosting or SaaS offering

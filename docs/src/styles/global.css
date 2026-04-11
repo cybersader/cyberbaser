@@ -1,0 +1,3 @@
+@import 'tailwindcss';
+@source '../../node_modules/starlight-theme-nova/src';
+@source '../../node_modules/starlight-theme-nova/components';

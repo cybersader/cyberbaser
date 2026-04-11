@@ -1,0 +1,217 @@
+---
+title: First-Principles Primitives
+description: The core concepts the rest of the project reasons about. If you understand these, every design decision downstream makes sense.
+sidebar:
+  order: 3
+status: research
+tags: [concepts, primitives]
+---
+
+These are the primitives. Everything in [Design](/cyberbaser/design/) reduces to combinations and constraints on these concepts.
+
+---
+
+## Wikilink
+
+<div class="cb-def">
+  <div class="cb-def-what">
+    <span class="cb-def-label">What</span>
+    <p>`[[Page Name]]` syntax that resolves to a link based on <em>page title</em>, not file path. Optional alias: `[[Page Name|display text]]`. Invented by wiki systems, canonicalized by Obsidian.</p>
+  </div>
+  <div class="cb-def-why">
+    <span class="cb-def-label">Why it matters</span>
+    <p>Standard markdown links (`[text](path/to/file.md)`) break whenever a file moves. Wikilinks survive reorganization because they reference identity, not location. For a growing knowledge base this is the difference between a living wiki and a graveyard of broken links.</p>
+  </div>
+  <div class="cb-def-how">
+    <span class="cb-def-label">How cyberbaser uses it</span>
+    <p>Wikilinks must round-trip cleanly. A Web CMS edit that produces `[[X]]` must be identical to an Obsidian edit that produces `[[X]]`. If the translation layer ever flattens to `[X](x.md)` the principle of round-trip fidelity is broken.</p>
+  </div>
+</div>
+
+---
+
+## Backlink
+
+<div class="cb-def">
+  <div class="cb-def-what">
+    <span class="cb-def-label">What</span>
+    <p>An automatically-generated "pages that link to this one" list, computed from the full set of outgoing wikilinks in the vault.</p>
+  </div>
+  <div class="cb-def-why">
+    <span class="cb-def-label">Why it matters</span>
+    <p>Backlinks turn a linear document into an emergent knowledge graph. Readers discover related content without navigation; authors see ripples of their edits. This is <em>the</em> feature that makes wiki-style reading distinct from reading a docs site.</p>
+  </div>
+  <div class="cb-def-how">
+    <span class="cb-def-label">How cyberbaser uses it</span>
+    <p>Backlinks must be computed at build time (scanning the full vault) and rendered in a standard position on every page — bottom of content, or in a right-sidebar panel. The `starlight-site-graph` plugin gets us partway; the rest is a translation-layer responsibility.</p>
+  </div>
+</div>
+
+---
+
+## Translation Layer
+
+<div class="cb-def cb-def-hard">
+  <div class="cb-def-what">
+    <span class="cb-def-label">What</span>
+    <p>The pipeline that converts Obsidian-flavored markdown into web-safe HTML (or MDX) while preserving enough semantic fidelity that a round-trip edit doesn't corrupt the source.</p>
+  </div>
+  <div class="cb-def-why">
+    <span class="cb-def-label">Why it matters</span>
+    <p>This is the single hardest and most load-bearing concept in the project. Get this right and the three contribution paths compose cleanly; get it wrong and the entire "round-trip editability" principle is an aspiration instead of a property. See <a href="/cyberbaser/design/translation-layer/">Design · Translation Layer</a> for the deep treatment.</p>
+  </div>
+  <div class="cb-def-how">
+    <span class="cb-def-label">How cyberbaser uses it</span>
+    <p>A tiered feature list: Tier 1 (full support, must round-trip), Tier 2 (partial support, best-effort), Tier 3 (not supported, documented workaround). Each Tier 1 feature gets a fixture page + expected output + round-trip correctness snapshot.</p>
+  </div>
+</div>
+
+---
+
+## Open Authoring
+
+<div class="cb-def">
+  <div class="cb-def-what">
+    <span class="cb-def-label">What</span>
+    <p>A CMS pattern (popularized by Decap/Netlify CMS) where an unauthenticated or lightly-authenticated user can propose changes via a forked-PR workflow, without needing direct commit access to the source repo.</p>
+  </div>
+  <div class="cb-def-why">
+    <span class="cb-def-label">Why it matters</span>
+    <p>Removes the biggest contribution barrier. Without Open Authoring, "contributors shouldn't need git" is impossible — you'd either need direct write access (which is a security problem) or contributors would have to fork manually (which is exactly the friction we're trying to eliminate).</p>
+  </div>
+  <div class="cb-def-how">
+    <span class="cb-def-label">How cyberbaser uses it</span>
+    <p>Primary contribution path for the Web CMS entry point. Decap handles the fork-and-PR dance; an OAuth proxy (Cloudflare Pages Function) handles the GitHub auth handshake.</p>
+  </div>
+</div>
+
+---
+
+## Round-Trip Editability
+
+<div class="cb-def cb-def-hard">
+  <div class="cb-def-what">
+    <span class="cb-def-label">What</span>
+    <p>The property that a contributor can edit the same page in Obsidian, in the Web CMS, or on GitHub, and the other surfaces see the change without corruption. A → B → A === A.</p>
+  </div>
+  <div class="cb-def-why">
+    <span class="cb-def-label">Why it matters</span>
+    <p>Without this, contributors get locked into whichever surface they started with, and the whole "three independent paths" vision collapses. It's also the only way the maintainer can keep using Obsidian as their primary authoring tool without dreading web contributions.</p>
+  </div>
+  <div class="cb-def-how">
+    <span class="cb-def-label">How cyberbaser uses it</span>
+    <p>Constrains every translation-layer decision. No lossy transforms. No "CMS-specific" schema that's different from the vault schema. Every Tier 1 feature gets a round-trip test fixture.</p>
+  </div>
+</div>
+
+---
+
+## Content-Addressable / Stable URLs
+
+<div class="cb-def">
+  <div class="cb-def-what">
+    <span class="cb-def-label">What</span>
+    <p>The property that a page's URL doesn't change when the vault is reorganized.</p>
+  </div>
+  <div class="cb-def-why">
+    <span class="cb-def-label">Why it matters</span>
+    <p>Breakage of external links (from blog posts, from other wikis, from Google's index) is a cardinal sin of any long-lived knowledge site. The whole point of publishing is that links stick.</p>
+  </div>
+  <div class="cb-def-how">
+    <span class="cb-def-label">How cyberbaser uses it</span>
+    <p>Open question for now — frontmatter slug? permanent hash? simple title-slug with redirects on rename? See <a href="/cyberbaser/reference/open-questions/">Open Questions</a>.</p>
+  </div>
+</div>
+
+---
+
+## Single Source of Truth (SSOT)
+
+<div class="cb-def">
+  <div class="cb-def-what">
+    <span class="cb-def-label">What</span>
+    <p>The principle that exactly one authoritative place exists for any given piece of content. Every other representation is derived.</p>
+  </div>
+  <div class="cb-def-why">
+    <span class="cb-def-label">Why it matters</span>
+    <p>Prevents drift between representations, makes conflict resolution tractable (one side always wins), and keeps the mental model of the system simple.</p>
+  </div>
+  <div class="cb-def-how">
+    <span class="cb-def-label">How cyberbaser uses it</span>
+    <p><code>cybersader/cyberbase</code> is the SSOT. The web wiki is derived at build time. The Obsidian vault (as local files on the maintainer's machine) is a read-view of the repo's current `main` branch. The Web CMS produces edits against the repo; it doesn't hold any state.</p>
+  </div>
+</div>
+
+---
+
+## Vault
+
+<div class="cb-def">
+  <div class="cb-def-what">
+    <span class="cb-def-label">What</span>
+    <p>In Obsidian parlance, a folder of markdown files + a `.obsidian/` config directory that behaves as a self-contained knowledge base.</p>
+  </div>
+  <div class="cb-def-why">
+    <span class="cb-def-label">Why it matters</span>
+    <p>The vault is the <em>unit of content</em> cyberbaser operates on. It's the durable artifact; cyberbaser is the delivery mechanism.</p>
+  </div>
+  <div class="cb-def-how">
+    <span class="cb-def-label">How cyberbaser uses it</span>
+    <p>The cyberbase vault lives in its own GitHub repo (<code>cybersader/cyberbase</code>). Cyberbaser reads from it (possibly as a git submodule, possibly as a build-time clone) and publishes it. The vault must remain a fully functional Obsidian vault independent of cyberbaser.</p>
+  </div>
+</div>
+
+<style>{`
+  .cb-def {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.9rem;
+    padding: 1.4rem;
+    background: var(--sl-color-gray-6);
+    border: 1px solid var(--sl-color-gray-4);
+    border-radius: 10px;
+    margin: 1.5rem 0 2rem;
+    position: relative;
+  }
+  .cb-def::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--cb-gradient-primary-soft);
+    border-radius: 10px 10px 0 0;
+    opacity: 0.5;
+  }
+  .cb-def-hard::before {
+    opacity: 1;
+    height: 3px;
+  }
+  .cb-def > div {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 0.8rem;
+    align-items: start;
+  }
+  .cb-def-label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--sl-color-gray-3);
+    padding-top: 0.25rem;
+  }
+  .cb-def-what .cb-def-label { color: var(--sl-color-gray-2); }
+  .cb-def-why .cb-def-label { color: var(--sl-color-accent); }
+  .cb-def-how .cb-def-label { color: var(--sl-color-gray-1); }
+  .cb-def p {
+    margin: 0;
+    color: var(--sl-color-gray-1);
+    line-height: 1.6;
+  }
+  @media (max-width: 640px) {
+    .cb-def > div {
+      grid-template-columns: 1fr;
+      gap: 0.3rem;
+    }
+  }
+`}</style>

@@ -1,0 +1,131 @@
+---
+title: The Problem
+description: Why existing Obsidian-to-web tools don't cover the contribution case, and what cyberbaser actually solves.
+sidebar:
+  order: 1
+status: research
+tags: [problem, motivation]
+---
+
+## TL;DR
+
+**An Obsidian vault is a great private knowledge base. Turning it into a *contributable* public wiki — without losing Obsidian's affordances or locking contributors into git — is a problem nobody has fully solved.** Cyberbaser is the attempt.
+
+## The three axes of friction
+
+Three things need to work simultaneously. Existing tools pick one or two and concede the rest.
+
+<div class="cb-triangle-wrapper" role="img" aria-label="Triangle showing the three forces that cyberbaser has to satisfy simultaneously">
+  <svg viewBox="0 0 520 440" preserveAspectRatio="xMidYMid meet" class="cb-triangle-svg">
+    <defs>
+      <linearGradient id="pt-edge" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#8b94a3"/>
+        <stop offset="1" stop-color="#10b981"/>
+      </linearGradient>
+      <filter id="pt-glow">
+        <feGaussianBlur stdDeviation="6" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+
+    {/* Triangle edges */}
+    <path d="M260,60 L470,380 L50,380 Z"
+          fill="none" stroke="url(#pt-edge)" stroke-width="1.5"
+          stroke-dasharray="3 5" opacity="0.6"/>
+
+    {/* Vertex 1 — top: Obsidian fidelity */}
+    <g filter="url(#pt-glow)">
+      <circle cx="260" cy="60" r="42" fill="#141921" stroke="#10b981" stroke-width="2"/>
+    </g>
+    <text x="260" y="55" text-anchor="middle" class="cb-tri-label">Obsidian</text>
+    <text x="260" y="72" text-anchor="middle" class="cb-tri-label">fidelity</text>
+    <text x="260" y="120" text-anchor="middle" class="cb-tri-desc">wikilinks, callouts,</text>
+    <text x="260" y="134" text-anchor="middle" class="cb-tri-desc">embeds, graph, round-trip</text>
+
+    {/* Vertex 2 — bottom right: Contribution friction */}
+    <g filter="url(#pt-glow)">
+      <circle cx="470" cy="380" r="42" fill="#141921" stroke="#10b981" stroke-width="2"/>
+    </g>
+    <text x="470" y="375" text-anchor="middle" class="cb-tri-label">Low-friction</text>
+    <text x="470" y="392" text-anchor="middle" class="cb-tri-label">contribution</text>
+    <text x="470" y="422" text-anchor="middle" class="cb-tri-desc">no git required</text>
+
+    {/* Vertex 3 — bottom left: No lock-in */}
+    <g filter="url(#pt-glow)">
+      <circle cx="50" cy="380" r="42" fill="#141921" stroke="#10b981" stroke-width="2"/>
+    </g>
+    <text x="50" y="375" text-anchor="middle" class="cb-tri-label">No vendor</text>
+    <text x="50" y="392" text-anchor="middle" class="cb-tri-label">lock-in</text>
+    <text x="50" y="422" text-anchor="middle" class="cb-tri-desc">GitHub = SSOT</text>
+
+    {/* Existing solutions as annotations on edges */}
+    <text x="370" y="230" class="cb-tri-tool" text-anchor="start">Obsidian Publish</text>
+    <text x="370" y="245" class="cb-tri-tool-sub" text-anchor="start">fidelity + contribution</text>
+    <text x="370" y="258" class="cb-tri-tool-sub" text-anchor="start">— concedes SSOT</text>
+
+    <text x="150" y="230" class="cb-tri-tool" text-anchor="end">Quartz v4</text>
+    <text x="150" y="245" class="cb-tri-tool-sub" text-anchor="end">fidelity + no lock-in</text>
+    <text x="150" y="258" class="cb-tri-tool-sub" text-anchor="end">— concedes contribution</text>
+
+    <text x="260" y="410" class="cb-tri-tool" text-anchor="middle">awesome-list + markdown</text>
+    <text x="260" y="424" class="cb-tri-tool-sub" text-anchor="middle">contribution + no lock-in — concedes fidelity</text>
+  </svg>
+  <p class="cb-triangle-caption">
+    Every existing Obsidian-to-web tool sits on an <em>edge</em>, not in the middle. Cyberbaser's thesis is that with the right translation layer, you can occupy the interior.
+  </p>
+</div>
+
+## The specific pain
+
+A cyber practitioner wants to publish knowledge — both for themselves and for others to find, reference, and correct. They already use Obsidian (or something like it) as their personal authoring surface. They reach for a publisher and find three kinds of tools:
+
+1. **Obsidian-aware publishers** (Obsidian Publish, Quartz, Digital Garden). Great fidelity — wikilinks work, callouts render, embeds show up. But contribution is an afterthought. Readers can't edit. At best, you get a GitHub "Edit" link that drops them into a raw markdown editor with no Obsidian syntax support.
+2. **Git-backed CMSes** (Decap, Sveltia, Tina). Great contribution story — Open Authoring lets anonymous readers submit PRs. But they don't understand Obsidian syntax. Wikilinks flatten to plain text. Callouts become quoted lines. The vault-side user and the CMS user are writing different dialects.
+3. **Docs platforms repurposed as wikis** (Docusaurus, Mintlify, GitBook). Beautiful reader UX, polished contribution flows. But opinionated content schemas; forcing Obsidian content into their shape is lossy and maintenance-heavy.
+
+None of these occupy the interior of the triangle. **Cyberbaser's hypothesis is that the gap is a translation-layer problem, not a new-SSG problem** — if you can guarantee round-trip fidelity between Obsidian syntax and a web-edit surface, you can compose an Obsidian-aware publisher with a git-backed CMS and get all three properties.
+
+## Who feels the pain
+
+> [!info]- Primary user — the vault-native practitioner
+> Already uses Obsidian. Has a personal cyber knowledge base they'd like to share. Values the wiki feel (crosslinks, discovery). Will not move to Notion or Publish because of vendor lock-in. Will not hand-maintain a separate publishing stack because it's too much work.
+
+> [!info]- Secondary user — the domain-expert contributor
+> Reads the published wiki, spots a gap or error. Knows the topic cold. **Does not know git.** Has a GitHub account because they needed one for something else. Would contribute if it took three clicks; will not contribute if it takes a terminal.
+
+> [!info]- Tertiary user — the git-native developer
+> Comfortable with git but has never used Obsidian. Treats the vault repo like any other docs repo — edit a `.md` file, open a PR. Shouldn't be forced to understand Obsidian syntax to contribute a typo fix.
+
+## Why existing solutions don't cover this
+
+Three constraints fall out of the principles. Each existing solution fails at least one.
+
+| | Obsidian fidelity | Low-friction contribution | No vendor lock-in |
+|---|---|---|---|
+| **Obsidian Publish** | ✅ | ⚠️ (read-only for visitors) | ❌ (proprietary hosting) |
+| **Quartz v4** | ✅ | ❌ (git required) | ✅ |
+| **Digital Garden** | ✅ | ❌ (git required) | ✅ |
+| **Docusaurus / GitBook / Mintlify** | ❌ (lossy for Obsidian) | ✅ | ⚠️ (platform-specific) |
+| **awesome-list repos** | ❌ (plain markdown only) | ✅ | ✅ |
+| **Notion-as-wiki** | ❌ (no Obsidian import fidelity) | ✅ | ❌ |
+| **cyberbaser (target)** | ✅ | ✅ | ✅ |
+
+## Scope boundaries
+
+Equally important — what cyberbaser is **not** trying to solve, so future-me doesn't scope-creep.
+
+- **Not a general-purpose Obsidian publisher.** It's built for the cyberbase vault's content shape first. Generalization is a *stretch goal*, not a design goal.
+- **Not a replacement for Obsidian Publish.** It's a parallel option with different trade-offs.
+- **Not a vault host.** The vault lives in `cybersader/cyberbase`. Cyberbaser reads from it.
+- **Not a comments / discussion system.** GitHub Issues is the fallback.
+- **Not a realtime-collaborative editor.** Conflicts resolve via git, not CRDT.
+
+## Success looks like
+
+Cyberbaser is successful when:
+
+- A reader lands on a wiki page from a Google search and doesn't notice that it came from an Obsidian vault — it just reads as a well-maintained wiki.
+- That same reader can submit a typo fix in three clicks, without learning git, and see it live within minutes.
+- The maintainer reviews and merges the edit without leaving Obsidian as their primary authoring surface.
+- The vault repo remains fully usable in Obsidian standalone — nothing cyberbaser-specific leaks into it.
+- Ten independent contributors, with different git fluencies, produce identical-quality edits to the same set of pages.

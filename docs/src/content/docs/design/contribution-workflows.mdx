@@ -1,0 +1,127 @@
+---
+title: Contribution Workflows
+description: Three independent contribution paths — Web CMS, Obsidian+Git, Direct GitHub — with end-to-end flows and constraints.
+sidebar:
+  order: 23
+status: research
+tags: [design, contribution]
+---
+
+Cyberbaser promises three contribution paths. Every path must work **independently** — no path is allowed to depend on another being running (see [Principle 4](/cyberbaser/getting-started/principles/#4-every-contribution-path-must-work-independently)). This page specifies each path end-to-end.
+
+## Path A — Web CMS (Decap, Open Authoring)
+
+**Target user:** domain expert, zero git knowledge, has a GitHub account (or willing to make one in 90 seconds).
+
+### Flow
+
+1. **Discovery** — reader lands on a wiki page, sees a prominent "Suggest edit" button
+2. **Auth** — clicking it opens Decap; GitHub OAuth modal appears
+3. **Editor** — Decap renders the page's markdown in a rich editor (not raw). Tier 1 features (wikilinks, callouts) render as interactive widgets; Tier 2/3 render read-only
+4. **Preview** — live preview pane shows the rendered page
+5. **Submit** — contributor writes a one-line commit message, clicks Submit
+6. **Behind the scenes** — Decap forks `cybersader/cyberbase` to the contributor's account, creates a branch, commits the change, opens a PR to the source repo
+7. **Feedback** — contributor sees a PR link and "your edit is pending review"
+
+### Constraints
+
+- Must NOT require Obsidian running anywhere
+- Must NOT hold edit state outside the repo
+- Must NOT require the maintainer to do anything special to accept the edit
+- The fork + PR flow must be invisible to the contributor — they should never see the word "fork"
+
+### Open questions
+
+- Where does the OAuth proxy live? (Probably Cloudflare Pages Functions)
+- What OAuth scopes are minimal? (Read: `public_repo`; write: needs fork + PR creation)
+- How does the editor surface Tier 2/3 features it can't render inline?
+
+## Path B — Obsidian + Git
+
+**Target user:** vault-native power user. Comfortable with either git or an Obsidian git plugin (obsidian-git).
+
+### Flow
+
+1. **Clone** — clone `cybersader/cyberbase` as an Obsidian vault
+2. **Edit locally** — full Obsidian affordances (wikilinks, callouts, graph view, templates)
+3. **Commit & push** — either via obsidian-git plugin or terminal
+4. **Build trigger** — GitHub Actions sees the push, triggers the Cloudflare Pages deploy
+5. **Live** — within ~60-90 seconds the change is on `cyberbase.wiki`
+
+### Constraints
+
+- Must not require any cyberbaser-specific plugins or tooling inside Obsidian
+- The vault must work as a plain Obsidian vault even if cyberbaser doesn't exist
+- Pre-commit hooks (if any) must be optional, not required
+
+### Open questions
+
+- Is direct push to `main` allowed for the maintainer, or always-PR?
+- What's the branch model for larger changes — feature branches?
+- Should there be a pre-commit hook that validates frontmatter?
+
+## Path C — Direct GitHub
+
+**Target user:** developer, knows git, doesn't use Obsidian, wants to fix something quickly.
+
+### Flow
+
+1. **Page footer link** — every page has "Edit this page on GitHub"
+2. **GitHub web editor** — opens the raw markdown in GitHub's web UI
+3. **Edit** — contributor edits the file; they see Obsidian-flavored syntax but don't need to understand it
+4. **Commit** — commit via the web UI; if they don't have write access, GitHub offers to open a PR
+5. **Merge** — same PR review flow as Path A
+
+### Constraints
+
+- Contributor must NOT need to understand Obsidian syntax to make safe edits
+- Wikilinks and callouts should be visible as raw text but must not break when round-tripped
+- The "Edit on GitHub" link must go to the exact file that renders the current page (not an approximation)
+
+### Open questions
+
+- Do we hide Obsidian-specific syntax behind a collapsible comment block in the raw view?
+- Should the PR template auto-fill with the page being edited?
+
+## Cross-path concerns
+
+### Conflict resolution
+
+> [!info] Concurrent edits
+> Two contributors edit the same page at once. The outcome depends on the timing:
+> - If both edits are sequential (first merges before second opens), git handles it fine.
+> - If both land simultaneously as open PRs, the second gets a merge conflict and must rebase.
+> - There is no realtime collaborative editing. That's fine — the contribution rate is low and async.
+
+### Review model
+
+| PR type | Reviewer | Auto-merge |
+|---|---|---|
+| Typo fix from trusted contributor | none | ✅ auto |
+| Typo fix from anonymous | maintainer | ❌ manual |
+| Content change from trusted | maintainer (quick) | ❌ manual |
+| Content change from anonymous | maintainer (full) | ❌ manual |
+| Structural / navigation change | maintainer + second review | ❌ manual |
+
+Trusted contributors are designated in a `.github/trusted-contributors.yml` file (or similar). Moving someone onto that list is a conscious act.
+
+### Preview / staging
+
+Every PR gets a Cloudflare Pages preview deployment. The maintainer reviews the rendered preview before merging. This is the CI gate — if the preview fails to build, the PR can't merge.
+
+### Attribution
+
+Contributor names appear in git history automatically. For web contributions via Decap's fork flow, the fork's commit author = the contributor's GitHub account, so attribution is preserved without any special handling.
+
+### Abuse / spam
+
+> [!warning]+ Anonymous contribution has an abuse surface
+> Anonymous contributions via Path A need protection:
+> - Rate limiting per GitHub account (Decap / the OAuth proxy enforces this)
+> - Optional manual approval for first-time contributors
+> - GitHub's anti-spam already covers most automated abuse
+> - Pathological bad actors can be blocked at the repo level
+
+## Minimum viable contribution set
+
+Based on prior art ([awesome-list repos](/cyberbaser/research/prior-art/#awesome-list-repos)), the floor for Path A is: **"as easy as editing an awesome-list repo on GitHub."** That's 3 clicks: Edit → type → Propose change. Any path that's harder than that has failed Principle 3.

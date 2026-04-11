@@ -1,0 +1,92 @@
+---
+title: Roadmap
+description: Phased plan — Research & Foundations is the only active phase. Later phases are deferred until principles justify them.
+sidebar:
+  order: 20
+status: research
+tags: [roadmap, planning]
+---
+
+## Current phase — **R · Research & Foundations** <span class="cb-pill cb-pill-research">Active</span>
+
+**Goal:** produce substantive content in the first-principles pages (Problem, Ecosystem, Concepts, Prior Art, Existing Work, Vision, Principles) so every subsequent phase can cite a specific section as its justification.
+
+**Exit criteria** — all must be true before Phase R closes:
+
+- [ ] [Problem](/cyberbaser/concepts/problem/) has a one-sentence TL;DR plus articulated pain, audience, and explicit scope boundaries
+- [ ] [Ecosystem](/cyberbaser/concepts/ecosystem/) has real paragraphs for every tool surveyed (no TODOs)
+- [ ] [Concepts](/cyberbaser/concepts/) has "What / Why / How" filled in for each primitive
+- [ ] [Prior Art](/cyberbaser/research/prior-art/) has a "Lesson for cyberbaser" sentence for every entry
+- [ ] [Vision](/cyberbaser/getting-started/vision/) rewritten from lived evidence, not first-pass reasoning
+- [ ] [Principles](/cyberbaser/getting-started/principles/) has a justified "Why" for each principle, grounded in Ecosystem / Prior Art content
+- [ ] Open questions list is at most 5 items (rest have moved to Resolved)
+
+**In scope during Phase R:**
+- Reading and writing into the content pages
+- Auditing the local Obsidian research vault for prior thinking to port in
+- Mining the archived Phase-0 docs in `.workspace/` for relevant material
+- Surveying sibling projects (crosswalker, cyberchaste) for patterns worth borrowing
+- Minor bug fixes to the parked Phase-0 prototype *only* if a research path requires running the site
+
+**Explicitly out of scope during Phase R:**
+- New features in the publishing pipeline
+- Refactoring the Astro site, Starlight theme, or test infrastructure
+- Alternative SSG evaluation (unless research explicitly calls for it)
+- Decap CMS / Open Authoring integration work
+- Translation layer implementation
+- Any code not directly justified by an already-written principle
+
+---
+
+## Phase 0 — Publishing prototype <span class="cb-pill cb-pill-parked">Parked</span>
+
+What was built before the reinit (captured here so future-me doesn't forget):
+
+- Astro + Starlight scaffold with Nova theme
+- Playwright smoke tests
+- Cloudflare Pages deploy workflow
+- Bun migration from npm
+- Custom domain + Pages project setup
+
+What was intentionally **not** built (because there was no principle to justify it yet):
+
+- Translation layer (wikilinks, callouts, embeds)
+- Decap CMS integration
+- GitHub OAuth proxy for Open Authoring
+- Backlinks rendering
+- Obsidian-aware navigation generation
+
+Phase 0 may resume after Phase R with a partial rewrite if principles dictate.
+
+---
+
+## Future phases <span class="cb-pill cb-pill-planning">Deferred</span>
+
+:::note[Deferred by design]
+These are placeholders. Each gets a real outline only after Phase R exits and the relevant principles are written. Roadmap is downstream of principles, not the other way around.
+:::
+
+### Phase 1 — Translation layer spike
+**Likely focus:** prove Tier 1 translation (wikilinks, callouts, embeds, math, Mermaid) with real vault content. Define a round-trip correctness test corpus.
+
+### Phase 2 — Contribution workflows
+**Likely focus:** implement at least two of the three contribution paths. Web CMS + Direct GitHub is probably the MVP pair.
+
+### Phase 3 — Publish the real vault
+**Likely focus:** point cyberbaser at `cybersader/cyberbase` content and deploy to `cyberbase.wiki`.
+
+### Phase 4 — Community onboarding
+**Likely focus:** CONTRIBUTING.md, docs, examples, first external contributor.
+
+---
+
+## Roadmap operating rules
+
+> [!important] Rule 1 — Roadmap is downstream of principles
+> If you find yourself adding a step here that isn't justified by a principle in the Principles page, stop and write the principle first (or decide you don't need the step).
+
+> [!important] Rule 2 — Phase R exits only by the exit criteria above
+> No "close enough" shortcuts. The whole point of the reinit was to resist the pull toward implementation before thinking is done.
+
+> [!important] Rule 3 — Short-term focus is the FOCUS.md file, not this page
+> `.claude/FOCUS.md` is the dated snapshot of what's active right now. This page is the long-term plan. Don't update both redundantly.

@@ -1,27 +1,39 @@
 {
   "name": "cyberbaser-docs",
+  "version": "0.1.0",
+  "private": true,
   "type": "module",
-  "version": "0.0.1",
   "scripts": {
-    "dev": "astro dev",
-    "start": "astro dev",
-    "build": "astro build",
-    "preview": "astro preview",
-    "test:build": "astro build && echo 'Build successful!'",
-    "test:local": "astro build && astro preview",
-    "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui",
-    "test:e2e:headed": "playwright test --headed",
-    "test:deploy": "TEST_URL=https://test.cyberbaser.com playwright test tests/deployment.spec.ts",
+    "preflight": "bun scripts/preflight.mjs",
+    "dev": "bun run preflight && astro dev",
+    "dev:host": "bun run preflight && astro dev --host 0.0.0.0",
+    "build": "bun run preflight && astro build",
+    "preview": "bun run preflight && astro preview",
+    "test:local": "bun run preflight && playwright test",
+    "test:deploy": "playwright test tests/deployment.spec.ts",
+    "test:e2e": "bun run preflight && playwright test --headed",
+    "test:e2e:ui": "bun run preflight && playwright test --ui",
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/starlight": "^0.37.1",
-    "astro": "^5.6.1",
-    "astro-loader-obsidian": "^0.10.0",
-    "sharp": "^0.34.2"
+    "@astrojs/starlight": "^0.38.0",
+    "@tailwindcss/vite": "^4.2.2",
+    "astro": "^6.0.0",
+    "rehype-external-links": "^3.0.0",
+    "rehype-mermaid": "^3.0.0",
+    "remark-obsidian-callout": "^1.5.1",
+    "remark-wiki-link": "^2.0.1",
+    "sharp": "^0.33.0",
+    "starlight-announcement": "^0.1.1",
+    "starlight-blog": "^0.26.1",
+    "starlight-heading-badges": "^0.7.0",
+    "starlight-image-zoom": "^0.14.1",
+    "starlight-site-graph": "^0.5.0",
+    "starlight-tags": "^0.4.0",
+    "starlight-theme-nova": "^0.11.7",
+    "tailwindcss": "^4.2.2"
   },
   "devDependencies": {
-    "@playwright/test": "^1.57.0"
+    "@playwright/test": "^1.59.1"
   }
 }

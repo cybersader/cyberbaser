@@ -1,0 +1,61 @@
+tags:
+  problem:
+    label: Problem
+    description: What cyberbaser actually solves and for whom
+  motivation:
+    label: Motivation
+    description: Why this project exists
+  ecosystem:
+    label: Ecosystem
+    description: Tools in the surrounding landscape
+  landscape:
+    label: Landscape
+    description: Inventory of adjacent systems
+  concepts:
+    label: Concepts
+    description: First-principles primitives
+  primitives:
+    label: Primitives
+    description: Core concepts the project reasons about
+  vision:
+    label: Vision
+    description: End-state narrative
+  principles:
+    label: Principles
+    description: Design constraints
+  design:
+    label: Design
+    description: Architecture and system design
+  architecture:
+    label: Architecture
+    description: Technical architecture
+  translation-layer:
+    label: Translation Layer
+    description: The Obsidian-to-web syntax conversion problem
+  contribution:
+    label: Contribution
+    description: How people add content
+  roadmap:
+    label: Roadmap
+    description: Phased plan
+  planning:
+    label: Planning
+    description: Forward-looking work
+  tradeoffs:
+    label: Trade-offs
+    description: Design decisions with accepted costs
+  research:
+    label: Research
+    description: Investigation notes
+  prior-art:
+    label: Prior Art
+    description: What others have tried
+  meta:
+    label: Meta
+    description: Project-level changes
+  setup:
+    label: Setup
+    description: Infrastructure and scaffolding
+  inventory:
+    label: Inventory
+    description: Stock-taking of existing work

@@ -1,0 +1,143 @@
+---
+title: Prior Art
+description: Tools and projects that have tried to solve the contributable Obsidian-to-web problem. What each got right, what each gave up, what the lesson is for cyberbaser.
+sidebar:
+  order: 0
+status: research
+tags: [research, prior-art]
+---
+
+This is different from [Ecosystem](/cyberbaser/concepts/ecosystem/). Ecosystem is an inventory ("what shelf do I grab a component from"). Prior art is lessons ("what did they try and learn, and what should we take from it").
+
+For each entry: **what they got right**, **what they gave up**, and **the lesson for cyberbaser**.
+
+---
+
+## Obsidian Publish (official)
+
+**What it is:** Obsidian's paid first-party publishing service. Point your vault at a published domain, enable Publish, and your vault renders on the web with full Obsidian fidelity — wikilinks, backlinks, graph view, callouts, embeds. Native affordances, zero translation layer needed.
+
+**What they got right:**
+- Full Obsidian fidelity out of the box — everything that renders in Obsidian renders on the web
+- Zero-config for the vault owner (just point-and-publish)
+- Native backlinks and graph view on the reader surface
+- The vault owner keeps using Obsidian as their authoring tool, exactly as before
+
+**What they gave up:**
+- **Contribution model** — Publish is read-only from the visitor's perspective. There's no contribution path at all, not even "edit on GitHub."
+- **Vendor lock-in** — content is hosted on Obsidian's CDN in a proprietary format. Leaving means exporting the markdown (which you already have locally) but losing the published URL.
+- **Pricing** — $10/month, which is fine for individuals but rules out the project's "contributable wiki" model where contributors might each need accounts.
+- **Customization** — very limited theming, no custom components, no plugin ecosystem on the reader side.
+
+**Lesson for cyberbaser:** Obsidian fidelity is the baseline to match, but the contribution gap is the real opportunity. Cyberbaser should aim for Publish-quality fidelity while adding the three contribution paths Publish lacks.
+
+---
+
+## Quartz v4 (Jacky Zhao)
+
+**What it is:** Open-source static site generator specifically designed for Obsidian vaults. Actively maintained. Converts an Obsidian vault into a fast static site with backlinks, graph view, search, wikilinks, and callouts.
+
+**What they got right:**
+- Obsidian-aware out of the box — wikilinks resolve, callouts render, backlinks work
+- Fully open-source and self-hostable (no vendor lock-in)
+- Active community, regular releases, good documentation
+- Fast build times, clean reader UX
+- Good default theming that doesn't feel generic
+
+**What they gave up:**
+- **Contribution workflow** — Quartz is a one-way publisher. Contributions require cloning the repo, running Quartz locally, and submitting a PR. Git-native only.
+- **Web-based editing** — no CMS layer; readers can't edit, period.
+- **MDX components** — pure markdown in, static HTML out. No rich interactive content in-page.
+
+**Lesson for cyberbaser:** Quartz proves that a Starlight-class Obsidian-aware publisher is viable and not that hard to build. The gap Quartz doesn't fill is *exactly* the contribution layer — which means cyberbaser can learn from Quartz's translation decisions while layering Decap (or similar) on top.
+
+---
+
+## Digital Garden (Ole Eskild Steensen, Obsidian plugin)
+
+**What it is:** A community Obsidian plugin that turns an Obsidian vault into a "digital garden" site. Uses an Obsidian-side plugin to handle the publishing mechanics, deploys to Netlify/Vercel/etc.
+
+**What they got right:**
+- Integrates with Obsidian directly — marking notes as "published" happens inside Obsidian
+- Handles wikilinks and backlinks correctly
+- Active community, common starting point for digital garden builders
+- Open-source
+
+**What they gave up:**
+- **Plugin dependency** — requires a specific Obsidian plugin, which means the publishing pipeline is coupled to Obsidian being installed. Violates the "vault is primary" principle.
+- **Contribution** — same story as Quartz, no CMS layer.
+- **Maintenance coupling** — if the plugin stops being maintained, the publishing pipeline breaks.
+
+**Lesson for cyberbaser:** Don't require vault-side plugins. The publisher should be able to read a plain Obsidian vault without any cyberbaser-specific Obsidian plugin enabled. If cyberbaser needs extra metadata, put it in standard frontmatter, not a proprietary field.
+
+---
+
+## Docusaurus / GitBook / Mintlify
+
+**What they are:** Polished docs-site platforms, often used to host open-source project documentation. Excellent reader UX — beautiful typography, search, versioning, responsive navigation.
+
+**What they got right:**
+- Reader UX is genuinely great — polished, mobile-friendly, fast
+- Versioning support (important for API docs, less so for wikis)
+- Easy onboarding for new contributors (clear contribution guides)
+- Active ecosystems with many plugins
+
+**What they gave up:**
+- **Obsidian fidelity** — none of them understand Obsidian syntax natively. Wikilinks don't resolve, callouts need conversion, embeds break.
+- **Vault workflow** — these tools assume docs live in their preferred directory layout (e.g., `/docs/` at the repo root), which is often incompatible with how an Obsidian vault is organized.
+- **Content shape opinions** — they push you toward "documentation" style writing, not "wiki" style. That's a category mismatch for cyberbaser.
+
+**Lesson for cyberbaser:** The reader UX is worth copying from this category — search, typography, mobile responsiveness, navigation — but the content ingestion model is wrong for Obsidian vaults. Starlight sits in a sweet spot because it's markdown-first and doesn't impose a schema.
+
+---
+
+## Notion as a public wiki
+
+**What it is:** Many people (including Cybersader at one point — see [cybersader-notion-workspace-public](https://github.com/cybersader/cybersader-notion-workspace-public)) have tried publishing a Notion workspace as a public wiki. Notion has a built-in "Publish to web" feature.
+
+**What they got right:**
+- Zero-config publishing (flip a switch)
+- Comment threads, discussions, embedded databases
+- Writers without technical background can contribute via Notion's editor
+- Good mobile experience
+
+**What they gave up:**
+- **Vendor lock-in** — content lives in Notion's format. Exporting to markdown is lossy (loses databases, formulas, block references).
+- **URL stability** — Notion page URLs contain page IDs that change when pages move; breakage is the default.
+- **No git history** — version control is Notion's internal history, not git. Can't diff a change, can't bisect a regression.
+- **Obsidian incompatibility** — Notion's data model is different enough from Obsidian that round-tripping is not feasible.
+
+**Lesson for cyberbaser:** This is the anti-pattern. The vendor-lock-in and no-git-history problems are *exactly* what cyberbaser's "GitHub is SSOT" principle exists to prevent. Cybersader's own prior attempts with Notion are strong evidence for that principle.
+
+---
+
+## awesome-* repos
+
+**What they are:** Curated markdown lists on GitHub (`awesome-cybersecurity`, `awesome-siem`, `awesome-log-management`, etc.). Pure markdown, PR-based contribution, rendered by GitHub's built-in markdown viewer.
+
+**What they got right:**
+- **Radically low barrier to contribution** — edit the file in GitHub's web UI, click "Propose change," done. Three clicks.
+- **No infrastructure** — GitHub renders the markdown for free. No build step, no deploy.
+- **Clear contribution norms** — every awesome list has a CONTRIBUTING.md that everyone follows
+- **Durable** — these repos have lasted years and accumulated thousands of contributions
+
+**What they gave up:**
+- **No navigation beyond the README** — a single long markdown file scrolls forever
+- **No cross-references or backlinks** — plain markdown with flat anchor links
+- **No rendered UI** — looks like whatever GitHub's markdown renderer does
+- **Not suitable for long-form content** — works for lists, breaks for articles
+
+**Lesson for cyberbaser:** The awesome-list contribution flow is the **floor** for ease-of-contribution. If contributing to cyberbaser is harder than contributing to `awesome-siem`, we have failed. The three-clicks-to-merge property is the target for Path A (Web CMS).
+
+---
+
+## Synthesis — what the evidence says
+
+> [!tip]+ The pattern
+> **Obsidian fidelity** is solved by Quartz / Digital Garden / Publish.
+> **Zero-friction contribution** is solved by awesome lists / Decap.
+> **No vendor lock-in** is solved by any git-backed solution.
+>
+> **Nothing existing has all three at once.** Cyberbaser's hypothesis is that the gap isn't a missing tool — it's a missing *composition*. Take Quartz-style fidelity (via translation layer plugins), bolt on Decap's Open Authoring for the low-friction path, keep the repo as SSOT. All parts exist; nobody has put them together.
+>
+> If the composition works, cyberbaser is novel-by-integration rather than novel-by-invention. That's a much cheaper bet than inventing new primitives.

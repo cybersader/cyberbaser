@@ -1,0 +1,809 @@
+/* Cyberbaser — silver base with a hint of emerald green.
+ * @import MUST be first in the file or browsers ignore it. */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap');
+
+/* ────────────────────────────────────────────────────────────────────────
+ * Responsive base font — larger on wide screens so the 3-column Starlight
+ * layout has room to breathe without feeling cramped.
+ * ──────────────────────────────────────────────────────────────────────── */
+@media (min-width: 1400px) { :root { font-size: 112%; } }
+@media (min-width: 1700px) { :root { font-size: 118%; } }
+
+/* ────────────────────────────────────────────────────────────────────────
+ * Title typography — Space Grotesk, sharp, geometric.
+ * Starlight wraps the title in nested elements so we target the span too.
+ * ──────────────────────────────────────────────────────────────────────── */
+.site-title,
+.site-title span,
+[class*="astro-"] .site-title {
+  font-family: 'Space Grotesk', var(--sl-font, system-ui, sans-serif) !important;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* Phase badge after the title — "research" in silver outline */
+.site-title span::after {
+  content: 'research';
+  font-size: 0.5em;
+  font-weight: 500;
+  font-family: var(--sl-font, system-ui, sans-serif);
+  margin-left: 0.4em;
+  padding: 0.15em 0.5em;
+  border-radius: 4px;
+  border: 1px solid var(--sl-color-gray-4);
+  background: none;
+  color: var(--sl-color-gray-3);
+  vertical-align: middle;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+ * Silver + emerald palette — DARK mode (primary)
+ *
+ * Concept: the whole surface feels like brushed aluminum under low light.
+ * Green only enters as the accent — links, focus rings, CTAs, active
+ * sidebar items, hover states. Everywhere else is pure silver/graphite.
+ * ──────────────────────────────────────────────────────────────────────── */
+:root {
+  /* Accent — emerald, used sparingly as the "hint" of color */
+  --sl-color-accent-low: #052e1e;       /* dark forest overlay */
+  --sl-color-accent: #10b981;            /* emerald — primary accent */
+  --sl-color-accent-high: #6ee7b7;       /* mint — highlight on hover */
+
+  /* Base palette — cool silver with a blue undertone */
+  --sl-color-white: #e8ecf1;             /* silver-white primary text */
+  --sl-color-gray-1: #c7ced9;            /* chrome highlight / secondary text */
+  --sl-color-gray-2: #8b94a3;            /* mid silver / tertiary text */
+  --sl-color-gray-3: #5c6574;            /* muted silver / meta text */
+  --sl-color-gray-4: #363d49;            /* divider / border */
+  --sl-color-gray-5: #1e232d;            /* elevated surface */
+  --sl-color-gray-6: #141921;            /* surface */
+  --sl-color-black: #0a0e14;             /* near-black background */
+
+  /* Cyberbaser custom tokens — used by .cb-* classes below */
+  --cb-silver-shimmer: #d6dde8;
+  --cb-silver-cool: #aab4c1;
+  --cb-emerald-glow: rgba(16, 185, 129, 0.15);
+  --cb-emerald-border: rgba(16, 185, 129, 0.35);
+
+  /* Primary gradient — silver → emerald. Used on hero headline, CTA buttons,
+   * card accents. The "just a hint of green" shows up on the right side of
+   * these gradients only. */
+  --cb-gradient-primary: linear-gradient(135deg, #d6dde8 0%, #8b94a3 45%, #10b981 100%);
+  --cb-gradient-primary-soft: linear-gradient(135deg, #c7ced9 0%, #10b981 100%);
+
+  /* Secondary gradient — pure silver sweep, no green.
+   * Used on section dividers, chrome UI elements. */
+  --cb-gradient-silver: linear-gradient(135deg, #e8ecf1 0%, #8b94a3 100%);
+
+  /* Glow gradient — soft emerald radial, used for hero background wash */
+  --cb-gradient-glow: radial-gradient(ellipse at top, rgba(16, 185, 129, 0.08) 0%, transparent 60%);
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+ * LIGHT mode — inverted for readability
+ * ──────────────────────────────────────────────────────────────────────── */
+:root[data-theme='light'] {
+  --sl-color-accent-low: #d1fae5;
+  --sl-color-accent: #059669;
+  --sl-color-accent-high: #047857;
+
+  --sl-color-white: #0a0e14;
+  --sl-color-gray-1: #141921;
+  --sl-color-gray-2: #363d49;
+  --sl-color-gray-3: #5c6574;
+  --sl-color-gray-4: #8b94a3;
+  --sl-color-gray-5: #c7ced9;
+  --sl-color-gray-6: #e8ecf1;
+  --sl-color-black: #fafbfc;
+
+  --cb-silver-shimmer: #5c6574;
+  --cb-silver-cool: #363d49;
+  --cb-emerald-glow: rgba(5, 150, 105, 0.08);
+  --cb-emerald-border: rgba(5, 150, 105, 0.3);
+
+  --cb-gradient-primary: linear-gradient(135deg, #363d49 0%, #5c6574 45%, #059669 100%);
+  --cb-gradient-primary-soft: linear-gradient(135deg, #64748b 0%, #059669 100%);
+  --cb-gradient-silver: linear-gradient(135deg, #0a0e14 0%, #5c6574 100%);
+  --cb-gradient-glow: radial-gradient(ellipse at top, rgba(5, 150, 105, 0.06) 0%, transparent 60%);
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+ * Nova theme layout fix — see crosswalker commit history.
+ * Nova's TwoColumnContent wrapper has overflow-x: hidden which clips wide
+ * content. Applying border-box to markdown children prevents overflow.
+ * ──────────────────────────────────────────────────────────────────────── */
+.sl-markdown-content div { box-sizing: border-box; }
+.sl-markdown-content svg { max-width: 100%; height: auto; }
+
+/* CRITICAL FIX: Starlight's markdown.css adds margin-top: var(--sl-content-gap-y)
+ * between adjacent children. Inside grid/flex containers (our .cb-* classes)
+ * this creates uneven vertical offsets. Reset to 0 for all children inside
+ * our custom containers. */
+.sl-markdown-content [class*="cb-grid"] > *,
+.sl-markdown-content [class*="cb-card"] > *,
+.sl-markdown-content [class*="cb-hero"] > * {
+  margin-top: 0;
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+ * Hero — splash landing page
+ *
+ * Usage: wrap the hero content in <div class="cb-hero"> on index.mdx.
+ * Applies the silver+green gradient background wash + centered layout.
+ * ──────────────────────────────────────────────────────────────────────── */
+.cb-hero {
+  position: relative;
+  padding: 4rem 1rem 5rem;
+  text-align: center;
+  background: var(--cb-gradient-glow);
+  overflow: hidden;
+}
+
+.cb-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 80% 50% at 50% 0%, var(--cb-emerald-glow) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.cb-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.cb-hero-eyebrow {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--sl-color-accent);
+  padding: 0.35rem 0.85rem;
+  border: 1px solid var(--cb-emerald-border);
+  border-radius: 99px;
+  background: var(--cb-emerald-glow);
+  margin-bottom: 1.5rem;
+}
+
+.cb-hero-headline {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: clamp(2rem, 5vw, 3.75rem);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  margin: 0 0 1.25rem;
+  /* Solid silver-white text; gradient only applied to the rotating word
+   * via .cb-rotate-wrap below. Nesting background-clip:text doesn't work
+   * reliably — keep this simple. */
+  color: var(--sl-color-white);
+}
+
+.cb-hero-subhead {
+  font-size: clamp(1rem, 1.6vw, 1.2rem);
+  color: var(--sl-color-gray-1);
+  max-width: 38rem;
+  margin: 0 auto 2.5rem;
+  line-height: 1.55;
+}
+
+.cb-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  justify-content: center;
+  align-items: center;
+}
+
+.cb-hero-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.4rem;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-decoration: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.cb-hero-cta-primary {
+  background: var(--cb-gradient-primary-soft);
+  color: var(--sl-color-black);
+  border: 1px solid var(--cb-emerald-border);
+  box-shadow: 0 1px 0 0 rgba(255, 255, 255, 0.1) inset, 0 8px 24px -12px rgba(16, 185, 129, 0.4);
+}
+
+.cb-hero-cta-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 1px 0 0 rgba(255, 255, 255, 0.15) inset, 0 12px 32px -12px rgba(16, 185, 129, 0.55);
+}
+
+.cb-hero-cta-secondary {
+  color: var(--sl-color-gray-1);
+  border: 1px solid var(--sl-color-gray-4);
+  background: var(--sl-color-gray-6);
+}
+
+.cb-hero-cta-secondary:hover {
+  color: var(--sl-color-white);
+  border-color: var(--sl-color-gray-3);
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+ * Card grid — used on splash + index pages for "jump to section" links
+ * ──────────────────────────────────────────────────────────────────────── */
+.cb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  margin: 2.5rem 0;
+  not-prose: true;
+}
+
+.cb-card {
+  display: block;
+  padding: 1.25rem 1.4rem;
+  background: var(--sl-color-gray-6);
+  border: 1px solid var(--sl-color-gray-4);
+  border-radius: 10px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.cb-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--cb-gradient-primary-soft);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.cb-card:hover {
+  border-color: var(--cb-emerald-border);
+  transform: translateY(-2px);
+  background: var(--sl-color-gray-5);
+}
+
+.cb-card:hover::before {
+  opacity: 1;
+}
+
+.cb-card-label {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--sl-color-accent);
+  margin-bottom: 0.5rem;
+}
+
+.cb-card-title {
+  display: block;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--sl-color-white);
+  margin-bottom: 0.4rem;
+  letter-spacing: -0.01em;
+}
+
+.cb-card-desc {
+  display: block;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--sl-color-gray-2);
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+ * Status pill — research / planning / stable / parked
+ * Used in frontmatter-driven page metadata and inline content.
+ * ──────────────────────────────────────────────────────────────────────── */
+.cb-pill {
+  display: inline-block;
+  padding: 0.2rem 0.65rem;
+  border-radius: 99px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid;
+}
+
+.cb-pill-research {
+  color: var(--sl-color-accent-high);
+  background: var(--cb-emerald-glow);
+  border-color: var(--cb-emerald-border);
+}
+
+.cb-pill-planning {
+  color: var(--sl-color-gray-1);
+  background: var(--sl-color-gray-6);
+  border-color: var(--sl-color-gray-4);
+}
+
+.cb-pill-stable {
+  color: #93c5fd;
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.35);
+}
+
+.cb-pill-parked {
+  color: var(--sl-color-gray-2);
+  background: transparent;
+  border-color: var(--sl-color-gray-4);
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+ * Obsidian-style callouts (from remark-obsidian-callout)
+ * Tint the left border with the emerald accent so callouts feel branded
+ * without overwhelming the page.
+ * ──────────────────────────────────────────────────────────────────────── */
+.callout {
+  padding: 1rem 1.2rem;
+  border-radius: 0.5rem;
+  margin: 1.25rem 0;
+  border-left: 3px solid var(--sl-color-accent);
+  background: var(--sl-color-gray-6);
+}
+
+.callout-title {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: var(--sl-color-white);
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+ * Mobile sidebar: nav links appearing inline at the top.
+ * Copied from sibling pattern — required because on splash/blog pages
+ * the sidebar has no nav items, so MobileMenuFooter injects these.
+ * ──────────────────────────────────────────────────────────────────────── */
+.cb-mobile-nav {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.cb-mobile-nav a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--sl-color-gray-2);
+  text-decoration: none;
+}
+
+.cb-mobile-nav a:hover {
+  color: var(--sl-color-white);
+}
+
+.cb-mobile-nav svg {
+  flex-shrink: 0;
+  color: var(--sl-color-gray-3);
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+ * Layout fixes (inherited from sibling patterns)
+ * Narrow-desktop range (768-1151px) has awkward sidebar/content tradeoffs.
+ * Hide sidebar + right panels until there's room for both.
+ * ──────────────────────────────────────────────────────────────────────── */
+@media (min-width: 768px) and (max-width: 1151px) {
+  #starlight__sidebar { display: none; }
+  body[data-mobile-menu-expanded] #starlight__sidebar {
+    display: block !important;
+    position: fixed !important;
+    width: 100% !important;
+    z-index: 10;
+  }
+  .main-frame { padding-inline-start: 0 !important; }
+  .right-sidebar-panel { display: none !important; }
+  .right-sidebar-container {
+    width: 0 !important; min-width: 0 !important;
+    overflow: hidden !important; padding: 0 !important;
+  }
+  mobile-starlight-toc { display: none !important; }
+  header .md\:hidden { display: flex !important; }
+}
+
+/* Widen content column on large screens */
+@media (min-width: 1152px) {
+  :root {
+    --sl-content-width: clamp(50rem, 68vw, 85rem);
+    --sl-sidebar-width: 15rem;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+ * Rotating headline word-wrap + animation (home page splash)
+ * Defined here in brand.css rather than inline in the MDX, because MDX
+ * <style> blocks can't use :global() the way .astro files can, so any
+ * selector that needs to target children gets dropped silently.
+ *
+ * The wrap gets the silver→emerald gradient via background-clip:text; its
+ * parent headline has a solid color, so nothing needs to be unset.
+ * ──────────────────────────────────────────────────────────────────────── */
+.cb-rotate-wrap {
+  display: inline-block;
+  vertical-align: baseline;
+  overflow: hidden;
+  height: 1.15em;
+  line-height: 1.15em;
+  transition: width 0.35s cubic-bezier(0.5, 0, 0.2, 1);
+  /* Silver → emerald gradient clipped to the text shape */
+  background: var(--cb-gradient-primary-soft);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+.cb-rotate {
+  display: block;
+  transition: transform 0.4s cubic-bezier(0.5, 0, 0.2, 1);
+}
+.cb-rotate > span {
+  display: block;
+  line-height: 1.15em;
+  white-space: nowrap;
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+ * Splash flow diagram (home index.mdx)
+ * The SVG uses .cb-sv-* class names; rules defined here (not inline in
+ * the MDX <style> block) so they actually apply to nested SVG children.
+ * ──────────────────────────────────────────────────────────────────────── */
+.cb-flow-wrapper {
+  max-width: 960px;
+  margin: 0 auto 4rem;
+  padding: 0 1rem;
+}
+.cb-flow-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.cb-flow-caption {
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--sl-color-gray-2);
+  line-height: 1.55;
+  margin-top: 1rem;
+  max-width: 48rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.sl-markdown-content .cb-sv-label,
+.cb-flow-svg .cb-sv-label {
+  fill: var(--sl-color-gray-3);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  font-family: system-ui, sans-serif;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.cb-flow-svg .cb-sv-item rect {
+  fill: var(--sl-color-gray-6);
+  stroke: var(--sl-color-gray-4);
+  stroke-width: 1;
+}
+.cb-flow-svg .cb-sv-item text {
+  fill: var(--sl-color-gray-1);
+  font-size: 12px;
+  font-family: system-ui, sans-serif;
+  font-weight: 500;
+}
+
+.cb-flow-svg .cb-sv-item-out rect {
+  fill: var(--sl-color-gray-6);
+  stroke: var(--sl-color-accent);
+  stroke-width: 1.3;
+}
+.cb-flow-svg .cb-sv-item-out text {
+  fill: var(--sl-color-white);
+  font-size: 12px;
+  font-family: system-ui, sans-serif;
+  font-weight: 600;
+}
+
+.cb-flow-svg .cb-sv-hub rect {
+  fill: var(--sl-color-gray-5);
+  stroke: url(#cb-edge);
+  stroke-width: 2;
+}
+.cb-flow-svg .cb-sv-hub text {
+  fill: var(--sl-color-white);
+  font-size: 13px;
+  font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
+  font-weight: 600;
+}
+.cb-flow-svg .cb-sv-hub-label {
+  fill: var(--sl-color-gray-3);
+  font-size: 10px;
+  font-family: system-ui, sans-serif;
+  font-style: italic;
+  letter-spacing: 0.05em;
+}
+
+.cb-flow-svg .cb-sv-edge-in {
+  fill: none;
+  stroke: url(#cb-edge);
+  stroke-width: 1.6;
+  stroke-dasharray: 4 4;
+  opacity: 0.85;
+}
+.cb-flow-svg .cb-sv-edge-out {
+  fill: none;
+  stroke: url(#cb-edge-out);
+  stroke-width: 1.6;
+  opacity: 0.85;
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+ * Layered stack (cb-layers) — used on ecosystem page to show the four
+ * concerns cyberbaser composes.
+ * ──────────────────────────────────────────────────────────────────────── */
+.cb-layers {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  margin: 2rem 0 2.5rem;
+  max-width: 720px;
+}
+
+.cb-layer {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.9rem 1.1rem 0.9rem 1rem;
+  background: var(--sl-color-gray-6);
+  border: 1px solid var(--sl-color-gray-4);
+  border-radius: 10px;
+  position: relative;
+  transition: border-color 0.15s ease;
+}
+
+.cb-layer:hover {
+  border-color: var(--cb-emerald-border);
+}
+
+.cb-layer::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 50%;
+  height: 60%;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--cb-gradient-primary-soft);
+  transform: translateY(-50%);
+  opacity: 0.7;
+}
+
+.cb-layer-badge {
+  flex: 0 0 auto;
+  width: 2.4rem;
+  height: 2.4rem;
+  display: grid;
+  place-items: center;
+  background: var(--sl-color-gray-5);
+  border: 1px solid var(--sl-color-gray-4);
+  border-radius: 8px;
+  font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--sl-color-accent);
+  letter-spacing: 0;
+}
+
+.cb-layer-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cb-layer-title {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--sl-color-white);
+  line-height: 1.3;
+}
+
+.cb-layer-desc {
+  font-size: 0.82rem;
+  color: var(--sl-color-gray-2);
+  line-height: 1.5;
+  margin-top: 0.15rem;
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+ * Problem triangle — three-axis tradeoff visualization on /concepts/problem
+ * ──────────────────────────────────────────────────────────────────────── */
+.cb-triangle-wrapper {
+  margin: 2.5rem auto 3rem;
+  max-width: 620px;
+  padding: 1.5rem 1rem 0.5rem;
+  background: var(--sl-color-gray-6);
+  border: 1px solid var(--sl-color-gray-4);
+  border-radius: 12px;
+}
+
+.cb-triangle-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.cb-triangle-caption {
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--sl-color-gray-2);
+  line-height: 1.55;
+  margin: 1rem auto 0;
+  max-width: 44rem;
+  padding: 0 0.5rem;
+}
+
+/* Triangle text styling (global because it's inside <svg> in MDX) */
+.sl-markdown-content .cb-tri-label {
+  fill: var(--sl-color-white);
+  font-size: 12px;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-weight: 700;
+}
+
+.sl-markdown-content .cb-tri-desc {
+  fill: var(--sl-color-gray-2);
+  font-size: 9px;
+  font-family: system-ui, sans-serif;
+  font-style: italic;
+}
+
+.sl-markdown-content .cb-tri-tool {
+  fill: var(--sl-color-accent-high);
+  font-size: 10px;
+  font-family: system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.sl-markdown-content .cb-tri-tool-sub {
+  fill: var(--sl-color-gray-3);
+  font-size: 8.5px;
+  font-family: system-ui, sans-serif;
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+ * Architecture diagram styling (cb-arch-*) — used on design/architecture
+ * ──────────────────────────────────────────────────────────────────────── */
+.cb-arch-wrapper {
+  margin: 2.5rem auto 3rem;
+  max-width: 920px;
+  padding: 1.25rem 1rem 0.5rem;
+  background: var(--sl-color-gray-6);
+  border: 1px solid var(--sl-color-gray-4);
+  border-radius: 12px;
+}
+
+.cb-arch-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.cb-arch-caption {
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--sl-color-gray-2);
+  line-height: 1.55;
+  margin: 1rem auto 0;
+  max-width: 44rem;
+  padding: 0 0.5rem;
+}
+
+/* Architecture diagram — text styles (inside <svg>) */
+.sl-markdown-content .cb-arch-layer {
+  fill: var(--sl-color-gray-3);
+  font-size: 9.5px;
+  font-family: system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.sl-markdown-content .cb-arch-box rect {
+  fill: var(--sl-color-gray-5);
+  stroke: var(--sl-color-gray-4);
+  stroke-width: 1.2;
+}
+.sl-markdown-content .cb-arch-box text {
+  fill: var(--sl-color-white);
+  font-size: 12px;
+  font-family: system-ui, sans-serif;
+  font-weight: 600;
+}
+
+.sl-markdown-content .cb-arch-box-group rect {
+  fill: rgba(20, 25, 33, 0.4);
+  stroke: var(--sl-color-gray-3);
+  stroke-dasharray: 3 3;
+  stroke-width: 1;
+}
+
+.sl-markdown-content .cb-arch-group-title {
+  fill: var(--sl-color-accent-high) !important;
+  font-size: 10px !important;
+  font-family: 'Space Grotesk', system-ui, sans-serif !important;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700 !important;
+}
+
+.sl-markdown-content .cb-arch-inner rect {
+  fill: var(--sl-color-gray-6);
+  stroke: var(--sl-color-gray-4);
+  stroke-width: 1;
+}
+.sl-markdown-content .cb-arch-inner text {
+  fill: var(--sl-color-gray-1);
+  font-size: 11px;
+  font-family: system-ui, sans-serif;
+  font-weight: 500;
+}
+
+.sl-markdown-content .cb-arch-inner-hot rect {
+  fill: rgba(16, 185, 129, 0.08);
+  stroke: var(--sl-color-accent);
+  stroke-width: 1.3;
+}
+.sl-markdown-content .cb-arch-inner-hot text {
+  fill: var(--sl-color-white);
+  font-weight: 600;
+}
+
+.sl-markdown-content .cb-arch-box-aux rect {
+  fill: var(--sl-color-gray-6);
+  stroke: var(--sl-color-gray-4);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+.sl-markdown-content .cb-arch-box-aux text {
+  fill: var(--sl-color-gray-2);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.sl-markdown-content .cb-arch-hub {
+  fill: var(--sl-color-white);
+  font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sl-markdown-content .cb-arch-sub {
+  fill: var(--sl-color-gray-2);
+  font-size: 9.5px;
+  font-family: system-ui, sans-serif;
+  font-style: italic;
+}
+
+.sl-markdown-content .cb-arch-sub-mini {
+  fill: var(--sl-color-gray-3);
+  font-size: 8.5px;
+  font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
+}
+

@@ -1,0 +1,135 @@
+---
+// PAGE_TITLE_ID is '_top' per Starlight's internal constants module. Inlined here
+// because `@astrojs/starlight/constants` is not a publicly exported specifier.
+const PAGE_TITLE_ID = '_top';
+
+// Starlight exposes page data + git-computed lastUpdated through Astro.locals.
+const { entry, lastUpdated } = Astro.locals.starlightRoute;
+const data = entry.data as Record<string, any>;
+
+// Created date from frontmatter `date:` (blog-schema compatible on docs)
+const createdDate: Date | null = data.date ? new Date(data.date) : null;
+// Updated date from git (via lastUpdated: true in astro.config.mjs)
+const updatedDate: Date | null = lastUpdated ?? null;
+// Don't show "Updated" if it's the same day as "Created"
+const sameDay = createdDate && updatedDate &&
+  createdDate.toDateString() === updatedDate.toDateString();
+
+const status = data.status; // 'research' | 'planning' | 'stable' | 'parked'
+
+// Splash / hero pages opt out of the meta row via hideMeta OR sidebar.hidden
+const hideMeta = data.hideMeta === true || data.sidebar?.hidden === true;
+const hasMeta = !hideMeta && Boolean(status || createdDate || (updatedDate && !sameDay));
+
+function fmt(d: Date): string {
+  return d.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+---
+
+<h1 id={PAGE_TITLE_ID}>{data.title}</h1>
+
+{hasMeta && (
+  <div class="cb-page-meta">
+    {status && (
+      <span class:list={['cb-meta-badge', `cb-meta-status-${status}`]}>
+        {status}
+      </span>
+    )}
+    {createdDate && (
+      <span class="cb-meta-date">
+        <span class="cb-meta-label">Created</span>
+        <time datetime={createdDate.toISOString()}>{fmt(createdDate)}</time>
+      </span>
+    )}
+    {updatedDate && !sameDay && (
+      <span class="cb-meta-date">
+        <span class="cb-meta-label">Updated</span>
+        <time datetime={updatedDate.toISOString()}>{fmt(updatedDate)}</time>
+      </span>
+    )}
+  </div>
+)}
+
+<style>
+  @layer starlight.core {
+    h1 {
+      margin-top: 1rem;
+      font-size: var(--sl-text-h1);
+      line-height: var(--sl-line-height-headings);
+      font-weight: 600;
+      color: var(--sl-color-white);
+    }
+  }
+
+  .cb-page-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+    margin-top: 0.6rem;
+    margin-bottom: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--sl-color-gray-2);
+  }
+
+  .cb-meta-badge {
+    display: inline-block;
+    padding: 0.15rem 0.55rem;
+    border-radius: 4px;
+    border: 1px solid var(--sl-color-gray-4);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.68rem;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  .cb-meta-status-research {
+    color: #6ee7b7;
+    border-color: rgba(110, 231, 183, 0.4);
+    background: rgba(16, 185, 129, 0.1);
+  }
+
+  .cb-meta-status-planning {
+    color: #c7ced9;
+    border-color: rgba(199, 206, 217, 0.35);
+    background: rgba(139, 148, 163, 0.08);
+  }
+
+  .cb-meta-status-stable {
+    color: #93c5fd;
+    border-color: rgba(147, 197, 253, 0.4);
+    background: rgba(59, 130, 246, 0.08);
+  }
+
+  .cb-meta-status-parked {
+    color: #8b94a3;
+    border-color: rgba(139, 148, 163, 0.3);
+    background: transparent;
+  }
+
+  .cb-meta-date {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
+    font-size: 0.72rem;
+    color: var(--sl-color-gray-2);
+  }
+
+  .cb-meta-label {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.62rem;
+    color: var(--sl-color-gray-3);
+    font-weight: 600;
+  }
+
+  .cb-meta-date time {
+    color: var(--sl-color-gray-1);
+  }
+</style>

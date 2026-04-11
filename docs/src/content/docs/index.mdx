@@ -1,44 +1,218 @@
 ---
-title: Welcome to Cyberbase
-description: A contributable cyber knowledge wiki
-template: splash
-hero:
-  tagline: A modern, distributed knowledge base for cybersecurity and beyond
-  image:
-    file: ../../assets/houston.webp
-  actions:
-    - text: Explore Knowledge Base
-      link: /kb/
-      icon: right-arrow
-      variant: primary
-    - text: View on GitHub
-      link: https://github.com/cybersader/cyberbase
-      icon: external
+title: Cyberbaser
+description: The contributable Obsidian-to-web pipeline for a distributed cybersecurity knowledge wiki. GitHub as the source of truth, Obsidian semantics preserved, zero-git contribution.
+hideMeta: true
+sidebar:
+  hidden: true
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
+<div class="cb-hero" role="img" aria-label="Cyberbaser turns an Obsidian vault into a contributable public cyber wiki">
 
-## What is Cyberbase?
+  <span class="cb-hero-eyebrow">Research &amp; Foundations phase</span>
 
-Cyberbase is a **contributable knowledge wiki** built on Obsidian, designed to make it easy for anyone to contribute to a growing body of cybersecurity knowledge.
+  <h1 class="cb-hero-headline">
+    A cyber knowledge wiki<br/>
+    that <span class="cb-rotate-wrap"><span class="cb-rotate"><span>anyone</span><span>power users</span><span>beginners</span><span>developers</span><span>domain experts</span><span>anyone</span></span></span> can contribute to.
+  </h1>
 
-<CardGrid stagger>
-	<Card title="Contribute Easily" icon="pencil">
-		Click "Edit this page" to propose changes via GitHub. No local setup required.
-	</Card>
-	<Card title="Obsidian Native" icon="document">
-		Content is authored in Obsidian with wikilinks, callouts, and rich formatting.
-	</Card>
-	<Card title="Open Source" icon="github">
-		All content is open source on GitHub. Fork, contribute, or start your own.
-	</Card>
-	<Card title="Modern Stack" icon="rocket">
-		Built with Astro, Starlight, and deployed on Cloudflare for speed.
-	</Card>
-</CardGrid>
+  <p class="cb-hero-subhead">Obsidian authoring. GitHub as the single source of truth. Web CMS for zero-git contribution. Obsidian semantics survive the round trip.</p>
 
-## Getting Started
+  <div class="cb-hero-actions">
+    <a class="cb-hero-cta cb-hero-cta-primary" href="/cyberbaser/getting-started/">
+      Read the vision →
+    </a>
+    <a class="cb-hero-cta cb-hero-cta-secondary" href="/cyberbaser/concepts/problem/">
+      The problem
+    </a>
+    <a class="cb-hero-cta cb-hero-cta-secondary" href="/cyberbaser/design/architecture/">
+      Architecture
+    </a>
+  </div>
 
-- **Browse**: Explore the knowledge base using the sidebar
-- **Search**: Use the search bar to find specific topics
-- **Contribute**: Click "Edit this page" on any article to propose changes
+  <script is:inline>{`
+    (function() {
+      var wrap = document.querySelector('.cb-rotate-wrap');
+      var rotate = document.querySelector('.cb-rotate');
+      var words = document.querySelectorAll('.cb-rotate > span');
+      if (!wrap || !rotate || !words.length) return;
+      var n = words.length - 1;
+      var i = 0;
+      var widths = [];
+
+      function setWidths() {
+        var test = document.createElement('span');
+        test.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;';
+        test.className = wrap.className;
+        wrap.parentNode.appendChild(test);
+        var newWidths = [];
+        for (var j = 0; j <= n; j++) {
+          test.textContent = words[j].textContent;
+          newWidths.push(Math.ceil(test.getBoundingClientRect().width) + 8);
+        }
+        wrap.parentNode.removeChild(test);
+        widths = newWidths;
+        wrap.style.width = widths[i] + 'px';
+      }
+
+      function tick() {
+        i = (i + 1) % (n + 1);
+        wrap.style.width = widths[i] + 'px';
+        rotate.style.transform = 'translateY(-' + (i * 1.15) + 'em)';
+        if (i === n) {
+          setTimeout(function() {
+            rotate.style.transition = 'none';
+            wrap.style.transition = 'none';
+            rotate.style.transform = 'translateY(0)';
+            wrap.style.width = widths[0] + 'px';
+            i = 0;
+            void rotate.offsetHeight;
+            rotate.style.transition = '';
+            wrap.style.transition = '';
+          }, 550);
+        }
+      }
+
+      function start() {
+        requestAnimationFrame(function() {
+          setWidths();
+          setInterval(tick, 2500);
+        });
+      }
+
+      var resizeTimer = null;
+      window.addEventListener('resize', function() {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(setWidths, 150);
+      });
+
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(start);
+      } else {
+        window.addEventListener('load', start);
+      }
+    })();
+  `}</script>
+
+</div>
+
+<div class="cb-flow-wrapper">
+
+  <svg class="cb-flow-svg" viewBox="0 0 880 280" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Three contribution paths converge on a single GitHub vault and publish to a web wiki">
+    <defs>
+      <linearGradient id="cb-edge" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#8b94a3"/>
+        <stop offset="1" stop-color="#10b981"/>
+      </linearGradient>
+      <linearGradient id="cb-edge-out" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#10b981"/>
+        <stop offset="1" stop-color="#8b94a3"/>
+      </linearGradient>
+      <filter id="cb-glow">
+        <feGaussianBlur stdDeviation="4" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+
+      {/* Left paths: 3 entry points → vault */}
+      <path id="cbL1" d="M180,70  C300,70  380,140  450,140" fill="none"/>
+      <path id="cbL2" d="M180,140 C320,140 380,140  450,140" fill="none"/>
+      <path id="cbL3" d="M180,210 C300,210 380,140  450,140" fill="none"/>
+
+      {/* Right paths: vault → publish targets */}
+      <path id="cbR1" d="M510,140 C600,140 640,90  720,90"  fill="none"/>
+      <path id="cbR2" d="M510,140 C600,140 640,190 720,190" fill="none"/>
+    </defs>
+
+    {/* Section labels */}
+    <text class="cb-sv-label" x="30" y="22">CONTRIBUTION PATHS</text>
+    <text class="cb-sv-label" x="850" y="22" text-anchor="end">READERS</text>
+
+    {/* Left entry items */}
+    <g class="cb-sv-item">
+      <rect x="30" y="55" width="150" height="30" rx="6"/>
+      <text x="105" y="75" text-anchor="middle">Web CMS (Decap)</text>
+    </g>
+    <g class="cb-sv-item">
+      <rect x="30" y="125" width="150" height="30" rx="6"/>
+      <text x="105" y="145" text-anchor="middle">Obsidian + Git</text>
+    </g>
+    <g class="cb-sv-item">
+      <rect x="30" y="195" width="150" height="30" rx="6"/>
+      <text x="105" y="215" text-anchor="middle">Direct GitHub</text>
+    </g>
+
+    {/* Edges in */}
+    <use href="#cbL1" class="cb-sv-edge-in"/>
+    <use href="#cbL2" class="cb-sv-edge-in"/>
+    <use href="#cbL3" class="cb-sv-edge-in"/>
+
+    {/* Center hub: GitHub vault */}
+    <g class="cb-sv-hub" filter="url(#cb-glow)">
+      <rect x="430" y="110" width="100" height="60" rx="10"/>
+      <text x="480" y="135" text-anchor="middle">cybersader/</text>
+      <text x="480" y="155" text-anchor="middle">cyberbase</text>
+    </g>
+    <text class="cb-sv-hub-label" x="480" y="195" text-anchor="middle">single source of truth</text>
+
+    {/* Edges out */}
+    <use href="#cbR1" class="cb-sv-edge-out"/>
+    <use href="#cbR2" class="cb-sv-edge-out"/>
+
+    {/* Right items */}
+    <g class="cb-sv-item-out">
+      <rect x="720" y="75" width="130" height="30" rx="6"/>
+      <text x="785" y="95" text-anchor="middle">cyberbase.wiki</text>
+    </g>
+    <g class="cb-sv-item-out">
+      <rect x="720" y="175" width="130" height="30" rx="6"/>
+      <text x="785" y="195" text-anchor="middle">Obsidian vault</text>
+    </g>
+  </svg>
+
+  <p class="cb-flow-caption">Three independent contribution paths converge on a single GitHub repo, which is then published to the web wiki <em>and</em> remains a fully-functional Obsidian vault. Round-trip editability everywhere.</p>
+</div>
+
+---
+
+## Jump in
+
+<div class="cb-grid">
+  <a class="cb-card" href="/cyberbaser/concepts/problem/">
+    <span class="cb-card-label">01 · Problem</span>
+    <span class="cb-card-title">Why existing Obsidian→web tools fall short</span>
+    <span class="cb-card-desc">Publishing works. Contribution doesn't. The gap cyberbaser fills.</span>
+  </a>
+
+  <a class="cb-card" href="/cyberbaser/concepts/ecosystem/">
+    <span class="cb-card-label">02 · Ecosystem</span>
+    <span class="cb-card-title">The landscape around the problem</span>
+    <span class="cb-card-desc">Obsidian Publish, Quartz, Digital Garden, Decap, and the gap none of them fill.</span>
+  </a>
+
+  <a class="cb-card" href="/cyberbaser/design/translation-layer/">
+    <span class="cb-card-label">22 · Hard problem</span>
+    <span class="cb-card-title">The translation layer</span>
+    <span class="cb-card-desc">Obsidian syntax → web HTML without losing round-trip fidelity. This is where the project lives or dies.</span>
+  </a>
+
+  <a class="cb-card" href="/cyberbaser/getting-started/principles/">
+    <span class="cb-card-label">12 · Principles</span>
+    <span class="cb-card-title">The rules that constrain every decision</span>
+    <span class="cb-card-desc">GitHub is truth. Obsidian semantics round-trip. Contributors don't need git. Research before code.</span>
+  </a>
+
+  <a class="cb-card" href="/cyberbaser/getting-started/roadmap/">
+    <span class="cb-card-label">20 · Roadmap</span>
+    <span class="cb-card-title">Phased plan — Research first</span>
+    <span class="cb-card-desc">Phase R is the only active phase until the first-principles work is real.</span>
+  </a>
+
+  <a class="cb-card" href="/cyberbaser/research/prior-art/">
+    <span class="cb-card-label">04 · Prior art</span>
+    <span class="cb-card-title">What others tried and learned</span>
+    <span class="cb-card-desc">Obsidian Publish, Quartz, Digital Garden, Notion-as-wiki, awesome lists — the data points.</span>
+  </a>
+</div>
+
+{/* Styles for .cb-hero, .cb-rotate-wrap, .cb-flow-svg, .cb-sv-* etc. live in
+    src/styles/brand.css. MDX <style> blocks can't use :global() reliably,
+    which is why this file previously rendered the flow SVG as a black mess. */}

@@ -1,0 +1,49 @@
+---
+title: Getting Started
+description: What cyberbaser is, why it exists, what phase it's in, and how to approach it.
+sidebar:
+  order: 0
+status: research
+---
+
+## What cyberbaser is
+
+Cyberbaser is the tooling project for **cyberbase** — a distributed, contributable cybersecurity knowledge wiki. The content itself lives in a separate repo (`cybersader/cyberbase`) and originates in an Obsidian vault. Cyberbaser is the publishing pipeline, the translation layer R&D, and the first-principles thinking that answers *"how do you turn an Obsidian vault into a public, contributable wiki without losing anything Obsidian makes possible?"*
+
+Two repos, easy to confuse:
+
+| Repo | Role |
+|---|---|
+| `cybersader/cyberbase` | The live Obsidian content vault — source of truth |
+| `cybersader/cyberbaser` (this repo) | The tooling: Astro+Starlight, translation layer, CMS integration, deployment |
+
+## Current phase — Research & Foundations
+
+Cyberbaser is in **Phase R** right now: building up first-principles thinking before shipping new implementation. The [Roadmap](/cyberbaser/getting-started/roadmap/) is explicit — Phase 0 (publishing prototype) is parked, and no later phase gets concrete steps until the problem, ecosystem, concepts, prior art, and principles have real content.
+
+This is a deliberate constraint. The old approach jumped to implementation before the principles justified the choices. The reinit inverted that: write the thinking, then write the code.
+
+## Where to look
+
+<div class="cb-grid">
+  <a class="cb-card" href="/cyberbaser/getting-started/vision/">
+    <span class="cb-card-label">10–11 · Vision</span>
+    <span class="cb-card-title">What this becomes</span>
+    <span class="cb-card-desc">The end-state narrative — three contribution paths, one source of truth, round-trip everywhere.</span>
+  </a>
+  <a class="cb-card" href="/cyberbaser/getting-started/principles/">
+    <span class="cb-card-label">12 · Principles</span>
+    <span class="cb-card-title">The rules</span>
+    <span class="cb-card-desc">What constrains every future decision. GitHub is truth. Obsidian semantics round-trip. Contributors don't need git.</span>
+  </a>
+  <a class="cb-card" href="/cyberbaser/getting-started/roadmap/">
+    <span class="cb-card-label">20 · Roadmap</span>
+    <span class="cb-card-title">Phased plan</span>
+    <span class="cb-card-desc">Phase R → 1 → 2 → 3 → 4. Currently Phase R is the only active one, with hard exit criteria.</span>
+  </a>
+  <a class="cb-card" href="/cyberbaser/concepts/">
+    <span class="cb-card-label">01–03 · Problem space</span>
+    <span class="cb-card-title">Concepts</span>
+    <span class="cb-card-desc">The problem, the ecosystem, and the primitives the rest of the project reasons about.</span>
+  </a>
+</div>

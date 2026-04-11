@@ -1,0 +1,48 @@
+---
+title: Development
+description: How to run the cyberbaser docs site locally, run tests, and deploy.
+sidebar:
+  order: 0
+status: research
+---
+
+## Local dev
+
+```bash
+cd docs
+bun install
+bun run dev              # http://localhost:4321/cyberbaser/
+bun run dev --host       # also binds to 0.0.0.0 (Tailscale / LAN / Docker)
+```
+
+Dev server hot-reloads on markdown and component changes. The base path is `/cyberbaser` — remember to include it in test URLs.
+
+## Build
+
+```bash
+cd docs
+bun run build            # static build to docs/dist/
+bun run preview          # serve the built output on :4321
+```
+
+The build runs the full translation layer (remark/rehype plugins), Pagefind search indexing, and sitemap generation.
+
+## Tests
+
+Playwright smoke tests verify the site builds, key pages render, and the Nova theme / Starlight plugins are wired correctly.
+
+```bash
+cd docs
+bun run test:local       # runs Playwright against local build
+bun run test:e2e         # headed browser
+bun run test:e2e:ui      # Playwright UI mode
+```
+
+## Deploy
+
+Currently: dev-only. Push to Cloudflare Pages is wired via `.github/workflows/deploy.yml` but the Pages project was deleted; the workflow will fail until a new project is created or the workflow is updated. **This is intentional during Phase R** — no public deploy until the content is ready.
+
+When deploying:
+1. Create a new Cloudflare Pages project named `cyberbaser`
+2. Set `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` in GitHub Actions secrets
+3. Push to `main` — the workflow deploys automatically

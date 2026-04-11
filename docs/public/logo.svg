@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <defs>
+    <linearGradient id="cb-silver" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#d6dde8"/>
+      <stop offset="0.45" stop-color="#8b94a3"/>
+      <stop offset="1" stop-color="#10b981"/>
+    </linearGradient>
+    <linearGradient id="cb-silver-inner" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e8ecf1"/>
+      <stop offset="1" stop-color="#6ee7b7"/>
+    </linearGradient>
+  </defs>
+  <!-- Outer hex shell -->
+  <path d="M24 3 L42 13.5 L42 34.5 L24 45 L6 34.5 L6 13.5 Z"
+        fill="none" stroke="url(#cb-silver)" stroke-width="2.5" stroke-linejoin="round"/>
+  <!-- Inner brackets — representing [[wikilinks]] / round-trip -->
+  <path d="M18 18 L14 24 L18 30" fill="none" stroke="url(#cb-silver-inner)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M30 18 L34 24 L30 30" fill="none" stroke="url(#cb-silver-inner)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Center dot — the "source of truth" pivot -->
+  <circle cx="24" cy="24" r="1.8" fill="#10b981"/>
+</svg>

@@ -1,0 +1,101 @@
+---
+title: Principles
+description: The design principles that constrain every decision in cyberbaser. Rules with reasons.
+sidebar:
+  order: 12
+status: research
+tags: [principles, design]
+---
+
+Design principles are constraints on future decisions. Each principle below:
+
+1. **States a rule** (what it forbids or requires)
+2. **Justifies it** with a reason grounded in prior art or a specific failure mode
+3. **Says what it rules out**, so it's falsifiable — if future evidence overturns the reason, the principle goes too
+
+These are the current working set for the research phase. They're candidates, not carved in stone. As the [Ecosystem](/cyberbaser/concepts/ecosystem/) and [Prior Art](/cyberbaser/research/prior-art/) work deepens, some of these will get sharper and some will get replaced.
+
+---
+
+## 1. GitHub is the single source of truth
+
+**Rule:** The `cybersader/cyberbase` repo on GitHub is authoritative for all content. Every contribution path — Web CMS, Obsidian+Git, direct GitHub — ultimately produces commits to this repo. No sidecar databases, no parallel content stores, no vendor-proprietary formats.
+
+**Why:** Every Obsidian-publishing tool that's taken off has one failure mode in common: they store content in a place the user doesn't own (Notion workspaces, Publish's proprietary CDN, CMS databases). When the tool goes away or changes pricing, the content is trapped. GitHub-as-SSOT means cyberbaser can disappear tomorrow and the vault still works perfectly as a plain Obsidian vault.
+
+**Rules out:**
+- Sidecar databases for "enriched" content
+- CMSes that don't write directly to git
+- Content that only exists in a CDN or rendered-HTML form
+- Any solution where the vault is not a self-sufficient Obsidian vault in isolation
+
+---
+
+## 2. Obsidian semantics must round-trip
+
+**Rule:** Any Obsidian feature that renders in the vault and also renders on the web must survive a round-trip edit. If a contributor edits via the Web CMS, the file the maintainer sees in Obsidian must be functionally identical (same wikilinks resolved, same callouts, same block refs) — not a flattened, downgraded version.
+
+**Why:** This is the invariant that makes three independent contribution paths possible. If web edits corrupt Obsidian-specific syntax, contributors get locked into whichever tool they started with. The project collapses into "just another publisher" or "just another CMS" rather than a bridge.
+
+**Rules out:**
+- Lossy transforms (e.g., `[[Page]]` → `[Page](page.md)` on save)
+- "Simplified" markdown dialects that drop Obsidian extensions
+- CMS editors that strip unknown syntax
+- Publishing pipelines that render-then-edit instead of edit-then-render
+
+**Load-bearing dependency:** the [translation layer](/cyberbaser/design/translation-layer/). If round-trip correctness can't be guaranteed, this principle becomes an aspiration and the whole "three paths" vision collapses.
+
+---
+
+## 3. Contributors shouldn't need to learn git
+
+**Rule:** At least one contribution path must work for a domain expert who has never used git, cloned a repo, or understood branching. The Web CMS exists for this reason.
+
+**Why:** The biggest barrier to community contribution on existing Obsidian-based wikis is that they require git fluency. The audience cyberbaser targets — cyber practitioners, compliance professionals, students — includes many people who can write excellent content but would bounce off `git clone`. The awesome-list model on GitHub is the floor: edit the file in the web UI, click "Propose change." Cyberbaser must be at least that easy.
+
+**Rules out:**
+- "Just send a PR" as the only contribution path
+- Required CLI tools for contributors
+- Documentation that assumes git knowledge
+- Merge conflict resolution that requires a terminal
+
+---
+
+## 4. Every contribution path must work independently
+
+**Rule:** The Web CMS, Obsidian+Git, and direct-GitHub paths must each work end-to-end without depending on the others. A contributor using the Web CMS should not need Obsidian running. An Obsidian user should not need the Web CMS deployed.
+
+**Why:** If the Web CMS depends on a live Obsidian instance to render previews, that's a fragile single point of failure. If the Obsidian path depends on the CMS deploy being up, power users get blocked by unrelated outages. Independence is what lets each path serve its own user population without coupling failure modes.
+
+**Rules out:**
+- Architectures where one path is a privileged client of another
+- Shared session state between paths
+- Preview pipelines that can only render through one surface
+
+---
+
+## 5. The vault is primary; cyberbaser is derivative
+
+**Rule:** If cyberbaser disappears tomorrow, `cybersader/cyberbase` must remain a fully functional Obsidian vault. No cyberbaser-specific files should be required to make the vault usable in Obsidian alone.
+
+**Why:** This is the vendor-lock-in escape hatch. It also forces good architectural hygiene — if you find yourself adding a build artifact to the vault, or requiring cyberbaser-side tooling to use the vault locally, you've violated separation of concerns. The vault is the durable artifact; cyberbaser is the delivery mechanism.
+
+**Rules out:**
+- Vault-side plugins that cyberbaser requires to be enabled
+- Frontmatter fields that cyberbaser writes back to files
+- Build artifacts committed to the vault repo
+- Any coupling where "cyberbaser is broken" implies "vault is broken"
+
+---
+
+## 6. Research before implementation
+
+**Rule:** No feature ships without a corresponding principle (or explicit trade-off entry) that justifies it. If you find yourself writing code for something that isn't grounded in the concepts / prior art / principles pages, stop and write the justification first.
+
+**Why:** The old approach — jumping from "it would be cool if..." to `git commit` — is exactly how the previous iteration ended up with a parked Phase-0 prototype that doesn't answer the hard questions. The reinit inverted the order. Writing the reason takes less time than undoing a misguided implementation.
+
+**Rules out:**
+- Speculative refactors without a written motivation
+- "Let me just try it and see" commits on the critical path
+- Adding dependencies without a documented trade-off
+- Populating later roadmap phases with concrete steps while Phase R is still active

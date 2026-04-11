@@ -1,0 +1,189 @@
+---
+title: Architecture
+description: How cyberbaser's components fit together — vault, build pipeline, translation layer, CMS, hosting.
+sidebar:
+  order: 21
+status: research
+tags: [design, architecture]
+---
+
+## The big picture
+
+<div class="cb-arch-wrapper" role="img" aria-label="Architecture diagram showing content flowing from the vault repo through the cyberbaser build pipeline to the published wiki, with three contribution paths converging on the vault">
+  <svg viewBox="0 0 900 460" preserveAspectRatio="xMidYMid meet" class="cb-arch-svg">
+    <defs>
+      <linearGradient id="arch-silver" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#c7ced9"/>
+        <stop offset="1" stop-color="#5c6574"/>
+      </linearGradient>
+      <linearGradient id="arch-green" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#10b981"/>
+        <stop offset="1" stop-color="#059669"/>
+      </linearGradient>
+      <filter id="arch-glow">
+        <feGaussianBlur stdDeviation="4" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <marker id="arch-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#10b981"/>
+      </marker>
+    </defs>
+
+    {/* Layer labels */}
+    <text class="cb-arch-layer" x="60" y="30">AUTHORING</text>
+    <text class="cb-arch-layer" x="310" y="30">SSOT</text>
+    <text class="cb-arch-layer" x="560" y="30">BUILD</text>
+    <text class="cb-arch-layer" x="820" y="30" text-anchor="end">DELIVERY</text>
+
+    {/* ═══ COLUMN 1: Authoring surfaces ═══ */}
+    <g class="cb-arch-box">
+      <rect x="30" y="60" width="180" height="60" rx="8"/>
+      <text x="120" y="85" text-anchor="middle">Obsidian (local)</text>
+      <text x="120" y="104" text-anchor="middle" class="cb-arch-sub">maintainer + power users</text>
+    </g>
+
+    <g class="cb-arch-box">
+      <rect x="30" y="160" width="180" height="60" rx="8"/>
+      <text x="120" y="185" text-anchor="middle">Web CMS (Decap)</text>
+      <text x="120" y="204" text-anchor="middle" class="cb-arch-sub">zero-git contributors</text>
+    </g>
+
+    <g class="cb-arch-box">
+      <rect x="30" y="260" width="180" height="60" rx="8"/>
+      <text x="120" y="285" text-anchor="middle">GitHub web editor</text>
+      <text x="120" y="304" text-anchor="middle" class="cb-arch-sub">git-native contributors</text>
+    </g>
+
+    {/* Arrows from authoring → vault */}
+    <path d="M215,90 C250,90 260,200 275,225" fill="none" stroke="url(#arch-green)" stroke-width="1.8" marker-end="url(#arch-arrow)"/>
+    <path d="M215,190 L275,215" fill="none" stroke="url(#arch-green)" stroke-width="1.8" marker-end="url(#arch-arrow)"/>
+    <path d="M215,290 C250,290 260,240 275,230" fill="none" stroke="url(#arch-green)" stroke-width="1.8" marker-end="url(#arch-arrow)"/>
+
+    {/* ═══ COLUMN 2: Vault (SSOT) ═══ */}
+    <g filter="url(#arch-glow)">
+      <rect x="280" y="180" width="180" height="90" rx="10" fill="#141921" stroke="url(#arch-green)" stroke-width="2"/>
+    </g>
+    <text class="cb-arch-hub" x="370" y="210" text-anchor="middle">cybersader/cyberbase</text>
+    <text class="cb-arch-hub" x="370" y="228" text-anchor="middle">vault repo</text>
+    <text class="cb-arch-sub" x="370" y="250" text-anchor="middle">Obsidian markdown</text>
+    <text class="cb-arch-sub" x="370" y="262" text-anchor="middle">+ .obsidian/ config</text>
+
+    {/* Arrow from vault → build */}
+    <path d="M465,225 L525,225" fill="none" stroke="url(#arch-green)" stroke-width="2" marker-end="url(#arch-arrow)"/>
+
+    {/* ═══ COLUMN 3: Build pipeline ═══ */}
+    <g class="cb-arch-box cb-arch-box-group">
+      <rect x="530" y="70" width="200" height="330" rx="10"/>
+      <text class="cb-arch-group-title" x="630" y="95" text-anchor="middle">cyberbaser build</text>
+    </g>
+
+    <g class="cb-arch-inner">
+      <rect x="548" y="115" width="164" height="46" rx="6"/>
+      <text x="630" y="135" text-anchor="middle">Content loader</text>
+      <text x="630" y="150" text-anchor="middle" class="cb-arch-sub-mini">astro-loader-obsidian</text>
+    </g>
+
+    <g class="cb-arch-inner cb-arch-inner-hot">
+      <rect x="548" y="175" width="164" height="60" rx="6"/>
+      <text x="630" y="197" text-anchor="middle">Translation layer</text>
+      <text x="630" y="213" text-anchor="middle" class="cb-arch-sub-mini">remark + rehype plugins</text>
+      <text x="630" y="226" text-anchor="middle" class="cb-arch-sub-mini">(wiki-link, callouts, embeds)</text>
+    </g>
+
+    <g class="cb-arch-inner">
+      <rect x="548" y="249" width="164" height="46" rx="6"/>
+      <text x="630" y="269" text-anchor="middle">Starlight renderer</text>
+      <text x="630" y="284" text-anchor="middle" class="cb-arch-sub-mini">Astro + MDX</text>
+    </g>
+
+    <g class="cb-arch-inner">
+      <rect x="548" y="309" width="164" height="46" rx="6"/>
+      <text x="630" y="329" text-anchor="middle">Site graph + search</text>
+      <text x="630" y="344" text-anchor="middle" class="cb-arch-sub-mini">Pagefind + starlight-site-graph</text>
+    </g>
+
+    {/* Arrows between build stages */}
+    <path d="M630,162 L630,173" fill="none" stroke="#10b981" stroke-width="1.5" marker-end="url(#arch-arrow)"/>
+    <path d="M630,236 L630,247" fill="none" stroke="#10b981" stroke-width="1.5" marker-end="url(#arch-arrow)"/>
+    <path d="M630,296 L630,307" fill="none" stroke="#10b981" stroke-width="1.5" marker-end="url(#arch-arrow)"/>
+
+    {/* Arrow from build → delivery */}
+    <path d="M735,225 L800,225" fill="none" stroke="url(#arch-green)" stroke-width="2" marker-end="url(#arch-arrow)"/>
+
+    {/* ═══ COLUMN 4: Delivery ═══ */}
+    <g class="cb-arch-box">
+      <rect x="780" y="185" width="110" height="80" rx="8"/>
+      <text x="835" y="210" text-anchor="middle">Cloudflare</text>
+      <text x="835" y="228" text-anchor="middle">Pages</text>
+      <text x="835" y="250" text-anchor="middle" class="cb-arch-sub">cyberbase.wiki</text>
+    </g>
+
+    {/* OAuth proxy note */}
+    <g class="cb-arch-box cb-arch-box-aux">
+      <rect x="30" y="380" width="390" height="50" rx="8"/>
+      <text x="225" y="400" text-anchor="middle">OAuth proxy (Cloudflare Pages Function)</text>
+      <text x="225" y="418" text-anchor="middle" class="cb-arch-sub">Decap ↔ GitHub OAuth handshake</text>
+    </g>
+    <path d="M120,375 L120,220" fill="none" stroke="#8b94a3" stroke-width="1" stroke-dasharray="2 3" opacity="0.5"/>
+  </svg>
+  <p class="cb-arch-caption">
+    Four layers: authoring, source of truth, build, delivery. The translation layer is the load-bearing step — everything else is integration.
+  </p>
+</div>
+
+## Components
+
+### The vault repo — `cybersader/cyberbase`
+
+The durable artifact. A plain Obsidian vault: markdown files + a `.obsidian/` config directory. Cyberbaser reads from this repo but never writes to it from the build side. Contributions reach it via commits from one of the three entry points.
+
+### Content loader — `astro-loader-obsidian`
+
+The first stage of the build. Discovers markdown files in the vault, parses frontmatter, and feeds them into Astro's content collection. Currently a third-party dependency; may need to be replaced or augmented depending on how much Tier 1 translation it handles internally.
+
+### Translation layer — `remark` + `rehype` plugins
+
+The hot spot. A composed pipeline:
+
+1. **`remark-obsidian-callout`** — `> [!note]` blocks → Starlight `<Aside>` components
+2. **`remark-wiki-link`** — `[[Page]]` and `[[Page|alias]]` → resolved HTML links
+3. **Custom embed handler** — `![[image.png]]` and `![[Note]]` — needs to resolve against the vault index
+4. **`rehype-mermaid`** — fenced mermaid blocks → inline SVG at build time
+5. **`rehype-external-links`** — external anchors get `target="_blank"` + `rel`
+
+Each Tier 1 feature gets a round-trip test fixture. See [Translation Layer](/cyberbaser/design/translation-layer/) for the full tiered list.
+
+### Starlight renderer
+
+Turns the transformed MDX into HTML pages with sidebar, search, and navigation. Uses the Nova theme for layout and the full sibling plugin stack for consistency.
+
+### Site graph + search — `starlight-site-graph` + Pagefind
+
+Backlinks, graph view, full-text search. Built by crawling the rendered output.
+
+### Delivery — Cloudflare Pages
+
+Static hosting. Cloudflare Pages Function hosts the OAuth proxy so Decap's Open Authoring can handshake with GitHub without exposing the OAuth client secret in the browser.
+
+## Boundaries — what each component must NOT do
+
+> [!danger] Vault repo
+> **MUST NOT**: contain cyberbaser build artifacts; depend on cyberbaser-side plugins to function in Obsidian; have its file structure dictated by cyberbaser's URL scheme (only the other way around).
+
+> [!danger] Translation layer
+> **MUST NOT**: apply lossy transforms; modify files on disk during build; assume it's running in any particular environment (must be pure functions over markdown AST).
+
+> [!danger] Web CMS
+> **MUST NOT**: depend on Obsidian being running; hold content state outside the repo; require the maintainer to do anything special for an incoming edit.
+
+> [!danger] OAuth proxy
+> **MUST NOT**: log or store tokens; have any persistent state beyond the OAuth secret (which lives in Cloudflare secrets, not in code).
+
+## Open architectural questions
+
+See [Open Questions](/cyberbaser/reference/open-questions/) for the full list. The architecturally-significant ones:
+
+- Does `astro-loader-obsidian` handle Tier 1 features sufficiently, or does it need replacement?
+- Where does backlinks data get computed — inside the content loader, or as a post-build rehype pass?
+- What's the incremental build story for a vault that grows past ~1000 pages?
+- How do assets (images) get resolved when the CMS edits a page — does Decap need vault-wide awareness, or can links stay relative?

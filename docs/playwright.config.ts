@@ -9,7 +9,6 @@ export default defineConfig({
   reporter: 'html',
 
   use: {
-    // Base URL for tests - can be overridden with ENV
     baseURL: process.env.TEST_URL || 'http://localhost:4321',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
@@ -22,10 +21,9 @@ export default defineConfig({
     },
   ],
 
-  // Run local dev server before tests (when testing locally)
   webServer: process.env.TEST_URL ? undefined : {
     command: 'bun run preview',
-    url: 'http://localhost:4321',
+    url: 'http://localhost:4321/cyberbaser/',
     reuseExistingServer: !process.env.CI,
     timeout: 120000,
   },

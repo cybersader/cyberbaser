@@ -1,0 +1,101 @@
+---
+title: Existing Work
+description: What's already been built toward cyberbaser — this repo, sibling projects, external artifacts. Prevents re-research.
+sidebar:
+  order: 5
+status: research
+tags: [research, inventory]
+---
+
+Inventory of what has *already* been built toward cyberbaser. Preserves institutional memory, prevents re-research, and makes clear what's salvageable vs. what should be left alone.
+
+## In this repo
+
+### Phase-0 publishing prototype — `docs/` (current)
+
+- Astro v6 + Starlight v0.38 + Nova theme
+- Full sibling plugin loadout (site-graph, blog, announcement, image-zoom, heading-badges, tags)
+- `remark-obsidian-callout`, `remark-wiki-link`, `rehype-mermaid` wired
+- `astro-loader-obsidian` as a content loader dependency (not yet evaluated for Tier 1 sufficiency)
+- Playwright E2E test scaffolding
+- Cloudflare Pages deploy workflow (currently orphaned — project was deleted)
+
+**Status:** Active. Hosts the first-principles content. Builds and serves on localhost + Tailscale.
+
+### Archived PARA dev docs — `.workspace/_archive-phase-0-docs/`
+
+Pre-reinit PARA-structured implementation notes. Covers:
+- `areas/cyberbase-architecture.md`
+- `areas/cyberbase-build-scaling.md`
+- `areas/cyberbase-deployment-architecture.md`
+- `areas/cyberbase-translation-layer.md`
+- `projects/cyberbase-phase-0-foundation.md`
+- `projects/cyberbase-testing-workflow.md`
+- `resources/research-astro-obsidian-integration.md`
+- `resources/vendor-cloudflare-pages-setup.md`
+
+**Status:** archived, gitignored (so they won't appear in a fresh clone). Useful as a reference mine for specific pages — `cyberbase-translation-layer.md` and `cyberbase-architecture.md` are the most likely to have salvageable content. Delete when exhausted.
+
+### `.claude/` meta layer (this folder's source of truth)
+
+Reinitialized 2026-04-11 to match crosswalker/cyberchaste convention:
+- `PROJECT_CONTEXT.md`, `FOCUS.md`, `KNOWLEDGE_BASE_PHILOSOPHY.md`, `DOCUMENTATION_STYLE.md`, `RESEARCH_SOURCES.md`
+- Numbered first-principles files (`00-INDEX.md` through `41-QUESTIONS-RESOLVED.md`) as skeletons
+
+**Status:** active. These are the agent-context scratch files; the polished public view lives in `docs/src/content/docs/`. Both evolve in parallel.
+
+## In sibling repos (Cybersader's other work)
+
+### `cybersader/cyberbase` — the live content vault
+
+- The Obsidian vault that cyberbaser will eventually publish
+- Already has Notion + Obsidian + GitHub sync via `cybersader/notion-to-obsidian-github-sync`
+- Public repo
+
+**Status:** production content, untouched by cyberbaser work. Cyberbaser will eventually read from this as its input.
+
+### `cybersader/notion-to-obsidian-github-sync`
+
+- Previous attempt: back up Notion → clean up → commit to repo for Obsidian consumption
+- Functional; the upstream of the current vault content
+
+**Relevant lesson:** see [Prior Art · Notion as a public wiki](/cyberbaser/research/prior-art/#notion-as-a-public-wiki). This is evidence for the "no vendor lock-in" principle.
+
+### `cybersader/cybersader-notion-workspace-public`
+
+- Even earlier attempt: public-read Notion workspace
+- Superseded by the vault approach
+
+### `cybersader/cybersader-obsidian-wiki-template` + `obsidian-vault-template-template` + `obsidian-secops-vault-template`
+
+- Earlier vault scaffolding experiments
+- Unclear if still relevant — needs an audit pass
+
+### `cybersader/awesome-*` repos (awesome-bhis, awesome-siem, awesome-cyber-deception, awesome-log-management, awesome-obsidian-and-cyber, awesome-sigma)
+
+- Prior-art data points: the minimum-viable-contribution baseline
+- See [Prior Art · awesome-list repos](/cyberbaser/research/prior-art/#awesome--repos)
+
+### `cybersader/crosswalker` and `cybersader/cyberchaste`
+
+- Sibling projects with mature `.claude/` conventions
+- Source of the docs template cyberbaser uses
+- Reference points for patterns worth borrowing
+
+## External artifacts
+
+### Local Obsidian research vault
+
+- Path: `C:\Users\Cybersader\Documents\4 VAULTS\cyberbase\📁 51 - Cyberbase\`
+- **Status:** unknown contents as of 2026-04-11. See [Q01 in Open Questions](/cyberbaser/reference/open-questions/#q01--whats-in-the-local-obsidian-research-vault).
+- **Action:** audit early in Phase R. Likely contains prior thinking that should be ported into the numbered files.
+
+### MCP / agent workflow project
+
+- Path: `C:\Users\Cybersader\Documents\1 Projects, Workspaces\mcp-workflow-and-tech-stack\docs\`
+- Cross-project notes on agentic workflows and KB patterns
+- **Action:** reference for `.claude/` organization decisions.
+
+## Implication for the roadmap
+
+> Because the Phase-0 publishing pipeline exists and works, cyberbaser is **not** blocked on "can we build the site at all." The blocker is upstream: we don't yet have the first-principles clarity to know what the site should *be*. That's why the [Roadmap](/cyberbaser/getting-started/roadmap/) places Research & Foundations as the only active phase.

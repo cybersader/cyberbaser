@@ -1,0 +1,249 @@
+---
+title: Translation Layer
+description: The hardest problem in cyberbaser — converting Obsidian-flavored markdown to web HTML without losing round-trip fidelity. Tier 1 / 2 / 3 feature list.
+sidebar:
+  order: 22
+status: research
+tags: [design, translation-layer, architecture]
+---
+
+> [!warning]+ This is where the project lives or dies
+> Every other component in cyberbaser is solvable with off-the-shelf parts. The translation layer is the hot spot. If we can't guarantee round-trip fidelity for the Tier 1 features below, the "three contribution paths" vision collapses to "one path plus some lossy alternatives."
+
+## What it does
+
+A pipeline of `remark` (markdown AST) and `rehype` (HTML AST) plugins composed on top of Astro's content loading. Takes an Obsidian-flavored markdown file as input, produces (a) rendered HTML for the web wiki and (b) enough preserved structure that a Web CMS edit round-trips cleanly back to the source file.
+
+```
+┌──────────────────────┐
+│  Vault markdown      │   > [!note]+ Example
+│  (Obsidian-flavored) │   > This is [[A Page|the target]].
+└──────────┬───────────┘   > ![[diagram.png]]
+           │
+           ▼
+┌──────────────────────┐
+│  remark plugins      │   Parse → AST
+│  - obsidian-callout  │   Transform:
+│  - wiki-link         │     callouts → Aside nodes
+│  - embed handler     │     wikilinks → resolved hrefs
+│  - frontmatter       │     embeds → image nodes
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│  rehype plugins      │   AST → HTML
+│  - mermaid           │     fenced mermaid → inline SVG
+│  - external-links    │     external <a> → target=_blank
+└──────────┬───────────┘
+           │
+           ▼
+    Rendered page
+```
+
+## The tiered feature list
+
+This is the contract. A feature's tier determines its level of support and the amount of engineering it justifies.
+
+### Tier 1 — Full Support (round-trip required)
+
+<div class="cb-tier cb-tier-1">
+  <div class="cb-tier-header">
+    <span class="cb-tier-num">Tier 1</span>
+    <span class="cb-tier-label">Full support · round-trip required</span>
+  </div>
+  <p class="cb-tier-intro">These features must survive edits from any contribution path. If the Web CMS edits a page and the roundtripped file doesn't equal the original (modulo intentional changes), the tier fails.</p>
+
+  <table class="cb-tier-table">
+    <thead>
+      <tr>
+        <th>Feature</th>
+        <th>Source syntax</th>
+        <th>Plugin</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Wikilinks</td>
+        <td><code>[[Page]]</code>, <code>[[Page|alias]]</code></td>
+        <td><code>remark-wiki-link</code></td>
+        <td><span class="cb-pill cb-pill-research">Scoped</span></td>
+      </tr>
+      <tr>
+        <td>Callouts</td>
+        <td><code>&gt; [!note]</code>, <code>&gt; [!warning]</code>, <code>&gt; [!tip]+</code></td>
+        <td><code>remark-obsidian-callout</code></td>
+        <td><span class="cb-pill cb-pill-research">Scoped</span></td>
+      </tr>
+      <tr>
+        <td>Image embeds</td>
+        <td><code>![[image.png]]</code></td>
+        <td>Custom remark plugin</td>
+        <td><span class="cb-pill cb-pill-planning">Pending</span></td>
+      </tr>
+      <tr>
+        <td>Note embeds</td>
+        <td><code>![[Other Note]]</code>, <code>![[Other#Section]]</code></td>
+        <td>Custom remark plugin</td>
+        <td><span class="cb-pill cb-pill-planning">Pending</span></td>
+      </tr>
+      <tr>
+        <td>Code blocks</td>
+        <td>Fenced, language-tagged</td>
+        <td>Astro/Starlight built-in</td>
+        <td><span class="cb-pill cb-pill-stable">OK</span></td>
+      </tr>
+      <tr>
+        <td>Math</td>
+        <td><code>$inline$</code> and <code>$$block$$</code></td>
+        <td><code>remark-math</code> + <code>rehype-katex</code></td>
+        <td><span class="cb-pill cb-pill-planning">Pending</span></td>
+      </tr>
+      <tr>
+        <td>Mermaid diagrams</td>
+        <td>Fenced <code>mermaid</code> blocks</td>
+        <td><code>rehype-mermaid</code></td>
+        <td><span class="cb-pill cb-pill-stable">OK</span></td>
+      </tr>
+      <tr>
+        <td>Tables</td>
+        <td>Standard markdown tables</td>
+        <td>Built-in</td>
+        <td><span class="cb-pill cb-pill-stable">OK</span></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+### Tier 2 — Partial Support (best-effort, never lossy)
+
+<div class="cb-tier cb-tier-2">
+  <div class="cb-tier-header">
+    <span class="cb-tier-num">Tier 2</span>
+    <span class="cb-tier-label">Partial · best-effort</span>
+  </div>
+  <p class="cb-tier-intro">These features render <em>something</em> but may lose fidelity. Important constraint: a Tier 2 feature should never silently corrupt a round-trip. If we can't preserve it fully, we render a best-effort fallback and leave the source markdown alone.</p>
+
+  <ul class="cb-tier-list">
+    <li><strong>Simple Dataview queries</strong> — <code>LIST FROM #tag</code>, basic <code>TABLE</code>. Rendered as a resolved list at build time; the query text is preserved as a comment for round-trip.</li>
+    <li><strong>Block references</strong> — <code>[[Note#^blockid]]</code>. Resolved to the target block's content with an anchor; block ID preserved.</li>
+    <li><strong>Aliases</strong> (frontmatter <code>aliases:</code>) — rendered as redirect pages; original frontmatter untouched.</li>
+    <li><strong>Frontmatter metadata</strong> — exposed as page properties / status badges; original keys preserved.</li>
+  </ul>
+</div>
+
+### Tier 3 — Not Supported (workaround documented)
+
+<div class="cb-tier cb-tier-3">
+  <div class="cb-tier-header">
+    <span class="cb-tier-num">Tier 3</span>
+    <span class="cb-tier-label">Not supported · document the workaround</span>
+  </div>
+  <p class="cb-tier-intro">These features cyberbaser will not translate. For each, we need a documented contributor-facing workaround — otherwise contributors will hit a silent failure mode.</p>
+
+  <ul class="cb-tier-list">
+    <li><strong>Complex Dataview JS</strong> — use Tier 2 simple queries or pre-compute a static table.</li>
+    <li><strong>Canvas files</strong> (<code>.canvas</code>) — export to SVG/PNG and embed via standard markdown image.</li>
+    <li><strong>Templater / DataviewJS plugins</strong> — render output to static markdown before commit.</li>
+    <li><strong>Graph view</strong> — inherently interactive; replaced by <code>starlight-site-graph</code> on the web.</li>
+  </ul>
+</div>
+
+## Round-trip correctness — the test corpus
+
+> [!important] The single most important artifact
+> A test corpus where each Tier 1 / 2 feature has:
+> 1. **A fixture vault page** written by hand
+> 2. **Expected web output** (HTML snapshot)
+> 3. **A "Web CMS edit → vault diff"** round-trip snapshot proving A → B → A === A
+>
+> Until this exists, "round-trip editability" is an aspiration instead of a tested property. Building this corpus is on the critical path for Phase 1.
+
+## Open research questions
+
+These live in [Open Questions](/cyberbaser/reference/open-questions/) but collecting them here because they all touch the translation layer:
+
+1. **Is `astro-loader-obsidian` sufficient for Tier 1?** Does it handle wikilinks, callouts, and embeds, or does it need augmentation? Unknown.
+2. **How does the Web CMS render Tier 2/3 features it can't preview?** Raw markdown? Rich editor with degraded modes? Hide behind a "view raw" toggle?
+3. **How do we enforce round-trip correctness at CI time?** Property-based tests? Snapshot diffing? Is there a testing framework that models markdown round-trips well?
+4. **Where should backlinks data be computed?** Inside the content loader as part of the AST, or as a post-build rehype pass over the full page set?
+5. **What's the incremental build story?** A 1000-page vault with a one-page edit shouldn't trigger a full rebuild. Astro 5+ has improved incremental support but this needs benchmarking on a realistic vault.
+
+<style>{`
+  .cb-tier {
+    margin: 1.5rem 0 2.5rem;
+    padding: 1.4rem 1.5rem;
+    background: var(--sl-color-gray-6);
+    border: 1px solid var(--sl-color-gray-4);
+    border-radius: 10px;
+    border-left: 3px solid;
+  }
+  .cb-tier-1 { border-left-color: #10b981; }
+  .cb-tier-2 { border-left-color: #c7ced9; }
+  .cb-tier-3 { border-left-color: #5c6574; }
+
+  .cb-tier-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.8rem;
+    margin-bottom: 0.8rem;
+  }
+  .cb-tier-num {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--sl-color-white);
+  }
+  .cb-tier-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--sl-color-gray-2);
+  }
+  .cb-tier-intro {
+    margin: 0 0 1rem;
+    color: var(--sl-color-gray-1);
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+
+  .cb-tier-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+  }
+  .cb-tier-table th {
+    text-align: left;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--sl-color-gray-3);
+    padding: 0.5rem 0.6rem;
+    border-bottom: 1px solid var(--sl-color-gray-4);
+  }
+  .cb-tier-table td {
+    padding: 0.55rem 0.6rem;
+    border-bottom: 1px solid var(--sl-color-gray-5);
+    color: var(--sl-color-gray-1);
+    vertical-align: top;
+  }
+  .cb-tier-table td code {
+    font-size: 0.8rem;
+  }
+
+  .cb-tier-list {
+    padding-left: 1.2rem;
+    margin: 0;
+  }
+  .cb-tier-list li {
+    margin-bottom: 0.5rem;
+    color: var(--sl-color-gray-1);
+    line-height: 1.55;
+  }
+  .cb-tier-list li strong {
+    color: var(--sl-color-white);
+  }
+`}</style>

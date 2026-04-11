@@ -1,0 +1,91 @@
+---
+title: Open Questions
+description: Unresolved questions that surfaced during Phase R research. Kept deliberately short — if this list grows beyond ~15, slow down and resolve some.
+sidebar:
+  order: 40
+status: research
+tags: [research]
+---
+
+> Kept deliberately short. If this list grows past ~15 items, we're accumulating questions faster than we're resolving them — slow research down and resolve some before adding more.
+
+## Current questions
+
+### Q01 — What's in the local Obsidian research vault?
+
+**Asked:** 2026-04-11
+**Source:** Existing Work audit
+**Why it matters:** we may be re-researching things that already exist in prior notes at `C:\Users\Cybersader\Documents\4 VAULTS\cyberbase\📁 51 - Cyberbase\`.
+**Blocks:** efficient use of Phase R time.
+**Status:** needs a manual audit pass.
+
+---
+
+### Q02 — Is `astro-loader-obsidian` sufficient for Tier 1 translation?
+
+**Asked:** 2026-04-11
+**Source:** [Translation Layer](/cyberbaser/design/translation-layer/)
+**Why it matters:** determines whether the translation layer is a "wire up existing plugins" problem or a "write custom plugins" problem. Changes the scope of Phase 1 by 5-10x.
+**Blocks:** Phase 1 translation layer spike.
+**Status:** unknown. Needs hands-on testing with a vault of real Obsidian-flavored content.
+
+---
+
+### Q03 — Should the Web CMS show rendered Obsidian preview, or raw markdown?
+
+**Asked:** 2026-04-11
+**Source:** [Contribution Workflows](/cyberbaser/design/contribution-workflows/)
+**Why it matters:** determines whether Decap needs a custom preview pipeline that can render Tier 1 features, or whether we accept "raw markdown with syntax highlighting" as the editing surface.
+**Blocks:** Web CMS design in Phase 2.
+**Status:** depends on how Decap / Sveltia / Tina each handle custom preview components.
+
+---
+
+### Q04 — How do we guarantee no lossy round-trip in practice?
+
+**Asked:** 2026-04-11
+**Source:** [Translation Layer](/cyberbaser/design/translation-layer/), [Principle 2](/cyberbaser/getting-started/principles/#2-obsidian-semantics-must-round-trip)
+**Why it matters:** Principle 2 is only a principle if it's enforceable. Otherwise it's an aspiration.
+**Blocks:** the claim of "round-trip editability" in vision and principles.
+**Status:** probably property-based tests on a vault fixture corpus, but the framework for this doesn't exist yet.
+
+---
+
+### Q05 — What's the incremental build story for a vault of thousands of pages?
+
+**Asked:** 2026-04-11
+**Source:** [Architecture](/cyberbaser/design/architecture/), carried forward from archived Phase-0 docs
+**Why it matters:** if every edit triggers a full rebuild of a 1000-page vault, the feedback loop breaks and contributors lose trust in the pipeline.
+**Blocks:** scaling, but not Phase R itself.
+**Status:** Astro 5+ has improved incremental support; needs benchmarking on a realistic vault.
+
+---
+
+### Q06 — Content addressability: slugs, hashes, or title-based with redirects?
+
+**Asked:** 2026-04-11
+**Source:** [Primitives · Content-Addressable URLs](/cyberbaser/concepts/primitives/#content-addressable--stable-urls)
+**Why it matters:** URL stability is a cardinal-sin property for a wiki. External links must survive vault reorganization.
+**Blocks:** any production deploy.
+**Status:** no decision yet. Three candidates: explicit frontmatter slug, content-hash, or auto-slug with a redirect table.
+
+---
+
+### Q07 — How does the OAuth proxy for Decap get hosted?
+
+**Asked:** 2026-04-11
+**Source:** [Architecture](/cyberbaser/design/architecture/)
+**Why it matters:** Decap's Open Authoring needs an OAuth proxy so the GitHub OAuth client secret isn't exposed in the browser. The proxy is a few lines of code but needs a hosting target.
+**Blocks:** Web CMS setup in Phase 2.
+**Status:** probably Cloudflare Pages Functions (matches sibling pattern); needs verification that Functions supports the redirect dance.
+
+---
+
+## How to resolve a question
+
+1. Spend the research time (could be a session, could be a sprint)
+2. Write the answer and rationale in [Trade-offs](/cyberbaser/reference/tradeoffs/) or in the relevant design page
+3. Move the question out of this file into a "Resolved Questions" log with date + answer + what-it-unblocked
+4. If the answer reveals deeper questions, those become new entries here
+
+The dirt house rule: **a good answer creates two new questions, and that's fine**. Better to have precise questions than vague confidence.

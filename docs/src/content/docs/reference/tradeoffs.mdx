@@ -1,0 +1,91 @@
+---
+title: Trade-offs
+description: Design decisions and their accepted costs. Each entry is dated and references a principle.
+sidebar:
+  order: 31
+status: research
+tags: [design, tradeoffs]
+---
+
+A log of significant design trade-offs and why each was decided the way it was. Each entry should outlive the person who made it.
+
+## Entry template
+
+```markdown
+### [YYYY-MM-DD] — Decision Title
+- **Context**: what was being decided and why it came up
+- **Options**: 2–4 alternatives considered
+- **Decision**: the choice made
+- **Rationale**: grounded in which principle(s)
+- **Trade-off accepted**: what we gave up
+- **Revisit when**: specific condition under which to reconsider
+```
+
+---
+
+## Log
+
+### 2026-04-11 — Reinitialize to crosswalker/cyberchaste workspace convention
+
+- **Context:** cyberbaser had been dormant ~4 months. Sibling projects (crosswalker, cyberchaste) had converged on a `.claude/` numbered-file workspace convention that makes sprint-to-sprint continuity much easier. Cyberbaser's layout was different: PARA `docs/` + separate `site/` prototype + almost-empty `.claude/`.
+- **Options:**
+  1. Leave it alone, just add a `FOCUS.md`
+  2. Add `.claude/` meta layer but keep `site/` and `docs/` split
+  3. Full reinit: consolidate `site/ → docs/`, archive old PARA docs, scaffold numbered first-principles files (matches crosswalker exactly)
+- **Decision:** Option 3
+- **Rationale:** user explicitly asked to match sibling convention for sprint continuity; the "ground-up first principles" focus meant existing PARA implementation notes were noise relative to queued research; the consolidated `docs/` pattern is what Astro Starlight expects anyway.
+- **Trade-off accepted:** git history shows a large rename churn; `.workspace/_archive-phase-0-docs/` needs to be mined or deleted later; the reinit cost ~1 session of time that could've been Phase R research.
+- **Revisit when:** never. One-shot setup decision.
+
+---
+
+### 2026-04-11 — Copy full sibling docs template (Starlight + Nova + plugin stack)
+
+- **Context:** The docs site needed to be built from the Phase-0 scaffold into something that actually works as a first-principles KB surface. Two broad approaches.
+- **Options:**
+  1. Build a custom minimal Starlight config
+  2. Copy the crosswalker/cyberchaste template wholesale — same theme, same plugins, same custom components, just change colors
+- **Decision:** Option 2
+- **Rationale:** the sibling template is already battle-tested across two projects. Custom work has near-zero payoff in Phase R. Consistency with siblings makes it easier to move patterns between projects later.
+- **Trade-off accepted:** carrying dependencies (D3, GSAP, 10 Starlight plugins) that cyberbaser may not use yet. Heavier install. Some plugin warnings about component override conflicts.
+- **Revisit when:** if Phase 1 or 2 reveals a specific reason to diverge (e.g., the translation layer needs a custom Astro integration that conflicts with Nova).
+
+---
+
+### 2026-04-11 — Silver base with emerald accent for visual differentiation
+
+- **Context:** Needed a distinct color identity vs. sibling projects (crosswalker = cyan, cyberchaste = blue/yellow).
+- **Options:** multi-color gradient aurora palette; silver + single green accent; orange; purple; various others
+- **Decision:** silver (cool graphite base) with a hint of emerald as the only accent color. Gradients used only on hero headline, CTAs, and card top borders — most of the surface is pure silver/graphite.
+- **Rationale:** "modern, silvery with just a hint of green" (direct user request). Silver gives a refined, hardware-product feel distinct from the siblings' flat brand colors. Keeping green as a 5% accent prevents it from becoming loud.
+- **Trade-off accepted:** visually less bold than a multi-color gradient; requires discipline to keep green subtle.
+- **Revisit when:** after the KB has real content and we can judge whether the understatedness helps or hurts readability at scale.
+
+---
+
+### 2026-04-11 — Archive old Phase-0 docs to `.workspace/` instead of porting forward
+
+- **Context:** The reinit moved `docs/` PARA content to `.workspace/_archive-phase-0-docs/`. Option was to port it into the new content structure immediately.
+- **Options:**
+  1. Port everything forward to `docs/src/content/docs/`
+  2. Archive as-is, port only when needed
+  3. Delete outright
+- **Decision:** Option 2
+- **Rationale:** the archived docs are implementation notes (Cloudflare setup, Playwright config, testing workflow) that don't belong in a first-principles research surface. Porting them forward would pollute the new structure with low-value content that needs re-contextualizing.
+- **Trade-off accepted:** `.workspace/` contents are gitignored, so the archive won't survive a fresh clone. Someone reading only the repo won't see the archived notes. Acceptable because they're in the original commit history.
+- **Revisit when:** if a specific archived doc becomes relevant to the translation layer or architecture work, port that one file forward then.
+
+---
+
+## Decisions pending (not yet made)
+
+These are decisions we know we'll need to make. When one gets decided, move it from here to the log above.
+
+- **SSG choice: Astro vs. Quartz vs. custom?** Inherited from Phase 0 as "Astro + Starlight"; not re-validated against current principles
+- **CMS choice: Decap vs. Sveltia vs. Tina?** Not yet made; Decap is the incumbent but Sveltia is worth evaluation
+- **Auth: GitHub OAuth only, or multi-provider?** Default: GitHub only. No principle yet justifies broader.
+- **Hosting: Cloudflare Pages vs. GitHub Pages vs. Vercel?** Inherited as "Cloudflare"; not re-validated
+- **Backlinks: build-time compute vs. runtime?** Not yet made. See [Architecture](/cyberbaser/design/architecture/)
+- **Asset hosting: in-vault vs. CDN?** Not yet made
+- **Content addressability: slugs vs. hashes vs. titles?** See [Q06 in Open Questions](/cyberbaser/reference/open-questions/#q06--content-addressability-slugs-hashes-or-title-based-with-redirects)
+- **Tier 2/3 rendering strategy: fallback, hide, or render-as-error?** Not yet made; see [Translation Layer](/cyberbaser/design/translation-layer/)

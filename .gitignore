@@ -69,3 +69,8 @@ wrangler.toml.local
 # Playwright artifacts inside docs/ (renamed from site/)
 docs/playwright-report/
 docs/test-results/
+docs/.playwright-mcp/
+
+# Claude Code internal state
+.claude/scheduled_tasks.lock
+.claude/*.lock
