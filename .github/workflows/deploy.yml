@@ -28,7 +28,7 @@ jobs:
           bun-version: latest
 
       - name: Install dependencies
-        working-directory: ./site
+        working-directory: ./docs
         run: bun install --frozen-lockfile
 
       # Future: Add translation layer steps here
@@ -36,7 +36,7 @@ jobs:
       #   run: bun run transform
 
       - name: Build site
-        working-directory: ./site
+        working-directory: ./docs
         run: bun run build
 
       - name: Create Cloudflare Pages project
@@ -56,7 +56,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy site/dist --project-name=cyberbase-testing --commit-dirty=true
+          command: pages deploy docs/dist --project-name=cyberbase-testing --commit-dirty=true
 
       # For PRs, just build and report success
       - name: Build status

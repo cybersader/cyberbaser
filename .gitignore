@@ -61,3 +61,11 @@ wrangler.toml.local
 
 # Local development
 .netlify/
+
+# Local workspace — folder tracked (so contributors get it), contents ignored
+.workspace/*
+!.workspace/.gitkeep
+
+# Playwright artifacts inside docs/ (renamed from site/)
+docs/playwright-report/
+docs/test-results/
