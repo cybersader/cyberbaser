@@ -136,23 +136,33 @@
  * ──────────────────────────────────────────────────────────────────────── */
 .cb-hero {
   position: relative;
-  padding: 1rem 1rem 3rem;
-  margin-top: -2rem; /* pull hero upward to eat the splash-panel gap */
+  padding: 0 1rem 3rem;
+  margin-top: -3rem;
   text-align: center;
   background: var(--cb-gradient-glow);
   overflow: hidden;
 }
 
-/* On splash pages (where PageTitle hides the default h1), collapse the
- * now-empty first content-panel above the hero so it sits flush under
- * the header + announcement banner. The first .content-panel that
- * doesn't contain an h1 = splash page = collapse it entirely. */
-main .content-panel:first-of-type:not(:has(h1)) {
-  display: none !important;
+/* On splash pages, the content-panel that contains the hero has a
+ * 24px padding-top from Starlight's defaults — zero it out so the
+ * hero sits flush under the banner. */
+main .content-panel:has(.cb-hero) {
+  padding: 0 !important;
+  margin: 0 !important;
 }
-/* Also tighten the outer container on splash pages to the minimum */
-main .main-pane > .content-panel:first-of-type:empty {
-  display: none !important;
+/* Kill any bottom margin/padding on the announcement banner container */
+.sl-announcements-container {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+/* And the outer wrappers between main and the panel */
+.sl-markdown-content:has(> .cb-hero) {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+/* Zero any gap between main and the content-panel on splash pages */
+.main-pane:has(.cb-hero) > * {
+  margin-top: 0 !important;
 }
 
 .cb-hero::before {
@@ -459,6 +469,13 @@ main .main-pane > .content-panel:first-of-type:empty {
  * The wrap gets the silver→emerald gradient via background-clip:text; its
  * parent headline has a solid color, so nothing needs to be unset.
  * ──────────────────────────────────────────────────────────────────────── */
+/* Group that keeps "A" glued to the rotating word so they never wrap
+ * independently. On narrow viewports the whole group breaks as one
+ * unit to the next line — "A" stays with its word. */
+.cb-rotate-group {
+  display: inline-block;
+  white-space: nowrap;
+}
 .cb-rotate-wrap {
   display: inline-block;
   vertical-align: baseline;
@@ -498,16 +515,13 @@ main .main-pane > .content-panel:first-of-type:empty {
   background-image: linear-gradient(135deg, #64748b 0%, #059669 100%) !important;
 }
 
-/* Stacked mode — the JS adds .cb-lead-stacked to the rotating wrap's
- * parent (the .cb-hero-lead paragraph) when the widest rotating word
- * would overflow the line alongside "A ... wiki that anyone can
- * contribute to." Forces the wrap onto its own line so the rest of
- * the sentence stays put. */
-.cb-hero-lead.cb-lead-stacked .cb-rotate-wrap {
-  display: block;
-  width: auto !important; /* override the JS-locked pixel width */
-  margin: 0 auto;
-}
+/* NOTE: Previously .cb-lead-stacked class forced display:block on the
+ * wrap when the JS detected overflow. Replaced with a simpler approach:
+ * "A " + the rotating wrap live inside .cb-rotate-group which has
+ * white-space:nowrap. The group is an inline-block that breaks to a
+ * new line as ONE unit when it can't fit alongside the suffix
+ * "wiki that anyone can contribute to.". Natural wrapping handles
+ * all viewport widths without needing a layout decision in JS. */
 
 /* ────────────────────────────────────────────────────────────────────────
  * Splash flow diagram (home index.mdx)

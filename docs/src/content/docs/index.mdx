@@ -10,7 +10,7 @@ sidebar:
 <div class="cb-hero" role="img" aria-label="Cyberbaser is a contributable wiki platform built on Obsidian and GitHub">
 <span class="cb-hero-eyebrow">Research &amp; Foundations phase</span>
 <h2 class="cb-hero-headline">The contributable wiki, reinvented.</h2>
-<p class="cb-hero-lead">A <span class="cb-rotate-wrap"><span class="cb-rotate"><span>knowledge</span><span>research</span><span>compliance</span><span>handbook</span><span>team</span><span>knowledge</span></span></span> wiki that anyone can contribute to.</p>
+<p class="cb-hero-lead"><span class="cb-rotate-group">A <span class="cb-rotate-wrap"><span class="cb-rotate"><span>knowledge</span><span>research</span><span>compliance</span><span>handbook</span><span>team</span><span>knowledge</span></span></span></span> wiki that anyone can contribute to.</p>
 <p class="cb-hero-subhead">Obsidian authoring. GitHub as the source of truth. Zero-git contribution. Obsidian semantics survive the round trip.</p>
 <div class="cb-hero-actions"><a class="cb-hero-cta cb-hero-cta-primary" href="/cyberbaser/getting-started/">Read the vision →</a><a class="cb-hero-cta cb-hero-cta-secondary" href="/cyberbaser/concepts/problem/">The problem</a><a class="cb-hero-cta cb-hero-cta-secondary" href="/cyberbaser/design/architecture/">Design</a></div>
 
@@ -54,65 +54,14 @@ sidebar:
         return Math.ceil(max) + 8; // fudge for kerning + rounding
       }
 
-      // Walk backward from wrap to the nearest <br/> (or start of headline),
-      // collecting text nodes. That's the prefix on the SAME visual line.
-      function measurePrefixOnSameLine() {
-        var text = '';
-        var node = wrap.previousSibling;
-        while (node) {
-          if (node.nodeName === 'BR') break;
-          if (node.nodeType === Node.TEXT_NODE) text = node.textContent + text;
-          node = node.previousSibling;
-        }
-        var test = makeTest();
-        test.textContent = text;
-        headline.appendChild(test);
-        var w = test.getBoundingClientRect().width;
-        headline.removeChild(test);
-        return w;
-      }
-
-      // Same idea forward — the suffix text that sits after the wrap on
-      // the same visual line, until the next <br/> or end of headline.
-      function measureSuffixOnSameLine() {
-        var text = '';
-        var node = wrap.nextSibling;
-        while (node) {
-          if (node.nodeName === 'BR') break;
-          if (node.nodeType === Node.TEXT_NODE) text += node.textContent;
-          node = node.nextSibling;
-        }
-        var test = makeTest();
-        test.textContent = text;
-        headline.appendChild(test);
-        var w = test.getBoundingClientRect().width;
-        headline.removeChild(test);
-        return w;
-      }
-
-      // Layout decision: does (prefix + widest word + suffix) fit on one
-      // line inside the headline container? If yes → keep the rotate wrap
-      // inline with "that ... can contribute to." on the same line. If no
-      // → add .cb-headline-stacked which breaks the wrap onto its own line.
-      function layoutCheck(maxWordWidth) {
-        var container = headline.getBoundingClientRect().width;
-        var prefix = measurePrefixOnSameLine();
-        var suffix = measureSuffixOnSameLine();
-        var needed = prefix + maxWordWidth + suffix + 24; // 24px safety
-        if (needed > container) {
-          headline.classList.add('cb-lead-stacked');
-        } else {
-          headline.classList.remove('cb-lead-stacked');
-        }
-      }
-
-      // Lock the wrap width to the widest word (in non-stacked mode) so
-      // rotation never causes the line to reflow. In stacked mode the CSS
-      // overrides this to display:block; width:auto.
+      // Lock the wrap width to the widest word so tick() never has to
+      // change width and the line never reflows within the group. Natural
+      // text wrapping (plus white-space:nowrap on .cb-rotate-group)
+      // handles layout at narrow viewports: the group stays glued as a
+      // unit and breaks as a whole when there's no room.
       function applyLayout() {
         var maxW = measureMaxWord();
         wrap.style.width = maxW + 'px';
-        layoutCheck(maxW);
       }
 
       // Rotate one word forward. Pure transform — no width change.
