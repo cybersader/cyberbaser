@@ -1,24 +1,30 @@
 ---
 title: Cyberbaser
-description: The contributable Obsidian-to-web pipeline for a distributed cybersecurity knowledge wiki. GitHub as the source of truth, Obsidian semantics preserved, zero-git contribution.
+description: The contributable wiki, reinvented. Obsidian authoring, GitHub as the source of truth, zero-git contribution. Build knowledge, research, compliance, handbook, or team wikis that anyone can contribute to.
+template: splash
 hideMeta: true
 sidebar:
   hidden: true
 ---
 
-<div class="cb-hero" role="img" aria-label="Cyberbaser turns an Obsidian vault into a contributable public cyber wiki">
+<div class="cb-hero" role="img" aria-label="Cyberbaser is a contributable wiki platform built on Obsidian and GitHub">
 <span class="cb-hero-eyebrow">Research &amp; Foundations phase</span>
-<h2 class="cb-hero-headline">A cyber knowledge wiki<br/>that <span class="cb-rotate-wrap"><span class="cb-rotate"><span>anyone</span><span>power users</span><span>beginners</span><span>developers</span><span>domain experts</span><span>anyone</span></span></span> can contribute to.</h2>
-<p class="cb-hero-subhead">Obsidian authoring. GitHub as the single source of truth. Web CMS for zero-git contribution. Obsidian semantics survive the round trip.</p>
-<div class="cb-hero-actions"><a class="cb-hero-cta cb-hero-cta-primary" href="/cyberbaser/getting-started/">Read the vision →</a><a class="cb-hero-cta cb-hero-cta-secondary" href="/cyberbaser/concepts/problem/">The problem</a><a class="cb-hero-cta cb-hero-cta-secondary" href="/cyberbaser/design/architecture/">Architecture</a></div>
+<h2 class="cb-hero-headline">The contributable wiki, reinvented.</h2>
+<p class="cb-hero-lead">A <span class="cb-rotate-wrap"><span class="cb-rotate"><span>knowledge</span><span>research</span><span>compliance</span><span>handbook</span><span>team</span><span>knowledge</span></span></span> wiki that anyone can contribute to.</p>
+<p class="cb-hero-subhead">Obsidian authoring. GitHub as the source of truth. Zero-git contribution. Obsidian semantics survive the round trip.</p>
+<div class="cb-hero-actions"><a class="cb-hero-cta cb-hero-cta-primary" href="/cyberbaser/getting-started/">Read the vision →</a><a class="cb-hero-cta cb-hero-cta-secondary" href="/cyberbaser/concepts/problem/">The problem</a><a class="cb-hero-cta cb-hero-cta-secondary" href="/cyberbaser/design/architecture/">Design</a></div>
 
   <script is:inline>{`
     (function() {
-      var headline = document.querySelector('.cb-hero-headline');
       var wrap = document.querySelector('.cb-rotate-wrap');
       var rotate = document.querySelector('.cb-rotate');
       var words = document.querySelectorAll('.cb-rotate > span');
-      if (!headline || !wrap || !rotate || !words.length) return;
+      if (!wrap || !rotate || !words.length) return;
+      // The container is whatever block-level element the wrap lives inside
+      // (the hero lead paragraph). Use it for prefix/suffix measurement and
+      // as the target of .cb-headline-stacked (renamed .cb-lead-stacked).
+      var headline = wrap.parentElement;
+      if (!headline) return;
 
       // words[last] is a duplicate of words[0] so the scroll animation has
       // a smooth target before snapping back. Only cycle through 0..n-1.
@@ -94,9 +100,9 @@ sidebar:
         var suffix = measureSuffixOnSameLine();
         var needed = prefix + maxWordWidth + suffix + 24; // 24px safety
         if (needed > container) {
-          headline.classList.add('cb-headline-stacked');
+          headline.classList.add('cb-lead-stacked');
         } else {
-          headline.classList.remove('cb-headline-stacked');
+          headline.classList.remove('cb-lead-stacked');
         }
       }
 

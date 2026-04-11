@@ -136,10 +136,23 @@
  * ──────────────────────────────────────────────────────────────────────── */
 .cb-hero {
   position: relative;
-  padding: 4rem 1rem 5rem;
+  padding: 1rem 1rem 3rem;
+  margin-top: -2rem; /* pull hero upward to eat the splash-panel gap */
   text-align: center;
   background: var(--cb-gradient-glow);
   overflow: hidden;
+}
+
+/* On splash pages (where PageTitle hides the default h1), collapse the
+ * now-empty first content-panel above the hero so it sits flush under
+ * the header + announcement banner. The first .content-panel that
+ * doesn't contain an h1 = splash page = collapse it entirely. */
+main .content-panel:first-of-type:not(:has(h1)) {
+  display: none !important;
+}
+/* Also tighten the outer container on splash pages to the minimum */
+main .main-pane > .content-panel:first-of-type:empty {
+  display: none !important;
 }
 
 .cb-hero::before {
@@ -176,11 +189,22 @@
   font-weight: 700;
   line-height: 1.1;
   letter-spacing: -0.025em;
-  margin: 0 0 1.25rem;
-  /* Solid silver-white text; gradient only applied to the rotating word
-   * via .cb-rotate-wrap below. Nesting background-clip:text doesn't work
-   * reliably — keep this simple. */
+  margin: 0 0 1rem;
+  /* Solid silver-white text; the gradient lives on the rotating word
+   * inside the lead paragraph below. */
   color: var(--sl-color-white);
+}
+
+/* Lead paragraph — the rotating-word sentence that sits between the
+ * static headline and the small subhead. Medium size, silver text. */
+.cb-hero-lead {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: clamp(1.1rem, 2.2vw, 1.6rem);
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--sl-color-gray-1);
+  max-width: 44rem;
+  margin: 0 auto 1.5rem;
 }
 
 .cb-hero-subhead {
@@ -450,35 +474,36 @@
   display: block;
   transition: transform 0.4s cubic-bezier(0.5, 0, 0.2, 1);
 }
-/* Specificity bumped (cb-hero-headline ancestor) to beat any
- * Starlight/Nova default span rules that clobber the gradient.
+/* Specificity bumped (cb-hero-lead ancestor) to beat any Starlight/Nova
+ * default span rules that clobber the display/gradient.
  *
  * Uses background-image: directly (not `background:` shorthand) and a
  * literal gradient (not var()). The shorthand + var combo was silently
  * resolving to empty in Chromium — the var is defined on :root but the
  * shorthand parser was discarding the whole declaration when the var
  * value didn't round-trip through its validator. Direct longhand works. */
-.sl-markdown-content .cb-hero-headline .cb-rotate > span,
-.cb-hero-headline .cb-rotate > span {
-  display: block;
-  line-height: 1.15em;
-  white-space: nowrap;
+.sl-markdown-content .cb-hero-lead .cb-rotate > span,
+.cb-hero-lead .cb-rotate > span {
+  display: block !important;
+  line-height: 1.15em !important;
+  white-space: nowrap !important;
   background-image: linear-gradient(135deg, #c7ced9 0%, #10b981 100%) !important;
   -webkit-background-clip: text !important;
   background-clip: text !important;
   color: transparent !important;
   -webkit-text-fill-color: transparent !important;
 }
-:root[data-theme='light'] .sl-markdown-content .cb-hero-headline .cb-rotate > span,
-:root[data-theme='light'] .cb-hero-headline .cb-rotate > span {
+:root[data-theme='light'] .sl-markdown-content .cb-hero-lead .cb-rotate > span,
+:root[data-theme='light'] .cb-hero-lead .cb-rotate > span {
   background-image: linear-gradient(135deg, #64748b 0%, #059669 100%) !important;
 }
 
-/* Stacked mode — the JS adds .cb-headline-stacked to .cb-hero-headline
- * when the widest rotating word would overflow the line alongside
- * "that ... can contribute to." Forces the wrap onto its own line so
- * the rest of the sentence stays put. */
-.cb-hero-headline.cb-headline-stacked .cb-rotate-wrap {
+/* Stacked mode — the JS adds .cb-lead-stacked to the rotating wrap's
+ * parent (the .cb-hero-lead paragraph) when the widest rotating word
+ * would overflow the line alongside "A ... wiki that anyone can
+ * contribute to." Forces the wrap onto its own line so the rest of
+ * the sentence stays put. */
+.cb-hero-lead.cb-lead-stacked .cb-rotate-wrap {
   display: block;
   width: auto !important; /* override the JS-locked pixel width */
   margin: 0 auto;

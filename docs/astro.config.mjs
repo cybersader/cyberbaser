@@ -51,7 +51,7 @@ export default defineConfig({
         src: './public/logo.svg',
       },
       favicon: '/favicon.svg',
-      description: 'The contributable Obsidian-to-web pipeline for a distributed cybersecurity knowledge wiki.',
+      description: 'The contributable wiki, reinvented. Obsidian authoring, GitHub as the source of truth, zero-git contribution.',
       lastUpdated: true,
       components: {
         MobileMenuFooter: './src/components/MobileMenuFooter.astro',
