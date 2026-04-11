@@ -1,0 +1,61 @@
+---
+title: How to enforce round-trip correctness at CI time
+description: Principle 2 ("Obsidian semantics must round-trip") is currently an aspiration, not a tested property. Working out how to make it enforceable without hand-crafting a test corpus by hand.
+status: research
+tags: [translation-layer, testing]
+---
+
+## The core problem
+
+[Principle 2](/cyberbaser/getting-started/principles/#2-obsidian-semantics-must-round-trip) says Obsidian semantics must round-trip between the Web CMS and the vault without corruption. That's enforceable only if:
+
+1. We have a **test corpus** of real Obsidian-flavored pages
+2. Each page has a **canonical "expected after round-trip"** snapshot
+3. CI runs the full pipeline: parse → render → simulate an edit → save → parse again → compare
+
+The comparison step is where this gets hard. "Equal" for markdown isn't string equality — whitespace, frontmatter ordering, link aliasing, callout syntax variants all produce non-corrupting differences. A naive diff will flag every benign reformat as a regression.
+
+## Why it's an open challenge, not just a test-harness problem
+
+Frame it as a testing problem and the answer is "write unit tests." But the actual blocker is **defining what "round-trip correct" means** for each feature:
+
+- **Wikilinks**: is `[[Foo]]` ≡ `[[Foo|Foo]]` ≡ `[[Foo|  Foo  ]]`? Probably yes. Codify.
+- **Callouts**: is `> [!note]` ≡ `> [!note]-`? Different — `-` means collapsed. Not equivalent.
+- **Frontmatter**: YAML key ordering is not semantic; re-ordering on save is benign.
+- **Embeds**: `![[image.png]]` should round-trip as the same literal. But what about `![[image.png|200]]`? That's Obsidian's size hint — probably needs to survive.
+- **Block refs**: `[[Note#^xyz]]` — the block ID must be preserved exactly; a re-key would break inbound references.
+
+Each of these needs a written **equivalence rule** before we can automate the test.
+
+## Candidate approaches
+
+### Approach A — Property-based testing
+Use `fast-check` or similar. Generate synthetic Obsidian markdown, run it through the pipeline twice, assert equality modulo equivalence rules. Pros: catches generalization bugs. Cons: generators for realistic markdown are non-trivial to write; false positives on edge cases that aren't real-world.
+
+### Approach B — Fixture corpus
+Hand-write a set of vault pages covering every Tier 1 / Tier 2 feature. Each is a `.in.md` file paired with a `.expected.md` file (the state after one round-trip). CI runs the round-trip and does a semantic diff. Pros: concrete, understandable. Cons: corpus maintenance burden grows with feature list.
+
+### Approach C — Real vault diffing
+Clone `cybersader/cyberbase` at a known commit, run the full pipeline, render, simulate edits on a random 1% of pages, save, compare. Pros: catches real-world regressions. Cons: requires network I/O at test time, slow, flaky.
+
+### Approach D — Nothing, document the risk
+Accept that round-trip correctness is an aspiration, not a property. Document each failure mode as it's discovered. Pros: zero upfront cost. Cons: Principle 2 becomes a lie; contributors will eventually lose trust.
+
+## Leaning
+
+Approach B + Approach A, in that order. Fixture corpus first (concrete, testable, documents expectations). Then property-based testing layered on top once the equivalence rules are codified.
+
+## What needs to happen next
+
+1. **Define equivalence rules** for each Tier 1 feature (wikilinks, callouts, embeds, code blocks, math, Mermaid, tables). One Markdown document per feature, documenting what "equal" means.
+2. **Write 3–5 fixture pages** covering the common cases. Store in `docs/tests/fixtures/` (or wherever, TBD).
+3. **Build a minimal semantic-diff tool** — initially just `normalize(a) === normalize(b)` where `normalize` canonicalizes whitespace, frontmatter order, and link aliases.
+4. **Wire into CI** as a Playwright test or a standalone script.
+
+This is probably 2–3 sessions of work once Phase R exits and Phase 1 begins. Not doing it during Phase R because the principle needs to be grounded first.
+
+## Related
+
+- [Translation Layer](/cyberbaser/design/translation-layer/) — the subsystem this challenge is about
+- [Q04 in Open Questions](/cyberbaser/reference/open-questions/#q04--how-do-we-guarantee-no-lossy-round-trip-in-practice) — the precise question form
+- [Principle 2](/cyberbaser/getting-started/principles/#2-obsidian-semantics-must-round-trip) — the principle this enforces

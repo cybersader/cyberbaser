@@ -17,8 +17,12 @@ const sameDay = createdDate && updatedDate &&
 
 const status = data.status; // 'research' | 'planning' | 'stable' | 'parked'
 
-// Splash / hero pages opt out of the meta row via hideMeta OR sidebar.hidden
-const hideMeta = data.hideMeta === true || data.sidebar?.hidden === true;
+// Splash / hero pages opt out of the page title entirely (their MDX
+// renders its own hero headline). Detected via `hideTitle: true`, the
+// implicit `sidebar.hidden === true` marker, or the explicit `hideMeta`
+// flag which also subsumes title-hiding.
+const hideTitle = data.hideTitle === true || data.sidebar?.hidden === true;
+const hideMeta = hideTitle || data.hideMeta === true;
 const hasMeta = !hideMeta && Boolean(status || createdDate || (updatedDate && !sameDay));
 
 function fmt(d: Date): string {
@@ -30,7 +34,7 @@ function fmt(d: Date): string {
 }
 ---
 
-<h1 id={PAGE_TITLE_ID}>{data.title}</h1>
+{!hideTitle && <h1 id={PAGE_TITLE_ID}>{data.title}</h1>}
 
 {hasMeta && (
   <div class="cb-page-meta">

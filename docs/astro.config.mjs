@@ -98,6 +98,7 @@ export default defineConfig({
         { label: 'Concepts', autogenerate: { directory: 'concepts' } },
         { label: 'Design', autogenerate: { directory: 'design' } },
         { label: 'Research', autogenerate: { directory: 'research', collapsed: true } },
+        { label: 'Agent context & exploration', autogenerate: { directory: 'agent-context', collapsed: true } },
         { label: 'Development', autogenerate: { directory: 'development' } },
         { label: 'Reference', autogenerate: { directory: 'reference' } },
       ],

@@ -1,0 +1,51 @@
+---
+title: "2026-04-11 · Reinit + full docs site build-out"
+description: "Big session: reinitialized the workspace to the sibling convention and built out the docs site with real first-principles content, silver+emerald theme, Playwright-driven design iteration."
+date: 2026-04-11
+status: research
+tags: [meta, setup]
+---
+
+## What happened
+
+Reinitialized cyberbaser after ~4 months dormant. The working state was: a PARA-structured `docs/` of implementation notes, a parked Phase-0 Astro prototype in `site/`, an almost-empty `.claude/`, and no real first-principles thinking anywhere.
+
+The reinit had two phases:
+
+**Phase 1 — workspace structure (early in the session)**
+- Consolidated `site/ → docs/` to match the crosswalker / cyberchaste convention (both sibling projects use `docs/` as the Astro Starlight root, not `site/`).
+- Archived the old PARA dev docs to `.workspace/_archive-phase-0-docs/` (gitignored contents, preserved for mining).
+- Created `.workspace/` as a tracked-but-ignored scratch folder via `.gitignore` rules.
+- Scaffolded `.claude/` with `PROJECT_CONTEXT`, `FOCUS`, `KNOWLEDGE_BASE_PHILOSOPHY` (copied verbatim from crosswalker), `DOCUMENTATION_STYLE`, `RESEARCH_SOURCES`, and numbered first-principles files (00-INDEX through 41-QUESTIONS-RESOLVED).
+- Rewrote root `CLAUDE.md` to point at `.claude/` as the first-read surface.
+
+**Phase 2 — docs site build-out (later in the session)**
+- Full template copy from crosswalker: Astro 6, Starlight 0.38, Nova theme, full plugin stack (site-graph, blog, announcement, image-zoom, tags). Omitted `starlight-heading-badges` because its `<starlight-toc>` custom element collided with Nova's at runtime.
+- Wired `remark-obsidian-callout`, `remark-wiki-link`, `rehype-mermaid`, `rehype-external-links`.
+- Custom components: `PageTitle.astro` (status + date meta) and `MobileMenuFooter.astro`, both rebadged to `.cb-*` classes.
+- Silver + emerald palette in `brand.css`. Graphite base (near-black in dark, off-white in light) with emerald accent appearing only in links, focus, CTAs, active sidebar, hero gradient, card top borders on hover.
+- Ported `.claude/` numbered files into real Concepts / Design / Reference prose. Each custom MDX component uses hand-drawn inline SVG (no Mermaid walls): triangle tradeoff diagram on Problem, 4-layer architecture diagram on Architecture, flow diagram on the splash.
+
+## Bugs hit and fixed
+
+A bunch of MDX + Astro gotchas surfaced as the first screenshots came in:
+
+1. **Rotating headline was a transparent blob.** Nested `background-clip: text` on parent h1 + child rotate-wrap; the child inherited `color: transparent` and painted the box background. Fix: parent headline is solid silver; only the rotate wrap gets the gradient.
+2. **Flow SVG was all black.** Inline MDX `<style>{`...`}</style>` wrapped rules in `:global(...)`, which is an Astro-scoped-component escape hatch that **doesn't work inside `.mdx` `<style>` tags** — rules were silently dropped. Fix: moved all `.cb-sv-*` rules into `brand.css`.
+3. **Hero subhead had `height: 0`.** MDX was splitting multiline `<p class="cb-hero-subhead">...</p>` into an empty classed `<p>` + an unclassed `<p>` with the actual text. Fix: single-line MDX for all custom JSX elements containing text.
+4. **`<h1><p>...</p></h1>` on the hero headline.** Same MDX wrapping bug. Fix: changed to `<h2>` (which also fixed duplicate-h1 semantics since Starlight's PageTitle already renders the `<h1>`), collapsed to single line, updated `PageTitle.astro` to hide the default h1 on splash pages via `sidebar.hidden === true`.
+5. **`starlight-toc` already defined runtime error.** `starlight-heading-badges` registered a custom element that collided with Nova's. Removed the plugin.
+
+## Dev-loop improvements
+
+- Added `tests/screenshots.spec.ts` that captures 30 full-page screenshots (15 pages × dark/light) for design iteration. Run serially with `--workers=1` to avoid overwhelming the dev server.
+- Added `scripts/preflight.mjs` — cross-platform `bun install` guard so `bun run dev` works from both WSL and Windows PowerShell without manual reinstalls.
+
+## Commit history
+
+- `bc02aa7` — Reinitialize workspace: adopt `.claude/` first-principles KB convention
+- `31bb90b` — Build out docs site: template copy, silver+emerald theme, first-principles content
+
+## What's loaded for next session
+
+Phase R is still active. The exit criteria in [Roadmap](/cyberbaser/getting-started/roadmap/) haven't moved: Problem / Ecosystem / Concepts / Prior Art all have first-pass content but need deeper research, especially Prior Art where each tool entry should grow from "what I know" into "what I actually tested." The Open Questions in [Reference](/cyberbaser/reference/open-questions/) are the immediate blockers.

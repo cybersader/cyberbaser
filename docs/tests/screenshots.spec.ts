@@ -32,7 +32,19 @@ const pages = [
   { slug: '/research/prior-art/', name: 'prior-art' },
   { slug: '/reference/open-questions/', name: 'open-questions' },
   { slug: '/reference/tradeoffs/', name: 'tradeoffs' },
+  { slug: '/agent-context/', name: 'agent-context' },
+  { slug: '/agent-context/zz-log/', name: 'zz-log' },
+  { slug: '/agent-context/zz-log/2026-04-11-reinit-and-docs-site/', name: 'zz-log-reinit' },
+  { slug: '/agent-context/zz-challenges/', name: 'zz-challenges' },
+  { slug: '/agent-context/zz-challenges/mdx-auto-wrapping/', name: 'zz-challenges-mdx' },
+  { slug: '/agent-context/zz-challenges/translation-layer-round-trip-enforcement/', name: 'zz-challenges-roundtrip' },
 ];
+
+// Hide the Astro dev toolbar (it's position:fixed and gets captured in
+// full-page screenshots as a floating pill, looking like broken UI).
+const HIDE_DEV_TOOLBAR_CSS = `
+  astro-dev-toolbar, #dev-toolbar-root, dev-toolbar { display: none !important; }
+`;
 
 for (const scheme of ['dark', 'light'] as const) {
   test.describe(`Screenshots · ${scheme}`, () => {
@@ -51,6 +63,8 @@ for (const scheme of ['dark', 'light'] as const) {
         }, scheme);
         // Re-navigate so the theme applies from the server-rendered HTML
         await page.reload();
+        // Suppress the Astro dev toolbar in full-page screenshots
+        await page.addStyleTag({ content: HIDE_DEV_TOOLBAR_CSS });
         // Wait for the rotating-text element on home, or h1 elsewhere
         if (name === 'home') {
           await page.waitForSelector('.cb-rotate-wrap', { state: 'visible' });

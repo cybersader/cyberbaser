@@ -59,3 +59,9 @@ tags:
   inventory:
     label: Inventory
     description: Stock-taking of existing work
+  gotcha:
+    label: Gotcha
+    description: Tricky implementation traps worth remembering
+  testing:
+    label: Testing
+    description: Test strategies, harnesses, fixtures

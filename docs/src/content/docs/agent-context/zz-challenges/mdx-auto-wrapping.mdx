@@ -1,0 +1,75 @@
+---
+title: MDX auto-wrapping custom JSX elements in <p> tags
+description: A real MDX / Astro content-processing gotcha that surfaced building the docs site. Captured here so future sessions don't repeat the same bug.
+status: research
+tags: [meta, gotcha]
+---
+
+## The gotcha
+
+When you write MDX like this:
+
+```mdx
+<div class="cb-hero">
+  <h1 class="cb-hero-headline">
+    A cyber knowledge wiki
+  </h1>
+  <p class="cb-hero-subhead">
+    Obsidian authoring.
+  </p>
+</div>
+```
+
+The MDX processor sees the text children (`A cyber knowledge wiki`, `Obsidian authoring.`) as **markdown block content** (they're on their own lines) and auto-wraps them in `<p>` tags. The rendered HTML is:
+
+```html
+<div class="cb-hero">
+  <h1 class="cb-hero-headline">
+    <p>A cyber knowledge wiki</p>
+  </h1>
+  <p class="cb-hero-subhead">
+    <p>Obsidian authoring.</p>
+  </p>
+</div>
+```
+
+That's **invalid HTML** — `<h1>` can't contain `<p>`, `<p>` can't contain `<p>`. Browsers auto-fix by closing the outer `<p>` and `<h1>` early, which silently destroys the intended layout. The `<p class="cb-hero-subhead">` ends up with `height: 0` because it's empty, and the real subhead text lives in an unclassed sibling `<p>`.
+
+## How to spot it
+
+- Custom JSX classes on `<p>`, `<h1>`–`<h6>`, `<a>`, `<div>` appear to have no styling in the browser
+- Computed height of the classed element is 0
+- Text content appears "below" where you expected
+- `curl | grep` shows nested tags like `<h1 class="..."><p>`
+
+## The workaround
+
+**Keep custom JSX elements + their text content on a single line**, with no line breaks between the opening tag, the text, and the closing tag:
+
+```mdx
+<div class="cb-hero">
+<span class="cb-hero-eyebrow">Research phase</span>
+<h2 class="cb-hero-headline">A cyber knowledge wiki<br/>that anyone can contribute to.</h2>
+<p class="cb-hero-subhead">Obsidian authoring. GitHub as truth. Zero-git contribution.</p>
+</div>
+```
+
+**Multi-element children are fine if each child is inline** (no blank line between them). The markdown block-detection kicks in only when the text appears to be its own paragraph.
+
+## Secondary gotchas from the same root
+
+- `<a class="cb-card" href="...">` with multi-line `<span>` children works because `<span>` is inline — MDX doesn't wrap those
+- `<div class="cb-grid">` with multi-line `<a>` children works because `<a>` is inline — same reason
+- `<script>{`...`}</script>` with multi-line JS code works because the JS is wrapped in a template literal expression `{`...`}`, which MDX treats as a JavaScript value, not markdown
+
+The danger zone is: **a block-level JSX element containing a plain text child on its own line.**
+
+## Why MDX does this
+
+MDX's philosophy is "any markdown between JSX elements is still markdown." A line of text inside a `<div>` is a paragraph; paragraphs get `<p>` tags; that's how all other Markdown-to-HTML works. The JSX element wrapping is incidental.
+
+Unfortunately this means you can't write "semantic HTML with nice indentation" the way you'd write it in plain HTML. You have to think of every text child as "would this be a paragraph in markdown" — if yes, it'll get wrapped.
+
+## Related
+
+- [2026-04-11 · Reinit + docs site build-out](/cyberbaser/agent-context/zz-log/2026-04-11-reinit-and-docs-site/) — the session where this was discovered
