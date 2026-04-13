@@ -65,3 +65,6 @@ tags:
   testing:
     label: Testing
     description: Test strategies, harnesses, fixtures
+  collaboration:
+    label: Collaboration
+    description: Real-time editing, CRDT, sync, multi-user workflows
