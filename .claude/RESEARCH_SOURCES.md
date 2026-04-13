@@ -13,12 +13,12 @@
 - **Description**: The actual content that cyberbaser publishes.
 
 ### Local Obsidian Research Vault
-- **Path**: `C:\Users\Cybersader\Documents\4 VAULTS\cyberbase\📁 51 - Cyberbase\`
+- **Path**: Local Obsidian vault (see `.claude/FOCUS.md` for path)
 - **Key folders**: Contributable Obsidian Wiki/, Obsidian as a CMS/, Cyberbase Development/, Cyberbase Tech Stack/, Collaboration in Obsidian/, ✒️ Cyberbase Architecture/
 - **Decision logs**: [Vault vision mining](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/) · [Vault tech stack mining](/cyberbaser/agent-context/zz-log/2026-04-13-vault-tech-stack-mining/) · [Vault collab mining](/cyberbaser/agent-context/zz-log/2026-04-13-vault-collab-mining/)
 
 ### MCP + Agent Workflow Patterns
-- **Path**: `C:\Users\Cybersader\Documents\1 Projects, Workspaces\mcp-workflow-and-tech-stack\docs\`
+- **Path**: Local MCP workflow project (sibling workspace)
 
 ### Sibling Projects
 - **crosswalker** — https://github.com/cybersader/crosswalker (most mature `.claude/` layout, research roadmap pattern)

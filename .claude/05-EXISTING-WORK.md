@@ -49,12 +49,12 @@ Inventory of what has *already* been built toward cyberbaser. Prevents re-resear
 
 ## In the Local Obsidian Research Vault
 
-- `C:\Users\Cybersader\Documents\4 VAULTS\cyberbase\📁 51 - Cyberbase\`
+- Local Obsidian vault (📁 51 - Cyberbase folder)
 - **Status**: unknown contents as of 2026-04-11. Audit early in the research phase — likely contains prior thinking that should be ported into these numbered files.
 
 ## In the MCP / Agent Workflow Project
 
-- `C:\Users\Cybersader\Documents\1 Projects, Workspaces\mcp-workflow-and-tech-stack\docs\`
+- Local MCP workflow project (sibling workspace)
 - **Status**: not cyberbaser-specific but contains KB patterns and agent conventions worth pulling in.
 
 ---

@@ -19,7 +19,7 @@
 
 **In scope during Phase R**:
 - Reading and writing into the numbered `.claude/` files
-- Auditing the local Obsidian research vault at `C:\Users\Cybersader\Documents\4 VAULTS\cyberbase\📁 51 - Cyberbase\` for prior thinking to port in
+- Auditing the local Obsidian research vault  for prior thinking to port in
 - Mining `.workspace/_archive-phase-0-docs/` for content that should be hoisted into the numbered files (especially for 21-ARCHITECTURE and 22-TRANSLATION-LAYER)
 - Surveying sibling projects (crosswalker, cyberchaste) for patterns worth borrowing
 - Minor bug fixes to the parked Phase-0 prototype *only* if a research path requires running the site

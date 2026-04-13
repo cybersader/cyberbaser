@@ -41,7 +41,7 @@ bun run preview --host 0.0.0.0  # serve built output (use this for mobile testin
 ## Pointers to External Context
 
 - **Live content vault**: https://github.com/cybersader/cyberbase
-- **Local research vault**: `C:\Users\Cybersader\Documents\4 VAULTS\cyberbase\📁 51 - Cyberbase\`
+- **Local research vault**: Obsidian vault, 📁 51 - Cyberbase folder (local path varies by machine)
 - **Vault mining logs**: [Vision mining](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/) · [Tech stack mining](/cyberbaser/agent-context/zz-log/2026-04-13-vault-tech-stack-mining/) · [Collab mining](/cyberbaser/agent-context/zz-log/2026-04-13-vault-collab-mining/)
 - **Research roadmap**: [Roadmap · Phase R](/cyberbaser/getting-started/roadmap/)
 - **Sibling repos**: `cybersader/crosswalker`, `cybersader/cyberchaste`
