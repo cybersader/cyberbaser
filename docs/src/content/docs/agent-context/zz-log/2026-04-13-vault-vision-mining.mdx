@@ -1,0 +1,84 @@
+---
+title: "2026-04-13 · Vault vision mining"
+description: "Mined the two critical vision documents from the Cyberbase Obsidian vault: 'Contributable Obsidian Wiki' and 'Obsidian as a CMS'. Extracted the user's original dream, stated goals, and the hardest unsolved problem."
+date: 2026-04-13
+status: research
+tags: [research, vision, meta]
+---
+
+## What we mined
+
+Two files from `📁 51 - Cyberbase/` in the local Obsidian research vault:
+
+1. **`Contributable Obsidian Wiki/Contributable Obsidian Wiki.md`** — the core vision doc, dated April 2024, updated through Dec 2024
+2. **`Obsidian as a CMS/Obsidian as a CMS.md`** — strategic positioning + ecosystem survey, dated Dec 2024
+
+## The user's original dream (verbatim synthesis)
+
+From the vault, paraphrased into one coherent vision:
+
+> Go to someone's Obsidian website, click "edit page", and immediately edit the content right there. Click submit, and it generates a PR and runs GitHub Actions. You can also edit by cloning the repo into Obsidian or from GitHub directly — 3+ ways to edit. You can "edit with someone" for live anonymous collaborative editing. Each page shows contributors with photos and a contributors page. Obsidian community plugins (Dataview, linting, attachment management) can run in multiple environments — not just in Obsidian locally, but also in GitHub Actions, serverless functions, and client-side CMS apps.
+
+**Key elements:**
+- **3+ contribution paths**: inline on-site editing, clone vault to Obsidian, GitHub UI/dev
+- **Live anonymous collaboration**: secure ephemeral editing sessions
+- **Contributor attribution**: photos, contributor pages, visible credit
+- **Plugin execution across environments**: the "hardest layer" — community plugins running in GitHub Actions, serverless, client-side
+- **Open Authoring**: Decap CMS Open Authoring for zero-git PR contribution
+
+## The hardest unsolved problem (from the vault)
+
+> "The hardest layer here would be creating an engine where some community plugins can run on multiple platforms (GitHub Actions, custom serverless functions, client-side with a custom CMS web-app, etc.)"
+
+The user explicitly identified this in the vault. The challenge: Obsidian plugins are designed for the Electron desktop app. Making them run in non-Obsidian contexts (CI, serverless, browser) requires either:
+1. An Obsidian-headless runtime (doesn't exist officially)
+2. Rewriting plugin logic as standalone remark/rehype plugins
+3. A "generate markdown" intermediate step where plugins run in Obsidian and output their results before publishing
+4. A hybrid where some plugins run everywhere and others only run locally
+
+This maps directly to **R04 (Plugin execution abstraction)** in the [Roadmap](/cyberbaser/getting-started/roadmap/).
+
+## What the vault already decided (prior state)
+
+| Decision | State | Confidence |
+|---|---|---|
+| 3 contribution paths (inline, Obsidian+Git, GitHub direct) | ✅ Stated as vision | High |
+| Decap CMS as the CMS layer (specifically Open Authoring) | ✅ Named explicitly | Medium — not fully evaluated against alternatives |
+| Live anonymous collab (Peerdraft or similar) | ✅ Desired | Low — no implementation research done |
+| Contributor attribution (photos + contributor pages) | ✅ Desired | Low — no implementation research |
+| Plugin execution across environments | ⚠️ Identified as hard | Open — no solution proposed |
+| Obsidian Publish as the initial publishing base | ⚠️ Early thinking | Superseded — Astro+Starlight is now the chosen SSG |
+
+## What still needs investigation
+
+1. **Identity (R01)**: the vault describes a SPECIFIC tool (contributable Obsidian wiki) but the current positioning is GENERAL ("the contributable wiki, reinvented"). Which is it? The answer shapes everything.
+2. **CMS choice (R02)**: the vault names Decap CMS but doesn't compare it against Sveltia, Tina, Emdash, Pages CMS, or Strapi in depth. Need a real evaluation.
+3. **Plugin abstraction (R04)**: the hardest problem is stated but not explored. Needs a dedicated deep-dive.
+4. **Collab model (R05)**: the vault vision includes live collab but the current architecture assumes git-only. Need to decide if v1 includes real-time or defers it.
+5. **Inline editing UX (R10)**: the dream is "click edit and edit right there." What does that technically mean? Decap widget, TinaCMS inline, custom BlockSuite/Tiptap editor?
+
+## Curated links from these documents
+
+- [Contentstack Composable DXP](https://www.contentstack.com/composable-dxp)
+- [Kontent.ai Composable DXP](https://kontent.ai/specials/what-is-composable-dxp/)
+- [Write Like a Pro with Astro and Obsidian](https://www.hungrimind.com/articles/obsidian-with-astro)
+- [awesome-markdown-editors](https://github.com/mundimark/awesome-markdown-editors)
+- [Decap CMS Open Authoring](https://decapcms.org/docs/open-authoring/)
+- [Prose: A Content Editor for GitHub](https://github.com/prose/prose)
+- [Jamstack SSG listing](https://jamstack.org/generators/)
+- [Jamstack Headless CMS listing](https://jamstack.org/headless-cms/)
+- [obsidian-static-site-export](https://github.com/yy4382/obsidian-static-site-export)
+- [obsidian-markdown-blogger](https://github.com/afazio1/obsidian-markdown-blogger)
+- [Digital Garden plugin](https://dg-docs.ole.dev/)
+
+## Implications for cyberbaser
+
+The vault vision is **more ambitious than what we currently describe** on the docs site. The current site says "three contribution paths + translation layer + round-trip fidelity." The vault adds: live anonymous collab, contributor attribution with photos, and plugin execution across environments.
+
+**Decision needed (R01):** is v1 the FULL vision (including live collab + plugin abstraction) or is v1 the MVP (three paths + translation layer + CMS contribution) with the rest deferred?
+
+## Related
+
+- [Roadmap · R01](/cyberbaser/getting-started/roadmap/#r01--what-is-cyberbasers-identity) — the identity question this log feeds
+- [Roadmap · R04](/cyberbaser/getting-started/roadmap/#r04--plugin-execution-abstraction) — the hardest problem
+- [Roadmap · R10](/cyberbaser/getting-started/roadmap/#r10--inline-editing-ux) — the dream feature

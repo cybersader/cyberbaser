@@ -1,0 +1,81 @@
+---
+title: "2026-04-13 · Vault collaboration mining"
+description: "Mined the 'Collaboration in Obsidian' vault folder. Surveyed live sync, git-based collab, and workaround methods. The vault vision says live anonymous collab; the current architecture assumes git-only."
+date: 2026-04-13
+status: research
+tags: [research, collaboration, contribution]
+---
+
+## What we mined
+
+**`Collaboration in Obsidian/Collaboration in Obsidian.md`** — organized into four categories of collaboration approaches.
+
+## Four collaboration models found
+
+### 1. File-level sync (P2P)
+
+- **Pears protocol** — P2P directory sync where participants control their own vault, synced via protocol. "Mount" multiple directories and use Obsidian on top.
+- **SyncTrayzor** — file-level sync tool
+
+**Relevance:** This is the "everyone has their own copy" model. Compatible with git-based workflows but doesn't solve real-time editing.
+
+### 2. Live collaborative editing
+
+- **Peerdraft** — secure real-time collaboration for Obsidian (named in the vault tech stack)
+- **screen.garden** — screen sharing / remote pairing
+- **obsidian-multiplayer** — real-time collaboration plugin (community)
+- **Self-hosted LiveSync** (formerly obsidian-livesync) — CouchDB-based sync with conflict resolution
+- **Etherpad** — classic real-time collaborative document editor
+
+**Relevance:** This is the "edit with someone live" model from the vault vision. Peerdraft is the closest existing solution.
+
+### 3. Git-based collaboration
+
+- **Samba** — network file sharing
+- **Filestash** — self-hosted web file client
+- **Sturdy** — real-time version control (open-source, for startups)
+- **GitLab, Gitea, Gogs** — self-hosted git platforms
+- **Radicle** — P2P, decentralized git forge
+
+**Relevance:** This is the "everyone uses git" model. Most mature, most boring. Works today with `obsidian-git` plugin.
+
+### 4. Workaround methods (VS Code, GitHub.dev)
+
+- **Cryptpad** — encrypted collaborative editor
+- **Etherpad** — (again)
+- **VS Code LiveShare** — if vault is in GitHub, use github.dev editor + LiveShare plugin
+- **github.dev** — browser-based VS Code for any GitHub repo
+
+**Relevance:** These are "good enough" solutions that don't require any custom infrastructure. A contributor can use github.dev to edit any file in the vault right now.
+
+## The tension
+
+The vault vision wants **live anonymous collaborative editing** (like Google Docs). The current cyberbaser architecture assumes **git-only async workflows** (PRs, commits, branches).
+
+These are fundamentally different:
+- **Git-only** = each edit is a commit. Conflicts resolve via merge. No real-time feedback. Simple.
+- **Real-time** = edits are characters/operations. Conflicts resolve via CRDT/OT. Requires a sync server or P2P. Complex.
+
+**The question for R05:** does v1 include real-time collab, or is it a v2+ feature?
+
+Arguments for deferring real-time to v2+:
+- Git-only is already functional (obsidian-git + GitHub PRs + Decap Open Authoring)
+- CRDT infrastructure is a significant build (sync server, conflict resolution, presence indicators)
+- The vault vision treats it as a nice-to-have ("edit WITH someone"), not the core value prop
+
+Arguments for including real-time in v1:
+- It's the feature that makes cyberbaser feel like "the future" vs "another static site generator"
+- Peerdraft exists as a ready-made solution (but only works inside Obsidian, not on the web)
+- BlockSuite/OctoBase from AFFiNE provide CRDT-native content editing that could be adapted
+
+## Recommendation (preliminary)
+
+**Defer real-time collab to v2.** Focus v1 on making the three async paths (Obsidian+Git, Web CMS, GitHub direct) excellent. The CRDT/sync research from the vault (50+ links in Development file) is valuable future context but shouldn't block v1.
+
+**Exception:** if github.dev + LiveShare counts as "live collab," it works TODAY with zero infrastructure. Document it as the v1 workaround.
+
+## Related
+
+- [Roadmap · R05](/cyberbaser/getting-started/roadmap/#r05--collaboration-model) — the decision this log feeds
+- [2026-04-13 · Vault tech stack mining](/cyberbaser/agent-context/zz-log/2026-04-13-vault-tech-stack-mining/) — sync/CRDT links
+- [Design · Contribution Workflows](/cyberbaser/design/contribution-workflows/) — the page that will reflect the decision

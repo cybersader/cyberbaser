@@ -1,0 +1,128 @@
+---
+title: "2026-04-13 · Vault tech stack mining"
+description: "Mined the Cyberbase Development, Tech Stack, and JS & Services vault folders. 300+ curated links across CMS, auth, sync/CRDT, SSGs, hosting, databases, and text editors."
+date: 2026-04-13
+status: research
+tags: [research, ecosystem, meta]
+---
+
+## What we mined
+
+Three files from the vault:
+
+1. **`Cyberbase Development/Cyberbase Development.md`** — 300+ curated links, the richest single source in the vault
+2. **`Cyberbase Tech Stack/Cyberbase Tech Stack.md`** — defined stack at a high level
+3. **`Cyberbase JS & Services/`** — (cross-referenced by Development, overlapping content)
+
+## Defined tech stack (prior state)
+
+From the Tech Stack file, the user's early thinking:
+
+| Layer | Choice | Status |
+|---|---|---|
+| Knowledge base | Obsidian (Sync, Publish, Git plugin) | ✅ Confirmed |
+| Version control | Git + GitHub + GitHub Actions | ✅ Confirmed |
+| CMS | "Git-Based CMS" (generic — Decap named elsewhere) | ⚠️ Needs evaluation (R02) |
+| SSG | Astro + Starlight | ✅ Confirmed (currently deployed) |
+| Media hosting | Cloudinary + S3/Storj | ⚠️ Not yet implemented |
+| Collaboration | Peerdraft | ⚠️ Not yet evaluated (R05) |
+| CSS | Tailwind | ✅ In use (via Nova theme) |
+| Hosting | Cloudflare (Pages) | ✅ Configured |
+| Auth | Not specified in tech stack | ⚠️ Needs decision (R03) |
+
+## CMS landscape (from Development file — 20+ options)
+
+The vault has curated links for these CMS options. **Bold** = most detail in the vault:
+
+- **Strapi** — extensive: RBAC, CKEditor/TinyMCE integrations, Cloudinary, Obsidian-to-Strapi export plugin
+- **Sveltia CMS** — Decap fork, linked to GitHub + Jamstack listing
+- **Pages CMS** — simple git-backed, linked
+- **Tina CMS** — extensive: Astro integration, self-hosted auth, Git providers, database adapters, co-authoring, Netlify Functions hosting, custom auth
+- **Keystone** — linked
+- **Coisas** — GitHub pages editor, linked to Jamstack
+- **Sanity** — auth, roles, API reference linked
+- **Craft CMS** — public registration, fields plugins
+- **Magnolia CMS** — enterprise DXP
+- **Gentics Mesh** — self-hosted, auth docs linked
+- **Decap CMS** — Open Authoring doc linked (key feature)
+- **Atomic Server** — linked
+- **Squidex** — open-source headless, linked
+- **Manifest CMS** — 1-file micro-backend
+- **Flextype** — flat-file CMS
+- **Prismic** — headless with page builder
+- **Contember** — business apps
+- **Dossier** — toolkit for building headless CMS
+- **Hygraph** — GraphQL headless
+
+**Not in vault but user requested:** Emdash CMS — needs research from scratch.
+
+## Auth landscape (from Development file — 20+ options)
+
+- **Better-Auth** — linked (newer, gaining traction)
+- **Stack Auth** — open-source Auth0/Clerk alternative
+- **OpenAuth** — linked
+- **Auth.js** — FusionAuth integration, general docs
+- **Auth0** — linked
+- **Okta** — linked
+- **Clerk** — pricing page linked
+- **Ory/Kratos** — cloud-native identity, detailed
+- **SuperTokens** — pricing + docs linked
+- **Hanko** — pricing linked
+- **Oso** — authorization layer, use cases
+- **Fief** — docs + roadmap linked
+- **Cerbos** — open-source authz, developer-focused
+- **Bitwarden Passwordless** — linked
+- **Dex** — federated OIDC provider
+- **FusionAuth** — full platform linked
+- **Stytch** — identity platform + fraud prevention
+- **Identity providers**: Keycloak, Authentik (with Wiki.js integration!), Authelia
+
+## Sync & CRDT landscape (from Development file — 50+ links)
+
+**Concepts & theory:**
+- CRDTs vs OT (extensive comparison links)
+- Local-first principles (Ink & Switch manifesto, multiple conference recaps)
+- Conflict resolution strategies (CouchDB-style, Hasura-based)
+
+**Libraries & frameworks:**
+- **Yjs** — shared editing, most linked
+- **Automerge** — CRDT library, v2 docs
+- **SyncedStore** — Yjs-based reactive store
+- **BlockSuite** — from AFFiNE, CRDT-native content editing
+- **OctoBase** — CRDT database from AFFiNE
+- **ShareDB** — OT-based realtime database
+
+**Sync engines:**
+- ElectricSQL, PowerSync, Turso (local-first SQLite), RxDB
+- Building offline realtime sync engine (reference gist)
+
+**Text editors with collab:**
+- CKEditor, Tiptap, Conclave, BlockSuite, Code-Sync, Banger-Editor (Bangle.io)
+
+**Note-taking apps with collab:**
+- AFFiNE (BlockSuite + OctoBase), AppFlowy, Outline, Boost Note, Standard Notes, Bangle.io
+
+## SSG landscape
+
+- Jekyll, Hugo, Astro (primary — extensive links), 11ty/Eleventy
+- Starlight theme links (starlight-theme-obsidian by Fevol, astro-loader-obsidian)
+- awesome-astro curated list
+
+## Hosting
+
+- Netlify (Astro integration docs), Cloudflare Pages (current choice), GitHub Pages, GitLab Pages, Firebase, DigitalOcean, Vercel
+
+## What this mining tells us
+
+1. **CMS evaluation (R02) is well-seeded.** We have links for 20+ CMSes. Tina and Strapi have the most detail. Decap Open Authoring is the known quantity. Emdash needs fresh research.
+2. **Auth evaluation (R03) is comprehensive.** 20+ options linked. Authentik's Wiki.js integration is interesting for cyberbaser context. Better-Auth is the newer contender.
+3. **Sync/CRDT research (R05) is DEEP.** 50+ links covering theory + implementations. The question isn't "what exists" but "do we need it for v1." If yes, Yjs/Automerge + BlockSuite are the strongest candidates.
+4. **SSG choice is settled.** Astro + Starlight is deployed and working. No need to re-evaluate unless R06 (translation layer) reveals a showstopper.
+5. **Hosting is settled.** Cloudflare Pages is configured and working.
+
+## Related
+
+- [Roadmap · R02](/cyberbaser/getting-started/roadmap/#r02--cms-landscape-survey)
+- [Roadmap · R03](/cyberbaser/getting-started/roadmap/#r03--auth-model)
+- [Roadmap · R05](/cyberbaser/getting-started/roadmap/#r05--collaboration-model)
+- [RESEARCH_SOURCES.md](/.claude/RESEARCH_SOURCES.md) — master link collection (to be updated with all links from this mining)
