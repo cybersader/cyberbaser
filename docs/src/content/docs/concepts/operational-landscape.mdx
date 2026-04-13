@@ -1,0 +1,264 @@
+---
+title: Operational landscape
+description: Who does what work in the contributable wiki ecosystem — actors × components × resource intensity. The combined view that determines what to build, what to crowdsource, and what needs ongoing funding.
+tags: [architecture, design, planning]
+sidebar:
+  order: 10
+status: research
+---
+
+The operational landscape shows **who does what** in the contributable wiki ecosystem. It combines three dimensions:
+- **Actors** — who builds, configures, contributes, reads, hosts
+- **Components** — translation layer, CMS, auth, publishing, content, plugins
+- **Resource intensity** — build-once investment vs periodic updates vs continuous operational work
+
+This is the combined view that determines what to build into software, what to crowdsource, and what requires ongoing resources (money, people, tooling).
+
+See [crosswalker's operational landscape](https://cybersader.github.io/crosswalker/concepts/operational-landscape/) for the sibling project's version of this analysis.
+
+---
+
+## The work gradient
+
+<div class="cb-gradient-bar">
+  <div class="cb-grad-track">
+    <div class="cb-grad-fill"></div>
+  </div>
+  <div class="cb-grad-labels">
+    <span class="cb-grad-l" style="left:0%"><strong>Build once</strong><br/>First principles</span>
+    <span class="cb-grad-l" style="left:25%"><strong>Build &amp; refine</strong><br/>Evolves slowly</span>
+    <span class="cb-grad-l" style="left:50%"><strong>Community</strong><br/>Shared work</span>
+    <span class="cb-grad-l" style="left:75%"><strong>Ongoing ops</strong><br/>Regular updates</span>
+    <span class="cb-grad-l" style="left:100%"><strong>Continuous</strong><br/>Never done</span>
+  </div>
+</div>
+
+The gradient runs from **emerald** (build once, rooted in first principles) through **amber** (community-maintained, shared effort) to **red** (ongoing operational work that never ends).
+
+### Where cyberbaser's work items fall
+
+<div class="cb-work-items">
+  <div class="cb-wi cb-wi-software" style="--pos:3%"><span class="cb-wi-name">Translation layer spec</span><span class="cb-wi-desc">Tier system, round-trip rules</span></div>
+  <div class="cb-wi cb-wi-software" style="--pos:8%"><span class="cb-wi-name">Remark/rehype plugins</span><span class="cb-wi-desc">Wikilinks, callouts, embeds</span></div>
+  <div class="cb-wi cb-wi-software" style="--pos:14%"><span class="cb-wi-name">Round-trip test suite</span><span class="cb-wi-desc">Fixture corpus + CI</span></div>
+  <div class="cb-wi cb-wi-software" style="--pos:20%"><span class="cb-wi-name">Content addressing</span><span class="cb-wi-desc">Stable URLs, permalink scheme</span></div>
+  <div class="cb-wi cb-wi-platform" style="--pos:30%"><span class="cb-wi-name">CMS integration</span><span class="cb-wi-desc">Decap/Sveltia/EmDash glue</span></div>
+  <div class="cb-wi cb-wi-platform" style="--pos:36%"><span class="cb-wi-name">Auth + OAuth proxy</span><span class="cb-wi-desc">GitHub OAuth, contributor identity</span></div>
+  <div class="cb-wi cb-wi-platform" style="--pos:42%"><span class="cb-wi-name">Inline editing UX</span><span class="cb-wi-desc">In-page WYSIWYG widget</span></div>
+  <div class="cb-wi cb-wi-community" style="--pos:52%"><span class="cb-wi-name">Plugin compat profiles</span><span class="cb-wi-desc">Which plugins work headless</span></div>
+  <div class="cb-wi cb-wi-community" style="--pos:58%"><span class="cb-wi-name">Vault templates</span><span class="cb-wi-desc">Starter configs, frontmatter schemas</span></div>
+  <div class="cb-wi cb-wi-community" style="--pos:64%"><span class="cb-wi-name">Contribution guidelines</span><span class="cb-wi-desc">CONTRIBUTING.md, PR templates</span></div>
+  <div class="cb-wi cb-wi-ops" style="--pos:74%"><span class="cb-wi-name">Hosting + deploy</span><span class="cb-wi-desc">Cloudflare Pages, CI pipeline</span></div>
+  <div class="cb-wi cb-wi-ops" style="--pos:80%"><span class="cb-wi-name">Dependency updates</span><span class="cb-wi-desc">Astro, Starlight, plugins</span></div>
+  <div class="cb-wi cb-wi-ops" style="--pos:86%"><span class="cb-wi-name">Content moderation</span><span class="cb-wi-desc">Spam, abuse, PR review</span></div>
+  <div class="cb-wi cb-wi-user" style="--pos:95%"><span class="cb-wi-name">Content creation</span><span class="cb-wi-desc">Writing the actual wiki</span></div>
+</div>
+
+<div class="cb-grad-legend">
+  <span class="cb-gl cb-gl-software">Software (build once)</span>
+  <span class="cb-gl cb-gl-platform">Platform (build &amp; refine)</span>
+  <span class="cb-gl cb-gl-community">Community (shared)</span>
+  <span class="cb-gl cb-gl-ops">Operations (ongoing)</span>
+  <span class="cb-gl cb-gl-user">User work (your effort)</span>
+</div>
+
+---
+
+## The responsibility matrix
+
+Who owns what across the contributable wiki ecosystem?
+
+**Color key**: <span style="color:#10b981">●</span> One-time/rare — <span style="color:#eab308">●</span> Periodic updates — <span style="color:#ef4444">●</span> Continuous ops — <span style="color:#5c6574">●</span> N/A
+
+| | Translation layer | CMS / contribution | Auth + identity | Publishing pipeline | Content | Plugin abstraction |
+|---|---|---|---|---|---|---|
+| **Cyberbaser core team** | <span style="color:#10b981">●</span> Builds remark/rehype plugins, defines [tier system](/cyberbaser/design/translation-layer/) | <span style="color:#10b981">●</span> Integrates CMS, builds [inline editing](/cyberbaser/getting-started/roadmap/) | <span style="color:#10b981">●</span> Builds OAuth proxy, [auth model](/cyberbaser/getting-started/roadmap/) | <span style="color:#10b981">●</span> Configures Astro + Starlight + deploy | <span style="color:#5c6574">● N/A</span> | <span style="color:#eab308">●</span> Tests [Obsidian CLI/headless](/cyberbaser/getting-started/roadmap/) compat |
+| **Vault owner** | <span style="color:#5c6574">● N/A</span> | <span style="color:#eab308">●</span> Configures CMS for their vault | <span style="color:#eab308">●</span> Sets up OAuth app, manages trusted contributors | <span style="color:#eab308">●</span> Deploys, maintains domain | <span style="color:#ef4444">●</span> Creates + curates content | <span style="color:#eab308">●</span> Chooses which plugins to enable |
+| **Web contributor** (zero-git) | <span style="color:#5c6574">● N/A</span> | <span style="color:#ef4444">●</span> Uses CMS to edit pages | <span style="color:#10b981">●</span> Signs in via OAuth | <span style="color:#5c6574">● N/A</span> | <span style="color:#ef4444">●</span> Writes + corrects content | <span style="color:#5c6574">● N/A</span> |
+| **Power contributor** (Obsidian+git) | <span style="color:#5c6574">● N/A</span> | <span style="color:#5c6574">● N/A</span> | <span style="color:#5c6574">● N/A</span> (uses git directly) | <span style="color:#5c6574">● N/A</span> | <span style="color:#ef4444">●</span> Writes content with full Obsidian affordances | <span style="color:#eab308">●</span> Uses plugins locally |
+| **Hosting provider** (Cloudflare, GitHub) | <span style="color:#5c6574">● N/A</span> | <span style="color:#5c6574">● N/A</span> | <span style="color:#10b981">●</span> Provides OAuth endpoints | <span style="color:#ef4444">●</span> Serves static files, runs Functions | <span style="color:#5c6574">● N/A</span> | <span style="color:#5c6574">● N/A</span> |
+| **Obsidian (the company)** | <span style="color:#eab308">●</span> Defines [OFM spec](https://help.obsidian.md/Editing+and+formatting/Obsidian+Flavored+Markdown) | <span style="color:#5c6574">● N/A</span> | <span style="color:#5c6574">● N/A</span> | <span style="color:#5c6574">● N/A</span> | <span style="color:#5c6574">● N/A</span> | <span style="color:#eab308">●</span> Maintains [CLI/headless](https://obsidian.md/cli) runtime |
+| **Community** | <span style="color:#eab308">●</span> Reports edge cases, contributes plugins | <span style="color:#eab308">●</span> Contributes CMS templates | <span style="color:#5c6574">● N/A</span> | <span style="color:#eab308">●</span> Contributes themes, plugins | <span style="color:#ef4444">●</span> Contributes content to vaults | <span style="color:#eab308">●</span> Tests plugin compat, files issues |
+
+**Key insight**: The **content creation** column (rightmost in spirit) is red for almost everyone — because the content is the whole point. No amount of software eliminates the need to *write the wiki*. Cyberbaser's job is to make contribution as frictionless as possible, not to write the content itself.
+
+---
+
+## The five tiers of work
+
+### Tier 1: First-principles software <span style="color:#10b981">(build once)</span>
+
+Work rooted in the fundamental nature of the problem. Once solved correctly, this rarely changes because the underlying principles don't change.
+
+| Work item | Why it's resilient | Related |
+|---|---|---|
+| [Translation layer spec](/cyberbaser/design/translation-layer/) (tier system, round-trip rules) | Obsidian-flavored markdown is stable; the tier definitions are structural | [Principles #2](/cyberbaser/getting-started/principles/#2-obsidian-semantics-must-round-trip) |
+| Remark/rehype plugins (wikilinks, callouts, embeds) | unified AST ecosystem is mature; plugin interfaces rarely break | [Ecosystem](/cyberbaser/concepts/ecosystem/) |
+| [Round-trip correctness test suite](/cyberbaser/agent-context/zz-challenges/translation-layer-round-trip-enforcement/) | Equivalence rules for markdown are mathematical; fixture corpus is durable | [Translation layer](/cyberbaser/design/translation-layer/) |
+| Content addressing / permalink scheme | URL stability is a wiki cardinal sin to violate; the scheme is chosen once | [Primitives: stable URLs](/cyberbaser/concepts/primitives/#content-addressable--stable-urls) |
+
+**Business analogy**: R&D. High upfront cost, near-zero marginal cost afterward. This is the technical moat — if cyberbaser's translation layer is the best, it's reusable as a library (`@cyberbaser/translate`).
+
+### Tier 2: Platform engineering <span style="color:#3b82f6">(build and refine)</span>
+
+Built on first principles but adapts as the ecosystem shifts. Changes on the order of months to years.
+
+| Work item | What causes change | Related |
+|---|---|---|
+| CMS integration ([Decap](https://decapcms.org/), [Sveltia](https://github.com/sveltia/sveltia-cms), [EmDash](https://github.com/emdash-cms/emdash)) | CMS landscape evolves; new features, new APIs | [Roadmap: CMS survey](/cyberbaser/getting-started/roadmap/) |
+| Auth + OAuth proxy | Auth standards evolve; new providers emerge | [Roadmap: auth model](/cyberbaser/getting-started/roadmap/) |
+| [Inline editing UX](/cyberbaser/getting-started/roadmap/) | Editor tech improves ([BlockSuite](https://blocksuite.io/), [Tiptap](https://tiptap.dev/)) | [Vault vision](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/) |
+| Publishing pipeline (Astro + Starlight) | Astro/Starlight version updates, new integrations | [Architecture](/cyberbaser/design/architecture/) |
+| Plugin abstraction ([Obsidian CLI/headless](https://obsidian.md/cli)) | Obsidian's headless runtime evolves; community plugins adapt | [Roadmap: plugin execution](/cyberbaser/getting-started/roadmap/) |
+
+**Business analogy**: Product engineering. This is the **platform value** — the integration work that vault owners don't want to do themselves. A hosted service ("bring your vault, get a contributable wiki") is Tier 2 work packaged as a product.
+
+### Tier 3: Community-maintained <span style="color:#eab308">(shared work)</span>
+
+Per-vault or per-plugin work that's shareable. Once someone figures it out, everyone benefits.
+
+| Work item | Who does it | Related |
+|---|---|---|
+| Plugin compatibility profiles (which Obsidian plugins work in headless mode) | Community tests; cyberbaser validates | [Roadmap: plugin execution](/cyberbaser/getting-started/roadmap/) |
+| Vault templates / starter configs | First vault owner configures; shares via template repo | [Existing work](/cyberbaser/reference/existing-work/) |
+| Contribution guidelines + PR templates | Community refines; vault owner customizes | [Contribution workflows](/cyberbaser/design/contribution-workflows/) |
+| Theme variants (beyond silver+emerald) | Community contributes; cyberbaser maintains as examples | Current: [brand.css](/cyberbaser/development/) |
+
+**Business analogy**: Marketplace / ecosystem. The more contributors, the more valuable each contribution. Like Obsidian's community plugin ecosystem — once someone builds a plugin, thousands of vaults benefit.
+
+**Key insight**: This is where a community config registry (like [crosswalker's config browser](https://cybersader.github.io/crosswalker/features/config-system/)) would create the most value — per-vault configuration done once, shared infinitely.
+
+### Tier 4: Operational maintenance <span style="color:#ef4444">(ongoing)</span>
+
+Work that recurs because the external world changes. Cannot be eliminated — only automated or made more efficient.
+
+| Work item | Why it recurs | Related |
+|---|---|---|
+| Hosting + deployment | Cloudflare Pages Functions, domain management, SSL | [Architecture](/cyberbaser/design/architecture/) |
+| Dependency updates (Astro, Starlight, CMS, plugins) | Upstream releases on their own schedule; security patches | [Development](/cyberbaser/development/) |
+| Content moderation (spam, abuse, PR review) | Abuse scales with openness; Open Authoring = open attack surface | [Contribution workflows](/cyberbaser/design/contribution-workflows/) |
+| OAuth proxy maintenance | Token handling, secret rotation, provider API changes | [Roadmap: auth model](/cyberbaser/getting-started/roadmap/) |
+
+**Business analogy**: DevOps / SRE. If cyberbaser were a business, this is where **subscription revenue** funds ongoing labor. A hosted service wraps Tier 4 into a monthly fee so vault owners don't have to manage it.
+
+### Tier 5: User work <span style="color:#a855f7">(your effort)</span>
+
+Work specific to YOUR vault. No tool can eliminate it — only make it more efficient.
+
+| Work item | Why only you can do it | Related |
+|---|---|---|
+| Content creation | Only you know what to write about | The whole point |
+| Contribution review | Only you can judge quality and accuracy for your domain | [Contribution workflows](/cyberbaser/design/contribution-workflows/) |
+| Vault organization | Only you know the right structure for your knowledge domain | [Primitives: vault](/cyberbaser/concepts/primitives/#vault) |
+| Contributor management | Only you decide who to trust with auto-merge vs manual review | [Contribution workflows](/cyberbaser/design/contribution-workflows/) |
+
+**Business analogy**: Customer's work. Cyberbaser makes contribution FASTER and more reliable, but the actual knowledge is irreducibly human.
+
+---
+
+## The sustainability question
+
+If cyberbaser were a business, where would the money come from?
+
+| Tier | Funding model | What it looks like |
+|---|---|---|
+| **Tier 1** (first-principles software) | Open-source + grants + sponsorship | The translation layer is MIT-licensed. Anyone can use it. Goodwill + ecosystem gravity. |
+| **Tier 2** (platform engineering) | **Hosted service (SaaS)** | "Bring your vault, get a contributable wiki." Monthly fee covers CMS setup, auth, inline editing, deployment. This is the product. |
+| **Tier 3** (community) | Self-sustaining once critical mass is reached | Plugin compat profiles, vault templates, contribution guidelines — all community-contributed. |
+| **Tier 4** (operations) | **Included in the SaaS fee** | Hosting, dependency updates, content moderation tooling, OAuth proxy — vault owners don't want to manage this. |
+| **Tier 5** (user work) | **The value proposition** | Cyberbaser sells efficiency, not elimination. "Your wiki, your content, but anyone can contribute without learning git." |
+
+**The core business thesis**: Tier 1 is the technical moat (hard to replicate). Tier 2+4 packaged together is the product (a hosted contributable wiki service). Tier 3 is the ecosystem (community contributions make the platform more valuable). Tier 5 is what the customer actually pays for — making their irreducible work as painless as possible.
+
+**Comparison to existing models**:
+- [Obsidian Publish](https://obsidian.md/publish) charges $10/month for Tier 2+4 — but has NO contribution model (no Tier 5 efficiency)
+- [GitBook](https://www.gitbook.com/) charges per user for Tier 2+4 — but has NO Obsidian fidelity (no Tier 1 moat)
+- [Notion public pages](https://www.notion.so/) is free for read — but has NO git SSOT (violates [Principle 1](/cyberbaser/getting-started/principles/#1-github-is-the-single-source-of-truth))
+- Cyberbaser occupies the intersection: Obsidian fidelity + git SSOT + zero-git contribution + hosted service
+
+---
+
+## What this means for the roadmap
+
+The [Research & Foundations roadmap](/cyberbaser/getting-started/roadmap/) should be read through this lens:
+
+- **Identity question** → determines which tiers to invest in first
+- **CMS survey** → Tier 2 decision (the platform choice)
+- **Auth model** → Tier 2+4 decision (infrastructure + ongoing maintenance)
+- **Plugin abstraction** → Tier 1 investment (if solved, becomes the technical moat)
+- **Collaboration model** → Tier 2 scope (real-time collab = much more Tier 4 ops work)
+- **Translation layer** → Tier 1 investment (the foundation everything else builds on)
+- **Operational model** → THIS PAGE (which tiers get resourced, in what order)
+
+**The architecture goal**: Push as much work as possible toward Tier 1 (solved once, resilient). Where that's impossible (Tiers 3-4), build community infrastructure so the work is shared. Only Tier 5 is irreducibly the user's burden.
+
+---
+
+## Related
+
+- [The Problem](/cyberbaser/concepts/problem/) — what gap cyberbaser fills
+- [Architecture](/cyberbaser/design/architecture/) — technical components mapped to tiers
+- [Contribution Workflows](/cyberbaser/design/contribution-workflows/) — who does what to contribute
+- [Roadmap](/cyberbaser/getting-started/roadmap/) — what's being researched in which order
+- [Vault vision mining](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/) — the original dream
+- [Crosswalker operational landscape](https://cybersader.github.io/crosswalker/concepts/operational-landscape/) — sibling project's version
+
+<style>{`
+  .cb-gradient-bar { margin: 2rem 0 1rem; }
+  .cb-grad-track {
+    height: 20px; border-radius: 10px; overflow: hidden;
+    background: var(--sl-color-gray-6);
+    border: 1px solid var(--sl-color-gray-4);
+  }
+  .cb-grad-fill {
+    height: 100%; border-radius: 10px;
+    background: linear-gradient(90deg, #10b981 0%, #eab308 50%, #ef4444 100%);
+    opacity: 0.85;
+  }
+  .cb-grad-labels {
+    position: relative; height: 40px; margin-top: 6px;
+  }
+  .cb-grad-l {
+    position: absolute; transform: translateX(-50%);
+    text-align: center; font-size: 0.62rem; line-height: 1.3;
+    color: var(--sl-color-gray-2);
+  }
+  .cb-grad-l strong { color: var(--sl-color-gray-1); display: block; font-size: 0.65rem; }
+
+  .cb-work-items {
+    display: flex; flex-direction: column; gap: 3px;
+    margin: 1.5rem 0; padding: 0.75rem 0;
+  }
+  .cb-wi {
+    display: flex; align-items: center; gap: 0.75rem;
+    padding: 0.35rem 0.6rem; border-radius: 6px;
+    border-left: 3px solid; font-size: 0.72rem;
+    background: var(--sl-color-gray-6);
+    margin-left: calc(var(--pos) * 0.6);
+  }
+  .cb-wi-name { font-weight: 600; white-space: nowrap; }
+  .cb-wi-desc { color: var(--sl-color-gray-3); font-size: 0.65rem; }
+
+  .cb-wi-software { border-color: #10b981; }
+  .cb-wi-software .cb-wi-name { color: #10b981; }
+  .cb-wi-platform { border-color: #3b82f6; }
+  .cb-wi-platform .cb-wi-name { color: #3b82f6; }
+  .cb-wi-community { border-color: #eab308; }
+  .cb-wi-community .cb-wi-name { color: #eab308; }
+  .cb-wi-ops { border-color: #ef4444; }
+  .cb-wi-ops .cb-wi-name { color: #ef4444; }
+  .cb-wi-user { border-color: #a855f7; }
+  .cb-wi-user .cb-wi-name { color: #a855f7; }
+
+  .cb-grad-legend {
+    display: flex; flex-wrap: wrap; gap: 1rem; margin: 1rem 0 2rem;
+    font-size: 0.65rem;
+  }
+  .cb-gl { display: flex; align-items: center; gap: 0.3rem; }
+  .cb-gl::before { content: '●'; font-size: 0.9rem; }
+  .cb-gl-software::before { color: #10b981; }
+  .cb-gl-platform::before { color: #3b82f6; }
+  .cb-gl-community::before { color: #eab308; }
+  .cb-gl-ops::before { color: #ef4444; }
+  .cb-gl-user::before { color: #a855f7; }
+`}</style>
