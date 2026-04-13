@@ -92,12 +92,6 @@ cyberbaser/
 └── CLA.md                # Contributor License Agreement
 ```
 
-## Sibling projects
-
-- [**crosswalker**](https://github.com/cybersader/crosswalker) — GRC framework crosswalking Obsidian plugin. Most mature `.claude/` layout; research roadmap pattern copied from here.
-- [**cyberchaste**](https://github.com/cybersader/cyberchaste) — Device-level content filtering research. Source of the shared KB philosophy.
-- [**cyberbase**](https://github.com/cybersader/cyberbase) — The live Obsidian content vault that cyberbaser will eventually publish.
-
 ## License
 
 [AGPL-3.0](LICENSE) — open source, but anyone hosting cyberbaser as a service must share their modifications. See [CLA.md](CLA.md) for contributor terms.
