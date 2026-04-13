@@ -61,11 +61,19 @@ tags: [roadmap, planning]
 
 **Question:** How can Obsidian community plugins (Dataview, linting, attachment management, etc.) run outside of Obsidian — in GitHub Actions, serverless functions, or a client-side CMS?
 
-**Why it matters:** This is the "hardest layer" the user identified in the vault vision doc. Without this, contributors who don't use Obsidian get a degraded experience — plugin-managed patterns (tags, links, metadata) only work when someone opens the vault in Obsidian. That's a bottleneck.
+**Why it matters:** This is the "hardest layer" the user identified in the [vault vision doc](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/). Without this, contributors who don't use Obsidian get a degraded experience — plugin-managed patterns (tags, links, metadata) only work when someone opens the vault in Obsidian. That's a bottleneck.
 
-**Source material:** Vault: [Contributable Obsidian Wiki](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/) — "The hardest layer here would be creating an engine where some community plugins can run on multiple platforms"
+**Major development (2025-2026):** Obsidian now has an **official headless runtime + CLI tool**:
+- [Obsidian CLI](https://obsidian.md/cli) — ships with Obsidian 1.12 (Early Access, Catalyst license). "Anything you can do in Obsidian you can do from the command line."
+- [Obsidian Headless](https://github.com/obsidianmd/obsidian-headless) — official headless client for Obsidian Sync and Publish. Sync/publish from CLI without the desktop app.
+- [obsidianless](https://github.com/lucastraba/obsidianless) — community tool to run Obsidian CLI on headless Linux servers (no monitor, no subscription).
+- [Headless Sync docs](https://help.obsidian.md/headless) · [CLI docs](https://obsidian.md/cli)
 
-**Decision log:** pending
+This potentially **solves the hardest problem.** If community plugins can run via the CLI in a GitHub Action, the "plugin execution across environments" gap closes. Key question: do community plugins actually load and execute in headless/CLI mode, or is it limited to core Obsidian features?
+
+**Source material:** Vault: [Contributable Obsidian Wiki](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/) · [Obsidian headless GitHub issue #8](https://github.com/obsidianmd/obsidian-headless/issues/8) (headless server/Docker support) · [HN discussion](https://news.ycombinator.com/item?id=47197267)
+
+**Decision log:** pending (needs hands-on testing of CLI + community plugins)
 
 ---
 

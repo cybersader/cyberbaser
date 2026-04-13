@@ -26,15 +26,20 @@ From the vault, paraphrased into one coherent vision:
 - **Plugin execution across environments**: the "hardest layer" — community plugins running in GitHub Actions, serverless, client-side
 - **Open Authoring**: Decap CMS Open Authoring for zero-git PR contribution
 
-## The hardest unsolved problem (from the vault)
+## The hardest unsolved problem (from the vault) — now potentially solved
 
 > "The hardest layer here would be creating an engine where some community plugins can run on multiple platforms (GitHub Actions, custom serverless functions, client-side with a custom CMS web-app, etc.)"
 
-The user explicitly identified this in the vault. The challenge: Obsidian plugins are designed for the Electron desktop app. Making them run in non-Obsidian contexts (CI, serverless, browser) requires either:
-1. An Obsidian-headless runtime (doesn't exist officially)
-2. Rewriting plugin logic as standalone remark/rehype plugins
-3. A "generate markdown" intermediate step where plugins run in Obsidian and output their results before publishing
-4. A hybrid where some plugins run everywhere and others only run locally
+The user explicitly identified this in the vault. At the time of writing (April 2024), Obsidian plugins were designed for the Electron desktop app only. Making them run in non-Obsidian contexts required workarounds.
+
+**Major update (2025-2026):** Obsidian has since released:
+- **[Obsidian CLI](https://obsidian.md/cli)** — official CLI shipping with Obsidian 1.12 (Early Access). "Anything you can do in Obsidian you can do from the command line." Enables scripting, automation, and integration with external tools.
+- **[Obsidian Headless](https://github.com/obsidianmd/obsidian-headless)** — official headless client for Sync and Publish. Vaults can be synced/published from CLI without the desktop app.
+- **[obsidianless](https://github.com/lucastraba/obsidianless)** — community tool to run the full Obsidian CLI on headless Linux servers (no monitor, no subscription needed).
+
+This potentially **dissolves the hardest problem.** If community plugins can load and execute via the CLI in a GitHub Action or Docker container, the entire "plugin execution across environments" challenge becomes an integration problem instead of a from-scratch build.
+
+**Open question for [R04](/cyberbaser/getting-started/roadmap/#r04--plugin-execution-abstraction):** do community plugins (Dataview, linting, attachment management) actually load and execute in headless/CLI mode? Or is CLI limited to core Obsidian features? Needs hands-on testing.
 
 This maps directly to **R04 (Plugin execution abstraction)** in the [Roadmap](/cyberbaser/getting-started/roadmap/).
 
