@@ -1,0 +1,74 @@
+---
+title: "05 · Translation layer per-feature equivalence"
+description: "For each Tier 1 feature, define the precise rules for round-trip correctness. What does 'equal' mean?"
+sidebar:
+  label: "05 · Translation equiv"
+  order: 5
+status: research
+tags: [research, translation-layer, testing]
+---
+
+## The assignment
+
+[Principle 2](/cyberbaser/getting-started/principles/#2-obsidian-semantics-must-round-trip) says Obsidian semantics must round-trip. The [existing challenge](/cyberbaser/agent-context/zz-challenges/translation-layer-round-trip-enforcement/) asks HOW to enforce this. **This challenge asks WHAT "round-trip correct" means for each specific feature.** Define the equivalence rules — which variations are semantically identical and which are corruption?
+
+This is the test-specification work that feeds the fixture corpus. Each feature's rules become one test file.
+
+## What to investigate
+
+For EACH Tier 1 feature, answer these 4 questions:
+
+### 1. Wikilinks
+- Source variants: `[[Page]]`, `[[Page|alias]]`, `[[Page#heading]]`, `[[Page#^block-id]]`, `[[Page|alias with spaces]]`
+- Are these equivalent? `[[Foo]]` ≡ `[[Foo|Foo]]`? `[[Foo]]` ≡ `[Foo](foo.md)`?
+- What's the canonical form the translation layer should output?
+- [remark-wiki-link](https://github.com/landakram/remark-wiki-link) — does it preserve all variants?
+
+### 2. Callouts
+- Source variants: `> [!note]`, `> [!note]+` (expanded), `> [!note]-` (collapsed), `> [!custom-type]`
+- Is `> [!note]` ≡ `> [!note]+`? (Both expand by default in Obsidian)
+- Is `> [!NOTE]` ≡ `> [!note]`? (Case sensitivity)
+- [remark-obsidian-callout](https://www.npmjs.com/package/remark-obsidian-callout) — what does it normalize?
+
+### 3. Image embeds
+- Source: `![[image.png]]`, `![[image.png|200]]` (size hint), `![[image.png|alt text]]`
+- Is the `|200` size hint preserved in round-trip? If the CMS strips it, is that corruption?
+- How do relative vs absolute image paths resolve across the translation layer?
+
+### 4. Note embeds
+- Source: `![[Other Note]]`, `![[Other Note#Section]]`, `![[Other Note#^block-id]]`
+- Does the web output inline the embedded content or link to it?
+- If the CMS edits the embedding page, does the embed reference survive?
+
+### 5. Math
+- Inline: `$E = mc^2$`, Block: `$$\int_0^\infty$$`
+- Does the remark-math + rehype-katex pipeline preserve the source exactly?
+- Dollar-sign ambiguity: `$5 and $10` — does the parser incorrectly treat this as math?
+
+### 6. Mermaid
+- Fenced: ` ```mermaid\ngraph TD\nA --> B\n``` `
+- Does [rehype-mermaid](https://www.npmjs.com/package/rehype-mermaid) render at build time (SVG) or client-side?
+- If rendered to SVG, can the CMS round-trip the original mermaid source?
+
+### 7. Tables
+- Standard markdown tables — any ambiguity in cell alignment, pipe escaping, or header-less tables?
+
+## Context to read first
+
+- [Translation Layer](/cyberbaser/design/translation-layer/) — the Tier 1/2/3 system
+- [Round-trip enforcement challenge](/cyberbaser/agent-context/zz-challenges/translation-layer-round-trip-enforcement/) — the enforcement mechanism
+- [Obsidian Flavored Markdown spec](https://help.obsidian.md/Editing+and+formatting/Obsidian+Flavored+Markdown) — the source of truth for syntax
+- [Primitives: round-trip editability](/cyberbaser/concepts/primitives/#round-trip-editability)
+
+## What success looks like
+
+For each of the 7 features:
+- **Canonical form** definition (what the translation layer normalizes TO)
+- **Equivalence rules** (which source variants are semantically identical)
+- **Corruption examples** (what a lossy transform looks like — "if you see X, the round-trip is broken")
+- **Plugin/tool responsible** (which remark/rehype plugin handles it)
+- **Test fixture sketch** (input markdown + expected output + round-trip assertion)
+
+Deliverable: a single document (or 7 mini-documents) that could be handed to a test engineer to build the fixture corpus.
+
+**Validity**: holds until the [OFM spec](https://help.obsidian.md/Editing+and+formatting/Obsidian+Flavored+Markdown) changes significantly.

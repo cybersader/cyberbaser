@@ -1,0 +1,53 @@
+---
+title: "01 · Identity + operational model"
+description: "Prove or disprove that 'the contributable wiki, reinvented' is a viable product position. Where's the value moat?"
+sidebar:
+  label: "01 · Identity"
+  order: 1
+status: research
+tags: [research, identity, planning]
+---
+
+## The assignment
+
+Cyberbaser claims to be **"the contributable wiki, reinvented."** Your job: **stress-test this claim.** Is this a real product position that someone would pay for, or is it a feature-list dressed as a vision? Where exactly does the sustained value live — and is it defensible?
+
+The [vault vision](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/) is more ambitious than the current docs describe (live anonymous collab, contributor attribution, plugin execution across environments). The [operational landscape](/cyberbaser/concepts/operational-landscape/) maps five tiers of work. This challenge resolves the identity question that blocks every downstream decision.
+
+## What to investigate
+
+1. **Publishing tool, wiki platform, or collaboration framework?** These are three different products with different customers, competitors, and funding models. Which is cyberbaser PRIMARILY, and which are stretch goals? Compare the technical requirements of each. A publishing tool is Tier 1+2 work. A wiki platform adds Tier 3+4. A collaboration framework adds real-time infrastructure (Tier 2+4 at scale).
+
+2. **What's v1 vs what's deferred?** The vault vision includes: 3+ contribution paths, live anonymous collab, contributor attribution with photos, plugin execution across environments. That's 2+ years of work. What's the minimum viable product that still justifies the "reinvented" claim? Concretely: which [roadmap tasks](/cyberbaser/getting-started/roadmap/) are v1-blocking vs nice-to-have?
+
+3. **Compare to incumbents on value, not features.** [Obsidian Publish](https://obsidian.md/publish) ($10/mo), [Quartz v4](https://quartz.jzhao.xyz/) (free, OSS), [GitBook](https://www.gitbook.com/) (free tier + paid), [wiki.js](https://js.wiki/) (free, OSS), [Notion public pages](https://www.notion.so/) (free). For each: what do they charge for? What's the WORK they eliminate for the customer? Where does cyberbaser's value proposition differ, and is that difference worth paying for?
+
+4. **Which [operational landscape tier](/cyberbaser/concepts/operational-landscape/) is the business?** Tier 1 (translation layer library) is hard to monetize. Tier 2+4 (hosted service) is a SaaS business. Tier 3 (community ecosystem) is a platform play. Which one, and what's the revenue model — subscription, per-seat, open-core, or sponsorship?
+
+5. **Steel-man the "this shouldn't exist" argument.** What if Quartz + Decap CMS + GitHub Pages already covers 90% of the value proposition for free? What if [EmDash](https://github.com/emdash-cms/emdash) (Cloudflare's Astro-native CMS) subsumes cyberbaser's contribution layer? What's the honest counter?
+
+6. **License implications.** Given the value analysis: is [AGPL-3.0](/cyberbaser/) the right license? Should the translation layer be MIT (maximize adoption) while the hosted service is proprietary? Or is the current AGPL + CLA dual-license sufficient?
+
+## Context to read first
+
+- [Operational landscape](/cyberbaser/concepts/operational-landscape/) — the five tiers + sustainability model
+- [The Problem](/cyberbaser/concepts/problem/) — the tradeoff triangle (fidelity / contribution / no lock-in)
+- [Vault vision mining](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/) — the original dream
+- [Roadmap](/cyberbaser/getting-started/roadmap/) — current research tasks
+- [Prior Art](/cyberbaser/research/prior-art/) — what others tried
+
+## What success looks like
+
+A decision document with:
+- **One-sentence identity statement** that could go on the README
+- **v1 scope boundary** — 5-7 bullet list of what's in vs out
+- **Competitor comparison table** (product, price, Obsidian fidelity Y/N, contribution Y/N, git SSOT Y/N, moat)
+- **Revenue model recommendation** with the tier it maps to
+- **The strongest counter-argument** (steel-manned) and why cyberbaser should proceed anyway (or shouldn't)
+- **Validity**: this recommendation holds until [specific condition — e.g., "until EmDash ships Open Authoring" or "until Quartz adds contribution"]
+
+## What this does NOT decide
+
+- Specific CMS choice (that's [Challenge 02](/cyberbaser/agent-context/zz-challenges/02-cms-evaluation/))
+- Technical architecture details (that's the [Architecture page](/cyberbaser/design/architecture/))
+- Timeline or resource allocation

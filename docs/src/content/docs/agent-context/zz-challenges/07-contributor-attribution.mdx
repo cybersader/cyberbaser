@@ -1,0 +1,50 @@
+---
+title: "07 · Contributor attribution across paths"
+description: "How do you show 'who edited this' when contributions come from 3+ surfaces? Design a unified attribution model."
+sidebar:
+  label: "07 · Attribution"
+  order: 7
+status: research
+tags: [research, attribution, contribution]
+---
+
+## The assignment
+
+The [vault vision](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/) includes **"show contributors at the top of each page with pic and contributors page."** Contributions come from 3+ surfaces: Obsidian+Git push, Web CMS PR (fork-and-PR via Decap), and GitHub direct edit. **Your job: design a unified attribution model that works across all paths.**
+
+This isn't just a UI question — it's a data-model question. Where does contributor identity live? How does it survive the translation layer? What about anonymous contributors?
+
+## What to investigate
+
+1. **Does git blame work across all paths?** When a contributor edits via Decap's Open Authoring (fork → branch → PR → merge), does `git blame` correctly attribute the lines to the contributor's GitHub account? Or does it show the merge commit author (the vault owner)? Test with a real Decap Open Authoring workflow.
+
+2. **Anonymous / pseudonymous contributors.** The vault vision mentions "anonymous secure editing sessions." If a contributor doesn't have a GitHub account, how are they attributed? Options: anonymous with session ID, email-based identity, OAuth with non-GitHub providers. What's the CLA implication — can you accept anonymous contributions under [AGPL + CLA](/cyberbaser/)?
+
+3. **Contributor profiles.** The dream: photos, contributor pages, edit history, contribution stats. Where does this data come from? GitHub API (avatar, profile link)? A custom contributor database? What about contributors who use different identities across paths (GitHub account for PRs, different name in Obsidian commits)?
+
+4. **Attribution in the published UI.** How do existing wikis show contributors? [Wikipedia's history tab](https://en.wikipedia.org/wiki/Special:RecentChanges), [GitBook's page history](https://docs.gitbook.com/), [Notion's page analytics](https://www.notion.so/). What UX patterns work for a reader who wants to know "who wrote this"? Where does it go — page header, footer, sidebar, dedicated tab?
+
+5. **Attribution through the translation layer.** If contributor info is stored in git history, does the Astro build extract it? Starlight has `lastUpdated: true` (git-based). Can it also extract contributor LIST per page? Does [astro-loader-obsidian](https://github.com/aitorllj93/astro-loader-obsidian) support this?
+
+6. **The CLA + attribution interaction.** The [CLA](/cyberbaser/) grants the maintainer sublicensing rights. Does attribution need to be legally preserved (like Creative Commons BY), or is it purely a UX/community feature? What does the AGPL require regarding contributor acknowledgment?
+
+## Context to read first
+
+- [Vault vision mining](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/) — contributor attribution dream
+- [Contribution Workflows](/cyberbaser/design/contribution-workflows/) — the three paths
+- [CLA.md](https://github.com/cybersader/cyberbaser/blob/main/CLA.md) — contributor license agreement
+- [Architecture](/cyberbaser/design/architecture/) — where attribution data flows
+
+## What success looks like
+
+- **Attribution data model**: where contributor identity is stored (git, CMS metadata, external DB), how it's extracted at build time, how it's displayed
+- **Path-specific attribution table**: for each contribution path (Obsidian+Git, Web CMS, GitHub direct, anonymous), how the contributor is identified, what data is available, what's lost
+- **UI mockup or reference**: sketch of how contributor info appears on a published page (can be ASCII or a reference to an existing implementation)
+- **CLA/legal summary**: what's required vs optional for attribution
+- **Validity**: holds until the CMS choice is finalized (attribution implementation depends on CMS capabilities)
+
+## What this does NOT decide
+
+- CMS choice (that's [Challenge 02](/cyberbaser/agent-context/zz-challenges/02-cms-evaluation/))
+- Auth provider (that's the [auth model roadmap task](/cyberbaser/getting-started/roadmap/))
+- The exact UI design (that's a design task, not a research task)

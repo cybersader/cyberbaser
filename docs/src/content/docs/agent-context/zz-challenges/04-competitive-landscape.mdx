@@ -1,0 +1,42 @@
+---
+title: "04 · Competitive landscape"
+description: "Prove or disprove: no existing tool occupies the intersection of Obsidian fidelity + git SSOT + zero-git contribution. Be honest."
+sidebar:
+  label: "04 · Competition"
+  order: 4
+status: research
+tags: [research, competitive, ecosystem]
+---
+
+## The assignment
+
+Cyberbaser's [Problem page](/cyberbaser/concepts/problem/) claims no existing tool covers all three corners of the tradeoff triangle (Obsidian fidelity + low-friction contribution + no vendor lock-in). **Your job: prove or disprove this claim.** If something already does what cyberbaser wants to do, cyberbaser shouldn't exist. Be honest — not cheerleading.
+
+## What to investigate
+
+1. **Obsidian-native publishers.** [Obsidian Publish](https://obsidian.md/publish) ($10/mo), [Quartz v4](https://quartz.jzhao.xyz/) (free OSS), [Digital Garden plugin](https://dg-docs.ole.dev/) (free OSS). For each: fidelity score (wikilinks, callouts, embeds, graph), contribution model (if any), vendor lock-in assessment, pricing.
+
+2. **Git-backed CMS platforms.** [EmDash](https://github.com/emdash-cms/emdash) (Cloudflare, Astro-native), [GitBook](https://www.gitbook.com/) (free + paid), [wiki.js](https://js.wiki/) (free OSS), [BookStack](https://www.bookstackapp.com/) (free OSS), [Outline](https://www.getoutline.com/) (free OSS + hosted). Do any of these support Obsidian-flavored markdown AND non-technical contribution AND git as SSOT?
+
+3. **Notion/Confluence alternatives.** [Notion public pages](https://www.notion.so/), [Confluence](https://www.atlassian.com/software/confluence), [Slite](https://slite.com/), [Nuclino](https://www.nuclino.com/). These are the "easy contribution" incumbents. What would it take for cyberbaser to match their contribution UX while keeping git SSOT + Obsidian fidelity?
+
+4. **The Quartz + Decap combo.** This is the most dangerous competitor because it's free: [Quartz](https://quartz.jzhao.xyz/) for Obsidian-aware publishing + [Decap Open Authoring](https://decapcms.org/docs/open-authoring/) for contribution + GitHub Pages for hosting. Has anyone built this? Does it work? What's missing that cyberbaser would add?
+
+5. **AI-native CMS newcomers (2025-2026).** [EmDash](https://blog.cloudflare.com/emdash-wordpress/), [v0.dev](https://v0.dev/), [Bolt.new](https://bolt.new/). Are AI-generated sites making the "build a wiki" problem obsolete? If an agent can scaffold a full wiki from a vault in 5 minutes, does cyberbaser's translation layer still matter?
+
+6. **The honest moat assessment.** After surveying all the above: what does cyberbaser do that NONE of them do? Is it a genuine gap, or is it "theoretically better but practically replaceable"?
+
+## Context to read first
+
+- [The Problem](/cyberbaser/concepts/problem/) — the tradeoff triangle
+- [Prior Art](/cyberbaser/research/prior-art/) — current analysis (6 entries)
+- [Ecosystem](/cyberbaser/concepts/ecosystem/) — the four layers
+- [Operational landscape](/cyberbaser/concepts/operational-landscape/) — where value lives
+
+## What success looks like
+
+- **Comparison table**: product, Obsidian fidelity (1-5), contribution UX (1-5), git SSOT (Y/N), self-hosted (Y/N), pricing, license
+- **Gap analysis**: which cells in the table are empty (features no one covers)?
+- **The "Quartz + Decap" test**: has it been done? Does it work? What breaks?
+- **Honest moat statement**: "Cyberbaser's defensible advantage is [X] because [Y]" OR "Cyberbaser's advantage is marginal because [Z already covers it]"
+- **Validity**: this landscape holds until [date — suggest 6 months given how fast the ecosystem moves]

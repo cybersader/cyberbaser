@@ -1,0 +1,46 @@
+---
+title: "03 · Plugin execution: Obsidian CLI + headless"
+description: "The vault vision says plugin execution across environments is 'the hardest layer.' Obsidian now has a headless runtime. Does it actually solve the problem?"
+sidebar:
+  label: "03 · Plugin execution"
+  order: 3
+status: research
+tags: [research, plugins, architecture]
+---
+
+## The assignment
+
+The [vault vision](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/) identified **"creating an engine where community plugins can run on multiple platforms"** as the hardest unsolved problem. Since then, Obsidian has released an [official CLI](https://obsidian.md/cli) + [headless runtime](https://github.com/obsidianmd/obsidian-headless).
+
+**Your job: test whether this actually solves the problem.** Don't assume it does — try it with real plugins on a real vault and report what works, what breaks, and what's missing.
+
+## What to investigate
+
+1. **Does the CLI load community plugins?** Install [Obsidian CLI](https://obsidian.md/cli) (requires Obsidian 1.12, Early Access / Catalyst license). Test with a vault that has these plugins enabled: [Dataview](https://blacksmithgu.github.io/obsidian-dataview/), [Linter](https://github.com/platers/obsidian-linter), [Tag Wrangler](https://github.com/pjeby/tag-wrangler), [Folder Note](https://github.com/LostPaul/obsidian-folder-notes), [Templater](https://github.com/SilentVoid13/Templater). Which load? Which execute? Which crash?
+
+2. **Can it run in CI (GitHub Actions)?** Install the CLI on a GitHub Actions runner (Ubuntu latest). Does it require a display server (Xvfb)? Does it require an Obsidian account / Catalyst license in CI? What's the container story — can [obsidianless](https://github.com/lucastraba/obsidianless) make it work on headless Linux? [GitHub issue #8](https://github.com/obsidianmd/obsidian-headless/issues/8) discusses Docker support.
+
+3. **What's the sandbox/permission model?** Does the CLI sandbox plugins? Can a malicious plugin access the filesystem, network, or other vaults? How does this compare to [EmDash's isolated worker model](https://blog.cloudflare.com/emdash-wordpress/)?
+
+4. **Performance on a real vault.** Run the CLI on a 100-page, 500-page, and 1000-page vault. Measure: startup time, Dataview query execution time, Linter pass time. Is it fast enough for CI (under 60 seconds for a typical vault)?
+
+5. **The licensing question.** Obsidian CLI requires Catalyst for Early Access (1.12+). Is Catalyst required for production use in CI? What's the licensing model for headless/server deployments? If Catalyst is required per-machine, that's a scaling constraint.
+
+6. **What the headless runtime DOESN'T cover.** The [headless client](https://github.com/obsidianmd/obsidian-headless) is specifically for Sync and Publish. The CLI is for scripting. Are these the same runtime? Can the headless sync client also execute plugins, or is that CLI-only?
+
+## Context to read first
+
+- [Vault vision mining](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/) — "the hardest layer" section
+- [Roadmap: plugin execution](/cyberbaser/getting-started/roadmap/) — the research task
+- [Obsidian CLI docs](https://obsidian.md/cli) · [Obsidian Headless docs](https://help.obsidian.md/headless)
+- [obsidianless](https://github.com/lucastraba/obsidianless) — community headless Linux tool
+- [HN discussion on headless sync](https://news.ycombinator.com/item?id=47197267)
+
+## What success looks like
+
+- **Plugin compatibility matrix**: table with plugin name, loads in CLI (Y/N), executes correctly (Y/N), known issues, workaround
+- **CI feasibility report**: can/can't run in GitHub Actions, with steps to reproduce
+- **Performance benchmarks**: startup + plugin execution time at 3 vault sizes
+- **Licensing summary**: what's required for CI/server use
+- **Recommendation**: "Plugin execution via CLI is viable for v1" OR "Plugin execution via CLI is NOT viable; here's the alternative path"
+- **Validity**: this holds until Obsidian CLI exits Early Access (currently in 1.12 EA)

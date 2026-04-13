@@ -68,3 +68,21 @@ tags:
   collaboration:
     label: Collaboration
     description: Real-time editing, CRDT, sync, multi-user workflows
+  identity:
+    label: Identity
+    description: What cyberbaser IS — positioning, scope, business model
+  cms:
+    label: CMS
+    description: Content management system evaluation and integration
+  plugins:
+    label: Plugins
+    description: Obsidian plugin ecosystem, headless execution, CLI
+  competitive:
+    label: Competitive
+    description: Competitive landscape and positioning analysis
+  scaling:
+    label: Scaling
+    description: Performance, repo limits, incremental builds, infrastructure
+  attribution:
+    label: Attribution
+    description: Contributor identity, credit, and display

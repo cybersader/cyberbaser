@@ -1,0 +1,70 @@
+---
+title: "08 · Linchpin + bottleneck audit"
+description: "From first principles: which problems in the architecture are load-bearing, which are incidental, and what are the solution paths for each?"
+sidebar:
+  label: "08 · Linchpin audit"
+  order: 8
+status: research
+tags: [research, architecture, design]
+---
+
+## The assignment
+
+The cyberbaser architecture has many moving parts: translation layer, CMS integration, auth, plugin execution, contribution workflows, hosting, sync, search, attribution. Some of these are **linchpins** — if they fail, nothing else works. Others are **incidental** — nice to have, replaceable, or deferrable.
+
+**Your job: audit from first principles.** Which problems are structurally load-bearing? Which have single points of failure? For each linchpin, map the solution space — not just "what we should do" but "what are ALL the viable paths and what does each cost?"
+
+Don't start from the current architecture — start from the problem definition. If you were designing this system from scratch today, what would you identify as the hardest constraints BEFORE looking at the existing plan?
+
+## What to investigate
+
+1. **Identify the linchpins.** Read the entire published KB (start with [Problem](/cyberbaser/concepts/problem/), [Principles](/cyberbaser/getting-started/principles/), [Architecture](/cyberbaser/design/architecture/), [Translation Layer](/cyberbaser/design/translation-layer/), [Contribution Workflows](/cyberbaser/design/contribution-workflows/)). For each architectural component, ask: "If this breaks or doesn't exist, does the system still deliver its core value proposition?" If no → it's a linchpin. If yes → it's incidental.
+
+2. **Rank linchpins by dependency depth.** Some linchpins depend on OTHER linchpins. Example: the CMS choice depends on the auth model, which depends on the identity question. Map the dependency graph. Which linchpin, if resolved first, unblocks the most other decisions?
+
+3. **For each linchpin, map the solution space.** Not "what we should do" but "what are ALL the paths":
+   - **Path A** (simplest) — what's the minimum viable solution? Cost? Tradeoffs?
+   - **Path B** (best-in-class) — what would the ideal solution look like? Cost? Dependencies?
+   - **Path C** (eliminate the problem) — can we restructure to avoid this constraint entirely?
+
+4. **Identify hidden dependencies.** Are there assumptions baked into the current architecture that haven't been questioned? Examples:
+   - "GitHub is the SSOT" — what if a vault owner wants GitLab or self-hosted Gitea?
+   - "Astro is the SSG" — what if the translation layer is SSG-agnostic?
+   - "Cloudflare is the host" — what if the user wants to self-host everything?
+   - "Contributors need GitHub accounts" — what if they don't have one?
+
+5. **The "critical path" for v1.** Given the linchpin ranking: what's the shortest sequence of decisions that gets to a working v1? Concretely: which 3-4 challenges from the [zz-challenges list](/cyberbaser/agent-context/zz-challenges/) are the v1 critical path, and in what order should they be resolved?
+
+6. **Steel-man the "wrong architecture" argument.** What if the entire approach (static site + git + CMS layer) is fundamentally wrong for a contributable wiki? What would a database-first architecture (like wiki.js or BookStack) look like? What would a CRDT-first architecture (like BlockSuite/AFFiNE) look like? Are these strictly better for the use case, or do they sacrifice something cyberbaser values (Obsidian fidelity, file-based SSOT, local-first)?
+
+7. **First-principles constraint analysis.** From the problem definition alone (not the current solution), what are the irreducible constraints?
+   - Obsidian-flavored markdown must render on the web (hard constraint from Principle 2)
+   - Non-git users must be able to contribute (hard constraint from Principle 3)
+   - The vault must be a self-sufficient Obsidian vault without cyberbaser (hard constraint from Principle 5)
+   - Are there other irreducible constraints the principles don't state but the architecture assumes?
+
+## Context to read first
+
+- [Principles](/cyberbaser/getting-started/principles/) — the 6 design constraints (start here)
+- [The Problem](/cyberbaser/concepts/problem/) — the tradeoff triangle
+- [Architecture](/cyberbaser/design/architecture/) — current technical design
+- [Operational Landscape](/cyberbaser/concepts/operational-landscape/) — where work lives
+- [All other challenges](/cyberbaser/agent-context/zz-challenges/) — the specific investigations (01-07)
+- [Roadmap](/cyberbaser/getting-started/roadmap/) — current research tasks
+
+## What success looks like
+
+- **Linchpin list** (ranked by dependency depth): 5-8 items, each with: what it is, why it's load-bearing, what depends on it
+- **Dependency graph** (ASCII or structured list): which linchpins must be resolved before which
+- **Solution space per linchpin**: 2-3 paths per linchpin with cost/tradeoff/dependency noted
+- **v1 critical path**: ordered list of 3-4 decisions that unblock a working product
+- **"Wrong architecture" counter-argument**: the strongest alternative architecture and why cyberbaser's approach is (or isn't) better
+- **Hidden assumption list**: 3-5 assumptions that should be questioned
+
+**Validity**: this audit should be redone whenever the principles or architecture page changes significantly.
+
+## What this does NOT decide
+
+- Any specific linchpin resolution (that's what Challenges 01-07 are for)
+- Timeline or resourcing
+- The final architecture (this maps the decision space; it doesn't make the decisions)

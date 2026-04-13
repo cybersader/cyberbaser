@@ -1,0 +1,45 @@
+---
+title: "06 · Scaling + infrastructure constraints"
+description: "Stress-test cyberbaser's architecture against real-world scaling. What breaks first?"
+sidebar:
+  label: "06 · Scaling"
+  order: 6
+status: research
+tags: [research, scaling, architecture]
+---
+
+## The assignment
+
+Cyberbaser's [architecture](/cyberbaser/design/architecture/) assumes a static-site-generation model (Astro build → Cloudflare Pages). **Your job: find where this breaks.** What happens at 500 pages? 2000? 10,000? What about media-heavy vaults? Windows users? Search at scale?
+
+Don't assume the current architecture scales — stress-test it against real-world constraints and report the ceilings.
+
+## What to investigate
+
+1. **GitHub repo size limits.** GitHub has soft limits at 1GB and hard warnings at 5GB. A vault with embedded images (screenshots, diagrams, photos) can hit this fast. At what point does a media-heavy vault become impractical in git? What's the alternative — [Cloudinary](https://cloudinary.com/), [S3/Storj](https://storj.io/), [ImageKit](https://imagekit.io/)? How does media-outside-git interact with the CMS contribution path?
+
+2. **Windows MAX_PATH (260 characters).** The vault's `📁 51 - Cyberbase/` folder structure + Obsidian's deeply-nested paths can exceed 260 chars on Windows. The vault's [known bugs](/cyberbaser/reference/open-questions/) already flagged this. How deep can folder structures go before Windows breaks? Is there a mitigation beyond "use shorter names"?
+
+3. **Astro incremental build performance.** Astro 5+ has improved incremental support. Benchmark: how long does `bun run build` take on a 500-page vault? 2000-page? Does Astro rebuild ALL pages when one changes, or just the changed ones? Compare to [Quartz](https://quartz.jzhao.xyz/) build times. If every contribution triggers a 5-minute rebuild, the feedback loop dies.
+
+4. **Pagefind search at scale.** [Pagefind](https://pagefind.app/) (Starlight's default search) builds a client-side search index at build time. At what page count does the index become too large for fast client-side search? What's the alternative — [Algolia](https://www.algolia.com/), [Typesense](https://typesense.org/), server-side search?
+
+5. **IPFS as a content-addressing layer.** Could [IPFS](https://ipfs.tech/) solve URL stability AND decentralized resilience? Cloudflare has an [IPFS gateway](https://developers.cloudflare.com/web3/). What's the practical story — does it integrate with Astro builds? Is the latency acceptable? Is the complexity justified for v1?
+
+6. **Media hosting architecture.** The vault [tech stack](/cyberbaser/agent-context/zz-log/2026-04-13-vault-tech-stack-mining/) mentions Cloudinary + S3/Storj. How do these integrate with: (a) Obsidian (local image refs → CDN URLs at build time), (b) the CMS (contributor uploads go where?), (c) [tus.io](https://tus.io/) for resumable uploads. What's the simplest architecture that handles images at scale without bloating the git repo?
+
+7. **The "what breaks first" ranking.** Given all the above: if you had to predict the first scaling bottleneck a real vault owner would hit, what is it? Rank the constraints by likelihood × severity.
+
+## Context to read first
+
+- [Architecture](/cyberbaser/design/architecture/) — current technical stack
+- [Roadmap: data sync + SEO](/cyberbaser/getting-started/roadmap/) — related research tasks
+- [RESEARCH_SOURCES: hosting section](https://github.com/cybersader/cyberbaser/blob/main/.claude/RESEARCH_SOURCES.md) — infrastructure links
+- [Open Questions](/cyberbaser/reference/open-questions/) — Q05 (incremental builds), Q06 (content addressability)
+
+## What success looks like
+
+- **Constraint matrix**: constraint name, threshold (page count / repo size / path length), severity (blocks v1 / blocks v2 / annoying), mitigation
+- **"Breaks first" ranking** with evidence (benchmarks, docs, or prior reports)
+- **Media architecture recommendation** for v1 (simplest path that doesn't block scale)
+- **Validity**: hold until Astro's next major version or GitHub's repo limit policy changes

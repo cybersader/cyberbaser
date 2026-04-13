@@ -1,0 +1,53 @@
+---
+title: "02 · CMS evaluation framework"
+description: "Narrow 20+ CMS options to 2-3 finalists. Don't cheerleader Decap — stress-test every candidate."
+sidebar:
+  label: "02 · CMS evaluation"
+  order: 2
+status: research
+tags: [research, cms, contribution]
+---
+
+## The assignment
+
+The [vault has 20+ CMS options](/cyberbaser/agent-context/zz-log/2026-04-13-vault-tech-stack-mining/) researched at varying depths. The current assumption is [Decap CMS with Open Authoring](https://decapcms.org/docs/open-authoring/). **Your job: challenge that assumption.** Evaluate the top candidates against cyberbaser's specific requirements and narrow to 2-3 finalists with evidence. No cheerleading — if Decap is the wrong choice, say so.
+
+The CMS IS the zero-git contribution path — the make-or-break feature for non-technical contributors. Wrong choice here = wrong contribution UX for years.
+
+## What to investigate
+
+1. **Decap CMS (Open Authoring)** — the incumbent. Evaluate: does Open Authoring actually work reliably in 2026? What's the maintenance status? How does it handle Obsidian-flavored markdown in the editor? Can it preview wikilinks, callouts, embeds? What are the known failure modes? [Decap docs](https://decapcms.org/) · [Open Authoring docs](https://decapcms.org/docs/open-authoring/)
+
+2. **[Sveltia CMS](https://github.com/sveltia/sveltia-cms)** — the modern Decap fork. How does it differ from Decap? Better editor UX? Better Obsidian syntax handling? Active maintenance? Does it support Open Authoring? What's the migration path from Decap?
+
+3. **[EmDash CMS](https://github.com/emdash-cms/emdash)** — Cloudflare-built, Astro-native, AI-agent-first. Content stored as portable text (structured JSON, not HTML). Does portable text preserve Obsidian semantics during round-trip? Can an Obsidian vault be the source of truth if EmDash stores content as JSON? What's the auth model? [Cloudflare announcement](https://blog.cloudflare.com/emdash-wordpress/) · [GitHub](https://github.com/emdash-cms/emdash)
+
+4. **[TinaCMS](https://tina.io/)** — inline visual editing, self-hosted auth, git providers, Astro integration. Does inline editing work with Obsidian markdown? What's the self-hosting complexity? How does git co-authoring work? [Astro integration](https://tina.io/astro) · [Self-hosted auth](https://tina.io/docs/reference/self-hosted/auth-provider/overview)
+
+5. **[Pages CMS](https://pagescms.org/)** — minimal git-backed CMS. Simpler than the others — is "simpler" better for v1? What's the contribution UX compared to Decap's Open Authoring?
+
+6. **Evaluation criteria matrix.** For each CMS, score on: git-backed round-trip fidelity, Obsidian markdown preview quality, inline editing capability, Open Authoring (fork-and-PR for anonymous contributors), self-hosted auth, mobile editing, Astro integration depth, community activity + maintenance trajectory, license compatibility with AGPL.
+
+7. **The "no CMS" option.** What if cyberbaser just uses GitHub's built-in "Edit this page" + [Prose editor](https://github.com/prose/prose) + PR workflow? Is a dedicated CMS actually needed, or is it over-engineering the contribution path?
+
+## Context to read first
+
+- [Vault tech stack mining](/cyberbaser/agent-context/zz-log/2026-04-13-vault-tech-stack-mining/) — 20+ CMS options with links
+- [RESEARCH_SOURCES.md CMS section](https://github.com/cybersader/cyberbaser/blob/main/.claude/RESEARCH_SOURCES.md) — full link collection
+- [Contribution Workflows](/cyberbaser/design/contribution-workflows/) — the three paths (Web CMS is Path A)
+- [Translation Layer](/cyberbaser/design/translation-layer/) — Tier 1 features the CMS must preserve
+- [Roadmap: CMS survey](/cyberbaser/getting-started/roadmap/) — the research task this feeds
+
+## What success looks like
+
+- **Comparison table** with columns: CMS name, git-backed (Y/N), Open Authoring (Y/N), Obsidian markdown preview (Y/N/partial), inline editing (Y/N), self-hosted auth (Y/N), Astro integration (native/plugin/manual), maintenance status (active/maintained/stale), license
+- **Top 2-3 recommendation** with 1-paragraph rationale each
+- **Killer flaws** for each rejected candidate (not just "it's not as good" — specific deal-breakers)
+- **The "no CMS" counter-argument** evaluated honestly
+- **Validity**: this analysis holds until [date or condition — e.g., "until EmDash exits beta" or "until Decap's Open Authoring gets a major rewrite"]
+
+## What this does NOT decide
+
+- Auth provider choice (that's the [auth model roadmap task](/cyberbaser/getting-started/roadmap/))
+- Inline editing UX design (that's the [inline editing roadmap task](/cyberbaser/getting-started/roadmap/))
+- Final CMS selection (this narrows the field; the final pick depends on auth + inline editing decisions)
