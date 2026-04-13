@@ -1,0 +1,160 @@
+---
+title: "09 · Source of truth alternatives"
+description: "GitHub is made for code, not content. What's actually made for content like this? Survey every viable SSOT alternative and the fundamental tension between git and wiki workflows."
+sidebar:
+  label: "09 · SSOT alternatives"
+  order: 9
+status: research
+tags: [research, architecture, scaling]
+---
+
+## The assignment
+
+Cyberbaser's [Principle 1](/cyberbaser/getting-started/principles/#1-github-is-the-single-source-of-truth) states: **"GitHub is the single source of truth."** But GitHub is made for CODE, not for content/wiki/knowledge-base workflows. **Your job: stress-test this assumption from first principles.** Is git actually the right SSOT for a contributable wiki? What else exists? What are the real tradeoffs?
+
+This is not an exercise in replacing GitHub for the sake of it — it's an honest evaluation of whether the current architecture is built on the right foundation, or if the project is fighting against git's design assumptions.
+
+## The fundamental tension
+
+Git assumes:
+- Line-by-line diffs (designed for code syntax)
+- Merge conflicts are normal (require developer intervention)
+- Branching is cheap (feature branches are the norm)
+- History is append-only (rewrites are discouraged)
+- Text files are primary; binary/media are second-class
+
+Wiki/content workflows assume:
+- Paragraph-level changes (semantic units, not lines)
+- Conflicts should be rare and auto-resolvable
+- Single trunk preferred (rolling content, not feature releases)
+- History is for audit, not branching
+- Media is first-class (images, diagrams, attachments)
+
+**Key question**: where do these conflict for cyberbaser specifically, and is the conflict fatal or manageable?
+
+**Sources on the tension**: [Docs-as-code: broken promise](https://idratherbewriting.com/blog/thoughts-on-docs-as-code-promise) · [When docs-as-code reaches its limits](https://clickhelp.com/clickhelp-technical-writing-blog/when-docs-as-code-reaches-its-limits-and-what-teams-do-next/) · [Martin Fowler: semantic conflict](https://martinfowler.com/bliki/SemanticConflict.html)
+
+## What to investigate
+
+### 1. Git forges beyond GitHub
+
+Not all git forges are equal. Evaluate for cyberbaser's specific needs (Open Authoring, OAuth, contributor UX):
+
+- **[GitLab](https://about.gitlab.com/)** (self-hosted, stronger CI) — heavy footprint but powerful
+- **[Forgejo](https://forgejo.org/)** (community-governed Gitea fork) — lightweight, single binary, powers [Codeberg](https://codeberg.org/)
+- **[Codeberg](https://codeberg.org/)** — non-profit hosted Forgejo. No corporate control.
+- **[Radicle](https://radicle.xyz/)** — P2P decentralized git. No central SSOT at all.
+- **[SourceHut](https://sourcehut.org/)** — email-driven workflows. Excludes non-technical contributors entirely.
+
+**Question**: if cyberbaser wants self-hosting capability, is Forgejo + Decap CMS a better foundation than GitHub + Decap?
+
+### 2. Non-git version control designed for content
+
+- **[Fossil](https://fossil-scm.org/)** — SQLite-based VCS with built-in wiki, bug tracker, forum. Wiki is first-class. Used by SQLite itself. [Fossil vs Git](https://fossil-scm.org/home/doc/trunk/www/fossil-v-git.wiki)
+- **[Pijul](https://pijul.com/)** — patch-based VCS with mathematically sound merges (patches commute). Better for content than git's snapshot model?
+- **[Jujutsu (jj)](https://github.com/jj-vcs/jj)** — git-compatible but with better UX (no staging area, implicit commits, better undo). Could sit on top of git transparently.
+
+**Question**: would Fossil's wiki-first design serve cyberbaser better than git's code-first design? The tradeoff: losing Obsidian authoring integration and the entire GitHub ecosystem.
+
+### 3. CRDT-native content systems
+
+These store content as conflict-free replicated data types instead of files-in-git:
+
+- **[Yjs](https://yjs.dev/)** — shared data types for real-time collab. Powers Tiptap, BlockSuite, ProseMirror. [GitHub](https://github.com/yjs/yjs)
+- **[Automerge](https://automerge.org/)** — JSON-like CRDT with rich history. [Automerge 2.0](https://automerge.org/blog/automerge-2/)
+- **[OctoBase](https://octobase.dev/)** — from AFFiNE. CRDT database, local-first, P2P-capable. [GitHub](https://github.com/toeverything/OctoBase)
+- **[BlockSuite](https://blocksuite.io/)** — CRDT-native content editing framework from AFFiNE. [CRDT-native data flow](https://block-suite.com/blog/crdt-native-data-flow.html)
+- **[Loro](https://loro.dev/)** — high-performance CRDT with Peritext (rich text) support. Newer competitor to Yjs.
+- **[Jazz](https://jazz.tools/)** — CoJSON collaborative framework with built-in permissions, roles, and sync.
+
+**Question**: could a vault be represented as a CRDT document set instead of files-in-git? What's gained (real-time collab, auto-merge) and what's lost (git audit trail, Obsidian compatibility, file portability)?
+
+### 4. Local-first databases
+
+- **[ElectricSQL](https://electric-sql.com/)** — Postgres ↔ SQLite sync. CRDT-based merging.
+- **[PowerSync](https://www.powersync.com/)** — Postgres → SQLite sync with fine-grained rules.
+- **[RxDB](https://rxdb.info/)** — reactive offline-first NoSQL with CouchDB-compatible replication.
+- **[Turso](https://turso.tech/)** — SQLite at the edge with distributed replicas.
+- **[Evolu](https://www.evolu.dev/)** — local-first SQLite + CRDT sync, privacy-first.
+- **[Triplit](https://www.triplit.dev/)** — full-stack database with real-time sync and CRDT conflict resolution.
+
+**Question**: these all solve sync beautifully but none have branching/PR/approval semantics. Is automatic conflict resolution actually what cyberbaser wants, or does human review (git's model) better serve a wiki where accuracy matters?
+
+### 5. Decentralized / P2P content systems
+
+- **[IPFS](https://ipfs.tech/)** — content-addressed, distributed, immutable. [Cloudflare IPFS gateway](https://developers.cloudflare.com/web3/). No native versioning.
+- **[Hypercore/Pears](https://docs.pears.com/)** — P2P append-only logs. Real-time data sharing.
+- **[Solid](https://solidproject.org/)** — Tim Berners-Lee's data pods with user sovereignty. [Project Liberty integration](https://techcrunch.com/2025/03/10/open-web-initiatives-project-liberty-and-solid-could-be-teaming-up/)
+- **[AT Protocol](https://atproto.com/)** — Bluesky's federated data model with portable identity.
+- **[Nostr](https://nostr.com/)** — decentralized event protocol. Censorship-resistant. [State of Nostr 2025](https://onnostr.substack.com/p/the-state-of-nostr-in-2025-bitcoin)
+- **[Ceramic](https://ceramic.network/)** — decentralized data network with mutable documents on IPFS.
+
+**Question**: could a vault live on a personal data server (Solid pod, AT Protocol PDS) instead of GitHub? What's the contribution model look like? Is decentralization a feature cyberbaser's users actually want?
+
+### 6. What real-world wikis actually use
+
+| System | Storage | Sync | Real-time? | Contribution model |
+|---|---|---|---|---|
+| **Wikipedia/MediaWiki** | MySQL, delta compression | Async | No | Open with gatekeeping |
+| **Notion** | PostgreSQL, sharded | WebSocket + CRDT | Yes | SaaS, real-time |
+| **Obsidian Publish** | Files + encrypted cloud | Async | No | Read-only |
+| **GitBook** | GitHub + secondary DB | Async, bidirectional | No | Visual editor + PRs |
+| **Outline** | PostgreSQL | WebSocket | Yes | Permissioned teams |
+| **AFFiNE** | OctoBase (CRDT) | CRDT sync | Yes | Local-first + cloud |
+| **Wiki.js** | PostgreSQL, MySQL, or git | Various | Partial | Web editor |
+| **BookStack** | MySQL | None | No | Role-based web editor |
+| **DokuWiki** | Flat files (no DB) | None | No | Web editor |
+
+**Question**: which of these architectures is closest to what cyberbaser needs? Is there a successful wiki that uses git as primary SSOT with non-technical contribution?
+
+### 7. The hybrid architecture question
+
+The emerging pattern (2025-2026): **CRDT for collaboration, git for persistence/audit**.
+
+```
+[Real-time editing layer]     (Yjs/Automerge/BlockSuite)
+         ↓ periodic snapshot
+[Git repository]               (GitHub/Forgejo)
+         ↓ CI build
+[Static site]                  (Astro/Starlight → Cloudflare Pages)
+```
+
+- [GitHub is using CRDTs internally](https://www.infoq.com/presentations/github-crdt/) (Eon project) for keystroke-level sync
+- [Logseq attempted this](https://discuss.logseq.com/t/seflhosted-logseq-db-synching/34537) (file + DB hybrid) and struggled
+- [Relay plugin](https://relay.md/) for Obsidian uses CRDTs for live multiplayer on top of local files
+- [AFFiNE (BlockSuite + OctoBase)](https://github.com/toeverything/AFFiNE) is the most mature implementation
+
+**Question**: should cyberbaser adopt a hybrid (CRDT for live collab, git for archive), or is the complexity not worth it for v1?
+
+## Context to read first
+
+- [Principles](/cyberbaser/getting-started/principles/) — especially Principle 1 (GitHub is SSOT) and Principle 5 (vault is primary)
+- [Architecture](/cyberbaser/design/architecture/) — current technical design
+- [Operational Landscape](/cyberbaser/concepts/operational-landscape/) — Tier 4 (operations) is where SSOT choice matters most
+- [Vault collab mining](/cyberbaser/agent-context/zz-log/2026-04-13-vault-collab-mining/) — collaboration models surveyed
+- [Vault tech stack mining](/cyberbaser/agent-context/zz-log/2026-04-13-vault-tech-stack-mining/) — sync/CRDT section (50+ links)
+- [RESEARCH_SOURCES: sync/CRDT section](https://github.com/cybersader/cyberbaser/blob/main/.claude/RESEARCH_SOURCES.md) — full link collection
+
+## What success looks like
+
+- **SSOT alternatives matrix**: system name, storage model, sync model, real-time (Y/N), contribution model, self-hostable (Y/N), Obsidian-compatible (Y/N), git-compatible (Y/N)
+- **The "9/10 requirements" test**: does git still score highest when evaluated against cyberbaser's actual requirements (branching, PR review, atomic commits, diffing, media, access control, API, history, low barrier)?
+- **Hybrid architecture assessment**: is CRDT + git viable for v1, or is it a v2 investment?
+- **The strongest "abandon git" argument**: steel-manned. What would cyberbaser look like on AFFiNE's stack (OctoBase + BlockSuite) instead of git? What's gained, what's lost?
+- **The strongest "keep git" argument**: steel-manned. Why is git-as-SSOT + CMS abstraction layer the pragmatic choice even with the tension?
+- **Recommendation**: keep, modify, or replace Principle 1 — with evidence and a validity date
+
+**Validity**: this analysis holds until one of these happens: (a) Obsidian ships native CRDT sync for shared vaults, (b) a git forge ships built-in wiki contribution UX that matches Decap's Open Authoring, or (c) a CRDT wiki with git export reaches production maturity.
+
+## What this does NOT decide
+
+- CMS choice (that's [Challenge 02](/cyberbaser/agent-context/zz-challenges/02-cms-evaluation/))
+- Whether to add real-time collab to v1 (that's the [collaboration model roadmap task](/cyberbaser/getting-started/roadmap/))
+- Hosting provider (Cloudflare vs alternatives)
+- The final architecture (this evaluates the SSOT layer; architecture is the full stack)
+
+## Related
+
+- [Challenge 05: Translation equivalence](/cyberbaser/agent-context/zz-challenges/05-translation-equivalence/) — round-trip fidelity depends on the SSOT format
+- [Challenge 06: Scaling + infrastructure](/cyberbaser/agent-context/zz-challenges/06-scaling-infrastructure/) — repo size limits are a git-specific constraint
+- [Challenge 08: Linchpin audit](/cyberbaser/agent-context/zz-challenges/08-linchpin-bottleneck-audit/) — SSOT choice is likely a linchpin
