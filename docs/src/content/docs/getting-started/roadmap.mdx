@@ -1,208 +1,93 @@
 ---
 title: Roadmap
-description: Concrete research tasks for Phase R, each with a question to answer, why it matters, and a link to the decision log where findings land. Modeled on crosswalker's research roadmap pattern.
+description: Named phases from vault-first research through community launch — each decision logged with rationale. Modeled on crosswalker's research roadmap pattern.
 sidebar:
   order: 20
 status: research
 tags: [roadmap, planning]
 ---
 
-## Current phase — **R · Research & Foundations** <span class="cb-pill cb-pill-research">Active</span>
+Cyberbaser is the **contributable wiki platform** — Obsidian authoring, GitHub as the single source of truth, zero-git contribution for anyone. The roadmap reflects this: research and architecture come first, features are built on that foundation, and every significant decision is [logged with rationale](/cyberbaser/agent-context/zz-log/).
 
-**Goal:** answer the 10 research questions below so every subsequent phase can cite a specific finding as its justification. No implementation until these are grounded.
+See the [vault vision mining](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/) for the original dream, and the [vault tech stack mining](/cyberbaser/agent-context/zz-log/2026-04-13-vault-tech-stack-mining/) for the 300+ curated links that seed the research below.
 
-**Convention (from crosswalker):** every research task links to a dated decision-log entry in [Agent context · zz-log](/cyberbaser/agent-context/zz-log/). Research done off the books doesn't count — if it's not written down, it didn't happen.
-
----
-
-### Research tasks
-
-#### R01 · What is cyberbaser's identity? <span class="cb-pill cb-pill-research">Open</span>
-
-**Question:** Is cyberbaser a publishing tool, a wiki platform, a collaboration framework, or something else entirely? The vault research shows ambitions spanning all three — but the positioning needs to be ONE thing with clear boundaries.
-
-**Why it matters:** Every downstream decision (CMS choice, auth model, plugin strategy) depends on what cyberbaser IS. Without this, we build features that don't compose.
-
-**Source material:** Vault: [Contributable Obsidian Wiki](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/) · [Cyberbase Domains] (Knowmord, Cyberbaser, Wikid.space, Cyber.space, Vulcanbase)
-
-**Decision log:** [2026-04-13 · Vault vision mining](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/)
+:::note[How this roadmap is maintained]
+This page is the **living roadmap** — only active and future phases live here. Every significant decision gets a dated entry in the [decision log](/cyberbaser/agent-context/zz-log/). Link roadmap items to their log entries so the *why* is always reachable from the *what*.
+:::
 
 ---
 
-#### R02 · CMS landscape survey <span class="cb-pill cb-pill-research">Open</span>
+## Current phase: Research & Foundations
 
-**Question:** Which git-backed CMS is the right fit? The vault contains 20+ CMS options evaluated at varying depths. Need to narrow to 2-3 finalists and make a decision.
+## Research & Foundations — "Know what we're building before we build it"
 
-**Why it matters:** The CMS is the "zero-git contribution" path — the make-or-break feature for non-technical contributors. Wrong choice = wrong contribution UX.
+The [vault research](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/) shows ambitions spanning publishing, contribution, and real-time collaboration — but the project identity, CMS choice, auth model, and collaboration strategy are all still open. This phase resolves them before code.
 
-**Candidates:** Decap (Open Authoring), Sveltia CMS, Tina CMS, Pages CMS, Emdash CMS, Strapi, Sanity, Keystone, Coisas, Contentstack, Kontent.ai, Squidex, Manifest, Flextype, Prismic, Contember, Hygraph, Dossier, Atomic Server, Craft CMS, Magnolia, Gentics Mesh
+**Research & spec** (iterative, first-principled):
 
-**Source material:** Vault: [Cyberbase Development](/cyberbaser/agent-context/zz-log/2026-04-13-vault-tech-stack-mining/) (300+ links) · [Cyberbase JS & Services] · [Portfolio CMSs]
+- [ ] **Cyberbaser identity** — is this a publishing tool, a wiki platform, a collaboration framework, or all three? The [vault vision](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/) is more ambitious than the current docs describe (includes live anonymous collab, contributor attribution, plugin execution across environments). Need to decide what's v1 vs what's deferred. Shapes every downstream decision.
+- [ ] **[CMS landscape survey](/cyberbaser/agent-context/zz-log/2026-04-13-vault-tech-stack-mining/)** — the vault has 20+ CMS options evaluated at varying depths. Need to narrow to 2-3 finalists: [Decap](https://decapcms.org/docs/open-authoring/) (Open Authoring), [Sveltia](https://github.com/sveltia/sveltia-cms), [Tina](https://tina.io/), [EmDash](https://github.com/emdash-cms/emdash) (Cloudflare-built, Astro-native, AI-agent-first — [announcement](https://blog.cloudflare.com/emdash-wordpress/)), [Pages CMS](https://pagescms.org/), and others from [RESEARCH_SOURCES](/cyberbaser/reference/existing-work/). The CMS IS the zero-git contribution path — wrong choice = wrong contribution UX.
+- [ ] **Auth model** — GitHub OAuth only, or multi-provider? The [vault has 20+ auth solutions](/cyberbaser/agent-context/zz-log/2026-04-13-vault-tech-stack-mining/) researched ([Better-Auth](https://www.better-auth.com/), [Clerk](https://clerk.com/), [Ory/Kratos](https://www.ory.sh/kratos/), [SuperTokens](https://supertokens.com/), [Authentik](https://goauthentik.io/) with [Wiki.js integration](https://docs.goauthentik.io/integrations/services/wiki-js/), and more). Auth gates the contribution path — scope decision for v1.
+- [ ] **Plugin execution abstraction** — how can Obsidian community plugins (Dataview, linting, attachment management) run outside the desktop app? This was the ["hardest layer"](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/) identified in the vault vision. **Major update:** Obsidian now has an [official headless runtime](https://github.com/obsidianmd/obsidian-headless) + [CLI tool](https://obsidian.md/cli) (ships with 1.12, Early Access). If community plugins load in headless/CLI mode, this problem may already be solved. Needs hands-on testing. [obsidianless](https://github.com/lucastraba/obsidianless) enables headless Linux servers. [HN discussion](https://news.ycombinator.com/item?id=47197267).
+- [ ] **[Collaboration model](/cyberbaser/agent-context/zz-log/2026-04-13-vault-collab-mining/)** — git-only async, or real-time live editing? The vault vision includes "edit with someone → anonymous secure live editing." The [vault survey](/cyberbaser/agent-context/zz-log/2026-04-13-vault-collab-mining/) found 4 models (file-level P2P, live collab via [Peerdraft](https://www.peerdraft.app/)/[LiveSync](https://forum.obsidian.md/t/self-hosted-livesync-ex-obsidian-livesync-released/26673), git-based, workaround methods). 50+ CRDT/sync links from [vault tech stack mining](/cyberbaser/agent-context/zz-log/2026-04-13-vault-tech-stack-mining/) ([Yjs](https://yjs.dev/), [Automerge](https://automerge.org/), [BlockSuite](https://blocksuite.io/), [ElectricSQL](https://electric-sql.com/)). Preliminary recommendation: defer real-time to v2, focus v1 on the three async paths.
+- [ ] **Translation layer deep-dive** — does [astro-loader-obsidian](https://github.com/aitorllj93/astro-loader-obsidian) handle [Tier 1 features](/cyberbaser/design/translation-layer/) (wikilinks, callouts, embeds, math, Mermaid) sufficiently, or do we need custom remark/rehype plugins? Changes Phase 1 scope by 5-10x. Requires hands-on testing with real [cyberbase vault](https://github.com/cybersader/cyberbase) content against the [Obsidian Flavored Markdown spec](https://help.obsidian.md/Editing+and+formatting/Obsidian+Flavored+Markdown). Also evaluate [Markdoc](https://markdoc.dev/) as an alternative authoring format. [starlight-theme-obsidian](https://github.com/Fevol/starlight-theme-obsidian) is worth examining.
+- [ ] **Publish site survey** — review 10-15 of the 60+ example Obsidian Publish sites catalogued in the vault (`📁 51 - Cyberbase/Cyberbase Obsidian Publish/`). Extract UX patterns: navigation, search, mobile, backlinks, graph view, contributor attribution, SEO. The reader experience determines whether people actually use the wiki.
+- [ ] **Data sync strategy** — how does content flow between Obsidian (local) → GitHub (repo) → Web CMS (edits) → built site? The vault [identified specific failure modes](/cyberbaser/reference/open-questions/): Obsidian Git conflicts from date-modified fields, Windows path length limits, bracket escaping in filenames. Media hosting at scale (Cloudinary + S3/Storj per the [vault tech stack](/cyberbaser/agent-context/zz-log/2026-04-13-vault-tech-stack-mining/)). [Resumable uploads via tus.io](https://tus.io/). Architecture: [current diagram](/cyberbaser/design/architecture/).
+- [ ] **SEO baseline** — sitemaps, robots.txt, canonical URLs, OG images, structured data. Which does Starlight handle, which need custom work? The vault has research in `📁 51 - Cyberbase/Obsidian Publish SEO/`. [Stable URLs on Obsidian Publish](https://joschua.io/posts/2023/10/07/stable-publish-urls) is the key reference for permalink design (R08 / [content addressability](/cyberbaser/concepts/primitives/#content-addressable--stable-urls)).
+- [ ] **Inline editing UX** — what does "click edit on any page and immediately edit the content right there" actually mean technically? [Decap widget](https://decapcms.org/), [TinaCMS inline mode](https://tina.io/), [EmDash's AI-agent-first portable text](https://blog.cloudflare.com/emdash-wordpress/), custom [BlockSuite](https://blocksuite.io/)/[Tiptap](https://tiptap.dev/) editor, [Prose](https://github.com/prose/prose) (GitHub content editor), or something else? This is the [dream feature](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/) that closes the reader→contributor loop. Synthesizes CMS choice, auth model, and translation layer decisions.
 
-**Decision log:** pending
+**Infrastructure:**
 
----
+- [ ] Bug fixes and polish on current docs site (Starlight + Nova + silver/emerald theme)
+- [ ] Expand Playwright smoke tests for new research pages
+- [ ] Update [`.claude/` numbered files](/cyberbaser/reference/existing-work/) to reflect decisions as they're made
 
-#### R03 · Auth model <span class="cb-pill cb-pill-research">Open</span>
+**Exit criteria** — all must be true before Research & Foundations closes:
 
-**Question:** GitHub OAuth only, or multi-provider auth? The vault has 20+ auth solutions researched. Need to decide scope for v1.
-
-**Why it matters:** Auth gates the contribution path. GitHub-only is simple but excludes non-GitHub users. Multi-provider is flexible but adds complexity. The decision constrains the CMS choice (R02) and the OAuth proxy architecture.
-
-**Candidates:** GitHub OAuth (current assumption), Better-Auth, Clerk, Ory/Kratos, SuperTokens, Auth.js, Auth0, Hanko, FusionAuth, Stytch, Stack Auth, OpenAuth, Keycloak, Authentik, Authelia, Bitwarden Passwordless, Fief, Cerbos, Oso, Dex
-
-**Source material:** Vault: [Cyberbase Development](/cyberbaser/agent-context/zz-log/2026-04-13-vault-tech-stack-mining/) auth section
-
-**Decision log:** pending
-
----
-
-#### R04 · Plugin execution abstraction <span class="cb-pill cb-pill-research">Open</span>
-
-**Question:** How can Obsidian community plugins (Dataview, linting, attachment management, etc.) run outside of Obsidian — in GitHub Actions, serverless functions, or a client-side CMS?
-
-**Why it matters:** This is the "hardest layer" the user identified in the [vault vision doc](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/). Without this, contributors who don't use Obsidian get a degraded experience — plugin-managed patterns (tags, links, metadata) only work when someone opens the vault in Obsidian. That's a bottleneck.
-
-**Major development (2025-2026):** Obsidian now has an **official headless runtime + CLI tool**:
-- [Obsidian CLI](https://obsidian.md/cli) — ships with Obsidian 1.12 (Early Access, Catalyst license). "Anything you can do in Obsidian you can do from the command line."
-- [Obsidian Headless](https://github.com/obsidianmd/obsidian-headless) — official headless client for Obsidian Sync and Publish. Sync/publish from CLI without the desktop app.
-- [obsidianless](https://github.com/lucastraba/obsidianless) — community tool to run Obsidian CLI on headless Linux servers (no monitor, no subscription).
-- [Headless Sync docs](https://help.obsidian.md/headless) · [CLI docs](https://obsidian.md/cli)
-
-This potentially **solves the hardest problem.** If community plugins can run via the CLI in a GitHub Action, the "plugin execution across environments" gap closes. Key question: do community plugins actually load and execute in headless/CLI mode, or is it limited to core Obsidian features?
-
-**Source material:** Vault: [Contributable Obsidian Wiki](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/) · [Obsidian headless GitHub issue #8](https://github.com/obsidianmd/obsidian-headless/issues/8) (headless server/Docker support) · [HN discussion](https://news.ycombinator.com/item?id=47197267)
-
-**Decision log:** pending (needs hands-on testing of CLI + community plugins)
+- [ ] Identity stated in one sentence in [Problem](/cyberbaser/concepts/problem/)
+- [ ] CMS shortlist narrowed to 2-3 with a recommended pick and rationale
+- [ ] Auth model chosen with v1 scope boundaries
+- [ ] Plugin abstraction tested (Obsidian CLI + community plugins) and scoped (v1 or deferred)
+- [ ] Collab model decided: git-only for v1 or real-time with evidence
+- [ ] Translation layer evaluated against Tier 1 feature list with real vault content
+- [ ] 10+ Publish sites reviewed with extracted patterns
+- [ ] Data sync architecture documented with failure modes
+- [ ] SEO checklist completed (Starlight-handles vs custom-needed)
+- [ ] Inline editing UX chosen with reference implementation or mockup
 
 ---
 
-#### R05 · Collaboration model <span class="cb-pill cb-pill-research">Open</span>
+## Publishing prototype <span class="cb-pill cb-pill-parked">Parked</span>
 
-**Question:** Git-only async collaboration, or real-time live editing? If real-time, which approach — CRDT (Yjs, Automerge), OT (ShareDB), or file-level sync (LiveSync, Peerdraft)?
-
-**Why it matters:** The vault vision includes "edit with someone → allows you to enter an anonymous secure page to edit with someone live." That's a fundamentally different architecture from git-only PR workflows. Need to decide if v1 includes real-time collab or defers it.
-
-**Candidates:**
-- **Git-only** (simplest, current assumption): PRs, no realtime
-- **CRDT-based**: Yjs, Automerge, SyncedStore, BlockSuite/OctoBase (from AFFiNE)
-- **OT-based**: ShareDB, Convergence
-- **File-level sync**: Peerdraft, LiveSync, SyncTrayzor
-- **Hybrid**: ElectricSQL, PowerSync, RxDB, Turso
-
-**Source material:** Vault: [Collaboration in Obsidian](/cyberbaser/agent-context/zz-log/2026-04-13-vault-collab-mining/) · [Cyberbase Development] sync/CRDT section (50+ links)
-
-**Decision log:** [2026-04-13 · Vault collab mining](/cyberbaser/agent-context/zz-log/2026-04-13-vault-collab-mining/)
-
----
-
-#### R06 · Translation layer deep-dive <span class="cb-pill cb-pill-research">Open</span>
-
-**Question:** Does `astro-loader-obsidian` handle Tier 1 features (wikilinks, callouts, embeds, math, Mermaid) sufficiently, or do we need custom remark/rehype plugins?
-
-**Why it matters:** The translation layer is the core technical differentiator. If the existing loader covers 80% of Tier 1, we're in "integration" territory. If it covers 30%, we're in "build from scratch" territory. Changes the Phase 1 scope by 5-10x.
-
-**Source material:** Vault: [Astro with Content Layer] · Current `astro-loader-obsidian` dep in `docs/package.json` · [Obsidian Flavored Markdown spec](https://help.obsidian.md/Editing+and+formatting/Obsidian+Flavored+Markdown)
-
-**Decision log:** pending (requires hands-on testing with real vault content)
-
----
-
-#### R07 · Publish site survey <span class="cb-pill cb-pill-research">Open</span>
-
-**Question:** What UX patterns do the best Obsidian-published wikis use? The vault has 60+ example sites — need to review 10-15 and extract patterns worth copying.
-
-**Why it matters:** Reader UX (navigation, search, mobile, backlinks, graph view) determines whether people actually USE the wiki or bounce. Prior art from existing sites is free evidence.
-
-**Source material:** Vault: [Cyberbase Obsidian Publish] — 60+ curated example sites including Obsidian Hub, Data Engineering Wiki, SlRvb's ITS Theme showcase
-
-**Decision log:** pending
-
----
-
-#### R08 · Data sync strategy <span class="cb-pill cb-pill-research">Open</span>
-
-**Question:** How does content flow between Obsidian (local files) → GitHub (repo) → Web CMS (edits) → Built site? What about media/images at scale?
-
-**Why it matters:** Sync failures = lost contributions or corrupt content. The vault identified specific issues: Obsidian Git conflicts from date-modified fields, Windows path length limits, bracket escaping in filenames. These are real blockers.
-
-**Source material:** Vault: [🐛 Known Base Bugs, Issues] · [Media Hosting in Obsidian] · [GitHub Repo Size Limits] · [Cyberbase Development] sync engines section
-
-**Decision log:** pending
-
----
-
-#### R09 · SEO for Obsidian-based sites <span class="cb-pill cb-pill-research">Open</span>
-
-**Question:** What's the SEO baseline? Sitemaps, robots.txt, canonical URLs, OG images, structured data — which are handled by Starlight and which need custom work?
-
-**Why it matters:** If the wiki isn't discoverable via search, the "reader" tier of the architecture diagram doesn't work. Starlight + Pagefind handle some of this, but vault research shows specific gaps (permalink stability, OG images per page).
-
-**Source material:** Vault: [Obsidian Publish SEO] · Starlight's built-in sitemap plugin · Current `@astrojs/sitemap` config
-
-**Decision log:** pending
-
----
-
-#### R10 · Inline editing UX <span class="cb-pill cb-pill-research">Open</span>
-
-**Question:** What does "click edit on any page and immediately edit the content right there" actually mean technically? Decap widget? TinaCMS inline mode? Custom WYSIWYG overlay? Prose editor (GitHub)?
-
-**Why it matters:** The vault vision doc describes this as the DREAM use case. It's the feature that closes the reader→contributor loop. But the technical implementation spans CMS choice (R02), auth model (R03), and translation layer (R06). This task synthesizes those.
-
-**Source material:** Vault: [Contributable Obsidian Wiki] · [Obsidian as a CMS] — Prose editor, CKEditor, Tiptap, BlockSuite · [Cyberbase Development] text editors section
-
-**Decision log:** pending
-
----
-
-### Phase R exit criteria
-
-All must be true before Phase R closes:
-
-- [ ] R01 answered: cyberbaser's identity is stated in one sentence in [Problem](/cyberbaser/concepts/problem/)
-- [ ] R02 narrowed: CMS shortlist is 2-3 with a recommended pick and rationale
-- [ ] R03 decided: auth model chosen with scope boundaries for v1
-- [ ] R04 scoped: plugin abstraction is either "v1 scope" or "explicitly deferred" with documented reasoning
-- [ ] R05 decided: collab model for v1 (git-only vs. real-time) with evidence
-- [ ] R06 tested: `astro-loader-obsidian` evaluated against Tier 1 feature list with real vault content
-- [ ] R07 completed: 10+ Publish sites reviewed with extracted patterns
-- [ ] R08 designed: data sync architecture documented with failure modes
-- [ ] R09 baselined: SEO checklist with Starlight-handles vs. custom-needed items
-- [ ] R10 specified: inline editing UX chosen with mockup or reference implementation
-
----
-
-## Phase 0 — Publishing prototype <span class="cb-pill cb-pill-parked">Parked</span>
-
-What was built before the reinit (see [Existing Work](/cyberbaser/reference/existing-work/)):
+What exists from before the reinit (see [Existing Work](/cyberbaser/reference/existing-work/)):
 - Astro + Starlight scaffold with Nova theme, full plugin stack
+- 57 pages of first-principles content + vault mining logs
 - Playwright smoke tests (32 passing)
 - Cloudflare Pages deploy workflow
-- Custom SVG diagrams, silver+emerald theme
-- Cross-platform preflight script
+- Custom inline SVG diagrams, silver+emerald theme, rotating hero
+- Cross-platform preflight script for WSL/Windows
 
-Phase 0 resumes after Phase R with possible rewrites based on research findings.
+Resumes after Research & Foundations with possible rewrites based on findings.
 
 ---
 
 ## Future phases <span class="cb-pill cb-pill-planning">Deferred</span>
 
 :::note[Deferred by design]
-Each gets a real outline only after the relevant R-tasks are resolved. Roadmap is downstream of research, not the other way around.
+Each gets a real outline only after the relevant research tasks are resolved. Roadmap is downstream of research, not the other way around.
 :::
 
-### Phase 1 — Translation layer spike
-Likely focus: prove Tier 1 translation with real vault content. Depends on R06.
+### Translation layer spike
+Prove [Tier 1 translation](/cyberbaser/design/translation-layer/) with real vault content. Depends on the translation layer deep-dive above.
 
-### Phase 2 — Contribution workflows
-Likely focus: implement CMS + auth + inline editing. Depends on R02, R03, R10.
+### Contribution workflows
+Implement CMS + auth + inline editing. Depends on CMS survey, auth model, and inline editing UX above.
 
-### Phase 3 — Publish the real vault
-Likely focus: point at `cybersader/cyberbase` and deploy to a real domain. Depends on R08, R09.
+### Publish the real vault
+Point at [cybersader/cyberbase](https://github.com/cybersader/cyberbase) and deploy to a real domain. Depends on data sync strategy and SEO baseline above.
 
-### Phase 4 — Community onboarding
-Likely focus: CONTRIBUTING.md, docs, examples, first external contributor.
+### Community onboarding
+CONTRIBUTING.md, docs, examples, first external contributor.
 
 ---
 
@@ -212,7 +97,7 @@ Likely focus: CONTRIBUTING.md, docs, examples, first external contributor.
 > Every research task links to a dated entry in [Agent context · zz-log](/cyberbaser/agent-context/zz-log/). No research done off the books.
 
 > [!important] Roadmap is downstream of research
-> Don't add implementation steps to later phases until the relevant R-task is resolved.
+> Don't add implementation steps to later phases until the relevant research task is resolved.
 
-> [!important] Phase R exits only by the exit criteria above
+> [!important] Phase exits only by the exit criteria
 > No "close enough" shortcuts.
