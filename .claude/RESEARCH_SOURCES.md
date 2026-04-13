@@ -2,7 +2,7 @@
 
 > Pointers to the primary sources that ground cyberbaser's research & foundations phase. Organized by research task (R01–R10). When adding findings to a decision log or docs page, cite the source here.
 
-> **Last major update:** 2026-04-13 — mined from the Cyberbase Obsidian vault (`📁 51 - Cyberbase/`), adding 200+ links across CMS, auth, sync/CRDT, SSGs, hosting, collaboration, and text editors.
+> **Last major update:** 2026-04-13 — mined from the Cyberbase Obsidian vault (the local research vault), adding 200+ links across CMS, auth, sync/CRDT, SSGs, hosting, collaboration, and text editors.
 
 ---
 
@@ -189,7 +189,7 @@
 
 ## R07 · Publish Site Examples (60+ in vault)
 
-Located in vault: `📁 51 - Cyberbase/Cyberbase Obsidian Publish/`. Key examples:
+Located in vault: the local research vault. Key examples:
 - Obsidian Hub (community standard)
 - Data Engineering Wiki (contributable model)
 - SlRvb's ITS Theme showcase
@@ -226,7 +226,7 @@ Located in vault: `📁 51 - Cyberbase/Cyberbase Obsidian Publish/`. Key example
 
 ## R09 · SEO
 
-Located in vault: `📁 51 - Cyberbase/Obsidian Publish SEO/`
+Located in vault: the local research vault
 *(To be inventoried in a dedicated research page)*
 
 ---

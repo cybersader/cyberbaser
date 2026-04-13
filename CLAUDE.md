@@ -84,7 +84,7 @@ Any design decision anywhere in the project should be checked against the transl
 ## External Context
 
 - **Live vault**: https://github.com/cybersader/cyberbase
-- **Local research vault**: Obsidian vault, 📁 51 - Cyberbase folder (local path varies by machine)
+- **Local research vault**: Obsidian vault, local research vault (local path varies by machine)
 - **MCP / agent patterns**: `cybersader/agentic-workflow-and-tech-stack` sibling project
 
 ## Conventions

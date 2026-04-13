@@ -19,7 +19,7 @@ Keep this list short. If it grows past ~15 items, it means we're accumulating qu
 
 ## Current Questions
 
-### [Q01] What's in the local Obsidian research vault at `📁 51 - Cyberbase/`?
+### [Q01] What's in the local Obsidian research vault?
 - **Asked**: 2026-04-11
 - **Source**: `05-EXISTING-WORK.md`
 - **Why it matters**: we might be re-researching things that already exist in prior notes.
