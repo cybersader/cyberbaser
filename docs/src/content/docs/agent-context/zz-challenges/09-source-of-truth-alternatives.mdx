@@ -107,7 +107,28 @@ These store content as conflict-free replicated data types instead of files-in-g
 
 **Question**: which of these architectures is closest to what cyberbaser needs? Is there a successful wiki that uses git as primary SSOT with non-technical contribution?
 
-### 7. The hybrid architecture question
+### 7. Federation, mixed-privacy, and role-based access
+
+A deeper vision question that stresses every filesystem-based SSOT: **the long-term vision includes federated KBs and partly-public/partly-private/role-based vaults**. Imagine:
+
+- A network of cyberbaser-powered KBs that can link, embed, or query each other (cross-KB wikilinks, shared taxonomies, federated search)
+- A single vault that's partly public (readable by anyone) and partly private (gated by role, team, or auth)
+- Role-based contribution (domain experts can edit their section; everyone can read)
+
+Git + flat files struggles here:
+- Git has no native permission model below "push access" — you either own the repo or you don't
+- Cross-repo references are string paths; nothing enforces link integrity across KB boundaries
+- Federation needs shared identity (OAuth, DIDs, or pod-based) that doesn't live in git
+
+Systems that handle this better:
+- **[Jazz](https://jazz.tools/)** has built-in roles and permissions on CRDT data
+- **[Solid](https://solidproject.org/)** pods have fine-grained access control via WebID + WAC
+- **[AT Protocol](https://atproto.com/)** has portable identity and federation primitives
+- **[Outline](https://www.getoutline.com/)** + **[Wiki.js](https://js.wiki/)** have role-based access built in (at the cost of a database SSOT)
+
+**Question**: if cyberbaser's v2+ vision is federation + mixed-privacy, does that force the SSOT choice NOW? Or is v1 git-only + v2 "wrap git with an access layer" a viable path? Which existing systems have successfully retrofitted federation onto git (or demonstrated it can't be done cleanly)?
+
+### 8. The hybrid architecture question
 
 The emerging pattern (2025-2026): **CRDT for collaboration, git for persistence/audit**.
 
