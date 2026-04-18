@@ -126,7 +126,25 @@ Systems that handle this better:
 - **[AT Protocol](https://atproto.com/)** has portable identity and federation primitives
 - **[Outline](https://www.getoutline.com/)** + **[Wiki.js](https://js.wiki/)** have role-based access built in (at the cost of a database SSOT)
 
-**Question**: if cyberbaser's v2+ vision is federation + mixed-privacy, does that force the SSOT choice NOW? Or is v1 git-only + v2 "wrap git with an access layer" a viable path? Which existing systems have successfully retrofitted federation onto git (or demonstrated it can't be done cleanly)?
+**Federation is a protocol problem, not a UI problem.** The connection model for federated KBs isn't "better search bar" — it's **DNS-style discovery**: a KB needs to find, resolve, and reference content in another KB across a federated namespace. Crawl + resolve, not manual cross-linking. Relevant protocols to investigate:
+
+- **[ActivityPub](https://www.w3.org/TR/activitypub/)** — the Fediverse standard (Mastodon, PeerTube). Federation primitives for actors, objects, activities.
+- **[WebFinger](https://webfinger.net/)** — identity resolution protocol (`acct:user@domain` → metadata). Works alongside ActivityPub.
+- **[AT Protocol federation](https://atproto.com/specs/atp)** — Bluesky's approach with Personal Data Servers and relays.
+- **[Matrix](https://matrix.org/)** — federated messaging with decentralized rooms, reputable for real-time + state sync.
+- **[Nostr relays](https://github.com/nostr-protocol/nips)** — pub/sub event federation; user-owned keys.
+- **[IPNS](https://docs.ipfs.tech/concepts/ipns/)** — mutable names over IPFS content addressing.
+- **[DIDs (Decentralized Identifiers)](https://www.w3.org/TR/did-core/)** — portable cross-system identity (W3C standard).
+- **IndieWeb**: [Webmention](https://www.w3.org/TR/webmention/), [Micropub](https://www.w3.org/TR/micropub/) — small, composable protocols for cross-site mentions + posting.
+- **[Federated Wiki](http://fed.wiki/)** (Ward Cunningham) — the original wiki creator's federated design. Drag pages between sites; fork semantics across instances.
+- **[Bonfire](https://bonfirenetworks.org/)** — federated social/knowledge platform built on extensible protocols.
+- **[Fedora Commons](https://fedora.lyrasis.org/)** — federated repositories for scholarly/cultural KBs.
+
+**Questions**:
+- If cyberbaser's v2+ vision is federation + mixed-privacy, does that force the SSOT choice NOW, or is "v1 git-only → v2 wrap with federation layer" a viable path?
+- Which of the above protocols has the right primitives for a KB (durable content, versioning, transclusion, attribution) vs. a social feed (ephemeral posts)?
+- **Federated Wiki is the closest prior art** — what did Ward Cunningham get right, and why didn't it win? Is its "fork across sites" model something cyberbaser should adopt?
+- Has anyone successfully retrofitted federation onto git-backed content (or proven it can't be done cleanly)?
 
 ### 8. The hybrid architecture question
 
