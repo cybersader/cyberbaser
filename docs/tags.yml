@@ -86,3 +86,6 @@ tags:
   attribution:
     label: Attribution
     description: Contributor identity, credit, and display
+  federation:
+    label: Federation
+    description: Cross-KB discovery, decentralized identity, mixed-privacy access

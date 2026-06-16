@@ -1,0 +1,250 @@
+---
+title: "Is git the right source of truth?"
+description: "A first-principles evaluation of GitHub vs every content-native alternative — CRDT stores, local-first databases, P2P systems, content VCS, and federation protocols. Git scores 21/26. It stays SSOT for v1, with a planned off-ramp."
+sidebar:
+  label: "SSOT: git vs alternatives"
+  order: 6
+status: research
+tags: [research, architecture, federation, scaling]
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+This page is the **findings** for [Challenge 09 · Source of truth alternatives](/cyberbaser/agent-context/zz-challenges/09-source-of-truth-alternatives/). The challenge asked a sharp question: GitHub is built for *code* — is git actually the right single source of truth (SSOT) for a contributable *content* wiki, or is something purpose-built for content better?
+
+The honest answer: **git stays the SSOT for v1, but the recommendation is scoped and conditional, not unqualified.** Git scores 21/26 against requirements derived from cyberbaser's own constraints — but it has two structural zeros (sub-repo access control and federation/discovery) that are *exactly* the two capabilities the [v2+ federation vision](/cyberbaser/agent-context/zz-challenges/09-source-of-truth-alternatives/#7-federation-mixed-privacy-and-role-based-access) needs most. No alternative fixes those zeros without breaking a constraint git satisfies by definition.
+
+<Aside type="note" title="How this was researched">
+This is not one person's literature review. It's the synthesized output of a **14-agent research run**: nine parallel deep-research agents (one per system category), a tenth that derived the requirements scorecard from first principles, two adversarial agents that steel-manned *abandon git* and *keep git* against the full evidence, a completeness critic, and a targeted follow-up that closed the critic's three biggest gaps. **83+ systems** were evaluated against a common rubric. Where the army made a claim that later proved stale (e.g. Sveltia's backend support), the follow-up corrected it — those corrections are flagged inline below.
+
+**Validity:** this analysis reflects the landscape as of **2026-06-16**. Revisit when any trigger in the [validity section](#validity--when-to-revisit) fires.
+</Aside>
+
+## The verdict in one table
+
+| Question | Answer |
+|---|---|
+| Is git a good content SSOT? | **Yes — 21/26.** Excellent at 7 things cyberbaser depends on; weak at 2 it will eventually need. |
+| Does anything beat it for v1? | **No.** Every alternative breaks [Constraint 3](/cyberbaser/getting-started/principles/) (plain `.md` that survives in vanilla Obsidian) or has no review gate. |
+| Where does git fail? | **Sub-repo access control (0/2)** and **federation/discovery (0/2)** — the two v2+ vision pillars. |
+| Do the alternatives fix those? | **Not cleanly.** The systems with native ACLs + federation (XWiki, Sanity) fail the plain-markdown constraint. The gaps are unshipped *everywhere*. |
+| Recommendation | **Keep git as SSOT. Reframe [Principle 1](/cyberbaser/getting-started/principles/) as scoped, with a documented off-ramp** if a loss-free Obsidian-markdown serializer ever ships. |
+
+## The git requirements scorecard
+
+Rather than accept "GitHub is SSOT" as given, the baseline agent **derived** the requirements from cyberbaser's three hard constraints plus the federation vision, then scored git 0/1/2 on each. This is the spine of the whole analysis.
+
+| # | Requirement | Git | Notes |
+|---|---|:---:|---|
+| 1 | Branching / parallel drafts | **2** | Branches are exactly this. Draft branch is isolated, gets its own CI, merges on approval. |
+| 2 | Human review before publish | **2** | PRs + required reviewers + [team-path rules](https://github.blog/changelog/2025-11-03-required-review-by-specific-teams-now-available-in-rulesets/). A complete editorial gate. |
+| 3 | Atomic grouped change (rename + all backlinks) | **2** | One commit = all-or-nothing. Structural advantage over per-save CMS APIs. |
+| 4 | Line / semantic diffing | **1** | Line-based, not semantic. Degrades on reformatted YAML, Mermaid, Dataview blocks. |
+| 5 | Media / large-binary handling | **1** | [LFS](https://docs.github.com/en/repositories/working-with-files/managing-large-files/about-large-files-on-github) works but adds ops burden + bandwidth quotas. |
+| 6 | **Sub-repo / section-level access control** | **0** | [CODEOWNERS routes review, not read access](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners). Repos are all-or-nothing on read. |
+| 7 | API a CMS can drive | **2** | REST + GraphQL, mature, 5k req/hr. Decap/Tina/Keystatic all use it in production. |
+| 8 | Full audit history + attribution | **2** | Cryptographically chained, immutable, signed. Better than most DB-backed CMSs. |
+| 9 | Low barrier for non-git contributors | **1** | Git itself: 0. CMS layer lifts it high — but the CMS is load-bearing infra, not a skin. |
+| 10 | **Federation / cross-KB discovery** | **0** | Git has zero discovery primitives. No namespace, no announce, no crawl. |
+| 11 | Self-hostability / no lock-in | **2** | Plain `.md`; swap GitHub → [Forgejo](https://forgejo.org/) without touching content. Git's best dimension. |
+| 12 | Offline-first editing | **2** | Local clone is fully offline. Maps perfectly to the Obsidian power-user workflow. |
+| 13 | Obsidian round-trip fidelity | **2** | Git stores bytes and does *nothing* to them — which is exactly right. Fidelity risk lives in the [translation layer](/cyberbaser/design/translation-layer/), not the SSOT. |
+
+**Total: 21/26.** Git is genuinely excellent at branch isolation, atomic commits, audit history, API maturity, offline-first, format-agnostic storage, and no-lock-in self-hosting — and these map *directly* onto cyberbaser's stated invariants. Its two zeros are not incidental; they are the v2+ vision.
+
+<Aside type="caution" title="The crux">
+Git's two weakest scores (sub-repo ACL, federation) are **the exact two capabilities the v2+ vision needs most.** That is a direct collision between the roadmap and the substrate — and it is the single most important finding on this page. The CMS layer cannot fix it, because CMSs inherit whatever GitHub exposes, and GitHub exposes repo-level all-or-nothing read access.
+</Aside>
+
+## The alternatives, by category
+
+83+ systems across nine categories. None is a viable drop-in SSOT replacement for v1. Here is *why*, category by category — viability is rated for cyberbaser specifically.
+
+### Git forges beyond GitHub
+
+The keystone finding: the **anonymous open-authoring flow** (non-technical contributor edits in a browser, a PR is created for them, no account-CLI, no git knowledge) is — as of 2026 — **still GitHub-exclusive.**
+
+| System | Self-host | Federation | Viability | Killer flaw |
+|---|:---:|:---:|:---:|---|
+| [GitHub](https://github.com) | no | no | **high** | Vendor lock-in; open-authoring couples you to GitHub specifically. |
+| [GitLab CE](https://about.gitlab.com/) | yes | no | medium | 4 GB RAM min (~20× Forgejo); CMS open-authoring not available. |
+| [Forgejo](https://forgejo.org/) | yes | partial | medium | Best self-host story (256 MB, single binary) but **no CMS open-authoring** yet. |
+| [Codeberg](https://codeberg.org/) | partial | partial | medium | Forgejo-hosted, non-profit — but same open-authoring gap. |
+| [Gitea](https://gitea.com) | yes | no | low | For-profit governance; Forgejo strictly better for a new project. |
+| [Radicle](https://radicle.xyz/) | yes | yes | none | True P2P federation but **no web contribution path, no canonical URL.** |
+| [SourceHut](https://sourcehut.org/) | yes | no | none | Email-patch workflow — the antithesis of "no git knowledge." |
+
+<Aside type="tip" title="Corrected: the open-authoring lock is real but not a law of nature">
+The army initially reported Sveltia open-authoring as "blocked on GitHub PKCE." The follow-up verified the current (2026) state: **anonymous open authoring is still GitHub-locked** — [Decap requires the GitHub backend](https://decapcms.org/docs/open-authoring/) ("you must use the GitHub backend"), and [Sveltia hasn't shipped open authoring at all](https://sveltiacms.app/en/docs/roadmap) ("coming in the near future," gated on GitHub PKCE). **But** Sveltia *does* now support **authenticated** editing on self-hosted **Forgejo/Gitea/GitLab** via PKCE OAuth today. So: logged-in contribution off GitHub works now; *anonymous* contribution does not. The lock is a "not-yet-ported" gap riding GitHub's fork API — a plausible future escape, not a present one.
+</Aside>
+
+### Content-native version control (Fossil, Pijul, jj)
+
+Key finding: **git's bottleneck for cyberbaser is the contributor-experience layer, not merge quality** — so swapping the VCS solves the wrong problem.
+
+| System | Obsidian `.md` | Viability | Killer flaw |
+|---|:---:|:---:|---|
+| [Fossil](https://fossil-scm.org/) | no | low | Wiki content lives in SQLite blobs, not `.md`. Can't open in Obsidian. |
+| [Pijul](https://pijul.com/) | yes | low | Commuting-patch merges solve code conflicts cyberbaser won't have. No contributor story. |
+| [Jujutsu (jj)](https://github.com/jj-vcs/jj) | yes | low | "Nicer git" for developers; changes *nothing* for non-technical contributors. |
+| [Gitit](https://github.com/jgm/gitit) | yes | medium | Git-backed wiki with browser editing — but Pandoc syntax ≠ Obsidian, low maintenance. |
+| Darcs / Mercurial | yes | none | Ecosystem collapse; no hosting; no merge benefit for prose. |
+
+### CRDT-native content systems
+
+Two structural problems for *every* system here: CRDT data models are binary/JSON blobs (breaking the plain-`.md` constraint), and **auto-merge is architecturally opposed to PR-style review** — any authorized peer silently alters content with no gate.
+
+| System | Obsidian `.md` | Access control | Viability | Note |
+|---|:---:|:---:|:---:|---|
+| [Yjs](https://yjs.dev/) | partial | doc-level token | low | Most production-proven, but opaque binary; markdown round-trip is editor glue. |
+| [Automerge](https://automerge.org/) | partial | none | low | `automerge-repo` explicitly "not production-ready" for large docs. |
+| [Loro](https://loro.dev/) | no | none | low | Most mature CRDT algorithmically (v1.13, MIT) — but zero markdown/ACL/federation. |
+| [OctoBase / BlockSuite](https://blocksuite.io/) (AFFiNE) | no | workspace roles | low | Obsidian round-trip broken by AFFiNE's own admission. |
+| [Jazz / CoJSON](https://jazz.tools/) | no | **cryptographic roles** | low* | The single best permission story surveyed — but JSON blobs, no `.md`, no federation. |
+
+<Aside type="note">
+**Jazz/CoJSON** is the standout that keeps recurring. Its roles (reader / writer / writeOnly / admin) are enforced *cryptographically client-side* with no trusted central server — and `writeOnly` uniquely models "anonymous contributor submits an edit they can't read others' drafts." It is the heart of the [abandon-git steel-man](#steel-man-abandon-git) below. Its disqualifier for *today*: data is encrypted CoJSON, not plain markdown files.
+</Aside>
+
+### Local-first / sync-engine databases
+
+Key finding: every sync engine here is built around **auto-convergence** (CRDT / LWW / server-reconcile), while a public wiki's hardest problem is the opposite — *preventing bad edits from reaching readers before review*. **No 2026 sync engine ships a "draft → review → publish" primitive.** That category does not exist as a product yet.
+
+| System | Viability | Killer flaw |
+|---|:---:|---|
+| [PowerSync](https://www.powersync.com/) | low | Sync layer, not governance; re-implement git's PR model yourself. Sync Streams beta Mar 2026. |
+| [ElectricSQL](https://electric-sql.com/) | low | Write path unspecified; the CRDT version that handled merges is dead. |
+| [Triplit](https://www.triplit.dev/) | low | Absorbed by Supabase Oct 2025; community-maintained now. |
+| [Convex](https://www.convex.dev/) | low | Best ACLs in class — but **not self-hostable.** Instant disqualifier. |
+| [RxDB](https://rxdb.info/) / [Evolu](https://www.evolu.dev/) | low / none | App-data shape, not human content; Evolu's E2E encryption blocks server-side search + moderation. |
+
+### Decentralized / P2P content systems
+
+Every P2P system fails ≥2 hard constraints at once. The dominant pattern: **public-by-default with no access control**, or correct P2P primitives with zero contribution/review semantics.
+
+| System | Obsidian `.md` | Access control | Viability | Killer flaw |
+|---|:---:|:---:|:---:|---|
+| [IPFS + IPNS](https://ipfs.tech/) | yes | none | low | Public by default; IPNS lookups ~11s median — unusable for navigation. |
+| [Solid](https://solidproject.org/) | yes | real (WAC/ACP) | low | Principled data-ownership + ACLs, but RDF-deep, no wiki app exists, zero non-technical UX. |
+| [AT Protocol](https://atproto.com/) | partial | **none yet** | low | Everything public; permissioned data is competing-proposal stage (mid-2026). Binary CAR repos, not `.md`. |
+| [Earthstar / Willow](https://earthstar-project.org/) | partial | **best (Meadowcap)** | medium | The most principled capability model surveyed — but beta, no federation, "remove a bad actor" unsolved. |
+| [Nostr](https://nostr.com/) | partial | none | none | NIP-23 markdown is close, but no ACL, no versioning, no transclusion. |
+| Hypercore / iroh / Ceramic | varies | namespace-key | low | Transport primitives, not content systems. Build the wiki from scratch. |
+
+### Real-world wiki architectures
+
+The decisive precedent finding: **no successful wiki at scale uses git as its true primary SSOT with non-technical contribution.** Every platform that achieves non-technical usability (Notion, Confluence, Outline, BookStack) hides git behind a database or uses none. Platforms that *do* use git/files as SSOT ([Quartz](https://quartz.jzhao.xyz/), Obsidian Publish) have *zero* non-technical contribution path.
+
+| System | SSOT model | Obsidian `.md` | Lesson for cyberbaser |
+|---|---|:---:|---|
+| [MediaWiki](https://www.mediawiki.org/) | SQL + wikitext | no | The only proven mass-contribution model — but orthogonal to files+markdown. |
+| [Notion](https://www.notion.so/) | proprietary blocks | partial | Best contribution UX; worst lock-in. The anti-pattern. |
+| [Quartz v4](https://quartz.jzhao.xyz/) | **git + Obsidian `.md`** | yes | Proves vault+git → great public wiki. Solves publish, not contribution. |
+| [GitBook](https://www.gitbook.com/) | DB (git mirror) | partial | Closest "git-backed wiki w/ non-tech editors" that ships — but git is a *mirror*, not SSOT; went closed-source. |
+| [Wiki.js](https://js.wiki/) | DB (git sync) | partial | Only wiki with real git-sync + WYSIWYG — but git is secondary, v3 in limbo. |
+| [Logseq](https://logseq.com/) | file → DB migration | partial | **The cautionary tale.** 4 years migrating file→SQLite; markdown SSOT promise broken. |
+
+<Aside type="caution" title="The Logseq existence proof">
+Logseq's file→DB migration is entering its **fourth year**, with markdown export now explicitly lossy ("cannot capture all data in a graph"; only their proprietary EDN is lossless). This is a direct, well-funded existence proof that **reconciling block-level content with plain files is a multi-year unsolved problem** — not a design choice better tooling fixes. It is the strongest single argument for *not* betting the vault on a block/CRDT store.
+</Aside>
+
+### Federation + discovery protocols
+
+The DNS-for-knowledge-bases problem. **No existing protocol fully solves it.** The surprise: a 2002 protocol — [OAI-PMH](https://www.openarchives.org/pmh/) — is architecturally *closer* to what cyberbaser needs (crawl + incremental harvest by datestamp) than any modern "decentralized" protocol, because ActivityPub / AT Protocol / Nostr all optimize for ephemeral social delivery and treat durable versioned documents as an afterthought.
+
+| Protocol | Solves | Viability | Note |
+|---|---|:---:|---|
+| [Federated Wiki](http://fed.wiki/) (Ward Cunningham) | discovery + fork-across-sites | medium | **Closest prior art.** Worked since 2011. Failed on UX, not tech: neighborhoods are *session-scoped* and evaporate on refresh. JSON, not markdown. |
+| [OAI-PMH](https://www.openarchives.org/pmh/) | crawl / incremental harvest | low | The right *shape* for KB discovery — but metadata-only, no content, no auth. |
+| [ActivityPub](https://www.w3.org/TR/activitypub/) + [WebFinger](https://webfinger.net/) | social federation + identity | low | Wrong primitive for versioned docs: object IDs are single-server, no versioning, no transclusion. |
+| [Matrix](https://matrix.org/) | **federated access control** | low | Best federated ACL model (power levels) — but rooms are chat, not pages. |
+| [DIDs](https://www.w3.org/TR/did-core/) (`did:web`) | portable identity | medium | Not federation itself, but the identity primitive any federated KB needs. Pragmatic via domain ownership. |
+| [Nostr](https://nostr.com/) (NIP-23) | addressable content | low | Markdown-ish + addressable, but no ACL, no versioning, no real crawl. |
+
+The composed answer: a minimal "DNS-for-KBs" would need **`did:web` identity + a `/.well-known/kb-manifest.json` discovery endpoint + an OAI-PMH-style incremental harvest keyed on git commit hashes + addressable content records.** Every piece exists; none is assembled. And critically — **this layer must be built regardless of SSOT**, so it is not a reason to leave git.
+
+### Hybrid CRDT + git ("edit live, archive to git")
+
+The emerging 2025-2026 pattern — and **the most directly on-point system, [Relay.md](https://relay.md/), is the cautionary existence proof.** It runs Yjs CRDTs over local `.md` files, but its own v0.7.4 release notes document **blank-note data loss** when CRDT state diverged from disk, forcing a manual merge UI. The unsolved core: Yjs treats markdown as character sequences with no awareness of Obsidian syntax — a concurrent edit splitting `[[a link]]` at the bracket produces a *silently corrupted* wikilink that the CRDT considers a valid merge.
+
+**Conclusion: CRDT-for-editing + git-for-archive is a v2 investment, not a v1 starting point.** The Obsidian-syntax-aware serializer, snapshot reconciliation, and debounced commit pipeline are all custom engineering with no reference implementation to copy.
+
+### Obsidian's own ecosystem
+
+None of Obsidian Sync / Publish / Headless / LiveSync / Relay can be the SSOT under all three constraints. The structural tension: Obsidian's sync tools are built for **one owner syncing their own devices**, not public multi-writer wikis.
+
+- **Obsidian Sync** — no public write API (forum request open since 2021, deliberately unresolved). Dead end for external contributors.
+- **Headless client (Feb 2026)** — genuinely new: enables a server-side "vault daemon" to watch+build+publish. But it *syncs only* (no plugin execution), requires a paid Sync subscription, and the authoritative store stays Obsidian's closed cloud. It shifts the build trigger; it doesn't change the SSOT calculus.
+- **Self-hosted LiveSync** — CouchDB store is **chunked proprietary blobs, not plain `.md`** — a new lock-in, just self-hosted. Frequently glossed over in tutorials.
+
+## Steel-man: abandon git
+
+The strongest good-faith case for *replacing* git, argued by an adversarial agent against the full evidence.
+
+**Position:** Adopt **Jazz/CoJSON** as the authoritative role-gated store + a one-way git+`.md` mirror generated by an Obsidian-syntax-aware serializer + `did:web` KB manifests for federation. Git survives as a *derived* archive, not the arbiter of who-sees-what. Trigger is **not v1** — it's the v2+ mixed-privacy + federation vision, where git's two zeros become unfixable.
+
+**Best arguments:**
+- Git's two `0/2` scores are *precisely* the v2+ vision pillars. The CMS layer can't fix them — it inherits GitHub's repo-level all-or-nothing read access.
+- The git-native workaround for mixed-privacy (one repo per access tier) **shatters the single-vault invariant**, which is itself a hard constraint. Git forces a choice between two of cyberbaser's own constraints.
+- Jazz's `writeOnly` role is a *structurally cleaner* open-contribution-with-privacy model than fork-and-PR.
+- Real-time multiplayer editing is impossible on raw git and is a genuine 2026 product expectation; every block-wiki that achieved non-technical usability hides version control behind a DB/CRDT for exactly this reason.
+
+**Its own honest weakness (the agent's words):** *"I am proposing to abandon the one thing that fully works today in exchange for solving problems that are still vision, not v1 — and the replacement's two load-bearing pieces are both unproven."* The Obsidian-syntax-aware serializer that makes the git mirror trustworthy **does not exist** in any shipping system (Relay.md's data-loss notes prove it's unsolved), and CoJSON auto-merge **deletes the human review gate** that is git's actual killer feature for a public wiki. Verdict: a defensible v2 R&D bet to *prototype in parallel*, reckless to *adopt as SSOT* before the serializer is proven.
+
+## Steel-man: keep git
+
+The strongest good-faith case for *keeping* git, treating every higher capability as an add-on *in front of* git.
+
+**Best arguments:**
+- **Constraint 3 is a git tautology.** "No lock-in / vanilla-Obsidian-survives" is satisfied by exactly one property: the authoritative store is plain `.md` bytes with versioning. Git *is* that. Every contender scoring `obsidian=no` fails this by construction. Git is the *only* surveyed system where "the vault survives if cyberbaser disappears" is true by definition rather than by a serializer someone must keep writing.
+- **The CMS layer genuinely neutralizes the non-git-user weakness** — and the most mature anonymous-contribution path on the planet ([Decap open authoring](https://decapcms.org/docs/open-authoring/)) sits *directly on top of git*. You get the non-technical UX *and* keep plain files *and* keep the review gate.
+- **The PR review gate is the killer feature, not the friction.** Three independent research tracks converged: every CRDT/sync alternative auto-converges with no human-review step. For a wiki where factual accuracy *is* the product, that is fatal. Git is the only surveyed system with draft→review→publish as a first-class primitive.
+- **Federation + mixed-privacy are retrofittable in front of git** — and no alternative SSOT ships them either, so you give up nothing by waiting. Every KB is already a cloneable, hash-versioned git mirror: an ideal harvest target.
+
+**Its own honest weakness (the agent's words):** if the v2+ mixed-privacy + federation vision is the *real* destination rather than a someday-maybe, then "keep git and bolt everything on" quietly concedes that **git stops being the arbiter of visibility the moment mixed-privacy ships** — you end up running a permission-aware content API as the true access boundary, with git demoted to a file store behind it. At that point a purpose-built system with native field-level roles + a git-export mirror might be the more honest architecture — the *inverse* of this position.
+
+## Critic corrections
+
+The completeness critic caught real problems. The follow-up agent resolved them:
+
+- **XWiki was the biggest miss** — the only system with *both* native page-level ACLs *and* ActivityPub federation. **Resolved: LOW/NONE.** XWiki stores XWiki-syntax rows in SQL, not `.md`; its markdown import is lossy; and its ActivityPub federation is **notification-grade ("notify followers on page create"), not content replication.** Constraint 3 kills it. Value: a *reference architecture* proving "page-ACL + ActivityPub actor-per-space" is technically real — not software to adopt.
+- **Sanity was cited as the ACL savior but never scored.** **Resolved: NONE.** Genuinely best-in-class document/field-level roles — but content lives in a hosted proprietary Content Lake (GROQ-only, not self-hostable), and its markdown bridge was **archived unmaintained in Dec 2025**. Great ACLs, wrong storage paradigm.
+- **The open-authoring lock claim was possibly stale.** **Resolved: still GitHub-locked in 2026**, but it's a not-yet-ported implementation gap riding GitHub's fork API, not a fundamental law (see the corrected aside [above](#git-forges-beyond-github)).
+
+Still genuinely open (flagged by the critic, not yet resolved): no one **hands-on tested** a Decap open-authoring flow end-to-end to confirm the UX is truly git-free through the OAuth/fork/PR steps; and "git preserves bytes" is necessary but not sufficient — the **CMS edit widget** is where wikilink/callout corruption would actually happen, and that wasn't exercised. Both belong in [Challenge 02 (CMS)](/cyberbaser/agent-context/zz-challenges/02-cms-evaluation/) and [Challenge 05 (translation equivalence)](/cyberbaser/agent-context/zz-challenges/05-translation-equivalence/).
+
+## Recommendation: keep git, scoped, with an off-ramp
+
+<Aside type="tip" title="The recommendation">
+**Keep git as the SSOT.** Do **not** replace [Principle 1](/cyberbaser/getting-started/principles/) — but **reframe it as scoped and conditional:**
+
+> *Git is the SSOT. Mixed-privacy and federation are deferred capabilities to be solved by a layer **in front of** git. If a content-native system ever proves it can export loss-free Obsidian `.md`, git may be demoted from arbiter-of-visibility to durable export target.*
+
+**The single strongest reason:** the only property *no* alternative satisfies by construction is Constraint 3 — git satisfies it by definition, while every content-native/CRDT/DB store satisfies it only via a serializer "someone must keep writing," and the one serializer the abandon-git path depends on **does not exist in any shipping system.** Replacing Principle 1 today is an unforced bet-the-vault risk.
+</Aside>
+
+Concretely:
+
+**v1 (ship on git):** GitHub repo as SSOT holding plain Obsidian `.md`, **continuously mirrored to Forgejo/Codeberg** to break vendor dependence + [Decap/Sveltia open authoring](/cyberbaser/agent-context/zz-challenges/02-cms-evaluation/) for anonymous contribution + branch protection & required review as the editorial gate + the existing [Astro/Starlight](/cyberbaser/design/architecture/) publish pipeline.
+
+**v2+ (retrofit in front of git, SSOT unchanged):** mixed-privacy via separate-repo tiers (zero-engineering) graduating to a permission-aware read/edit API proxy; federation via `/.well-known/kb-manifest.json` + OAI-PMH-style harvest keyed on commit hashes + `did:web` identity. Real-time collab deferred until an Obsidian-syntax-aware CRDT↔`.md` serializer with a debounced git-commit pipeline exists.
+
+**Run in parallel as R&D (don't adopt):** prototype the Jazz/CoJSON + serializer path. The day that serializer round-trips wikilinks/callouts/embeds loss-free is the day the off-ramp opens.
+
+## Validity — when to revisit
+
+Re-run this analysis when any of these fire:
+
+- An **Obsidian-syntax-aware CRDT↔markdown serializer** reaches production (round-trips wikilinks, callouts, embeds loss-free) — opens the off-ramp.
+- **Sveltia (or any CMS) ships anonymous open authoring on a non-GitHub backend** — breaks the GitHub contribution lock.
+- **Obsidian ships a public write API or shared-vault sync** — changes the Obsidian-native calculus.
+- **AT Protocol permissioned data, or an XWiki-class system with loss-free `.md` export, reaches production** — would be the first system to fix git's two zeros without breaking Constraint 3.
+
+## Related
+
+- [Challenge 09 · Source of truth alternatives](/cyberbaser/agent-context/zz-challenges/09-source-of-truth-alternatives/) — the challenge this answers
+- [Principles](/cyberbaser/getting-started/principles/) — especially Principle 1 (now scoped) and Constraint 3
+- [Challenge 08 · Linchpin audit](/cyberbaser/agent-context/zz-challenges/08-linchpin-bottleneck-audit/) — SSOT choice is a confirmed linchpin
+- [Challenge 02 · CMS evaluation](/cyberbaser/agent-context/zz-challenges/02-cms-evaluation/) — the open-authoring layer that makes git-as-SSOT viable
+- [Challenge 05 · Translation equivalence](/cyberbaser/agent-context/zz-challenges/05-translation-equivalence/) — where the byte-fidelity question actually gets decided
+- [Architecture](/cyberbaser/design/architecture/) · [Translation layer](/cyberbaser/design/translation-layer/)
