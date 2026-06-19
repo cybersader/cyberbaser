@@ -1,0 +1,32 @@
+---
+title: Reference architectures
+description: Concrete, buildable wiring diagrams for the parts of cyberbaser — each one names the components, the deploy shape, and the trade-offs. Developed as the engineering gets real.
+sidebar:
+  label: Reference architectures
+  order: 0
+status: research
+tags: [design, architecture]
+---
+
+A **reference architecture** is a concrete, opinionated wiring diagram for one slice of the system: *these components, wired this way, deployed in this shape, with these trade-offs.* They sit a layer below the [principles](/cyberbaser/getting-started/principles/) and [research findings](/cyberbaser/research/) — where research answers "what should we use," a reference architecture answers "exactly how do the pieces connect, and what does it cost to run."
+
+We develop these as the engineering gets real, so that "self-hostable, no lock-in" stays a buildable claim rather than a slogan. Each one is grounded in a [research findings page](/cyberbaser/research/) and respects the project's standing constraints — especially **self-host-first, no AWS/GCP cloud-native** (non-hyperscaler edge services are acceptable only for the genuinely-hard-to-secure bits).
+
+## Catalog
+
+| # | Reference architecture | Status | Grounded in |
+|---|---|---|---|
+| 01 | [Self-hosted Forgejo + PKCE auth](/cyberbaser/design/reference-architectures/self-hosted-forgejo-auth/) | 🟢 drafted | [v1 architecture](/cyberbaser/research/v1-architecture/) · [SSOT findings](/cyberbaser/research/source-of-truth/) |
+| 02 | Translation-layer pipeline (OFM → web, round-trip) | ⚪ planned | [Translation layer](/cyberbaser/design/translation-layer/) |
+| 03 | Block↔markdown editor (CodeMirror 6 + mdast) | ⚪ planned (after the [fidelity spike](/cyberbaser/research/v1-architecture/#block-markdown-fidelity--the-keystone-rd)) | [v1 architecture](/cyberbaser/research/v1-architecture/) |
+| 04 | Media + build pipeline (R2, git-derived dates, CI cache) | ⚪ planned | [v1 architecture](/cyberbaser/research/v1-architecture/) |
+| 05 | Dual-forge mirroring (GitHub ⇄ Forgejo) | ⚪ planned | [v1 architecture](/cyberbaser/research/v1-architecture/#forgejo-and-the-github-trust-question) |
+
+## What each page contains
+
+- **The headline decision** — the one thing that shapes the rest.
+- **A wiring diagram** — components and how they connect (ASCII is fine).
+- **Component table** — what each piece is, self-host vs outsource, and why.
+- **The hard bits** — what is genuinely hard to run securely, and the narrow set of things worth outsourcing to a non-hyperscaler.
+- **Trade-offs** — honestly, against the alternative.
+- **Open questions** — what still needs proving.

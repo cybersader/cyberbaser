@@ -1,0 +1,129 @@
+---
+title: "RA-01 · Self-hosted Forgejo + PKCE auth"
+description: "A fully self-hostable authentication stack for a contributable wiki on Forgejo — where PKCE eliminates the OAuth proxy entirely. No AWS/GCP; the only outsourced piece is a non-hyperscaler edge for DDoS/WAF."
+sidebar:
+  label: "RA-01 · Self-hosted auth"
+  order: 1
+status: research
+tags: [design, architecture, federation]
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The [v1 architecture findings](/cyberbaser/research/v1-architecture/) drafted a **Cloudflare Worker OAuth proxy** for the Web CMS auth path. This reference architecture reconsiders that for **full self-hosting** — the standing preference is self-host-first, **no AWS/GCP cloud-native**, with non-hyperscaler edge services acceptable only for the genuinely-hard-to-secure bits.
+
+<Aside type="tip" title="The headline: PKCE deletes the proxy">
+The Cloudflare Worker proxy was an artifact of the **GitHub + Sveltia** path. Move the source of truth to **self-hosted Forgejo** and use **Decap (or Sveltia) CMS's native Gitea/Forgejo backend**, and the CMS authenticates **directly from the browser via PKCE** against Forgejo's built-in OAuth2/OIDC provider. That **eliminates the OAuth proxy, the client secret, and the server-side token exchange** — the only piece of *compute* and the only *secret* that previously had to live at Cloudflare both disappear.
+</Aside>
+
+## Forgejo is already an OIDC provider
+
+[Forgejo ships an instance-wide OAuth2/OIDC provider](https://forgejo.org/docs/latest/user/oauth2-provider/) — it exposes the standard surface (`/.well-known/openid-configuration`, authorize, token, userinfo, JWKS) and implements **Authorization Code + PKCE** with support for **public clients (no secret)**. So a browser-only CMS can do the whole login itself.
+
+[Decap's Gitea/Forgejo backend](https://decapcms.org/docs/gitea-backend/) is pure client-side config:
+
+```yaml
+backend:
+  name: gitea
+  repo: owner/repo
+  app_id: <client-id-from-forgejo>     # OAuth app in Forgejo, "Confidential Client" UNCHECKED
+  api_root: https://forgejo.example.com/api/v1
+  base_url: https://forgejo.example.com
+  auth_endpoint: https://forgejo.example.com/login/oauth/authorize
+```
+
+**Requirements / gotchas:**
+- Forgejo **≥ 1.21.4** (the fast content API needs **Forgejo 12.0+**).
+- **CORS must be enabled** in `app.ini` for the wiki origin (`[cors] ENABLED=true`, `ALLOW_DOMAIN=wiki.example.com`) — test it end-to-end ([known CORS edge cases](https://codeberg.org/forgejo/forgejo/issues/1803)).
+- The Gitea backend does **not** support Git LFS.
+- **Note:** Sveltia *CMS* supports the Forgejo backend via PKCE, but `sveltia-cms-auth` (the Worker) is GitHub/GitLab-only and [not coming to Forgejo](https://github.com/sveltia/sveltia-cms-auth/issues/19) — which is fine, because the PKCE path doesn't use it.
+
+<Aside type="caution" title="The one real wart: Forgejo OAuth2 scopes">
+Forgejo's OAuth2 **scopes are not yet granular** — a token from the CMS login can perform *any* action as that user, not just git ops. For a public wiki, mitigate by keeping the Forgejo user base curated, gating all contributions through PRs, and restricting repo permissions — or front login with an IdP (below). Track [Forgejo PR #4449](https://codeberg.org/forgejo/forgejo/pulls/4449).
+</Aside>
+
+## The reference stack
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Cloudflare edge — OUTSOURCED (non-hyperscaler, optional) │
+│  • Cloudflare Tunnel (cloudflared): no open inbound ports│
+│  • Free WAF + rate-limiting + DDoS + IP cloaking + TLS   │
+└────────────────────────┬────────────────────────────────┘
+                         │ outbound-only tunnel
+┌────────────────────────▼────────────────────────────────┐
+│ Your box — Docker Compose (or Coolify)                   │
+│                                                          │
+│  Caddy (reverse proxy, auto-HTTPS at the origin)         │
+│    ├── wiki.example.com    → Astro/Starlight static site │
+│    │      └── /admin/  = Decap CMS  (PKCE → Forgejo)     │
+│    └── forgejo.example.com → Forgejo (SSOT + OIDC IdP)   │
+│                                                          │
+│  Forgejo ........ git SSOT + built-in OAuth2/OIDC (PKCE) │
+│  Infisical / SOPS+age ...... secret storage & rotation   │
+│  [optional] Pocket ID ...... passkey OIDC, if you want   │
+│             SSO/MFA over Forgejo + future services       │
+└──────────────────────────────────────────────────────────┘
+```
+
+## Components
+
+| Component | Role | Self-host vs outsource |
+|---|---|---|
+| **Forgejo** | git SSOT **and** the OIDC provider | Self-host (GPL, Codeberg e.V., ~100–200 MB idle) |
+| **Decap / Sveltia CMS (Gitea backend)** | Zero-git contribution surface; **PKCE login, no proxy** | Self-host (static, served by the site) |
+| **[Caddy](https://caddyserver.com/)** | Reverse proxy + automatic Let's Encrypt TLS | Self-host (zero-config). [Traefik](https://traefik.io/) if you prefer Docker-label routing |
+| **[Cloudflare Tunnel](https://www.cloudflare.com/products/tunnel/)** | DDoS/WAF/rate-limiting, no open ports, IP cloaking | **Outsource** (non-hyperscaler edge; free tier). Removable later |
+| **[Infisical](https://infisical.com/)** or **SOPS + age** | Secret storage + rotation | Self-host (very little to store, thanks to PKCE) |
+| **[Pocket ID](https://pocket-id.org/)** *(optional)* | Passkey-only OIDC in front of Forgejo + future services | Self-host (single SQLite container) |
+| Transactional email *(only if you add email auth)* | Magic-link delivery | **Outsource** to [Postmark](https://postmarkapp.com/) — *not* AWS SES. Or skip entirely via passkeys/OAuth |
+
+## What's genuinely hard to secure (and what to outsource)
+
+The principle: **outsource only the network-edge primitives that need massive shared infrastructure to do well; keep identity, tokens, TLS, and secrets self-hosted** — and PKCE removes the hardest one (token exchange) from the board.
+
+| Concern | Verdict |
+|---|---|
+| OAuth client-secret storage | **Eliminated** — PKCE means no secret for the CMS login |
+| Token exchange | **Eliminated** — happens in-browser against Forgejo |
+| TLS / certs | **Self-host** — Caddy automates it (a solved problem) |
+| Secret rotation | **Self-host** — Infisical or SOPS+age |
+| Email / magic-link delivery | **Outsource** (Postmark) — deliverability is genuinely hard. Better: avoid email auth via passkeys/OAuth |
+| Abuse / bot rate-limiting / WAF | **Outsource** to Cloudflare edge |
+| DDoS | **Outsource** to Cloudflare Tunnel (also gives no-open-ports) |
+
+## Self-hostable IdP options (only if you want a real identity layer)
+
+For v1 you likely **don't need a separate IdP** — Forgejo's built-in provider covers "log into the CMS." Add one only for SSO across services, enforced passkeys/MFA, or the [v2 federation/role-gating vision](/cyberbaser/research/source-of-truth/#federation-mixed-privacy-and-role-based-access).
+
+| IdP | Footprint | Pragmatic fit |
+|---|---|---|
+| **[Pocket ID](https://pocket-id.org/)** | Single SQLite container | **Top pick for solo/small** — passkey-only OIDC, no password surface |
+| **[Kanidm](https://kanidm.com/)** | Single Rust binary | **Best security/ops ratio** if you want a full IDM, not just login |
+| **[Authelia](https://www.authelia.com/)** | ~20 MB image | Best as a *forward-auth gate* in front of the reverse proxy |
+| Zitadel / Authentik / Keycloak / Ory | Heavier (Postgres/JVM) | Overkill for a small wiki — only if multi-service/enterprise need is real |
+
+## Trade-offs vs the Cloudflare-Worker-proxy approach
+
+| | Worker proxy (original draft) | Self-hosted Forgejo + PKCE (this RA) |
+|---|---|---|
+| Token exchange | Runs in a Worker you deploy + maintain | **Eliminated** (in-browser) |
+| Client secret | Stored in Worker env (Cloudflare holds it) | **None** (public client) |
+| Backend | Tied to GitHub/GitLab | Forgejo-native, fully self-hosted SSOT |
+| Hyperscaler exposure | Compute + secret at Cloudflare | Cloudflare is a **dumb edge only** (tunnel/WAF) — no compute, no secrets; removable |
+| Failure surface | Worker is a live auth dependency | Auth = Forgejo (already running) |
+| Ops | One more deployed service | One fewer service |
+
+## Where this fits
+
+This is the **self-hosted / Forgejo-primary** variant. The [v1 plan](/cyberbaser/research/v1-architecture/#forgejo-and-the-github-trust-question) still keeps **GitHub primary for v1** (for anonymous open-authoring + reach) with Forgejo as a push-mirror trust anchor. This RA is what the stack becomes when trust/sovereignty wins and you flip Forgejo to primary — and it's notably *simpler* than the GitHub path, not harder. The remaining gap to go Forgejo-primary is **anonymous** (zero-account) contribution: PKCE gives clean *authenticated* contribution, but the true zero-account path still depends on either Sveltia shipping Forgejo-backend open authoring or the [serverless contribution-bot pattern](/cyberbaser/research/v1-architecture/#the-contribution-path-cms).
+
+## Open questions
+
+- Does the Forgejo broad-scope-token risk rule out a *public* (anyone-can-register) Forgejo, forcing an IdP-fronted or curated-users model?
+- Can the [serverless contribution bot](/cyberbaser/research/v1-architecture/#the-contribution-path-cms) (Contribunator/Staticman/PRB0t) run fully self-hosted against Forgejo to deliver the zero-account path?
+- Is Cloudflare Tunnel acceptable for the media-serving volume, or does that push toward a self-hosted edge?
+
+## Sources
+
+[Forgejo OAuth2 provider](https://forgejo.org/docs/latest/user/oauth2-provider/) · [Forgejo config cheat sheet](https://forgejo.org/docs/latest/admin/config-cheat-sheet/) · [Decap Gitea/Forgejo backend](https://decapcms.org/docs/gitea-backend/) · [Decap external OAuth clients](https://decapcms.org/docs/external-oauth-clients/) · [docker-decap-cms-standalone](https://github.com/itsmejoeeey/docker-decap-cms-standalone) · [oauth2-proxy Gitea provider](https://oauth2-proxy.github.io/oauth2-proxy/configuration/providers/gitea/) · [Pocket ID](https://github.com/pocket-id/pocket-id) · [Kanidm](https://github.com/kanidm/kanidm) · [Caddy vs Traefik 2026](https://ossalt.com/guides/traefik-vs-caddy-vs-nginx-reverse-proxy-self-hosting-2026) · [Cloudflare Tunnel](https://www.cloudflare.com/products/tunnel/) · [Postmark](https://postmarkapp.com/)

@@ -8,3 +8,21 @@ name = "shell"
 cwd = "."
 command = "bash"
 kind = "shell"
+
+[[session]]
+name = "agent"
+cwd = "."
+command = "claude"
+kind = "claude-code"
+description = "main coding agent"
+
+[[session]]
+name = "docs"
+cwd = "docs"
+command = "bun run dev:host" # Astro Starlight -> http://localhost:4321/cyberbaser/
+kind = "dev-server"
+
+# ── Handy one-off commands (run from the `shell` session) ──────────────
+# cd docs && bun run build                    # production build -> docs/dist/
+# cd docs && bun run preview --host 0.0.0.0   # serve built output (mobile / Tailscale)
+# cd docs && bun run test:local               # headless Playwright smoke tests
