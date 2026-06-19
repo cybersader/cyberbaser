@@ -39,7 +39,7 @@ It is *all three* eventually — publishing tool, wiki platform, collaboration f
 | **Auth** | GitHub OAuth via a ~100-line Cloudflare Worker proxy | ✅ decided |
 | **Inline editing** | Sidebar CMS, raw-markdown for OFM bodies | ✅ decided (true on-page editing deferred) |
 | **Collaboration** | git-async PR flow | ✅ v1; real-time deferred |
-| **Block↔md editor** | CodeMirror 6 + `mdast-util-to-markdown` | 🟡 **NEEDS-PROTOTYPE** (the keystone R&D) |
+| **Block↔md editor** | CodeMirror 6 + `mdast-util-to-markdown` | 🟢 **prototype done** — round-trip achievable (20/21), gap bounded |
 | **Plugin execution** | Pre-render locally; no community plugins in CI | ✅ decided |
 | **Publish UX** | Starlight + callouts + tags + last-updated; defer graph view | ✅ decided |
 | **Media** | Cloudflare R2 (host-agnostic; 10 GB free, zero egress) | ✅ decided |
@@ -63,11 +63,15 @@ Any editor that parses markdown into a block AST and re-serializes it risks drop
 
 ### Block↔markdown fidelity — the keystone R&D
 
-Your instinct — *"if there were a world where block content syncs to markdown with high fidelity, that would be awesome"* — is exactly right, and the run gives it a concrete verdict: **`NEEDS-PROTOTYPE`, and the hypothesis is architecturally sound.**
+Your instinct — *"if there were a world where block content syncs to markdown with high fidelity, that would be awesome"* — is exactly right, and the run gave it a verdict of `NEEDS-PROTOTYPE`. **That prototype has now been run** ([`spikes/ofm-roundtrip/`](https://github.com/cybersader/cyberbaser/tree/main/spikes/ofm-roundtrip)).
 
-The hypothesis: a **markdown-first block schema** — where the block model *is* the Obsidian-Flavored-Markdown AST (`mdast` + OFM extensions), not a richer superset — round-trips **losslessly by construction**, because markdown is the *serialization*, not a lossy export.
+<Aside type="tip" title="Spike result: round-trip is achievable, gap precisely bounded">
+21 of the hardest OFM fixtures, parsed → `mdast` → stringified → diffed byte-for-byte. Bare CommonMark scores **6/21** (it escapes every bracket construct: `[[x]]`→`\[\[x]]`). The off-the-shelf stack with `remark-wiki-link` tops out at **12/21** (it round-trips `[[wikilinks]]` but still escapes `![[embeds]]`). A **~10-line markdown-first protection layer** — mask `![[...]]`/`[[...]]`/`[!type]` before parse, restore after stringify — reaches **20/21**. The single holdout is **nested callouts**, and it fails on *blockquote reflow* (an inserted blank `>` line), **not lost content** — Obsidian still renders it correctly. So the keystone moves from "unproven" to **"achievable, with a narrow known gap"**: embeds need their own serializer, nested callouts need spacing-preserving stringify (or first-class callout nodes), and block-ID transclusion *resolution* stays a v2 vault-resolver problem. This empirically answers the critic's #1 risk. Caveat: the spike proves *serialization fidelity*, not the editor UX — a real block editor must also render/edit these, which is downstream.
+</Aside>
 
-What the run found:
+The hypothesis the spike confirms: a **markdown-first block schema** — where the block model *is* the Obsidian-Flavored-Markdown AST (`mdast` + OFM extensions), not a richer superset — round-trips **losslessly by construction**, because markdown is the *serialization*, not a lossy export.
+
+What the broader run found about the production path:
 
 - **No production lossless OFM↔block serializer exists today.** Every block editor is either CommonMark-only or self-lossy on OFM extensions.
 - **The `remark` / `mdast-util-to-markdown` ecosystem is the only one architecturally clean on both sides** of the round-trip. And it's closer than the lead thought:

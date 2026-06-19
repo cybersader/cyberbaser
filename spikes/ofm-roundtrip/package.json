@@ -1,0 +1,15 @@
+{
+  "name": "ofm-roundtrip-spike",
+  "private": true,
+  "type": "module",
+  "description": "Empirical OFM <-> markdown round-trip fidelity spike (cyberbaser keystone gate)",
+  "dependencies": {
+    "remark-frontmatter": "^5.0.0",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
+    "remark-parse": "^11.0.0",
+    "remark-stringify": "^11.0.0",
+    "remark-wiki-link": "^2.0.1",
+    "unified": "^11.0.5"
+  }
+}
