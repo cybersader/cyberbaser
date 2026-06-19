@@ -13,25 +13,29 @@ This page is an early draft. The scenarios below are reasoned forward from the p
 
 ## In one paragraph
 
-Cyberbaser turns an Obsidian cybersecurity knowledge vault into a living, contributable public wiki — one that anyone can read on the web, edit via a zero-git CMS, or extend from their own Obsidian vault, without any of those paths corrupting the others. GitHub is the single source of truth. Obsidian semantics round-trip. Contribution is frictionless at every skill level.
+Cyberbaser turns *any* Obsidian vault into a living, contributable public wiki — one that anyone can read on the web, edit in place, or extend from their own Obsidian vault, without any of those paths corrupting the others. Git is the single source of truth. Obsidian semantics round-trip, so an edit made on the website serializes back to clean markdown. And contribution isn't a wall — it's a **trust curve the maintainer controls**, from fully-anonymous-but-moderated to KYC-gated, whatever fits the community. The shared safety net is *moderation, not identity*.
+
+> The journeys below use security examples — that's the first vault we dogfood — but cyberbaser is domain-agnostic. Swap in a research group's vault, a company handbook, a course, an open standard; the story is the same.
 
 ## From a reader's perspective
 
-A junior analyst lands on `cyberbase.wiki/dns-tunneling/` from a Google search. The page loads fast (static HTML, Cloudflare Pages). It reads like a well-maintained wiki — clean typography, code blocks with syntax highlighting, callouts for gotchas, cross-links to related pages. At the bottom: an "Edit this page" link. Next to each heading: a tiny anchor to copy a direct link. A "last updated" date that matches the git commit. They bookmark it, copy a paragraph into their notes, move on.
+A junior analyst lands on `cyberbase.wiki/dns-tunneling/` from a Google search. The page loads fast (static HTML, GitHub Pages). It reads like a well-maintained wiki — clean typography, code blocks with syntax highlighting, callouts for gotchas, cross-links to related pages. At the bottom: an "Edit this page" link. Next to each heading: a tiny anchor to copy a direct link. A "last updated" date that matches the git commit. They bookmark it, copy a paragraph into their notes, move on.
 
 They don't know or care that it came from an Obsidian vault.
 
 ## From an Obsidian-native contributor's perspective
 
-Cybersader notices a gap in the DNS tunneling page — a detection technique isn't mentioned. Opens Obsidian, finds the file in the vault, adds a `> [!tip]` callout with the technique, wikilinks it to the detection overview page. Commits via the obsidian-git plugin. Push happens automatically. Within a minute, the Cloudflare Pages build completes and the change is live on `cyberbase.wiki`.
+Cybersader notices a gap in the DNS tunneling page — a detection technique isn't mentioned. Opens Obsidian, finds the file in the vault, adds a `> [!tip]` callout with the technique, wikilinks it to the detection overview page. Commits via the obsidian-git plugin. Push happens automatically. Within a minute, the GitHub Pages build completes and the change is live on `cyberbase.wiki`.
 
 Friction points that should NOT happen: losing the Obsidian link graph; the new callout rendering as plain text on the web; the translation layer dropping the wikilink.
 
 ## From a zero-git contributor's perspective
 
-A compliance manager at an enterprise reads the NIST 800-53 mapping page and spots an outdated reference. Clicks "Suggest edit" on the page. GitHub's OAuth modal appears; they sign in with their work GitHub account. A Decap CMS editor opens, pre-loaded with the page's markdown (rendered in a rich editor, not raw). They fix the reference, write a one-line commit message, click Submit. Behind the scenes: Decap forks the repo to their GitHub, makes the commit on a branch, opens a PR to `cybersader/cyberbase` with an auto-generated title.
+A compliance manager at an enterprise reads the NIST 800-53 mapping page and spots an outdated reference. They click **edit right on the page** and fix it inline — what they see is what they get, because the [translation layer](/cyberbaser/design/translation-layer/) round-trips their change back to clean Obsidian markdown (no corrupted wikilinks, no flattened callouts).
 
-They never clone anything. They never learn git. Their edit shows up as a PR in Cybersader's GitHub notifications, gets reviewed, merged, and goes live.
+What happens next is the *maintainer's* choice, set by the [trust curve](/cyberbaser/concepts/problem/#contribution-is-a-curve-not-a-wall) they configured. On an open wiki, the edit submits anonymously; on a tighter one, the contributor verifies an email or signs in first. Either way the edit does **not** go straight live — it lands in a **moderation queue**. The maintainer (or a trusted reviewer) approves it, it merges to the vault, and it deploys.
+
+They never clone anything, never learn git, and — if the maintainer allows it — never make an account. The moderation queue is what keeps the wiki safe, so identity can be as light as the maintainer wants.
 
 ## From a direct-GitHub contributor's perspective
 
@@ -41,15 +45,15 @@ The wikilink they ignored still resolves correctly on the wiki because the trans
 
 ## From Cybersader's perspective (the maintainer)
 
-Most changes arrive as PRs. Each PR auto-generates a Cloudflare Pages preview deployment so Cybersader can see the change rendered before merging. Trusted contributors (a small list in a config file) get auto-merge on trivial diffs (typo fixes, reference updates). Non-trivial changes get a quick review in the Obsidian vault locally — the PR branch is checked out, the file looks right in Obsidian, merge. The entire review loop takes 60–90 seconds.
+Most changes arrive in the **moderation queue**, each with a preview so Cybersader sees it rendered before approving. The maintainer set the **trust curve** when they stood up the wiki: anonymous edits are heavily queued, verified contributors get faster review, long-trusted contributors edit directly. Trivial diffs from trusted contributors can auto-approve. Non-trivial changes get a quick look in Obsidian locally — the branch checks out, the file looks right, approve. The loop takes 60–90 seconds.
 
-Critically: the maintainer never has to leave Obsidian as their primary authoring surface. Web contributions flow into the same file the maintainer edits by hand. No parallel systems to keep in sync.
+Critically: the maintainer never has to leave Obsidian as their primary authoring surface, and they never had to *build* the trust/moderation machinery — it's composed from existing tools and wired to the queue. Web contributions flow into the same file the maintainer edits by hand. No parallel systems to keep in sync.
 
 ## A day in the life
 
 On a Tuesday, three things happen without anyone coordinating:
 
-1. **09:14** — A reader in Berlin finds a typo in the TLS downgrade page and fixes it via the Web CMS. Decap opens a PR. Preview deploy finishes in 2 minutes. Cybersader merges on their phone during coffee.
+1. **09:14** — A reader in Berlin finds a typo in the TLS downgrade page and fixes it in place on the page, anonymously. It lands in the moderation queue with a preview attached. Cybersader approves it on their phone during coffee.
 2. **11:47** — A consultant in Austin pushes a commit directly to main from their Obsidian vault: three new pages about Kerberoasting detection, fully wikilinked to existing content. The build deploys. The new pages are immediately discoverable via search on the wiki.
 3. **16:22** — A grad student opens a PR via GitHub web with one-line code block fixes across four pages. They've never used Obsidian. Their PR passes preview. Merged.
 
@@ -57,10 +61,11 @@ None of these contributors know the others exist. None of them had to pick a "co
 
 ## Anti-features (what this deliberately does NOT do)
 
-- **Does not host the Obsidian vault.** The vault lives in `cybersader/cyberbase`. Cyberbaser reads from it.
-- **Does not support realtime collaborative editing.** Conflicts resolve via git, not CRDT. That's fine — the contribution rate is low and async.
-- **Does not replace Obsidian as a primary authoring tool.** Maintainers still use Obsidian locally; the Web CMS is for contributors who don't.
-- **Does not try to be a general-purpose Obsidian publisher.** It's built for cyber content first; generalization is a stretch goal, not a design goal.
+- **Does not host the Obsidian vault.** Cyberbaser reads from a vault repo you own (e.g. `cybersader/cyberbase`); it doesn't store or own your content.
+- **Does not support realtime collaborative editing (v1).** Conflicts resolve via git, not CRDT — fine for an async contribution rate. (Real-time is gated on the [round-trip keystone](/cyberbaser/research/v1-architecture/#block-markdown-fidelity--the-keystone-rd); deferred to v2+.)
+- **Does not replace Obsidian as a primary authoring tool.** Maintainers still use Obsidian locally; the web surfaces are for contributors who don't.
+- **It IS general-purpose** — any Obsidian vault, any domain. The cyber vault is just the first content we dogfood it on, not the scope. (Earlier drafts said the opposite; that was backwards — contributability is the product.)
+- **Does not build the trust/identity/moderation stack from scratch.** It composes existing tools (Discourse-style trust, moderation queues, contribution bots, edge rate-limiting) into one pipeline.
 - **Does not solve search in the vault itself.** Wiki search uses Pagefind (Starlight default). In-vault search stays in Obsidian.
 
 ## Non-goals for v1
@@ -68,7 +73,7 @@ None of these contributors know the others exist. None of them had to pick a "co
 These might happen later but are explicitly not v1:
 
 - Comments/discussion on pages (out of scope; GitHub Issues is the fallback)
-- User accounts beyond GitHub OAuth
+- Deep KYC / identity integrations (the trust curve ships, but heavy identity verification is post-v1)
 - Versioning / diffing UI on the reader surface (git history is the fallback)
-- Multi-vault publishing from the same pipeline
+- Multi-vault publishing / federation from the same pipeline
 - Paid hosting or SaaS offering
