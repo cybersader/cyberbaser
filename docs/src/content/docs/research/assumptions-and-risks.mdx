@@ -46,6 +46,16 @@ These dominate the technical keystone — most can fail the product even if ever
 - **Moderation reality (1 hour):** write the abuse policy in two paragraphs — who approves a web-CMS PR, in what SLA, what happens to a 3am spam PR with one maintainer asleep. *If it can't be written without deferral, the open-authoring surface is unshippable.*
 - **License + assets (1 hour):** count vault binary size, project to scale, check the LFS free-tier crossover; commit a `LICENSE` (CC-BY-SA 4.0 or CC0) to the vault.
 
+### Tested: Quartz prior-art audit (2026-06-19)
+
+The "Quartz already ships the publish half" test (risk #4) is **done** — and it cuts both ways:
+
+- **Confirmed, sharper than feared.** Quartz (now v5) doesn't just compete on the publish half — it currently **beats cyberbaser's own Starlight prototype** on OFM fidelity: transclusion (`![[embeds]]`), block-refs, heading anchors, foldable callouts, LaTeX, backlinks, popovers, comment-stripping, robust tags. Free, Obsidian-native, ~12.5k stars. **"Publishing tool" is a dead frame for v1.**
+- **But the differentiator is intact — and publicly disclaimed by the incumbent.** Quartz's lead maintainer explicitly **closed** the web-editor/CMS requests as out of scope ([#1864](https://github.com/jackyzha0/quartz/issues/1864): "intended as a static site generator not a CMS"; [#710](https://github.com/jackyzha0/quartz/issues/710): "make this a community plugin"). So the contribution surface — in-page WYSIWYG, the **reverse web→vault round-trip** (structurally impossible in any SSG), the [maintainer-controlled trust curve](/cyberbaser/concepts/problem/#contribution-is-a-curve-not-a-wall), multi-surface contribution — is genuinely unclaimed, not evaporating. The watch-signal points *our* way.
+- **New open question it surfaced.** Should cyberbaser **adopt Quartz's forward transform as a commodity** — build the contribution + round-trip layer *on top of* a Quartz-rendered site — instead of hand-maintaining a parallel Starlight plugin chain that already trails Quartz? The reverse round-trip is net-new regardless of host SSG, so the forward renderer is a relatively interchangeable dependency. Counter-tension: a contribution/auth/moderation/write-back layer needs a *runtime*, which any SSG (Quartz or Starlight) architecturally resists equally. Worth a spike before investing further in the bespoke Astro/Starlight pipeline.
+
+**Net:** lead with **"the contribution + round-trip layer for any Obsidian vault."** Treat forward publishing as a commodity to *adopt*, not build, and pour engineering into the one thing no SSG can do — turning a browser edit back into a clean, Obsidian-valid vault file under maintainer control.
+
 ### What to watch (long-term direction-changers)
 
 - A verifiably **lossless Obsidian-markdown↔block serializer** shipping → flips the [SSOT off-ramp](/cyberbaser/research/source-of-truth/) and unlocks block-native UX on plain `.md`. (Watch Logseq DB, Anytype.)

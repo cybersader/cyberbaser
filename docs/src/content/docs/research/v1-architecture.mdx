@@ -24,6 +24,10 @@ A **20-agent research run**: twelve parallel lead agents (one per open task — 
 
 It is *all three* eventually — publishing tool, wiki platform, collaboration framework — but **for v1 it is a publishing tool first.** The "wiki platform" identity is real but thin in v1 (reader features ship, but the contribution surface is borrowed from existing CMSs, not purpose-built). The "collaboration framework" identity is **explicitly deferred** — every live-collab path is gated behind a serializer that doesn't exist yet.
 
+<Aside type="caution" title="Update (2026-06-19): 'publishing tool first' is the wrong lead">
+The [Quartz prior-art audit](/cyberbaser/research/assumptions-and-risks/#tested-quartz-prior-art-audit-2026-06-19) showed publishing is a **commodity Quartz already wins for free** — and currently does it *better* than this prototype. So v1 still *ships* publishing as table stakes, but the **identity leads with the contribution + round-trip layer**, not publishing. Quartz's maintainer has explicitly disclaimed the contribution niche, leaving it open. Open strategic question it raises: adopt Quartz's forward transform as a commodity vs. keep the bespoke Astro/Starlight stack.
+</Aside>
+
 - **The value moat** is the **lossless Obsidian-Flavored-Markdown round-trip** — wikilinks, callouts, embeds, transclusion, math, Mermaid surviving web↔vault without corruption. Multiple independent research streams converged on this being *the* unsolved problem in 2026: Quartz, MkDocs, Flowershow, `astro-loader-obsidian`, Decap, Sveltia, TinaCMS, BlockSuite each handle only a subset or self-document data loss. No competitor has claimed the full Tier-1 round-trip.
 - **The biggest dependency** is that same round-trip, *validated by tests* — specifically the contribution direction (a Web CMS edit re-serializing a file without escaping or silently dropping OFM syntax). Reader-side rendering is largely solved; the contribution side is unverified per-editor and gates every CMS decision.
 
