@@ -90,7 +90,7 @@ None of these occupy the interior of the triangle. **Cyberbaser's hypothesis is 
 > Already uses Obsidian. Has a personal or team knowledge base they'd like to share. Values the wiki feel (crosslinks, discovery). Will not move to Notion or Publish because of vendor lock-in. Will not hand-maintain a separate publishing stack because it's too much work.
 
 > [!info]- Secondary user — the domain-expert contributor
-> Reads the published wiki, spots a gap or error. Knows the topic cold. **Does not know git.** Has a GitHub account because they needed one for something else. Would contribute if it took three clicks; will not contribute if it takes a terminal.
+> Reads the published wiki, spots a gap or error. Knows the topic cold. **Does not know git, and may not have (or want) a GitHub account.** Would contribute if it took three clicks — edit the page in place; will not contribute if it requires an account, a CLI, or learning a new tool. Whether they edit anonymously or sign in is the *maintainer's* call — see the [trust curve](#contribution-is-a-curve-not-a-wall).
 
 > [!info]- Tertiary user — the git-native developer
 > Comfortable with git but has never used Obsidian. Treats the vault repo like any other docs repo — edit a `.md` file, open a PR. Shouldn't be forced to understand Obsidian syntax to contribute a typo fix.
@@ -108,6 +108,30 @@ Three constraints fall out of the principles. Each existing solution fails at le
 | **awesome-list repos** | ❌ (plain markdown only) | ✅ | ✅ |
 | **Notion-as-wiki** | ❌ (no Obsidian import fidelity) | ✅ | ❌ |
 | **cyberbaser (target)** | ✅ | ✅ | ✅ |
+
+## Contribution is a curve, not a wall
+
+The deepest part of cyberbaser isn't the publisher, or even the translation layer — it's *how contribution is governed*. The web is adversarial, so the usual reflex is to demand identity up front (an account, an email, KYC) to keep bad actors out. That reflex is mostly wrong here, for two reasons:
+
+- **Identity gates are mostly theater.** Requiring an email to "reduce abuse" doesn't — email aliasing is trivial. A GitHub-account requirement mainly filters *out the person you want* (the domain expert who spotted the error) while barely slowing a determined adversary. Friction on the front door buys very little safety.
+- **The real question isn't "who are you?" — it's "can this hurt anything before a human approves it?"** If every contribution lands in a **moderation queue** and nothing goes live until it's reviewed, an anonymous edit *cannot* hurt the content. Moderation, not identity, is the load-bearing safety mechanism.
+
+So the model is: **the maintainer controls the trust curve.** Like [Discourse's trust levels](https://blog.discourse.org/2018/06/understanding-discourse-trust-levels/), a contributor earns capability as they prove themselves — but *how steep that curve is, and what each level requires, is the maintainer's choice*, per wiki:
+
+| Posture | Anonymous edits | Trust progression |
+|---|---|---|
+| **Fully open** | yes, all moderated | trust accrues from accepted edits; IP only for rate-limiting |
+| **Balanced** | yes, heavily queued | email/verified contributors get faster review; long-trusted edit directly |
+| **Locked down** | no | KYC or invite required |
+
+Same vault, different governance — set by whoever runs it. **Denial-of-service is a separate problem:** content abuse is caught by the moderation queue; *volumetric* abuse (DoS, spam floods) is handled at the infrastructure edge (rate-limiting, WAF — see [RA-01](/cyberbaser/design/reference-architectures/self-hosted-forgejo-auth/)). Don't conflate the two.
+
+**Multiple surfaces, one pipeline.** A contributor should be able to act *from wherever they are, however suits them* — and the translation layer is what makes the richest of these possible:
+
+- **In-page, what-you-see-is-what-you-get** — click edit on the rendered page and change it right there. This works *only because* the [translation layer](/cyberbaser/design/translation-layer/) round-trips the edit back to clean Obsidian markdown. (This is why the [round-trip keystone](/cyberbaser/research/v1-architecture/#block-markdown-fidelity--the-keystone-rd) is an *enabler* of contribution, not a vanity feature.)
+- **Web CMS** form/editor · **Obsidian + git** · **direct GitHub** — for those who prefer them.
+
+Every surface feeds the *same* maintainer-configured pipeline: contribution → (whatever identity/trust step the maintainer set) → moderation queue → merge → live. **Compose, don't build from scratch:** trust levels, identity, moderation queues, and rate-limiting all have mature implementations ([Discourse](https://www.discourse.org/)-style trust, moderation tooling, serverless contribution bots like [Contribunator](https://github.com/Contribunator/Contribunator) / [Staticman](https://staticman.net/), edge WAF). Cyberbaser's job is to *wire them into a coherent pipeline* — a tech-stack design problem, not a from-scratch build. This is the direct answer to the two biggest [product risks](/cyberbaser/research/assumptions-and-risks/) (the account wall, and moderation).
 
 ## Scope boundaries
 
