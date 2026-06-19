@@ -1,21 +1,26 @@
 ---
 title: Architecture
-description: How cyberbaser's components fit together — vault, build pipeline, translation layer, CMS, hosting.
+description: The hub-and-spoke shape of cyberbaser — a renderer-agnostic hub (round-trip, trust, moderation, federation) orchestrating swappable vault-spokes.
 sidebar:
   order: 21
 status: research
 tags: [design, architecture]
 ---
 
+## TL;DR
+
+- **Hub-and-spoke.** One central **hub** orchestrates many **vault-spokes**. ([Why](/cyberbaser/getting-started/vision/#the-shape-one-hub-many-spokes).)
+- **The spokes are a commodity.** Each wiki = a vault rendered to a static site by some forward renderer (Quartz, Starlight, Obsidian Publish — *swappable*) + the surfaces people read/edit it through. The forward "vault → web" render is solved and free; [Quartz already wins it](/cyberbaser/research/assumptions-and-risks/#tested-quartz-prior-art-audit-2026-06-19). **Never couple the architecture to one renderer.**
+- **The hub is the product.** Renderer-agnostic, and the only hard part: the **reverse round-trip** (a web edit → a clean vault file), the **trust + moderation** pipeline, and **federation**.
+- **v1** is one hub over one (or a few) vaults. **v2+** is the same hub over a [federation](/cyberbaser/research/source-of-truth/#federation-mixed-privacy-and-role-based-access) of them.
+
+Scroll for the picture, then the two halves, the round-trip hot-spot, a contribution's journey, and the boundaries.
+
 ## The big picture
 
-<div class="cb-arch-wrapper" role="img" aria-label="Architecture diagram showing content flowing from the vault repo through the cyberbaser build pipeline to the published wiki, with three contribution paths converging on the vault">
-  <svg viewBox="0 0 900 460" preserveAspectRatio="xMidYMid meet" class="cb-arch-svg">
+<div class="cb-arch-wrapper" role="img" aria-label="Hub-and-spoke architecture: a vault is rendered to a published wiki by a swappable forward renderer (the commodity top row); edits flow back through the hub — round-trip, trust, moderation, federation — which writes a clean file to the vault, closing the loop.">
+  <svg viewBox="0 0 900 450" preserveAspectRatio="xMidYMid meet" class="cb-arch-svg">
     <defs>
-      <linearGradient id="arch-silver" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stop-color="#c7ced9"/>
-        <stop offset="1" stop-color="#5c6574"/>
-      </linearGradient>
       <linearGradient id="arch-green" x1="0" y1="0" x2="1" y2="1">
         <stop offset="0" stop-color="#10b981"/>
         <stop offset="1" stop-color="#059669"/>
@@ -27,161 +32,120 @@ tags: [design, architecture]
       <marker id="arch-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
         <path d="M0,0 L10,5 L0,10 z" fill="#10b981"/>
       </marker>
+      <marker id="arch-arrow-mute" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#8b94a3"/>
+      </marker>
     </defs>
 
-    {/* Layer labels */}
-    <text class="cb-arch-layer" x="60" y="30">AUTHORING</text>
-    <text class="cb-arch-layer" x="310" y="30">SSOT</text>
-    <text class="cb-arch-layer" x="560" y="30">BUILD</text>
-    <text class="cb-arch-layer" x="820" y="30" text-anchor="end">DELIVERY</text>
+    {/* Phase labels */}
+    <text class="cb-arch-layer" x="450" y="28" text-anchor="middle">① PUBLISH — forward render (commodity · swappable spoke)</text>
+    <text class="cb-arch-layer" x="450" y="438" text-anchor="middle">② CONTRIBUTE — the hub (renderer-agnostic · the moat)</text>
 
-    {/* ═══ COLUMN 1: Authoring surfaces ═══ */}
+    {/* ─── Vault (SSOT) ─── */}
     <g class="cb-arch-box">
-      <rect x="30" y="60" width="180" height="60" rx="8"/>
-      <text x="120" y="85" text-anchor="middle">Obsidian (local)</text>
-      <text x="120" y="104" text-anchor="middle" class="cb-arch-sub">maintainer + power users</text>
+      <rect x="48" y="176" width="158" height="92" rx="10"/>
+      <text x="127" y="208" text-anchor="middle">Vault — SSOT</text>
+      <text x="127" y="229" text-anchor="middle" class="cb-arch-sub">git · plain .md</text>
+      <text x="127" y="245" text-anchor="middle" class="cb-arch-sub">any domain</text>
     </g>
 
+    {/* ─── Forward renderer (spoke) ─── */}
     <g class="cb-arch-box">
-      <rect x="30" y="160" width="180" height="60" rx="8"/>
-      <text x="120" y="185" text-anchor="middle">Web CMS (Decap)</text>
-      <text x="120" y="204" text-anchor="middle" class="cb-arch-sub">zero-git contributors</text>
+      <rect x="368" y="74" width="204" height="62" rx="8"/>
+      <text x="470" y="100" text-anchor="middle">Forward renderer</text>
+      <text x="470" y="119" text-anchor="middle" class="cb-arch-sub">Quartz / Starlight — swappable</text>
     </g>
 
+    {/* ─── Published wiki ─── */}
     <g class="cb-arch-box">
-      <rect x="30" y="260" width="180" height="60" rx="8"/>
-      <text x="120" y="285" text-anchor="middle">GitHub web editor</text>
-      <text x="120" y="304" text-anchor="middle" class="cb-arch-sub">git-native contributors</text>
+      <rect x="694" y="176" width="158" height="92" rx="10"/>
+      <text x="773" y="208" text-anchor="middle">Published wiki</text>
+      <text x="773" y="229" text-anchor="middle" class="cb-arch-sub">read on the web</text>
     </g>
 
-    {/* Arrows from authoring → vault */}
-    <path d="M215,90 C250,90 260,200 275,225" fill="none" stroke="url(#arch-green)" stroke-width="1.8" marker-end="url(#arch-arrow)"/>
-    <path d="M215,190 L275,215" fill="none" stroke="url(#arch-green)" stroke-width="1.8" marker-end="url(#arch-arrow)"/>
-    <path d="M215,290 C250,290 260,240 275,230" fill="none" stroke="url(#arch-green)" stroke-width="1.8" marker-end="url(#arch-arrow)"/>
-
-    {/* ═══ COLUMN 2: Vault (SSOT) ═══ */}
-    <g filter="url(#arch-glow)">
-      <rect x="280" y="180" width="180" height="90" rx="10" fill="#141921" stroke="url(#arch-green)" stroke-width="2"/>
-    </g>
-    <text class="cb-arch-hub" x="370" y="210" text-anchor="middle">cybersader/cyberbase</text>
-    <text class="cb-arch-hub" x="370" y="228" text-anchor="middle">vault repo</text>
-    <text class="cb-arch-sub" x="370" y="250" text-anchor="middle">Obsidian markdown</text>
-    <text class="cb-arch-sub" x="370" y="262" text-anchor="middle">+ .obsidian/ config</text>
-
-    {/* Arrow from vault → build */}
-    <path d="M465,225 L525,225" fill="none" stroke="url(#arch-green)" stroke-width="2" marker-end="url(#arch-arrow)"/>
-
-    {/* ═══ COLUMN 3: Build pipeline ═══ */}
-    <g class="cb-arch-box cb-arch-box-group">
-      <rect x="530" y="70" width="200" height="330" rx="10"/>
-      <text class="cb-arch-group-title" x="630" y="95" text-anchor="middle">cyberbaser build</text>
-    </g>
-
-    <g class="cb-arch-inner">
-      <rect x="548" y="115" width="164" height="46" rx="6"/>
-      <text x="630" y="135" text-anchor="middle">Content loader</text>
-      <text x="630" y="150" text-anchor="middle" class="cb-arch-sub-mini">astro-loader-obsidian</text>
-    </g>
-
-    <g class="cb-arch-inner cb-arch-inner-hot">
-      <rect x="548" y="175" width="164" height="60" rx="6"/>
-      <text x="630" y="197" text-anchor="middle">Translation layer</text>
-      <text x="630" y="213" text-anchor="middle" class="cb-arch-sub-mini">remark + rehype plugins</text>
-      <text x="630" y="226" text-anchor="middle" class="cb-arch-sub-mini">(wiki-link, callouts, embeds)</text>
-    </g>
-
-    <g class="cb-arch-inner">
-      <rect x="548" y="249" width="164" height="46" rx="6"/>
-      <text x="630" y="269" text-anchor="middle">Starlight renderer</text>
-      <text x="630" y="284" text-anchor="middle" class="cb-arch-sub-mini">Astro + MDX</text>
-    </g>
-
-    <g class="cb-arch-inner">
-      <rect x="548" y="309" width="164" height="46" rx="6"/>
-      <text x="630" y="329" text-anchor="middle">Site graph + search</text>
-      <text x="630" y="344" text-anchor="middle" class="cb-arch-sub-mini">Pagefind + starlight-site-graph</text>
-    </g>
-
-    {/* Arrows between build stages */}
-    <path d="M630,162 L630,173" fill="none" stroke="#10b981" stroke-width="1.5" marker-end="url(#arch-arrow)"/>
-    <path d="M630,236 L630,247" fill="none" stroke="#10b981" stroke-width="1.5" marker-end="url(#arch-arrow)"/>
-    <path d="M630,296 L630,307" fill="none" stroke="#10b981" stroke-width="1.5" marker-end="url(#arch-arrow)"/>
-
-    {/* Arrow from build → delivery */}
-    <path d="M735,225 L800,225" fill="none" stroke="url(#arch-green)" stroke-width="2" marker-end="url(#arch-arrow)"/>
-
-    {/* ═══ COLUMN 4: Delivery ═══ */}
-    <g class="cb-arch-box">
-      <rect x="780" y="185" width="110" height="80" rx="8"/>
-      <text x="835" y="210" text-anchor="middle">Cloudflare</text>
-      <text x="835" y="228" text-anchor="middle">Pages</text>
-      <text x="835" y="250" text-anchor="middle" class="cb-arch-sub">cyberbase.wiki</text>
-    </g>
-
-    {/* OAuth proxy note */}
+    {/* ─── Edit surfaces ─── */}
     <g class="cb-arch-box cb-arch-box-aux">
-      <rect x="30" y="380" width="390" height="50" rx="8"/>
-      <text x="225" y="400" text-anchor="middle">OAuth proxy (Cloudflare Pages Function)</text>
-      <text x="225" y="418" text-anchor="middle" class="cb-arch-sub">Decap ↔ GitHub OAuth handshake</text>
+      <rect x="660" y="312" width="182" height="76" rx="8"/>
+      <text x="751" y="336" text-anchor="middle">Edit surfaces</text>
+      <text x="751" y="354" text-anchor="middle" class="cb-arch-sub">in-page · web CMS</text>
+      <text x="751" y="369" text-anchor="middle" class="cb-arch-sub">Obsidian · GitHub</text>
     </g>
-    <path d="M120,375 L120,220" fill="none" stroke="#8b94a3" stroke-width="1" stroke-dasharray="2 3" opacity="0.5"/>
+
+    {/* ─── THE HUB (the product) ─── */}
+    <g filter="url(#arch-glow)">
+      <rect x="300" y="296" width="288" height="108" rx="12" fill="#141921" stroke="url(#arch-green)" stroke-width="2"/>
+    </g>
+    <text class="cb-arch-hub" x="444" y="322" text-anchor="middle">THE HUB</text>
+    <text class="cb-arch-sub" x="444" y="340" text-anchor="middle">the product · renderer-agnostic</text>
+    <text class="cb-arch-sub-mini" x="444" y="360" text-anchor="middle">round-trip: web edit → clean .md</text>
+    <text class="cb-arch-sub-mini" x="444" y="375" text-anchor="middle">trust curve + moderation queue</text>
+    <text class="cb-arch-sub-mini" x="444" y="390" text-anchor="middle">federation: one hub, many vaults</text>
+
+    {/* ── Forward (commodity, muted) ── */}
+    <path d="M206,196 C300,150 310,108 368,106" fill="none" stroke="#8b94a3" stroke-width="1.8" marker-end="url(#arch-arrow-mute)"/>
+    <path d="M572,106 C632,108 642,150 694,196" fill="none" stroke="#8b94a3" stroke-width="1.8" marker-end="url(#arch-arrow-mute)"/>
+
+    {/* ── Reverse loop (green, the moat) ── */}
+    <path d="M773,268 L757,312" fill="none" stroke="url(#arch-green)" stroke-width="2" marker-end="url(#arch-arrow)"/>
+    <path d="M658,350 L592,350" fill="none" stroke="url(#arch-green)" stroke-width="2" marker-end="url(#arch-arrow)"/>
+    <path d="M300,356 C228,356 180,300 135,268" fill="none" stroke="url(#arch-green)" stroke-width="2" marker-end="url(#arch-arrow)"/>
+    <text x="208" y="318" text-anchor="middle" class="cb-arch-sub-mini">writes clean .md</text>
   </svg>
-  <p class="cb-arch-caption">Four layers: authoring, source of truth, build, delivery. The translation layer is the load-bearing step — everything else is integration.</p>
+  <p class="cb-arch-caption">Two halves. The top row (<strong>publish</strong>) is a swappable commodity — muted on purpose. The bottom — <strong>the hub</strong> — is the product: it round-trips a web edit back to a clean vault file, governs it through trust + moderation, and (v2+) federates many vaults. Follow the green loop: vault → render → read → edit → hub → vault.</p>
 </div>
 
-## Components
+## The two halves
 
-### The vault repo — `cybersader/cyberbase`
+Everything in the system is either a **spoke** (commodity, swappable) or the **hub** (the product). Keeping the line sharp is what stops cyberbaser from quietly becoming "yet another publisher."
 
-The durable artifact. A plain Obsidian vault: markdown files + a `.obsidian/` config directory. Cyberbaser reads from this repo but never writes to it from the build side. Contributions reach it via commits from one of the three entry points.
+| | Spokes (commodity) | The hub (the product) |
+|---|---|---|
+| **Does** | render vault → web; show + let people touch the content | round-trip web→vault, govern contribution, federate |
+| **Examples** | Quartz, Starlight, Obsidian Publish; the rendered page, a web editor, Obsidian, GitHub | the round-trip engine, trust curve, moderation queue, discovery layer |
+| **Swappable?** | yes — pick the cheapest/best renderer per spoke | no — this is the moat |
+| **Who else has it** | everyone (free) | [no one — Quartz's maintainer explicitly disclaimed it](/cyberbaser/research/assumptions-and-risks/#tested-quartz-prior-art-audit-2026-06-19) |
 
-### Content loader — `astro-loader-obsidian`
+## The hub (the product)
 
-The first stage of the build. Discovers markdown files in the vault, parses frontmatter, and feeds them into Astro's content collection. Currently a third-party dependency; may need to be replaced or augmented depending on how much Tier 1 translation it handles internally.
+Three capabilities, all renderer-agnostic:
 
-### Translation layer — `remark` + `rehype` plugins
+- **Round-trip** — the load-bearing one. Turning a browser edit back into a **clean, Obsidian-valid vault file** is the reverse direction *no static-site generator can do*. The [fidelity spike](/cyberbaser/research/v1-architecture/#block-markdown-fidelity--the-keystone-rd) showed it's achievable (20/21 of the hardest fixtures). This is also what makes safe in-page WYSIWYG editing possible. See [Translation Layer](/cyberbaser/design/translation-layer/).
+- **Trust + moderation** — the [maintainer-controlled trust curve](/cyberbaser/concepts/problem/#contribution-is-a-curve-not-a-wall) (anonymous → IP → email → verified → KYC, configurable) feeding a **moderation queue**. Nothing goes live until reviewed, so identity can be as light as the maintainer wants. Composed from existing tools (Discourse-style trust, moderation queues, contribution bots), not built from scratch.
+- **Federation** — one hub orchestrating *many* vault-spokes, with DNS-style discovery so they can reference each other. v2+; see the [SSOT federation analysis](/cyberbaser/research/source-of-truth/#federation-mixed-privacy-and-role-based-access).
 
-The hot spot. A composed pipeline:
+The hub needs a small **runtime** (auth handshake, write-back, moderation state) — which is why it's *not* a static site, and why the spoke renderers (which are static) stay strictly separate from it.
 
-1. **`remark-obsidian-callout`** — `> [!note]` blocks → Starlight `<Aside>` components
-2. **`remark-wiki-link`** — `[[Page]]` and `[[Page|alias]]` → resolved HTML links
-3. **Custom embed handler** — `![[image.png]]` and `![[Note]]` — needs to resolve against the vault index
-4. **`rehype-mermaid`** — fenced mermaid blocks → inline SVG at build time
-5. **`rehype-external-links`** — external anchors get `target="_blank"` + `rel`
+## The spokes (commodity)
 
-Each Tier 1 feature gets a round-trip test fixture. See [Translation Layer](/cyberbaser/design/translation-layer/) for the full tiered list.
+- **The vault — SSOT.** A plain Obsidian vault (markdown + `.obsidian/`), in git. The durable artifact: it works in vanilla Obsidian with zero cyberbaser tooling, and the hub never writes anything cyberbaser-specific into it. (e.g. `cybersader/cyberbase` — but any vault, any domain.)
+- **The forward renderer.** Vault → web HTML. A commodity: adopt the best free one rather than maintain a bespoke chain. The current prototype uses Astro + Starlight; the [Quartz audit](/cyberbaser/research/assumptions-and-risks/#tested-quartz-prior-art-audit-2026-06-19) is an open question on whether to swap.
+- **The surfaces.** Where people read and edit: the rendered page (with an in-page edit widget that calls the hub), a web CMS, Obsidian, GitHub. All edit surfaces feed the *same* hub pipeline.
 
-### Starlight renderer
+## A contribution's journey
 
-Turns the transformed MDX into HTML pages with sidebar, search, and navigation. Uses the Nova theme for layout and the full sibling plugin stack for consistency.
+Follow the green loop:
 
-### Site graph + search — `starlight-site-graph` + Pagefind
+1. A reader spots an error and **edits in place** on the published page (or via the web CMS / Obsidian / GitHub).
+2. The edit hits the **hub**: the round-trip engine turns it into a clean `.md` diff; the trust curve decides how much scrutiny it gets; it lands in the **moderation queue**.
+3. A maintainer (or trusted auto-rule) **approves** it. The hub commits the clean file to the **vault (SSOT)**.
+4. The **spoke renderer** rebuilds the published wiki. The change is live. Loop closed — and the vault is still a pristine Obsidian vault.
 
-Backlinks, graph view, full-text search. Built by crawling the rendered output.
+## Boundaries — what each part must NOT do
 
-### Delivery — Cloudflare Pages
+The separations that keep the system honest:
 
-Static hosting. Cloudflare Pages Function hosts the OAuth proxy so Decap's Open Authoring can handshake with GitHub without exposing the OAuth client secret in the browser.
-
-## Boundaries — what each component must NOT do
-
-> [!danger] Vault repo
-> **MUST NOT**: contain cyberbaser build artifacts; depend on cyberbaser-side plugins to function in Obsidian; have its file structure dictated by cyberbaser's URL scheme (only the other way around).
-
-> [!danger] Translation layer
-> **MUST NOT**: apply lossy transforms; modify files on disk during build; assume it's running in any particular environment (must be pure functions over markdown AST).
-
-> [!danger] Web CMS
-> **MUST NOT**: depend on Obsidian being running; hold content state outside the repo; require the maintainer to do anything special for an incoming edit.
-
-> [!danger] OAuth proxy
-> **MUST NOT**: log or store tokens; have any persistent state beyond the OAuth secret (which lives in Cloudflare secrets, not in code).
+| Part | Must **not** |
+|---|---|
+| **Vault (SSOT)** | hold build artifacts · depend on cyberbaser plugins to work in Obsidian · let its file layout be dictated by the URL scheme |
+| **Hub / round-trip** | apply lossy transforms · be coupled to a specific renderer · hold content state outside the commit it produces |
+| **Spoke renderer** | be treated as permanent or unique (it's swappable) · hold any contribution/auth state |
+| **Edit surfaces** | require Obsidian to be running · keep content outside the vault · make the maintainer do anything special per edit |
 
 ## Open architectural questions
 
-See [Open Questions](/cyberbaser/reference/open-questions/) for the full list. The architecturally-significant ones:
+See [Open Questions](/cyberbaser/reference/open-questions/) for the full list; the architecturally-significant ones now:
 
-- Does `astro-loader-obsidian` handle Tier 1 features sufficiently, or does it need replacement?
-- Where does backlinks data get computed — inside the content loader, or as a post-build rehype pass?
-- What's the incremental build story for a vault that grows past ~1000 pages?
-- How do assets (images) get resolved when the CMS edits a page — does Decap need vault-wide awareness, or can links stay relative?
+- **Adopt a commodity renderer or keep the bespoke stack?** The [Quartz audit](/cyberbaser/research/assumptions-and-risks/#tested-quartz-prior-art-audit-2026-06-19) says the forward render is free and better elsewhere — worth a spike before more Starlight investment.
+- **Where does the hub runtime live?** It needs auth + write-back + moderation state; the [self-hosted Forgejo + PKCE stack](/cyberbaser/design/reference-architectures/self-hosted-forgejo-auth/) is one answer (and eliminates the OAuth proxy).
+- **How does the round-trip resolve assets and block-IDs** when a web edit touches embeds (`![[note#^id]]`)? The one genuinely unsolved Tier-1 item.
+- **What's the incremental build story** for a vault past ~1000 pages, and does a federation of vaults change it?
