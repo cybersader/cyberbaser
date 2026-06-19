@@ -9,12 +9,12 @@ tags: [design, architecture]
 
 ## TL;DR
 
-- **Hub-and-spoke.** One central **hub** orchestrates many **vault-spokes**. ([Why](/cyberbaser/getting-started/vision/#the-shape-one-hub-many-spokes).)
-- **The spokes are a commodity.** Each wiki = a vault rendered to a static site by some forward renderer (Quartz, Starlight, Obsidian Publish — *swappable*) + the surfaces people read/edit it through. The forward "vault → web" render is solved and free; [Quartz already wins it](/cyberbaser/research/assumptions-and-risks/#tested-quartz-prior-art-audit-2026-06-19). **Never couple the architecture to one renderer.**
-- **The hub is the product.** Renderer-agnostic, and the only hard part: the **reverse round-trip** (a web edit → a clean vault file), the **trust + moderation** pipeline, and **federation**.
-- **v1** is one hub over one (or a few) vaults. **v2+** is the same hub over a [federation](/cyberbaser/research/source-of-truth/#federation-mixed-privacy-and-role-based-access) of them.
+- **Hub-and-spoke** — one **hub** orchestrates many **vault-spokes**. ([why](/cyberbaser/getting-started/vision/#the-shape-one-hub-many-spokes))
+- **Spokes = commodity** — a vault + a swappable renderer (Quartz/Starlight) + the surfaces people touch. The "vault → web" render is free ([Quartz wins it](/cyberbaser/research/assumptions-and-risks/#tested-quartz-prior-art-audit-2026-06-19)); never couple to one renderer.
+- **Hub = the product** — renderer-agnostic: the reverse **round-trip** (web edit → clean vault file), **trust + moderation**, and **federation**.
+- **v1** = one hub, a few vaults. **v2+** = the same hub over a [federation](/cyberbaser/research/source-of-truth/#federation-mixed-privacy-and-role-based-access).
 
-Scroll for the picture, then the two halves, the round-trip hot-spot, a contribution's journey, and the boundaries.
+Below: the picture, the tools, then the loop in four steps.
 
 ## The big picture
 
@@ -67,36 +67,9 @@ Scroll for the picture, then the two halves, the round-trip hot-spot, a contribu
   </svg>
 </div>
 
-## The two halves
-
-Everything in the system is either a **spoke** (commodity, swappable) or the **hub** (the product). Keeping the line sharp is what stops cyberbaser from quietly becoming "yet another publisher."
-
-| | Spokes (commodity) | The hub (the product) |
-|---|---|---|
-| **Does** | render vault → web; show + let people touch the content | round-trip web→vault, govern contribution, federate |
-| **Examples** | Quartz, Starlight, Obsidian Publish; the rendered page, a web editor, Obsidian, GitHub | the round-trip engine, trust curve, moderation queue, discovery layer |
-| **Swappable?** | yes — pick the cheapest/best renderer per spoke | no — this is the moat |
-| **Who else has it** | everyone (free) | [no one — Quartz's maintainer explicitly disclaimed it](/cyberbaser/research/assumptions-and-risks/#tested-quartz-prior-art-audit-2026-06-19) |
-
-## The hub (the product)
-
-Three capabilities, all renderer-agnostic:
-
-- **Round-trip** — the load-bearing one. Turning a browser edit back into a **clean, Obsidian-valid vault file** is the reverse direction *no static-site generator can do*. The [fidelity spike](/cyberbaser/research/v1-architecture/#block-markdown-fidelity--the-keystone-rd) showed it's achievable (20/21 of the hardest fixtures). This is also what makes safe in-page WYSIWYG editing possible. See [Translation Layer](/cyberbaser/design/translation-layer/).
-- **Trust + moderation** — the [maintainer-controlled trust curve](/cyberbaser/concepts/problem/#contribution-is-a-curve-not-a-wall) (anonymous → IP → email → verified → KYC, configurable) feeding a **moderation queue**. Nothing goes live until reviewed, so identity can be as light as the maintainer wants. Composed from existing tools (Discourse-style trust, moderation queues, contribution bots), not built from scratch.
-- **Federation** — one hub orchestrating *many* vault-spokes, with DNS-style discovery so they can reference each other. v2+; see the [SSOT federation analysis](/cyberbaser/research/source-of-truth/#federation-mixed-privacy-and-role-based-access).
-
-The hub needs a small **runtime** (auth handshake, write-back, moderation state) — which is why it's *not* a static site, and why the spoke renderers (which are static) stay strictly separate from it.
-
-## The spokes (commodity)
-
-- **The vault — SSOT.** A plain Obsidian vault (markdown + `.obsidian/`), in git. The durable artifact: it works in vanilla Obsidian with zero cyberbaser tooling, and the hub never writes anything cyberbaser-specific into it. (e.g. `cybersader/cyberbase` — but any vault, any domain.)
-- **The forward renderer.** Vault → web HTML. A commodity: adopt the best free one rather than maintain a bespoke chain. The current prototype uses Astro + Starlight; the [Quartz audit](/cyberbaser/research/assumptions-and-risks/#tested-quartz-prior-art-audit-2026-06-19) is an open question on whether to swap.
-- **The surfaces.** Where people read and edit: the rendered page (with an in-page edit widget that calls the hub), a web CMS, Obsidian, GitHub. All edit surfaces feed the *same* hub pipeline.
-
 ## The tools in play
 
-The concrete options under each role. Spoke renderers are swappable; the hub roles (contribution, trust, moderation) are where the product lives.
+The concrete options under each role. Spoke renderers (top) are swappable commodities; the hub roles (contribution · trust · moderation) are where the product lives.
 
 <div class="cb-stack" role="img" aria-label="Tools grouped by role: renderers, vault/SSOT, CMS, auth, moderation, host.">
   <div class="cb-stack-row">
