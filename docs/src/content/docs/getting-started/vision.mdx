@@ -17,6 +17,20 @@ Cyberbaser turns *any* Obsidian vault into a living, contributable public wiki �
 
 > The journeys below use security examples — that's the first vault we dogfood — but cyberbaser is domain-agnostic. Swap in a research group's vault, a company handbook, a course, an open standard; the story is the same.
 
+## The shape: one hub, many spokes
+
+Architecturally, cyberbaser is a **hub-and-spoke** system — and being clear about which half is which is what keeps the product honest.
+
+**The spokes are commodities.** Each published wiki is a *spoke*: a vault rendered to a static site by some forward renderer (Quartz, Starlight, Obsidian Publish — interchangeable), plus the surfaces people touch it through (the rendered page, a web editor, Obsidian, GitHub). The forward "vault → web" render is a solved, free problem — [Quartz already does it better than a bespoke stack](/cyberbaser/research/assumptions-and-risks/#tested-quartz-prior-art-audit-2026-06-19). So the renderer is a **swappable commodity**, not the product, and cyberbaser must never couple itself to one SSG.
+
+**The hub is the product.** Everything that's actually hard and actually *ours* lives in the renderer-agnostic **hub**:
+
+- **Round-trip** — turning a browser edit back into a clean, Obsidian-valid vault file. The one thing no static-site generator can do.
+- **Trust + moderation** — the [maintainer-controlled trust curve](/cyberbaser/concepts/problem/#contribution-is-a-curve-not-a-wall) and moderation queue that make open contribution safe.
+- **Federation** — *one central hub orchestrating many vaults/wikis*, with DNS-style discovery so they can reference each other.
+
+v1 is one hub governing one (or a few) vaults; the [v2+ vision](/cyberbaser/research/source-of-truth/#federation-mixed-privacy-and-role-based-access) is that same hub orchestrating a federation of them. Either way: **the spokes stay swappable, and the hub is the moat.**
+
 ## From a reader's perspective
 
 A junior analyst lands on `cyberbase.wiki/dns-tunneling/` from a Google search. The page loads fast (static HTML, GitHub Pages). It reads like a well-maintained wiki — clean typography, code blocks with syntax highlighting, callouts for gotchas, cross-links to related pages. At the bottom: an "Edit this page" link. Next to each heading: a tiny anchor to copy a direct link. A "last updated" date that matches the git commit. They bookmark it, copy a paragraph into their notes, move on.
