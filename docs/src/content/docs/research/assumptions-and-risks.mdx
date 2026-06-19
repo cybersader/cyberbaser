@@ -1,0 +1,58 @@
+---
+title: "Assumptions & risks under test"
+description: "A living risk register from adversarial red-team passes. What the current direction is getting right, what it's under-weighting, and the cheapest tests that would prove it wrong. Updated by /red-team."
+sidebar:
+  label: "Assumptions & risks"
+  order: 8
+status: research
+tags: [research, planning, architecture]
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A living register of the load-bearing assumptions the project is betting on, and the risks that could kill it regardless of execution. Updated by the [`/red-team` command](https://github.com/cybersader/cyberbaser/blob/main/.claude/commands/red-team.md) — a point-in-time adversarial check of the current direction, run by a fan-out of sub-agents.
+
+The point of this page is to **stay honest about what we haven't tested.** Bias toward cheap, high-severity falsification over expensive reassurance.
+
+## 2026-06-19 — red-team of "fidelity keystone first"
+
+**Bet under test:** spend a multi-week block↔markdown fidelity spike as the keystone, with v1 identity as a "publishing tool" whose moat is the lossless OFM round-trip.
+
+<Aside type="caution" title="Verdict: the fidelity keystone is a real linchpin, but it was mis-sequenced and mis-sized — and it is NOT the value moat">
+A 5-agent adversarial pass (four lenses + synthesizer) largely agreed: the round-trip is the **most verifiable, most fun, least-risky** variable, and proving it doesn't move the product-killing risks at all. It credits that per [FOCUS](/cyberbaser/getting-started/roadmap/) the round-trip is a genuine prerequisite for the off-ramp and block-grade editing UX — so it's not pure vanity — but the value moat claim ("contributors want lossless fidelity") protects **a use case no verified user has been shown to want.** The correct move was a **2–3 day go/no-go**, not a 2–3 week keystone — which is exactly what the [spike](/cyberbaser/research/v1-architecture/#block-markdown-fidelity--the-keystone-rd) did (an afternoon, 20/21, via a markdown-first path that sidesteps Logseq's block-DB trap). The bigger lesson: **point next at the higher-severity, cheaper tests below — and respect Phase R** (`01-PROBLEM.md` is still blank TODOs; the project's own rules forbid implementation before the problem is defined).
+</Aside>
+
+### The real gating risks, ranked
+
+These dominate the technical keystone — most can fail the product even if every line of code is perfect:
+
+1. **Unvalidated demand + Phase-R violation (critical, meta-risk).** `01-PROBLEM.md` is blank; "whose pain" is unwritten. Building any feature for an unverified constituency of one is the dominant risk. *Cost to retire: ~1 day.*
+2. **The GitHub-account wall on the "zero-git" path (critical).** Decap open-authoring is GitHub-only; Sveltia's anonymous authoring is unshipped. The persona [Principle 3](/cyberbaser/getting-started/principles/) exists to serve — domain expert, no GitHub, possibly pseudonymous — has **no path**. Partial mitigation in flight: the [Forgejo thread](/cyberbaser/design/reference-architectures/self-hosted-forgejo-auth/) (authenticated Forgejo editing works today) and the [serverless contribution-bot pattern](/cyberbaser/research/v1-architecture/#the-contribution-path-cms).
+3. **Moderation / AI-slop / knowledge-poisoning at any scale (high).** Abuse/spam is an unfilled TODO; Wikipedia's March-2026 AI-content ban (with 800+ admins) shows even well-resourced wikis buckle. One maintainer + no tooling = the PR queue *is* the product. A Phase-0 constraint mis-filed as Phase-2 polish.
+4. **A "good-enough" competitor already ships the publish half (high).** [Quartz v4](https://quartz.jzhao.xyz/) ships wikilinks, callouts, embeds, backlinks, search, and graph — free, today. The publish direction is commoditized; only the **reverse** (web-edit → clean vault) is novel. "Publishing tool" is the wrong v1 frame — it must be a *contributable* cyber reference, or it's a worse Quartz.
+5. **License + asset-cost pre-public blockers (medium, cheap, unowned).** No content license anywhere = liability the moment a web contributor pastes proprietary CTI. LFS/asset crossover is undecided. Both gate going public; neither touches fidelity.
+6. **The fidelity keystone itself (medium — lower than currently ranked).** Genuinely novel only in the reverse direction; a real prerequisite for the off-ramp + block UX; but a *buildability/sequencing* risk, not the moat. The spike already converted the 3-week bet into a go/no-go and came back "achievable."
+
+### Falsification tests to run next (cheap, high-severity)
+
+- **Demand (1 day):** a 5-question intercept survey to r/netsec, r/cybersecurity, a cyber Discord. Do you use Obsidian? Have you edited a public cyber wiki? Would a required GitHub account stop you? Do you care if a web edit returns as a valid wikilink vs plain markdown? *If under 20% use Obsidian and under 10% care about round-trip, the moat protects nobody in the contributor pool.*
+- **GitHub-wall (1 hour):** as a fresh browser with no GitHub session, attempt a real edit on a live Decap open-authoring site. Count steps and the drop-off point vs "Edit on GitHub." *If equal or worse, Path A doesn't justify its build cost.*
+- **Prior-art delta (4 hours):** point Quartz v4 at the real `cyberbase` vault; document what Tier-1 already works in the publish direction. *Whatever Quartz covers is not cyberbaser's contribution.*
+- **LLM→vault pipeline (2–3 days):** feed a CISA advisory to an LLM, emit an OFM entry, auto-open a PR. *If it works in under 3 days, the human contribution funnel is already partly disrupted — gating risk moves to review/provenance/moderation.*
+- **Moderation reality (1 hour):** write the abuse policy in two paragraphs — who approves a web-CMS PR, in what SLA, what happens to a 3am spam PR with one maintainer asleep. *If it can't be written without deferral, the open-authoring surface is unshippable.*
+- **License + assets (1 hour):** count vault binary size, project to scale, check the LFS free-tier crossover; commit a `LICENSE` (CC-BY-SA 4.0 or CC0) to the vault.
+
+### What to watch (long-term direction-changers)
+
+- A verifiably **lossless Obsidian-markdown↔block serializer** shipping → flips the [SSOT off-ramp](/cyberbaser/research/source-of-truth/) and unlocks block-native UX on plain `.md`. (Watch Logseq DB, Anytype.)
+- **Anonymous open-authoring landing off GitHub** (Sveltia PKCE-free / first-class Forgejo) → dissolves risk #2 and makes the Forgejo thread the v1 substrate decision.
+- **AI-slop vs human-curation equilibrium** → if the market rewards "trustworthy human-reviewed substrate AI agents write into," cyberbaser's git+review model is an asset; pivot identity toward "the reviewed cyber knowledge layer AI agents cite."
+- **Quartz / Obsidian Publish shipping a contribution UI** → would evaporate the differentiator pre-launch.
+- **Where cyber practitioners actually keep notes** (SANS/SO surveys) → if block-native (Notion/GitBook) dominates, the OFM bet narrows to a low-hundreds audience.
+- **Maintainer-throughput post-launch** → under 50 unique external contributors in 6 months means the value-prop conjunction is too tight; re-scope to a personal/OSS tool.
+
+## Related
+
+- [v1 architecture](/cyberbaser/research/v1-architecture/) — the direction this red-teams
+- [SSOT findings](/cyberbaser/research/source-of-truth/) · [Roadmap (Phase R)](/cyberbaser/getting-started/roadmap/)
+- [`/red-team` command](https://github.com/cybersader/cyberbaser/blob/main/.claude/commands/red-team.md) — re-run this check

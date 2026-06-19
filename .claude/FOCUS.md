@@ -13,13 +13,16 @@ Last updated: 2026-06-17
 - **Challenge 09 (SSOT) answered** via a 14-agent run → [`research/source-of-truth.mdx`](/cyberbaser/research/source-of-truth/). Git scores 21/26. Outcome: keep git as SSOT, reframe Principle 1 as *scoped*, with an **off-ramp** if a loss-free Obsidian-markdown↔block serializer ever ships. Git's two structural zeros (sub-repo access control, federation) are exactly the v2+ vision pillars — but no alternative fixes them without breaking the plain-`.md` constraint.
 - **Master linchpin identified:** high-fidelity block↔markdown round-trip. A *markdown-first* block schema (block model = the Obsidian-Flavored-Markdown AST, not a richer superset) could round-trip losslessly **by construction** — markdown as serialization, not lossy export. That would unlock block-grade editing UX + real-time collab while keeping the plain-`.md` SSOT.
 
-## What's Next (in priority order)
+## What's Next (RE-SEQUENCED by the 2026-06-19 red-team)
 
-1. **Delegated research run (in progress)** — multi-agent workflow answering the open tasks: CMS, auth, plugin execution, collaboration, translation layer, publish-site UX, data sync, SEO, operational model, inline editing — plus **Forgejo-as-host** and **block↔markdown fidelity**. Identity is synthesized from all of them.
-2. **Block↔markdown fidelity (keystone)** — decide buildable vs not. If promising, prototype: Tiptap/ProseMirror + remark, throw the hardest OFM fixtures (nested callouts, `![[embed#^block]]`, wikilink aliases) at it and measure round-trip survival.
-3. **Forgejo evaluation** — can cyberbaser be GitHub-optional / Forgejo-primary for v1? The trade: lose anonymous open-authoring (GitHub-only today), gain trust + self-hosting.
-4. **Translation layer hands-on** — test `astro-loader-obsidian` against the Tier 1 feature list with real `cyberbase` vault content.
-5. **Identity** — once the inputs land, rewrite `concepts/problem.mdx` and `getting-started/vision.mdx`.
+The [adversarial red-team](/cyberbaser/research/assumptions-and-risks/) found we were optimizing the most-verifiable, least-risky variable (fidelity) while the product-killing risks stayed untested. The fidelity spike is **done** (20/21, right-sized to an afternoon) — so the next moves are the *cheap, high-severity falsification tests*, not more building. **Respect Phase R: `01-PROBLEM.md` is still blank, and the project's own rules forbid implementation before the problem is defined.**
+
+1. **Fill `01-PROBLEM.md`** — one-sentence TL;DR + whose pain + scope; then get ONE external cyber person to confirm the pain. (The #1 meta-risk.)
+2. **Cheap falsification tests** (~1 day each, see [Assumptions & risks](/cyberbaser/research/assumptions-and-risks/)): demand survey · GitHub-account-wall walkthrough · Quartz prior-art audit · LLM→vault PR probe · a 2-paragraph moderation policy · commit a vault `LICENSE`.
+3. **Re-frame v1 identity** — "contributable cyber reference" (contribution in v1), not "publishing tool" (Quartz already wins that).
+4. **Only after demand + the account-wall are tested:** the translation-layer hands-on and the editor/contribution build. The [Forgejo self-host stack](/cyberbaser/design/reference-architectures/self-hosted-forgejo-auth/) is the substrate decision to make alongside #2's wall test.
+
+**Done this session:** SSOT answered · 20-agent Phase-R research run · v1-architecture findings · RA-01 self-hosted auth · the OFM round-trip spike · dev-tooling adoption · the `/red-team` command.
 
 ## Deliberately NOT Doing Right Now
 
