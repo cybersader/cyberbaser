@@ -1,0 +1,152 @@
+---
+title: "The v1 architecture (Phase R findings)"
+description: "What cyberbaser IS, and the concrete v1 stack — synthesized from a 20-agent research run across all open Phase-R tasks. The keystone is a lossless Obsidian-markdown round-trip; everything else is decided around it."
+sidebar:
+  label: "v1 architecture decision"
+  order: 7
+status: research
+tags: [research, architecture, planning]
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+This page synthesizes the answers to every open Phase-R research task into one decision-ready picture: **what cyberbaser is for v1, and the concrete stack to build it on.** It is the companion to the [SSOT findings](/cyberbaser/research/source-of-truth/) (which answered *where content lives*); this answers *everything built around that*.
+
+<Aside type="note" title="How this was researched">
+A **20-agent research run**: twelve parallel lead agents (one per open task — CMS, auth, plugin execution, collaboration, translation layer, publish UX, data sync, SEO, operational model, inline editing, Forgejo-as-host, block↔markdown fidelity), six skeptical verifiers that re-checked the decision-critical tasks against fresh 2026 sources, an identity synthesizer that derived the v1 scope from all of them, and a completeness critic. The verifiers materially corrected several lead claims — those corrections are baked in below and flagged where they matter.
+
+**Validity:** reflects the landscape as of **2026-06-17**. The single biggest caveat: the keystone round-trip claim is **documentary, not yet empirically tested** — see [the keystone](#the-keystone-lossless-round-trip).
+</Aside>
+
+## What cyberbaser is (for v1)
+
+> **Cyberbaser is a publishing tool that turns an existing Obsidian vault into a public, contributable wiki by round-tripping Obsidian-flavored markdown to the web without corruption — with a git-backed PR contribution path for people who don't know git.**
+
+It is *all three* eventually — publishing tool, wiki platform, collaboration framework — but **for v1 it is a publishing tool first.** The "wiki platform" identity is real but thin in v1 (reader features ship, but the contribution surface is borrowed from existing CMSs, not purpose-built). The "collaboration framework" identity is **explicitly deferred** — every live-collab path is gated behind a serializer that doesn't exist yet.
+
+- **The value moat** is the **lossless Obsidian-Flavored-Markdown round-trip** — wikilinks, callouts, embeds, transclusion, math, Mermaid surviving web↔vault without corruption. Multiple independent research streams converged on this being *the* unsolved problem in 2026: Quartz, MkDocs, Flowershow, `astro-loader-obsidian`, Decap, Sveltia, TinaCMS, BlockSuite each handle only a subset or self-document data loss. No competitor has claimed the full Tier-1 round-trip.
+- **The biggest dependency** is that same round-trip, *validated by tests* — specifically the contribution direction (a Web CMS edit re-serializing a file without escaping or silently dropping OFM syntax). Reader-side rendering is largely solved; the contribution side is unverified per-editor and gates every CMS decision.
+
+## The v1 stack at a glance
+
+| Area | v1 decision | Status |
+|---|---|---|
+| **Identity** | Publishing tool: contributable Obsidian→web wiki | ✅ decided |
+| **SSOT** | git/GitHub (scoped) — see [SSOT findings](/cyberbaser/research/source-of-truth/) | ✅ decided |
+| **Host** | **GitHub Pages** (`actions/deploy-pages@v4`, ubuntu-latest) | ✅ corrected (was mis-stated as Cloudflare) |
+| **Translation layer** | `starlight-obsidian` v0.13 + `rehype-callouts` v2.2 | 🟢 ~80% solved off-the-shelf |
+| **CMS (zero-git path)** | Pages CMS (invited editors) + Decap open-authoring (GitHub-account public PRs) | 🔴 round-trip **untested** — the gate |
+| **Auth** | GitHub OAuth via a ~100-line Cloudflare Worker proxy | ✅ decided |
+| **Inline editing** | Sidebar CMS, raw-markdown for OFM bodies | ✅ decided (true on-page editing deferred) |
+| **Collaboration** | git-async PR flow | ✅ v1; real-time deferred |
+| **Block↔md editor** | CodeMirror 6 + `mdast-util-to-markdown` | 🟡 **NEEDS-PROTOTYPE** (the keystone R&D) |
+| **Plugin execution** | Pre-render locally; no community plugins in CI | ✅ decided |
+| **Publish UX** | Starlight + callouts + tags + last-updated; defer graph view | ✅ decided |
+| **Media** | Cloudflare R2 (host-agnostic; 10 GB free, zero egress) | ✅ decided |
+| **SEO** | `permalink` frontmatter contract | 🟡 decided; redirect mechanism needs a GitHub-Pages fix |
+| **Operational model** | Hosted "bring-your-vault" service; MIT translation-layer core | 🟢 direction set |
+| **Forgejo** | Push-mirror trust anchor; GitHub stays primary | ✅ decided; primary deferred |
+
+## The keystone: lossless round-trip
+
+Everything hinges on one capability: **a Web CMS edit must re-serialize the file without corrupting Obsidian syntax.** This is the moat *and* the biggest risk, because — per the critic — it is currently **asserted-safe but never tested.** No task stood up a real editor and confirmed that `[[wikilink|alias]]`, `> [!note]` callouts, `$$math$$`, and `![[embed]]` survive a save.
+
+**The non-negotiable first action:** a byte-for-byte round-trip fixture test on a real vault corpus before any CMS ships. If it fails, the moat collapses and v1 is "just another Obsidian publisher."
+
+### Why WYSIWYG corrupts OFM
+
+Any editor that parses markdown into a block AST and re-serializes it risks dropping syntax it can't model. Verified failure modes from the run:
+
+- **TinaCMS** — converts to a Plate/Slate AST; unrecognized syntax (wikilinks, callouts) throws or degrades. A 2026 bug shows even **standard bold/italic fail to write to disk**. Hard-disqualified.
+- **Decap** — *both* its markdown and new richtext widgets round-trip through `remark@10` and write a raw markdown string; **neither is inherently safe passthrough** (the lead's "markdown widget = raw" framing was wrong). Wikilinks can be read as link text, callouts flattened to blockquotes. Safe only if you force a true source/raw field *and* register `remark@10`-compatible OFM plugins.
+- **Sveltia** — Lexical-based; a known serializer bug escapes asterisks globally on any save.
+
+### Block↔markdown fidelity — the keystone R&D
+
+Your instinct — *"if there were a world where block content syncs to markdown with high fidelity, that would be awesome"* — is exactly right, and the run gives it a concrete verdict: **`NEEDS-PROTOTYPE`, and the hypothesis is architecturally sound.**
+
+The hypothesis: a **markdown-first block schema** — where the block model *is* the Obsidian-Flavored-Markdown AST (`mdast` + OFM extensions), not a richer superset — round-trips **losslessly by construction**, because markdown is the *serialization*, not a lossy export.
+
+What the run found:
+
+- **No production lossless OFM↔block serializer exists today.** Every block editor is either CommonMark-only or self-lossy on OFM extensions.
+- **The `remark` / `mdast-util-to-markdown` ecosystem is the only one architecturally clean on both sides** of the round-trip. And it's closer than the lead thought:
+  - [`mdast-util-wiki-link`](https://github.com/landakram/mdast-util-wiki-link) **is already bidirectional** (set `aliasDivider: '|'` for Obsidian) — wikilink round-trip is *low* risk.
+  - [`mdast-util-directive`](https://github.com/syntax-tree/mdast-util-directive) ships a proven bidirectional container handler; **copy its pattern and retarget output to `> [!type]`** instead of building a callout serializer from scratch.
+  - `mdast-util-frontmatter` already does lossless frontmatter.
+- **The right stack:** `mdast-util-to-markdown` for serialization + **CodeMirror 6** as the editor (markdown-as-ground-truth — the file is *always* the markdown, which mirrors Obsidian's own architecture and matches git's text-level merge model). [`kenforthewin/atomic-editor`](https://github.com/kenforthewin/atomic-editor) proves the CM6 + live-preview + byte-identical pattern. Milkdown (remark-bridged ProseMirror) is the higher-UX alternative.
+- **Avoid for a markdown-SSOT system:** BlockSuite/AFFiNE (richer-than-markdown model), BlockNote (self-lossy), Plate.js (outputs MDX/JSX, not OFM), and Tiptap's markdown extension (MarkedJS-based, *not* `mdast` — diverges from the serialization foundation).
+
+**The spike (2–3 weeks, standalone, before any editor work):** parse the hardest OFM → `mdast` → serialize back → diff. De-risk the two things flagged as unproven: (1) character-level CRDT merges producing structurally invalid OFM (a half-merged `> [!warn` header), and (2) `|`-in-alias escaping colliding with GFM table pipes. Keep live transclusion rendering, Dataview execution, and block-level CRDT reorder as v2+.
+
+<Aside type="tip" title="Why this is the master linchpin">
+This one serializer gates **three** things at once: the Web CMS editing UX (Constraint 2), real-time collaboration (the deferred v2 dream), and the [SSOT off-ramp](/cyberbaser/research/source-of-truth/#recommendation-keep-git-scoped-with-an-off-ramp). The day it round-trips OFM losslessly is the day all three unlock.
+</Aside>
+
+## The contribution path (CMS)
+
+The honest v1 constraint is **"a GitHub account or email invite is required, but no git CLI is."** Truly anonymous (zero-account) open authoring does **not** exist in any shipping git-backed CMS as of mid-2026.
+
+- **Pages CMS** — v1 pick for *invited* non-technical editors: email magic-link + OTP (no GitHub account needed), raw-markdown mode, MIT, self-hostable. Caveats the verifier caught: latest release is v2.1.8 (June **2025**, not 2026 — the lead was a year off), GitHub-backend only, **single-maintainer bus-factor**. Treat as "slow-cadence but active," log the risk.
+- **Decap** — retained as the only *shipped* open-authoring (fork-and-PR for any GitHub account, no repo write). But it's **maintenance-stagnant** (unpatched Sept-2025 XSS) and its markdown widget was **deprecated April 2026** → use `widget: richtext, modes: ["raw"]`. Design the CMS as a **swappable slot**; Sveltia is the more active successor (1.0 GA mid-2026, gated on GitHub PKCE).
+
+<Aside type="caution" title="Correction: a true zero-account path may exist after all">
+The run initially filed "anonymous, no-account contribution" as impossible. The collab verifier corrected this: a **serverless contribution bot** is established prior art — [Contribunator](https://github.com/Contribunator/Contribunator), [Staticman](https://staticman.net/), [PRB0t](https://github.com/PRB0t/PRB0t), [gitmask](https://github.com/AnalogJ/gitmask). Pattern: anonymous web form → serverless function → a maintainer-owned bot commits with attribution → PR. This removes the account requirement entirely and is the strongest candidate for the *true* keystone non-technical path. Worth a serious v1 evaluation — it's prior art, not an open question.
+</Aside>
+
+## Forgejo and the GitHub-trust question
+
+You flagged that GitHub isn't very trustworthy right now. The run's verdict: **run a dual-forge strategy now; make Forgejo primary later.**
+
+- **Do now (v1):** push-mirror GitHub → Forgejo (free on [Codeberg.org](https://codeberg.org/) or self-hosted). Anyone who distrusts GitHub can clone/contribute from Forgejo. The Astro build runs from either forge (`.forgejo/workflows/` ≈ `.github/workflows/`). Document the trust case: GPL, Codeberg e.V. nonprofit, no telemetry, **v15.0 LTS through July 2027**, ~100–200 MB idle footprint.
+- **Why not primary yet:** the decisive blocker is **anonymous open-authoring is GitHub-only.** Decap open-authoring is GitHub-by-design; Sveltia's open-authoring is **GitHub-backend-only** today, with Forgejo-backend support "may be added in the future" (uncommitted, undated). Forgejo's *built-in wiki* also requires an account to edit (no fork/PR path).
+- **What already works on Forgejo:** *authenticated* Sveltia editing is production-working today (v0.146.10 against Forgejo v13.0.3, OAuth2 PKCE, efficient content API since Forgejo 12.0). So a Forgejo-primary-with-accounts path exists for a *technical* audience — it just breaks the "no account" goal, so it stays out of v1.
+
+**The trade, stated plainly:** going Forgejo-primary buys trust + self-hosting and costs you the anonymous open-authoring path and GitHub's discovery traffic. Mirror now, revisit primary when Sveltia ships Forgejo-backend open authoring.
+
+## Translation layer
+
+The load-bearing technical risk — and in **better shape than feared**, once the host fact is corrected.
+
+- **Base:** [`starlight-obsidian`](https://github.com/HiDeoo/starlight-obsidian) v0.13 is the only single maintained package covering ~80% of Tier-1 OFM (wikilinks + aliases + heading anchors, image/media/PDF embeds, note + heading-section transclusion, math, Mermaid, tables, code). Stack [`rehype-callouts`](https://github.com/lin-stephanie/rehype-callouts) v2.2 on top for all 13 callout types, foldable + nested. **Avoid** `remark-obsidian-callout` (archived Sept 2025) and `astro-loader-obsidian` (silently parses `#hex` colors and shell `#` in code blocks as tags — a corruption risk for security content).
+- **Host correction matters:** the two scariest stated risks were artifacts of a *wrong host assumption* (the stale "Cloudflare Pages"). On the real GitHub Pages + ubuntu-latest CI:
+  - **Mermaid** is *not* a hard constraint — Playwright/Chromium installs cleanly (`npx playwright install --with-deps chromium`). Build-time SVG works; client-side `pre-mermaid` is a one-flag fallback, not a package swap.
+  - **KaTeX** sqrt-rendering bug is a **one-line CSS fix** (`.katex-html svg { height: inherit; }`), not a MathML migration. ~30 minutes.
+- **The one genuine gap:** **block-ID transclusion** `![[note#^block-id]]` — needs a multi-pass build resolver, and even this is *plausible-but-unconfirmed* (section embeds already work). Verify against a real vault with a 30-minute test before scoping any custom plugin. Markdoc is a non-starter for OFM.
+
+## Everything else, in brief
+
+- **Auth** — GitHub OAuth only for v1, via a self-hosted ~100-line Cloudflare Worker proxy (the Sveltia-authenticator / decap-proxy pattern). No auth library, no database, no SaaS. Only the Web CMS path is cyberbaser's auth problem. GitHub shipped PKCE in 2025 but *still requires a client secret*, so the proxy stays. Multi-provider OAuth adds nothing without a Git-Gateway layer.
+- **Plugin execution** — don't run community plugins in CI. The official `obsidian-headless` is Sync-only; the CLI needs the desktop app; `obsidianless` (xvfb+Docker) is fragile. v1: authors pre-render Dataview/Templater locally and commit static markdown. Replace the Obsidian Linter with `markdownlint`/`remark` in a pre-commit hook.
+- **Publish UX** — Starlight defaults + three additions: callouts, tags (`starlight-tags`), and last-updated + "Edit this page" (needs `fetch-depth: 0` in CI). **Defer graph view** — the only usability evidence says it's a *writer's* tool that confuses readers. Pagefind search is sufficient under ~5,000 pages. Sticky TOC is high-ROI and free.
+- **Data sync** — Cloudflare R2 for media (host-agnostic, 10 GB free, zero egress; Storj raised its floor to $50/mo, eliminated). **Derive modified-dates from `git log` at build time** — never write them to frontmatter (it makes every opened file dirty). Cache `node_modules/.astro` in GitHub Actions (10 min → ~30 s builds). Windows contributors need `core.trustctime=false` + `core.longpaths=true`; enforce ASCII kebab-case filenames via CI lint.
+- **SEO** — adopt a `permalink` frontmatter contract (matches Obsidian Publish's own field; decouples URL from folder structure). Set `site` in config for canonical + sitemap. **GitHub-Pages caveat:** the `public/_redirects` plan is Cloudflare-specific and *does not work on GitHub Pages* — retired-URL redirects need a different mechanism (e.g. `jekyll-redirect-from`-style HTML stubs or moving the canonical domain to a host with real 301s). Flagged as open.
+- **Operational model** — the **hosted "bring-your-vault" service** is the most defensible value center, but only because it bundles the translation-layer correctness guarantee no competitor has. Open-core: **MIT** on the translation layer (the viral distribution channel) and the contribution widget; the hosted service + enterprise RBAC/audit as the commercial layer. **Avoid AGPL** (enterprise-blocker; OCV won't fund it). Enterprise RBAC needs the mixed-privacy capability git lacks — deferred to v2+.
+
+## Deferred to v2+
+
+True anonymous open authoring (unless the bot pattern proves out) · true on-page inline editing · real-time live collaboration · the lossless block↔markdown editor (prototype first) · block-ID transclusion · plugin execution in CI · Forgejo-as-primary · enterprise RBAC / mixed-privacy / federation · multi-provider OAuth · per-page contributor attribution · RSS · per-page OG images · graph view · backlinks panel · hover previews.
+
+## Biggest risks + what Phase R still needs
+
+The critic's verdict: **Phase R is not ready to exit.** Blockers:
+
+1. **The keystone round-trip is untested.** Every CMS verdict is documentary, not empirical. *Build the fixture spike.* This is the #1 action.
+2. **Host inconsistency** — now partially fixed (CLAUDE.md corrected to GitHub Pages), but the SEO redirect plan and any Cloudflare-specific advice must be reconciled to the real host.
+3. **Federation + mixed-privacy got no task** despite being the v2 vision and the RBAC blocker — see the [SSOT federation section](/cyberbaser/research/source-of-truth/#federation-mixed-privacy-and-role-based-access).
+4. **Uncovered entirely:** spam/abuse/moderation on a public edit→PR path, content license + contributor IP, and merge-conflict UX for non-git contributors across three write paths.
+5. The live prototype still uses some plugins the survey says to replace (`remark-obsidian-callout` archived, `remark-wiki-link` lacks alias support) — reconcile when the translation layer is implemented.
+
+## Recommended next steps
+
+1. **Round-trip fixture spike** — the gate for everything. Build the corpus (`[[a|b]]`, `[[a#h]]`, nested `> [!note]`, `![[embed]]`, `$$math$$`, `` ```mermaid ``), test it through Decap raw mode and Pages CMS. *No CMS ships until this passes.*
+2. **Block↔markdown prototype** (2–3 weeks) — `mdast-util-to-markdown` + CM6, hardest cases, per the [keystone spike plan](#block-markdown-fidelity--the-keystone-rd).
+3. **Stand up the Forgejo mirror** — low-cost trust anchor, do it now.
+4. **Evaluate the serverless contribution bot** as the true zero-account path.
+5. **Promote these findings** into the gated `.claude/` foundational files (01/02/04/12) and rewrite the identity in `problem.mdx` / `vision.mdx`.
+
+## Related
+
+- [SSOT findings: is git the right source of truth?](/cyberbaser/research/source-of-truth/) — the companion decision
+- [Principles](/cyberbaser/getting-started/principles/) · [Roadmap](/cyberbaser/getting-started/roadmap/) · [Architecture](/cyberbaser/design/architecture/) · [Translation layer](/cyberbaser/design/translation-layer/)
+- Challenges this answers: [01 Identity](/cyberbaser/agent-context/zz-challenges/01-identity-operational-model/) · [02 CMS](/cyberbaser/agent-context/zz-challenges/02-cms-evaluation/) · [03 Plugins](/cyberbaser/agent-context/zz-challenges/03-plugin-execution-testing/) · [05 Translation equivalence](/cyberbaser/agent-context/zz-challenges/05-translation-equivalence/) · [07 Attribution](/cyberbaser/agent-context/zz-challenges/07-contributor-attribution/)

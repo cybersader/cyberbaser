@@ -1,0 +1,337 @@
+---
+title: "Data sync strategy: Obsidian → GitHub → CMS → site"
+description: "How content flows Obsidian(local) → GitHub repo → Web CMS edits → built site without corruption. Covers frontmatter dirty-state, Windows MAX_PATH, wikilink escaping, media hosting at scale, resumable uploads, and incremental builds. Includes a v1 architecture recommendation."
+sidebar:
+  label: "Data sync strategy"
+  order: 7
+status: research
+tags: [research, architecture, cms, translation-layer]
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+This page answers [Challenge 10 · Data sync strategy](/cyberbaser/agent-context/zz-challenges/). It covers the *plumbing* layer: how bits move from Obsidian on a contributor's laptop all the way to a deployed static site, and where that pipeline breaks.
+
+**Validity:** landscape as of **2026-06-19**. Revisit if obsidian-git ships a frontmatter-exclude option, if Sveltia CMS 1.0 GA ships (mid-2026), or if Astro merges the incremental-build proposal (RFC 0044).
+
+---
+
+## The four-leg pipeline
+
+```
+[Obsidian local vault]
+       │  obsidian-git push (or Obsidian GitHub Sync plugin)
+       ▼
+[GitHub repo — SSOT]
+       │  GitHub Actions on push  →  build  →  deploy
+       ▼
+[Cloudflare Pages — static site]
+       │  Web CMS (Sveltia CMS) writes back via GitHub API
+       ▼
+[GitHub repo — PR or direct commit]
+```
+
+Each leg has known failure modes. The rest of this doc treats them in priority order.
+
+---
+
+## Failure mode 1 — Frontmatter date-modified creates a permanently dirty vault
+
+### The problem
+
+The `frontmatter-modified-date` Obsidian plugin (and equivalents like Linter) writes a `modified: <timestamp>` field every time you touch a note. obsidian-git then sees every opened file as changed, triggering spurious commits on every auto-sync. On shared vaults across machines, this causes merge conflicts where the conflicting change is just a timestamp string.
+
+A separate but related Windows issue: Obsidian on Windows changes a file's `ctime` (creation timestamp) when it *renders* the file, even with no content edit. Git with default settings detects this as a modification (`core.trustctime=true` by default).
+
+### Confirmed workarounds (in order of invasiveness)
+
+**1. Git config: disable ctime trust (Windows-specific)**
+
+Add to `.git/config` or `~/.gitconfig`:
+
+```ini
+[core]
+  trustctime = false
+  autocrlf = true     # Windows CRLF normalization
+```
+
+This fixes the render-triggers-dirty bug. A forum report confirmed 16 days of clean operation after this change.
+
+**2. Exclude the date-modified plugin from running during git commits**
+
+The `alangrainger/obsidian-frontmatter-modified-date` plugin supports per-file exclusion via a `exclude_modified_update: true` frontmatter property, and folder-level exclusion in plugin settings. This does not prevent the plugin from running, but lets you gate which files get timestamps.
+
+**3. Move date metadata to git-derived sources, not frontmatter**
+
+Instead of writing `modified:` into the file, derive it at build time from `git log --format=%aI -- <file>`. The Astro content loader can inject this as computed metadata. Zero frontmatter mutations, zero dirty state. **This is the recommended v1 approach.**
+
+**4. .gitignore the workspace cache (always do this)**
+
+```
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/cache/
+.trash/
+.DS_Store
+```
+
+<Aside type="caution" title="No native obsidian-git frontmatter-exclude option">
+As of mid-2026, obsidian-git (Vinzent03) does not have a built-in "ignore frontmatter changes" option. The workaround is either the git-derived date approach above, or accepting that auto-commits will include timestamp-only diffs and squashing them at the PR level.
+</Aside>
+
+---
+
+## Failure mode 2 — Windows MAX_PATH (260-char limit) breaks deeply nested vaults
+
+### The problem
+
+Windows imposes a 260-character limit on file paths by default. A deeply nested Obsidian vault — `C:\Users\username\Documents\vault\Security\SIEM\Detection Engineering\Sigma Rules\Windows\Process Creation\` — can easily exceed this before adding a filename. Git for Windows silently fails on checkout/pull for paths over the limit, leaving contributors with partial syncs and confusing errors.
+
+### Solution (two-part, both required)
+
+**Step 1 — Windows Group Policy / registry**
+
+```
+HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\FileSystem
+LongPathsEnabled = 1 (DWORD)
+```
+
+Or via Group Policy: Computer Configuration > Administrative Templates > System > Filesystem > "Enable Win32 long paths" → Enabled. Requires reboot.
+
+**Step 2 — Git config**
+
+```bash
+git config --system core.longpaths true
+```
+
+Both are required. Windows and Git each enforce the limit independently. Developer Mode does NOT enable long paths — that is a common misconception confirmed by Microsoft's own Q&A.
+
+### Vault design mitigation
+
+Even with long paths enabled, keep folder hierarchy shallow. A flat or two-level structure (`/security/sigma-rules-windows-process.md` rather than `/security/detection-engineering/siem/sigma-rules/windows/process-creation/sigma-rule.md`) is lower-risk and improves web slug readability.
+
+---
+
+## Failure mode 3 — Wikilink special characters corrupt on round-trip
+
+### The problem
+
+Obsidian wikilinks can reference filenames with spaces, parentheses, hash characters, colons, and non-ASCII characters. These have distinct meanings in URLs, markdown, and HTML:
+
+- `[[Note (draft)]]` — parentheses are valid in filenames but need URL encoding: `Note%20%28draft%29`
+- `[[Security: SIEM]]` — colon is invalid in Windows filenames; creates cross-platform conflict
+- `[[résumé]]` — non-ASCII: different Unicode normalization (NFC vs NFD) on macOS vs Windows causes git to see the file as always changed
+
+When a web CMS or build tool writes these back as Markdown links without proper encoding, the round-trip corrupts.
+
+### What the remark plugin ecosystem provides
+
+The `remark-obsidian-md` npm package transforms `[[wikilink]]` to standard Markdown links. The `remark-wiki-link-a` (twardoch fork) supports configurable `htmlSpace` replacement so spaces become `-` or `%20`. Custom remark plugins built for Astro handle `[[target|display text]]` pipe aliases correctly.
+
+**The dangerous case is folder notes.** If a page ID exists both as `foo.md` and as a directory `foo/`, the link resolution differs between Obsidian and the static generator. A round-trip export→import via wiki-format mangles these links. See [GitHub: obsidian-wiki issue #108](https://github.com/Ar9av/obsidian-wiki/issues/108).
+
+### Recommended v1 rules
+
+| Rule | Reason |
+|---|---|
+| Ban `:` and `#` from filenames | Cross-platform breakage + wikilink parsing ambiguity |
+| Require ASCII-only filenames in the vault | Eliminates NFC/NFD git dirty-state on macOS/Windows |
+| No folder notes (`index.md` inside a folder named after a concept) | Avoids the file-and-directory ambiguity |
+| Use kebab-case slugs in filenames | Matches Astro Starlight URL convention, no encoding needed |
+| Validate at CI with a lint step | Catch violations before they reach the built site |
+
+A `pre-receive` git hook or a GitHub Actions step that runs `find . -name "*.md" | grep -P '[:#%\(\)\[\]\s]'` catches violations before they merge.
+
+---
+
+## Failure mode 4 — Binary assets bloat the git repo
+
+### The problem
+
+Obsidian users paste screenshots, attach PDFs, and embed audio into notes. These binaries in git:
+
+- Balloon repo clone time (5 MB of images = minor; 500 MB = painful for contributors)
+- Exceed GitHub's 100 MB per-file hard limit and the 2 GB soft push limit
+- Cannot be diffed or merged, cluttering history
+
+Git LFS is the "official" answer but has its own problems: GitHub free tier caps at 2 GB LFS storage, and Decap CMS's "Netlify Large Media" (a Git LFS wrapper) was **deprecated September 1, 2023** and should not be used.
+
+### Media hosting decision matrix
+
+| Option | Free tier | Egress | v1 verdict |
+|---|---|---|---|
+| **Cloudflare R2** | 10 GB storage, 1M writes/mo, 10M reads/mo, $0 egress | Zero always | **Recommended v1** |
+| AWS S3 | 5 GB / 12 months only | $0.09/GB after 100 GB free | Not for v1 |
+| Cloudinary | 25 credits/mo (generous for images) | Included in credits | Good for image transforms, R2 still needed for raw files |
+| Storj | Free tier exists but minimum monthly fee jumps to **$50/month effective July 1, 2026** | Per-GB | Do not use for v1 |
+| git-lfs (GitHub) | 2 GB total | Counted against bandwidth | Last resort only |
+
+**R2 specifics (verified 2026):**
+- 10 GB storage free forever (not a 12-month trial)
+- 1,000,000 Class A (write) operations/month free
+- 10,000,000 Class B (read) operations/month free
+- $0.015/GB/month beyond free tier
+- Zero egress to any origin, always — this is the decisive advantage at scale
+
+**Sveltia CMS + R2 native support:** Sveltia CMS has documented, working Cloudflare R2 integration for image/file fields. Configuration requires `access_key_id`, `bucket`, `account_id`, and `public_url`. CORS must be configured on the R2 bucket (allow GET, PUT, HEAD from CMS domain with all headers, expose ETag). **Caveat:** the Asset Library browse view for existing R2 files is not yet implemented (planned for a future release). Upload works; browsing your existing bucket from the CMS media picker does not yet surface R2 files.
+
+### v1 media architecture
+
+```
+Obsidian local → attachments stored in vault/assets/ (local only, not committed)
+                 ↓
+          obsidian-s3-attachments plugin uploads to R2
+                 ↓
+          .md file contains: ![alt](https://pub-xxx.r2.dev/assets/image.png)
+                 ↓
+          git commit contains: only the .md file, no binary
+                 ↓
+          Astro build: remote image URLs pass through as-is (no local copy needed)
+```
+
+The `S3 attachments storage` Obsidian plugin (community plugin) uploads attachments to any S3-compatible bucket — including R2 — and inserts the CDN URL into the note. The vault `.gitignore` excludes the local `assets/` attachment folder. Git stays lean.
+
+**For web CMS contributors:** Sveltia CMS uploads directly to R2 via its media library. The file URL is inserted into the Markdown content field. No git involvement for binaries.
+
+---
+
+## Failure mode 5 — Resumable uploads for large media via web CMS
+
+### The problem
+
+Web CMS contributors uploading large images or video over a flaky connection will silently fail with a standard HTTP PUT. The tus.io protocol provides resumable uploads with chunk-level acknowledgment.
+
+### Current CMS support (mid-2026)
+
+Neither Decap CMS nor Sveltia CMS document native tus.io resumable upload support. Sveltia CMS uses standard S3 multipart upload semantics when uploading to R2. For most wiki media (screenshots, diagrams, PDFs under 20 MB), multipart S3 uploads are sufficient — they resume at the part level.
+
+**Practical v1 recommendation:** Do not build tus.io infrastructure for v1. R2 multipart uploads handle up to 5 TB per object in 5 MB–5 GB parts. If a contributor's upload fails, they re-upload the file; the CMS does not need resumability for typical wiki attachments. Add tus.io only if video hosting becomes a requirement (v2+).
+
+---
+
+## Failure mode 6 — Full rebuilds on every push
+
+### The problem
+
+Every git push to the vault repo triggers a Cloudflare Pages build. Without caching, Astro re-processes all Markdown, re-optimizes all images, and re-fetches all remote data. On a large vault (500+ pages, 200+ images), this can take 5–15 minutes per deploy.
+
+### Astro's current caching capabilities (Astro 5/6, mid-2026)
+
+Astro caches processed content and optimized images in `node_modules/.astro/`. The cache structure includes:
+- `data-store.json` — parsed content collection cache
+- `assets/` — optimized image output
+- `og-cache/` — generated OG images
+
+**On GitHub Actions:** Persisting `node_modules/.astro/` between runs with `actions/cache@v4` reduces a 10-minute build to ~30 seconds for runs where only a few pages changed. The cache key should hash the content files that trigger regeneration.
+
+```yaml
+- uses: actions/cache@v4
+  with:
+    path: node_modules/.astro
+    key: astro-cache-${{ hashFiles('src/content/**') }}
+    restore-keys: |
+      astro-cache-
+```
+
+**On Cloudflare Pages:** Cloudflare Pages does not natively persist `node_modules/.astro/` between builds. The directory is ephemeral per-build. This means full rebuilds on every push when deploying via Cloudflare Pages' built-in CI.
+
+**Workaround for Cloudflare Pages:** Use GitHub Actions for the build step, then push the `dist/` output to Cloudflare Pages via `wrangler pages deploy`. This keeps the Cloudflare CDN (free tier, unlimited sites) while caching the build on GitHub's infrastructure.
+
+```yaml
+# .github/workflows/deploy.yml
+- uses: actions/cache@v4
+  with:
+    path: node_modules/.astro
+    key: astro-${{ hashFiles('docs/src/content/**') }}
+- run: cd docs && bun run build
+- run: wrangler pages deploy docs/dist --project-name cyberbaser
+```
+
+**Astro RFC 0044 (incremental builds):** A formal incremental build proposal exists in the Astro roadmap repo but was not yet merged as of mid-2026. When shipped, it would allow Astro to skip unchanged pages entirely, not just reuse cached asset processing. Watch the `withastro/roadmap` repo.
+
+---
+
+## The v1 sync architecture (summary)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  OBSIDIAN LOCAL                                                  │
+│  - vault/.md files (ASCII filenames, kebab-case, shallow tree)  │
+│  - S3 attachments plugin → R2 (binaries never touch git)        │
+│  - .gitignore: workspace.json, cache/, local assets/            │
+│  - git config: core.trustctime=false, core.autocrlf=true        │
+│  - No frontmatter date-modified plugin (derive dates from git)  │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │ obsidian-git commit-and-push
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  GITHUB REPO (SSOT)                                              │
+│  - Only .md files + config (no binaries)                        │
+│  - Branch protection + PR reviews for curated contributions      │
+│  - Webhook → GitHub Actions on push to main                     │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │ push triggers
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  GITHUB ACTIONS BUILD                                            │
+│  - Cache node_modules/.astro (hashFiles content/**)             │
+│  - remark-obsidian-md plugin: [[wikilinks]] → HTML links        │
+│  - Image URLs: R2 CDN URLs pass through as remote images        │
+│  - git log → inject modified dates as computed frontmatter      │
+│  - wrangler pages deploy → Cloudflare Pages CDN                 │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  SVELTIA CMS (Web CMS path for non-git contributors)            │
+│  - Authenticated GitHub OAuth → writes via GitHub Contents API  │
+│  - Media uploads → directly to R2 (never through git)          │
+│  - Saves as PR or direct commit → triggers build pipeline above │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### What is v1 vs deferred
+
+| Area | v1 | Deferred |
+|---|---|---|
+| Sync mechanism | obsidian-git commit-and-push | Obsidian Sync, P2P, real-time collab |
+| Date metadata | Derived from git log at build time | Frontmatter date plugins |
+| Media hosting | Cloudflare R2 (free tier, S3-compatible) | Cloudinary transforms, video hosting |
+| Resumable uploads | Standard S3 multipart (via Sveltia) | tus.io for video/large file support |
+| Build caching | GitHub Actions + node_modules/.astro cache | Astro RFC 0044 incremental builds |
+| Wikilink processing | remark-obsidian-md + custom remark plugin | Block-level transclusion, embed resolution |
+| Filename policy | Enforced via CI lint | Automated rename/redirect if violated |
+| Windows long paths | core.longpaths=true + registry | Automatic validation in onboarding docs |
+
+---
+
+## Open questions
+
+1. Does the S3 attachments Obsidian plugin support R2 with custom endpoints, or only AWS-hosted S3? (Needs hands-on test.)
+2. When does Sveltia CMS 1.0 GA ship? The current beta Asset Library limitation (no R2 browse) is a UX friction point for editors.
+3. Can `git log` dates be injected into Astro's content layer at build time without a custom loader, or does this require a plugin?
+4. Does obsidian-git's "Other sync service" merge strategy prevent the frontmatter-conflict problem, or only the workspace-file conflict?
+5. Astro RFC 0044: what is the current implementation status as of late 2026?
+
+---
+
+## Sources
+
+- [alangrainger/obsidian-frontmatter-modified-date — GitHub](https://github.com/alangrainger/obsidian-frontmatter-modified-date)
+- [Obsidian Forum: Windows timestamp workaround via core.trustctime=false](https://forum.obsidian.md/t/workaround-for-rendering-markdown-files-on-windows-results-in-timestamp-changes-detected-by-git/53039)
+- [Obsidian Git tips and tricks](https://publish.obsidian.md/git-doc/Tips-and-Tricks)
+- [Safe .gitignore for Obsidian — kristoffer.dev](https://kristoffer.dev/blog/obsidian-gitignore/)
+- [Microsoft Learn: Maximum Path Length Limitation](https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation)
+- [Cloudflare R2 free tier guide — r2drop.com](https://r2drop.com/blog/cloudflare-r2-free-tier-guide)
+- [Cloudflare R2 pricing breakdown — themedev.net](https://themedev.net/blog/cloudflare-r2-pricing/)
+- [Sveltia CMS: Cloudflare R2 integration docs](https://sveltiacms.app/en/docs/media/cloudflare-r2)
+- [Sveltia CMS: media storage overview](https://sveltiacms.app/en/docs/media)
+- [Decap CMS: Netlify Large Media (deprecated Sept 2023)](https://decapcms.org/docs/netlify-large-media/)
+- [Storj pricing update July 2026 — Storj Community Forum](https://forum.storj.io/t/update-to-storj-object-storage-pricing-what-node-operators-need-to-know/30725)
+- [Astro build caching in CI — walterra.dev](https://walterra.dev/blog/2025-11-09-astro-build-caching)
+- [Astro 2025 year in review](https://astro.build/blog/year-in-review-2025/)
+- [Syncing Obsidian notes with Astro — bndy.org](https://bndy.org/posts/syncing-obsidian-notes-with-astro/)
+- [Adding Obsidian wiki links to Astro blog — alexop.dev](https://alexop.dev/posts/adding-obsidian-wiki-links-to-astro-blog/)
+- [remark-obsidian-md on npm](https://libraries.io/npm/remark-obsidian-md)
+- [OKF round-trip link mangling issue — GitHub](https://github.com/Ar9av/obsidian-wiki/issues/108)
+- [Astro Framework 2026 overview — alexbobes.com](https://alexbobes.com/programming/a-deep-dive-into-astro-build/)

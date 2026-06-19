@@ -1,0 +1,270 @@
+---
+title: "Block editor ↔ OFM round-trip: can it be lossless?"
+description: "The keystone question for the CMS editor and real-time collab. Evaluates Tiptap, ProseMirror, Milkdown, Lexical, BlockSuite, and remark/mdast against lossless Obsidian-Flavored-Markdown serialization. Verdict: NEEDS-PROTOTYPE."
+sidebar:
+  label: "Block ↔ OFM round-trip"
+  order: 7
+status: research
+tags: [research, translation-layer, architecture, cms, collaboration, prior-art]
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="note" title="How this was researched">
+14 primary sources fetched. 15+ search angles across Tiptap, ProseMirror/prosemirror-markdown, Milkdown, Lexical/MDXEditor, BlockSuite/AFFiNE, remark/mdast-util-to-markdown, CodeMirror 6/Lezer, Quartz OFM transformer, Plate.js, and BlockNote. Claims adversarially verified — anything relying on a single uncorroborated source is flagged. Landscape current as of **2026-06-19**.
+</Aside>
+
+## The question
+
+A block-based editor (Notion/AFFiNE-style) is technically superior for editing UX and real-time collab, but existing block tools have **lossy** markdown export. The hypothesis: a **markdown-first block schema** — where the block model IS the OFM AST, not a richer superset — could round-trip losslessly by construction. Markdown is the serialization, not an export.
+
+This question gates **three things simultaneously**: the CMS web editor, real-time collab, and the SSOT off-ramp that the [14-agent SSOT study](/cyberbaser/research/source-of-truth/) said was required before switching away from git.
+
+---
+
+## Verdict first
+
+| Axis | Verdict |
+|---|---|
+| Does any existing system do lossless OFM ↔ block? | **No.** Every production block editor is either CommonMark-only or lossy on OFM extensions. |
+| Is the hypothesis architecturally sound? | **Yes.** The remark + mdast-util-to-markdown extension pattern is exactly this approach. |
+| Does a lossless OFM ↔ block serializer exist off-the-shelf? | **No.** Parse-side plugins exist; serialization back to OFM markdown does not. |
+| Can it be built? | **Yes, but with real effort and at least two hard sub-problems.** |
+| What is the right next step? | **NEEDS-PROTOTYPE** — not blocked in principle, but confidence in the "lossless" claim requires a working spike on the two hardest cases before any CMS work begins. |
+
+---
+
+## What each candidate actually does
+
+### Tiptap + @tiptap/markdown
+
+**Architecture**: MarkedJS lexer → Tiptap JSON (ProseMirror doc) → custom `renderMarkdown` handlers. Bidirectional. CommonMark-lossless by design. Released a dedicated markdown package in 2024–2025.
+
+**OFM gap**: Zero out-of-the-box OFM support. No wikilinks, no callouts, no embeds, no block-refs, no frontmatter in the core package. A community extension (`tiptap-wikilink-extension`) exists but: (a) no npm package published — GitHub-only, (b) no aliases, block-ref, embed, or frontmatter support documented, (c) no serialization back to `[[...]]` syntax confirmed.
+
+**Custom extension path**: The API (`parseMarkdown` / `renderMarkdown` on each extension) is well-documented and modular. You can register custom tokenizers and render functions. The 2026 roadmap focuses on DOCX/PDF, not markdown or Obsidian compatibility — no upstream help coming.
+
+**Collab**: Tiptap Collab via Hocuspocus + Yjs CRDT. Production-grade. But the CRDT operates on the ProseMirror document, not on the markdown string — conflict resolution happens in the block layer. If the canonical SSOT is the `.md` file, there is a mismatch: you must define what the git-committed markdown looks like after a merge, and Yjs does not help with that.
+
+**Assessment**: Viable foundation. 6–10 weeks to add a full OFM layer (wikilinks + callouts + frontmatter + basic embeds). Block-refs are harder (see below).
+
+---
+
+### ProseMirror + prosemirror-markdown
+
+**Architecture**: ProseMirror schema + MarkdownSerializer. The serializer maps node types to output strings; the parser maps markdown-it tokens to schema nodes.
+
+**OFM gap**: Same as Tiptap (which is built on ProseMirror). prosemirror-markdown targets CommonMark. The `strict` option lets you reject unknown nodes rather than silently dropping them — useful for detecting serialization gaps.
+
+**Lossiness**: The library's own source makes intentional trade-offs (soft breaks become spaces; indented code blocks always become fenced). Not lossless even for CommonMark edge cases. For OFM, you would need custom schema nodes + custom serializers.
+
+**Assessment**: Lower-level than Tiptap. Correct choice if building a custom editor from scratch and you want full control. Adds effort vs. Tiptap.
+
+---
+
+### Milkdown
+
+**Architecture**: ProseMirror + remark. Parses markdown with remark (so you get the unified/mdast ecosystem), then converts the mdast into ProseMirror nodes via a plugin system. This is the closest to "markdown-first" of any ProseMirror-family editor.
+
+**OFM gap**: No OFM plugins in the official plugin set. The Obsidian forum discussed switching to Milkdown (thread exists) but concluded the OFM extension set was missing. remark plugins for parsing OFM exist (`remark-obsidian`, `remark-callout`, `remark-wiki-link`); none of them implement the mdast→markdown serializer side.
+
+**Collab**: Yjs integration exists (Milkdown Collab plugin, documented in yjs.dev ecosystem). Same CRDT-vs-markdown-SSOT tension as Tiptap.
+
+**Assessment**: Architecturally the best match for the hypothesis because it already bridges remark and ProseMirror. Requires OFM remark plugins on both sides (parse + stringify). Less mature than Tiptap; smaller community.
+
+---
+
+### Lexical + MDXEditor
+
+**Lexical** (@lexical/markdown): Facebook's editor framework. Built-in markdown import/export is "fairly limited and does not handle advanced cases like nested lists" per the MDXEditor docs. OFM: nothing.
+
+**MDXEditor**: Built on Lexical. Implements bidirectional conversion between mdast (via remark) and Lexical AST through visitor patterns. This is also a "markdown-first" approach. No OFM extensions out of the box.
+
+**Assessment**: Interesting architecture. MDXEditor's mdast-visitor bridge is similar to Milkdown's approach but targets MDX (JSX in markdown) rather than OFM. Adapting it to OFM is possible but requires the same serializer work. Smaller ecosystem than Tiptap.
+
+---
+
+### BlockSuite (AFFiNE)
+
+**Architecture**: Block snapshot (JSON) → MarkdownAdapter. The adapter converts between BlockSuite's internal block tree and markdown.
+
+**Lossiness**: **Explicitly documented as lossy.** The official documentation states adapters "may result in data loss during the conversion process, as the target format might not support all the structures present in the original data." GitHub issue #14592 (March 2026) confirms wikilinks and callouts break on Obsidian import.
+
+**OFM**: No dedicated OFM adapter. A feature request opened in March 2026 asks for improved Obsidian import (directory support, wikilinks, callouts). Not merged as of this writing.
+
+**Assessment**: BlockSuite is designed for a richer-than-markdown block model (AFFiNE's internal format), making lossless markdown serialization a secondary concern. Wrong architectural fit for a markdown-SSOT system.
+
+---
+
+### BlockNote
+
+**Architecture**: ProseMirror-based block editor. Markdown export explicitly documented as "lossy." Recommends `JSON.stringify(editor.document)` for non-lossy storage.
+
+**Assessment**: Wrong fit. Designed for block-native storage, not markdown-native.
+
+---
+
+### Plate.js
+
+**Architecture**: Slate-based editor + @platejs/markdown. Bridges remark/mdast and Plate JSON. Custom elements with no CommonMark equivalent serialize as MDX JSX (e.g., `<callout>...</callout>`).
+
+**The MDX trick**: Plate serializes custom nodes as MDX JSX tags, which are parseable back into Plate nodes. This is lossless IF you control both the writer and the reader — but the resulting files are MDX, not OFM. Opening them in vanilla Obsidian, they show raw `<callout>` tags, not rendered callouts.
+
+**Assessment**: If the only consumer is your own web editor, MDX round-trip is viable and clever. But it violates Constraint 3 (vault must work in vanilla Obsidian). Not a fit for cyberbaser.
+
+---
+
+### remark + mdast-util-to-markdown (unified ecosystem)
+
+**Architecture**: remark-parse → mdast → (plugins transform) → remark-stringify via mdast-util-to-markdown. The stringify side supports a stable extension API: custom handlers map mdast node types to markdown strings.
+
+**Existing OFM parse plugins (one-directional, parse-only)**:
+- `remark-wiki-link` / `remark-obsidian-link`: parse `[[...]]` into mdast nodes
+- `remark-callout` / `remark-obsidian`: parse `> [!type]` callouts
+- `remark-frontmatter` + `mdast-util-frontmatter`: **bidirectional** — both parse AND serialize YAML frontmatter losslessly
+- `remark-gfm`: bidirectional for GFM extensions
+- Quartz's `ofm.ts` transformer: comprehensive OFM parse, but outputs HTML — no markdown stringify
+
+**The gap**: No production `mdast-util-to-markdown` extension for wikilinks or callouts exists. The extension API is stable and well-typed (v2.1.2, 41 releases). GFM and frontmatter prove the pattern works. Writing serializers is feasible but uncharted for wikilinks and callouts.
+
+**Assessment**: This is the correct base layer. The remark/mdast ecosystem is the only one where both sides of the round-trip are architecturally clean. The work is writing the missing stringify extensions.
+
+---
+
+### CodeMirror 6 + Lezer (the Obsidian-native approach)
+
+**Architecture**: CodeMirror 6 parses markdown into a Lezer syntax tree; decorations hide markdown syntax tokens and replace them with widgets. The file on disk is always the raw OFM markdown. There is no separate "block model" — the markdown IS the model.
+
+**Losslessness**: Provably lossless by construction. The file never changes format. Obsidian itself uses this approach.
+
+**OFM coverage**: The `simple-markdown-editor` project (CodeMirror 6 + Lezer) implements: wikilinks, embeds, frontmatter, task lists, LaTeX, footnotes, highlights, comments, hashtags, and nested callouts (self-described as "70% progress" for callouts as of 2025).
+
+**Real-time collab**: CodeMirror 6 has a Yjs extension (`y-codemirror.next`). The CRDT operates on the text stream — exactly the right layer for a markdown SSOT system. Merges happen at the character level; the result is valid markdown (assuming non-overlapping structural edits, which CRDT handles).
+
+**The trade-off**: CodeMirror's "WYSIWYG" is the Live Preview model — syntax is hidden behind widgets but the underlying text is always markdown. This is not a block editor (you cannot drag-and-drop blocks, reorder sections by handle, or have Notion-style slash commands natively). It can be approximated but requires significant custom UI work.
+
+**Assessment**: Architecturally the purest answer to the hypothesis. If the goal is "block model IS the OFM AST," CodeMirror 6 + Lezer makes that literally true. Trade-off is UX — block-editor affordances require building them on top of the text model.
+
+---
+
+## The hardest cases
+
+### 1. Nested callouts
+
+OFM callouts use blockquote syntax: `> [!warning]` followed by `> content`. Nesting is `>> [!info]` inside an outer callout. Standard remark blockquote parsing handles this fine. The serializer must reconstruct the nested `>` prefixes correctly. **Difficulty: medium** — solvable with careful handler logic.
+
+### 2. `![[embed#^block-id]]` transclusion
+
+This is the hardest case. In Obsidian, this renders by fetching the referenced block from another file at read time. In a web editor, there is no local vault to resolve against. The round-trip problem is actually two problems: (a) serializing the syntax `![[note#^blockid]]` correctly (easy — just preserve the string), and (b) actually rendering the embedded content (requires a resolution service that knows the vault). **Difficulty: hard for rendering, easy for serialization.**
+
+### 3. Wikilink aliases: `[[Page|alias]]`
+
+Syntactically straightforward. The mdast node needs fields for `target` and `alias`. Both the parse handler (splitting on `|`) and the serialize handler (reconstructing `[[target|alias]]`) are simple. **Difficulty: low.**
+
+### 4. Block IDs: `^block-id` at end of a paragraph
+
+In OFM, `^my-id` appended to a paragraph line is a block anchor. Standard markdown parsers treat it as text. An mdast custom node type (e.g., `blockAnchor`) with a serialize handler that emits ` ^my-id` at end of the paragraph is straightforward. **Difficulty: low.**
+
+### 5. Dataview blocks
+
+Dataview uses fenced code blocks with `dataview` as the language identifier. These round-trip trivially as opaque code blocks — the content is preserved verbatim. The editor does not need to understand Dataview syntax; it just renders the fence. **Difficulty: none for round-trip; rendering is a separate display concern.**
+
+### 6. Frontmatter
+
+`remark-frontmatter` + `mdast-util-frontmatter` already provide lossless bidirectional handling. YAML content is preserved as a literal string — no YAML-parse-then-reserialize that could reorder keys. **Difficulty: solved.**
+
+---
+
+## Build effort and risk summary
+
+| Component | Effort | Risk | Status |
+|---|---|---|---|
+| remark parse plugins for OFM | 1–2 weeks | Low | Multiple partial impls exist; needs assembly |
+| mdast-util-to-markdown extensions for wikilinks + callouts | 2–3 weeks | Medium | No existing impl; pattern is clear from GFM/frontmatter extensions |
+| Block anchor (`^id`) serializer | 1 week | Low | Straightforward custom mdast node |
+| Frontmatter round-trip | Done | None | remark-frontmatter already does this |
+| Embed resolution (render `![[...]]`) | 3–5 weeks | High | Requires vault-aware resolution service; not a serialization problem |
+| WYSIWYG block editor on top of CodeMirror 6 | 8–12 weeks | Medium | CodeMirror has widget/decoration system; drag-and-drop blocks require custom work |
+| WYSIWYG block editor on top of Tiptap + OFM layer | 10–14 weeks | Medium-High | Tiptap is more block-native but OFM layer is entirely custom |
+| Real-time collab (Yjs) | 2–3 weeks | Low | Both CodeMirror and Tiptap have mature Yjs integrations |
+| Transclusion rendering with live vault resolution | 8–16 weeks | Very High | Requires API, vault index, access control |
+
+**Total for a viable v1 CMS editor (no transclusion, no Dataview rendering)**:
+- CodeMirror 6 path: ~14–20 weeks
+- Tiptap path: ~16–24 weeks
+
+---
+
+## What is v1 vs. deferred
+
+### v1 (lossless is achievable)
+
+- Wikilinks: `[[page]]`, `[[page|alias]]`, `[[page#heading]]`
+- Callouts (flat and nested)
+- Frontmatter YAML
+- Block anchors (`^id` as opaque preserved text)
+- Embeds as opaque preserved syntax (stored as-is, rendered as a placeholder in the editor)
+- Dataview as opaque code fence (no rendering)
+
+### Deferred to v2+
+
+- Live transclusion rendering (`![[note#^blockid]]` expands inline in the editor) — requires vault resolution service
+- Dataview query execution in the editor
+- Drag-and-drop block reorder with structural conflict resolution via CRDT
+- Block-level access control
+
+---
+
+## The off-ramp this question gates
+
+The [SSOT research](/cyberbaser/research/source-of-truth/) said: "keep git as SSOT, with a planned off-ramp IF a loss-free Obsidian-markdown ↔ block serializer ever ships." This research confirms:
+
+1. A loss-free serializer does not exist today off-the-shelf.
+2. It is buildable — the architecture is sound, the hardest sub-problems are tractable.
+3. The off-ramp condition is a **buildable prototype**, not a waiting-for-someone-else problem.
+4. The correct signal to revisit the SSOT decision is: "we have a working round-trip spike that passes a test suite of OFM documents including nested callouts and wikilink aliases."
+
+---
+
+## Recommendation
+
+**NEEDS-PROTOTYPE before any CMS editor work begins.**
+
+Build a standalone spike (no editor UI) that:
+1. Parses a corpus of OFM `.md` files (wikilinks, callouts, embeds, block-refs, frontmatter) into mdast using remark + OFM extensions
+2. Serializes them back to markdown using mdast-util-to-markdown with custom handlers
+3. Diffs the input and output — target: byte-identical for all v1 features
+
+This spike is 2–3 weeks. If it passes, the CMS editor work is de-risked. If it fails on the hard cases (especially nested callouts), we learn that before committing to an editor architecture.
+
+The recommended base: **remark + mdast-util-to-markdown** for the serialization layer, with **CodeMirror 6 + Lezer** as the editor layer (preserves markdown-as-ground-truth) OR **Milkdown** (if a richer block-editor UX is required, at the cost of more OFM glue work).
+
+---
+
+## Sources
+
+- [Tiptap Markdown Introduction](https://tiptap.dev/docs/editor/markdown)
+- [Tiptap: Integrate Markdown in Your Extension](https://tiptap.dev/docs/editor/markdown/guides/integrate-markdown-in-your-extension)
+- [Tiptap: Introducing Bidirectional Markdown Support](https://tiptap.dev/blog/release-notes/introducing-bidirectional-markdown-support-in-tiptap)
+- [Tiptap 2026 Roadmap](https://tiptap.dev/blog/release-notes/our-roadmap-for-2026)
+- [tiptap-wikilink-extension (GitHub)](https://github.com/aarkue/tiptap-wikilink-extension)
+- [prosemirror-markdown (GitHub)](https://github.com/ProseMirror/prosemirror-markdown)
+- [Milkdown (GitHub)](https://github.com/Milkdown/milkdown)
+- [MDXEditor Overview](https://mdxeditor.dev/editor/docs/overview)
+- [BlockSuite Adapter docs (AFFiNE)](https://blocksuite.io/guide/adapter.html)
+- [AFFiNE issue #14592: Obsidian Import Improvements](https://github.com/toeverything/AFFiNE/issues/14592)
+- [BlockNote Markdown Export](https://www.blocknotejs.org/docs/features/export/markdown)
+- [Plate.js Markdown](https://platejs.org/docs/markdown)
+- [mdast-util-to-markdown (GitHub)](https://github.com/syntax-tree/mdast-util-to-markdown)
+- [mdast-util-frontmatter (GitHub)](https://github.com/syntax-tree/mdast-util-frontmatter)
+- [remark-obsidian (alfredoperez, GitHub)](https://github.com/alfredoperez/remark-obsidian)
+- [remark-callout (r4ai, GitHub)](https://github.com/r4ai/remark-callout)
+- [remark-wiki-link (flowershow/datopian)](https://github.com/datopian/remark-wiki-link-plus)
+- [remark-obsidian-md on libraries.io](https://libraries.io/npm/remark-obsidian-md)
+- [Quartz OFM transformer (ofm.ts)](https://github.com/jackyzha0/quartz/blob/v4/quartz/plugins/transformers/ofm.ts)
+- [Quartz OFM: DeepWiki analysis](https://deepwiki.com/jackyzha0/quartz/3.1-obsidian-flavored-markdown)
+- [simple-markdown-editor (CTRL-Neo-Studios)](https://github.com/CTRL-Neo-Studios/simple-markdown-editor)
+- [Obsidian markdown portability analysis (Karl Voit, April 2026)](https://karl-voit.at/2026/04/08/obsidian-md-portability/)
+- [Logseq DB version / SQLite migration](https://www.markdownguide.org/tools/logseq/)
+- [Milkdown + Yjs integration](https://docs.yjs.dev/ecosystem/editor-bindings/milkdown)
+- [Tiptap + Yjs Collaboration](https://docs.yjs.dev/ecosystem/editor-bindings/tiptap2)

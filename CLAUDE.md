@@ -40,7 +40,7 @@ cyberbaser/
 │   ├── tests/            # Playwright E2E
 │   └── …
 │
-├── .github/workflows/    # CI (deploy.yml → Cloudflare Pages)
+├── .github/workflows/    # CI (deploy.yml → GitHub Pages via actions/deploy-pages@v4)
 ├── CLAUDE.md             # This file
 └── README.md
 ```
