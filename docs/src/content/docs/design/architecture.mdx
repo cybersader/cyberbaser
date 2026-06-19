@@ -18,80 +18,53 @@ Scroll for the picture, then the two halves, the round-trip hot-spot, a contribu
 
 ## The big picture
 
-<div class="cb-arch-wrapper" role="img" aria-label="Hub-and-spoke architecture: a vault is rendered to a published wiki by a swappable forward renderer (the commodity top row); edits flow back through the hub — round-trip, trust, moderation, federation — which writes a clean file to the vault, closing the loop.">
-  <svg viewBox="0 0 900 450" preserveAspectRatio="xMidYMid meet" class="cb-arch-svg">
+<div class="cb-arch-wrapper" role="img" aria-label="A rectangular loop. Top edge (muted): a vault is rendered into a published wiki — a swappable commodity. Down the right edge, an edit; across the bottom sits the hub (round-trip, trust, moderation, federation); up the left edge the hub writes a clean file back to the vault.">
+  <svg viewBox="0 0 760 340" preserveAspectRatio="xMidYMid meet" class="cb-arch-svg">
     <defs>
       <linearGradient id="arch-green" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stop-color="#10b981"/>
+        <stop offset="0" stop-color="#34d399"/>
         <stop offset="1" stop-color="#059669"/>
       </linearGradient>
-      <filter id="arch-glow">
-        <feGaussianBlur stdDeviation="4" result="b"/>
-        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-      </filter>
-      <marker id="arch-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-        <path d="M0,0 L10,5 L0,10 z" fill="#10b981"/>
-      </marker>
-      <marker id="arch-arrow-mute" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-        <path d="M0,0 L10,5 L0,10 z" fill="#8b94a3"/>
-      </marker>
+      <filter id="arch-glow"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      <marker id="arch-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9" fill="none" stroke="#10b981" stroke-width="1.6"/></marker>
+      <marker id="arch-arrow-mute" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9" fill="none" stroke="#8b94a3" stroke-width="1.6"/></marker>
     </defs>
 
-    {/* Phase labels */}
-    <text class="cb-arch-layer" x="450" y="28" text-anchor="middle">① PUBLISH — forward render (commodity · swappable spoke)</text>
-    <text class="cb-arch-layer" x="450" y="438" text-anchor="middle">② CONTRIBUTE — the hub (renderer-agnostic · the moat)</text>
+    {/* ── top edge: vault ──render──▶ published (commodity, muted) ── */}
+    <line x1="230" y1="92" x2="318" y2="92" stroke="#8b94a3" stroke-width="1.6"/>
+    <line x1="442" y1="92" x2="530" y2="92" stroke="#8b94a3" stroke-width="1.6" marker-end="url(#arch-arrow-mute)"/>
+    <rect x="320" y="76" width="120" height="32" rx="16" class="cb-arch-pillbox"/>
+    <text x="380" y="96" text-anchor="middle" class="cb-arch-pill">render →</text>
 
-    {/* ─── Vault (SSOT) ─── */}
-    <g class="cb-arch-box">
-      <rect x="48" y="176" width="158" height="92" rx="10"/>
-      <text x="127" y="208" text-anchor="middle">Vault — SSOT</text>
-      <text x="127" y="229" text-anchor="middle" class="cb-arch-sub">git · plain .md</text>
-      <text x="127" y="245" text-anchor="middle" class="cb-arch-sub">any domain</text>
-    </g>
+    {/* ── right edge: published ──edit──▶ hub (green) ── */}
+    <polyline points="640,128 640,250 612,250" fill="none" stroke="url(#arch-green)" stroke-width="2" marker-end="url(#arch-arrow)"/>
+    <rect x="610" y="173" width="60" height="30" rx="15" class="cb-arch-pillbox-g"/>
+    <text x="640" y="192" text-anchor="middle" class="cb-arch-pill cb-arch-pill-g">edit</text>
 
-    {/* ─── Forward renderer (spoke) ─── */}
-    <g class="cb-arch-box">
-      <rect x="368" y="74" width="204" height="62" rx="8"/>
-      <text x="470" y="100" text-anchor="middle">Forward renderer</text>
-      <text x="470" y="119" text-anchor="middle" class="cb-arch-sub">Quartz / Starlight — swappable</text>
-    </g>
+    {/* ── left edge: hub ──write──▶ vault (green) ── */}
+    <polyline points="148,250 120,250 120,128" fill="none" stroke="url(#arch-green)" stroke-width="2" marker-end="url(#arch-arrow)"/>
+    <rect x="90" y="173" width="60" height="30" rx="15" class="cb-arch-pillbox-g"/>
+    <text x="120" y="192" text-anchor="middle" class="cb-arch-pill cb-arch-pill-g">write</text>
 
-    {/* ─── Published wiki ─── */}
-    <g class="cb-arch-box">
-      <rect x="694" y="176" width="158" height="92" rx="10"/>
-      <text x="773" y="208" text-anchor="middle">Published wiki</text>
-      <text x="773" y="229" text-anchor="middle" class="cb-arch-sub">read on the web</text>
-    </g>
+    {/* ── vault ── */}
+    <rect x="40" y="56" width="160" height="72" rx="10" class="cb-arch-r"/>
+    <text x="120" y="88" text-anchor="middle" class="cb-arch-t">Vault</text>
+    <text x="120" y="108" text-anchor="middle" class="cb-arch-st">SSOT · plain .md</text>
 
-    {/* ─── Edit surfaces ─── */}
-    <g class="cb-arch-box cb-arch-box-aux">
-      <rect x="660" y="312" width="182" height="76" rx="8"/>
-      <text x="751" y="336" text-anchor="middle">Edit surfaces</text>
-      <text x="751" y="354" text-anchor="middle" class="cb-arch-sub">in-page · web CMS</text>
-      <text x="751" y="369" text-anchor="middle" class="cb-arch-sub">Obsidian · GitHub</text>
-    </g>
+    {/* ── published ── */}
+    <rect x="560" y="56" width="160" height="72" rx="10" class="cb-arch-r"/>
+    <text x="640" y="88" text-anchor="middle" class="cb-arch-t">Published wiki</text>
+    <text x="640" y="108" text-anchor="middle" class="cb-arch-st">read on the web</text>
 
-    {/* ─── THE HUB (the product) ─── */}
-    <g filter="url(#arch-glow)">
-      <rect x="300" y="296" width="288" height="108" rx="12" fill="#141921" stroke="url(#arch-green)" stroke-width="2"/>
-    </g>
-    <text class="cb-arch-hub" x="444" y="322" text-anchor="middle">THE HUB</text>
-    <text class="cb-arch-sub" x="444" y="340" text-anchor="middle">the product · renderer-agnostic</text>
-    <text class="cb-arch-sub-mini" x="444" y="360" text-anchor="middle">round-trip: web edit → clean .md</text>
-    <text class="cb-arch-sub-mini" x="444" y="375" text-anchor="middle">trust curve + moderation queue</text>
-    <text class="cb-arch-sub-mini" x="444" y="390" text-anchor="middle">federation: one hub, many vaults</text>
+    {/* ── the hub (hero) ── */}
+    <g filter="url(#arch-glow)"><rect x="150" y="216" width="460" height="68" rx="14" class="cb-arch-hubbox"/></g>
+    <text x="380" y="248" text-anchor="middle" class="cb-arch-h">THE HUB</text>
+    <text x="380" y="270" text-anchor="middle" class="cb-arch-hs">round-trip&#160;&#160;·&#160;&#160;trust + moderation&#160;&#160;·&#160;&#160;federation</text>
 
-    {/* ── Forward (commodity, muted) ── */}
-    <path d="M206,196 C300,150 310,108 368,106" fill="none" stroke="#8b94a3" stroke-width="1.8" marker-end="url(#arch-arrow-mute)"/>
-    <path d="M572,106 C632,108 642,150 694,196" fill="none" stroke="#8b94a3" stroke-width="1.8" marker-end="url(#arch-arrow-mute)"/>
-
-    {/* ── Reverse loop (green, the moat) ── */}
-    <path d="M773,268 L757,312" fill="none" stroke="url(#arch-green)" stroke-width="2" marker-end="url(#arch-arrow)"/>
-    <path d="M658,350 L592,350" fill="none" stroke="url(#arch-green)" stroke-width="2" marker-end="url(#arch-arrow)"/>
-    <path d="M300,356 C228,356 180,300 135,268" fill="none" stroke="url(#arch-green)" stroke-width="2" marker-end="url(#arch-arrow)"/>
-    <text x="208" y="318" text-anchor="middle" class="cb-arch-sub-mini">writes clean .md</text>
+    {/* ── side captions ── */}
+    <text x="380" y="34" text-anchor="middle" class="cb-arch-cap">publish — swappable commodity</text>
+    <text x="380" y="312" text-anchor="middle" class="cb-arch-cap cb-arch-cap-g">contribute — the hub is the product</text>
   </svg>
-  <p class="cb-arch-caption">Two halves. The top row (<strong>publish</strong>) is a swappable commodity — muted on purpose. The bottom — <strong>the hub</strong> — is the product: it round-trips a web edit back to a clean vault file, governs it through trust + moderation, and (v2+) federates many vaults. Follow the green loop: vault → render → read → edit → hub → vault.</p>
 </div>
 
 ## The two halves
