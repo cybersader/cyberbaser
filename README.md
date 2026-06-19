@@ -17,7 +17,7 @@
 
 ---
 
-Cyberbaser is the tooling project for building **contributable wikis on top of Obsidian vaults**. Obsidian authoring. GitHub as the single source of truth. Zero-git contribution for anyone.
+Cyberbaser is the tooling project for turning **any Obsidian vault into a contributable wiki** — a general contributability layer / CMS for markdown knowledge bases, for any domain. Obsidian authoring. Git as the single source of truth. Zero-git contribution for anyone. (It's not a cyber tool — the `cyberbase` vault is just the first content we dogfood it on.)
 
 > Wikipedia is old. Cyberbaser is what replaces it — your vault, your content, contributable by anyone, controllable by you. [Read the vision.](https://cybersader.github.io/cyberbaser/getting-started/vision/)
 
@@ -42,23 +42,23 @@ Multiple authoring surfaces → one GitHub vault → one translation layer → p
 
 ## Current phase: Research & Foundations
 
-Cyberbaser is in **Phase R** — building first-principles understanding before writing implementation code. The [research roadmap](https://cybersader.github.io/cyberbaser/getting-started/roadmap/) has 11 concrete tasks covering identity, CMS choice, auth model, plugin execution, collaboration, translation layer, and more.
+Cyberbaser is in **Phase R** — building first-principles understanding before writing implementation code. Most of the open research is now answered; the findings live in the docs.
+
+**Key findings so far:**
+- 🧭 [**Is git the right source of truth?**](https://cybersader.github.io/cyberbaser/research/source-of-truth/) — 83+ systems evaluated. Git scores 21/26 and stays SSOT, with a documented off-ramp.
+- 🏗️ [**The v1 architecture decision**](https://cybersader.github.io/cyberbaser/research/v1-architecture/) — CMS, auth, translation layer, Forgejo, collaboration, and the keystone, decided across a 20-agent run.
+- 🔑 [**OFM round-trip spike**](https://github.com/cybersader/cyberbaser/tree/main/spikes/ofm-roundtrip) — the keystone (lossless Obsidian-markdown round-trip) is empirically **achievable** (20/21 of the hardest fixtures).
+- 🧱 [**Reference architectures**](https://cybersader.github.io/cyberbaser/design/reference-architectures/) — e.g. a fully self-hosted Forgejo + PKCE auth stack (no proxy, no hyperscaler).
+- 🚨 [**Assumptions & risks**](https://cybersader.github.io/cyberbaser/research/assumptions-and-risks/) — a living red-team register: the real product-gating risks (demand, contribution friction, moderation) ranked against the technical keystone.
 
 **What exists today:**
-- 📖 [**Live docs site**](https://cybersader.github.io/cyberbaser/) — 57+ pages of first-principles content, research logs, and architecture diagrams
-- 🧪 Astro + Starlight prototype with Nova theme, Playwright tests, silver+emerald palette
-- 🔬 [Decision logs](https://cybersader.github.io/cyberbaser/agent-context/zz-log/) documenting vault mining and research findings
-- 📊 [Operational landscape](https://cybersader.github.io/cyberbaser/concepts/operational-landscape/) — work gradient, responsibility matrix, sustainability model
-
-**Key research questions being resolved:**
-- [CMS landscape survey](https://cybersader.github.io/cyberbaser/getting-started/roadmap/) — Decap, Sveltia, Tina, EmDash (Cloudflare), and 15+ others
-- [Plugin execution abstraction](https://cybersader.github.io/cyberbaser/getting-started/roadmap/) — Obsidian now has an [official headless runtime + CLI](https://obsidian.md/cli)
-- [Collaboration model](https://cybersader.github.io/cyberbaser/agent-context/zz-log/2026-04-13-vault-collab-mining/) — git-only async vs real-time CRDT
-- [Operational model](https://cybersader.github.io/cyberbaser/concepts/operational-landscape/) — where the sustained value lives
+- 📖 [**Live docs site**](https://cybersader.github.io/cyberbaser/) — 80+ pages of first-principles content, research findings, and architecture diagrams
+- 🧪 Astro + Starlight prototype with Nova theme, 74 passing Playwright tests, silver+emerald palette
+- 🎯 [Agent-delegatable challenges](https://cybersader.github.io/cyberbaser/agent-context/zz-challenges/) — adversarial research briefs for parallel agent runs
 
 ## Docs site
 
-The knowledge base lives in `docs/` and is published to GitHub Pages:
+The knowledge base lives in `docs/` and is published to GitHub Pages. On Windows, double-click **`dev-docs.bat`** to launch it; or run it directly:
 
 ```bash
 cd docs
@@ -67,8 +67,10 @@ bun run dev              # localhost:4321/cyberbaser/
 bun run dev:host         # bind to 0.0.0.0 (Tailscale / LAN)
 bun run build            # production build
 bun run preview --host   # serve built output
-bun run test:local       # Playwright smoke tests (32 passing)
+bun run test:local       # Playwright smoke tests (74 passing)
 ```
+
+A [portagenty](https://cybersader.github.io/portagenty/) workspace (`cyberbaser.portagenty.toml`) defines `shell` / `agent` / `docs` sessions for one-command launch.
 
 ## Repo layout
 
@@ -82,15 +84,19 @@ cyberbaser/
 │   └── 00-INDEX.md … 41-QUESTIONS-RESOLVED.md
 │
 ├── docs/                 # Astro + Starlight docs site (the KB itself)
-│   ├── src/content/docs/ # 57+ pages of content
+│   ├── src/content/docs/ # 80+ pages: concepts, design, research, challenges
 │   ├── tests/            # Playwright smoke + screenshot specs
 │   └── scripts/          # Cross-platform preflight
 │
+├── spikes/               # Throwaway experiments (e.g. ofm-roundtrip fidelity spike)
 ├── .workspace/           # Personal scratch (tracked folder, ignored contents)
+├── dev-docs.bat          # Windows double-click docs launcher
 ├── CLAUDE.md             # Agent entry point
-├── LICENSE               # AGPL-3.0
+├── LICENSE               # AGPL-3.0 (the tooling)
 └── CLA.md                # Contributor License Agreement
 ```
+
+> Code license is AGPL-3.0; the **vault content** license (CC-BY-SA / CC0) is a separate, still-open decision — see [Assumptions & risks](https://cybersader.github.io/cyberbaser/research/assumptions-and-risks/).
 
 ## License
 
