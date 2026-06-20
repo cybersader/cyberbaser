@@ -1257,3 +1257,99 @@ main .content-panel:has(+ .content-panel .cb-hero) {
   .sl-markdown-content .cb-mock-caret { animation: none; }
 }
 
+/* ── "In one glance": file tree (vault) ⇄ browser (wiki) ── */
+.sl-markdown-content .cb-glance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem 0.9rem;
+  margin: 1.5rem 0 0.7rem;
+}
+.sl-markdown-content .cb-glance-panel {
+  flex: 1 1 240px;
+  min-width: 210px;
+  max-width: 350px;
+  margin: 0;
+}
+.sl-markdown-content .cb-glance-cap {
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--sl-color-gray-2);
+  margin-top: 0.45rem;
+}
+.sl-markdown-content .cb-glance .cb-mock { max-width: none; margin: 0; }
+.sl-markdown-content .cb-glance-link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+}
+.sl-markdown-content .cb-glance-node {
+  padding: 0.38rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--sl-color-accent);
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--sl-color-accent-high);
+  font-weight: 700;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+.sl-markdown-content .cb-glance-arr {
+  font-size: 0.72rem;
+  color: var(--sl-color-gray-3);
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.sl-markdown-content .cb-glance-arr-g { color: var(--sl-color-accent); }
+.sl-markdown-content .cb-tree {
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--sl-color-gray-6);
+  padding: 0.5rem 0;
+  font-family: ui-monospace, monospace;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.28);
+}
+.sl-markdown-content .cb-tree-hd {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.8rem;
+  color: var(--sl-color-white);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.sl-markdown-content .cb-tree-sub { color: var(--sl-color-gray-2); font-weight: 500; }
+.sl-markdown-content .cb-tree-fold { color: var(--sl-color-gray-3); font-size: 0.7rem; }
+.sl-markdown-content .cb-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.26rem 0.8rem 0.26rem 1.7rem;
+  color: var(--sl-color-gray-1);
+  font-size: 0.8rem;
+}
+.sl-markdown-content .cb-tree-ic {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: var(--sl-color-gray-3);
+  stroke-width: 1.1;
+}
+.sl-markdown-content .cb-tree-hot { color: var(--sl-color-white); background: rgba(16, 185, 129, 0.09); }
+.sl-markdown-content .cb-tree-hot .cb-tree-ic { stroke: var(--sl-color-accent); }
+.sl-markdown-content .cb-tree-tag {
+  margin-left: auto;
+  font-size: 0.64rem;
+  color: var(--sl-color-accent-high);
+  border: 1px solid var(--sl-color-accent);
+  border-radius: 999px;
+  padding: 0.04rem 0.4rem;
+}
+@media (max-width: 640px) {
+  .sl-markdown-content .cb-glance-link { flex-direction: row; gap: 0.55rem; }
+}
+
