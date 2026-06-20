@@ -20,14 +20,14 @@ Below: a one-glance picture, the tools, then a zoom into each piece.
 <div class="cb-glance">
   <figure class="cb-glance-panel">
     <div class="cb-tree">
-      <div class="cb-tree-hd"><span class="cb-tree-fold">▾</span> your-vault</div>
+      <div class="cb-tree-hd"><span class="cb-tree-fold">▾</span> your-content</div>
       <div class="cb-tree-row"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>home.md</div>
       <div class="cb-tree-row"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>guides.md</div>
       <div class="cb-tree-row cb-tree-hot"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>ideas.md<span class="cb-tree-tag">just edited</span></div>
       <div class="cb-tree-row"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>reference.md</div>
       <div class="cb-tree-hd cb-tree-sub"><span class="cb-tree-fold">▸</span> archive</div>
     </div>
-    <figcaption class="cb-glance-cap">Your vault — plain files you own</figcaption>
+    <figcaption class="cb-glance-cap">Plain markdown — yours, in git</figcaption>
   </figure>
 
   <div class="cb-glance-link" aria-hidden="true">
@@ -94,62 +94,9 @@ It isn't a black box. People author from wherever they like, and the hub does tw
   </div>
   <div class="cb-hub-col">
     <div class="cb-hub-cap">one faithful form</div>
-    <div class="cb-surf cb-surf-out"><svg class="cb-surf-ico-o" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2.5h8.5L18.5 6.5V21.5H6z M14.5 2.5V6.5H18.5"/></svg>Your vault · .md</div>
+    <div class="cb-surf cb-surf-out"><svg class="cb-surf-ico-o" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2.5h8.5L18.5 6.5V21.5H6z M14.5 2.5V6.5H18.5"/></svg>Markdown files (git)</div>
     <div class="cb-surf cb-surf-out"><svg class="cb-surf-ico-o" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5a9.5 9.5 0 1 0 0 19 9.5 9.5 0 0 0 0-19z M2.5 12h19 M12 2.5c3.2 3 3.2 16 0 19 M12 2.5c-3.2 3-3.2 16 0 19"/></svg>Published wiki</div>
   </div>
-</div>
-
-## Zoom in: the contribution loop
-
-The round-trip in motion — follow the green path back from the web into the vault.
-
-<div class="cb-arch-wrapper" role="img" aria-label="A rectangular loop. Top edge (muted): a vault is rendered into a published wiki — a swappable commodity. Down the right edge, an edit; across the bottom sits the hub (round-trip, trust, moderation, federation); up the left edge the hub writes a clean file back to the vault.">
-  <svg viewBox="0 0 760 340" preserveAspectRatio="xMidYMid meet" class="cb-arch-svg">
-    <defs>
-      <linearGradient id="arch-green" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stop-color="#34d399"/>
-        <stop offset="1" stop-color="#059669"/>
-      </linearGradient>
-      <filter id="arch-glow"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-      <marker id="arch-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9" fill="none" stroke="#10b981" stroke-width="1.6"/></marker>
-      <marker id="arch-arrow-mute" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9" fill="none" stroke="#8b94a3" stroke-width="1.6"/></marker>
-    </defs>
-
-    {/* ── top edge: vault ──render──▶ published (commodity, muted) ── */}
-    <line x1="230" y1="92" x2="318" y2="92" stroke="#8b94a3" stroke-width="1.6"/>
-    <line x1="442" y1="92" x2="530" y2="92" stroke="#8b94a3" stroke-width="1.6" marker-end="url(#arch-arrow-mute)"/>
-    <rect x="320" y="76" width="120" height="32" rx="16" class="cb-arch-pillbox"/>
-    <text x="380" y="96" text-anchor="middle" class="cb-arch-pill">render →</text>
-
-    {/* ── right edge: published ──edit──▶ hub (green) ── */}
-    <polyline points="640,128 640,250 612,250" fill="none" stroke="url(#arch-green)" stroke-width="2" marker-end="url(#arch-arrow)"/>
-    <rect x="610" y="173" width="60" height="30" rx="15" class="cb-arch-pillbox-g"/>
-    <text x="640" y="192" text-anchor="middle" class="cb-arch-pill cb-arch-pill-g">edit</text>
-
-    {/* ── left edge: hub ──write──▶ vault (green) ── */}
-    <polyline points="148,250 120,250 120,128" fill="none" stroke="url(#arch-green)" stroke-width="2" marker-end="url(#arch-arrow)"/>
-    <rect x="90" y="173" width="60" height="30" rx="15" class="cb-arch-pillbox-g"/>
-    <text x="120" y="192" text-anchor="middle" class="cb-arch-pill cb-arch-pill-g">write</text>
-
-    {/* ── vault ── */}
-    <rect x="40" y="56" width="160" height="72" rx="10" class="cb-arch-r"/>
-    <text x="120" y="88" text-anchor="middle" class="cb-arch-t">Vault</text>
-    <text x="120" y="108" text-anchor="middle" class="cb-arch-st">SSOT · plain .md</text>
-
-    {/* ── published ── */}
-    <rect x="560" y="56" width="160" height="72" rx="10" class="cb-arch-r"/>
-    <text x="640" y="88" text-anchor="middle" class="cb-arch-t">Published wiki</text>
-    <text x="640" y="108" text-anchor="middle" class="cb-arch-st">read on the web</text>
-
-    {/* ── the hub (hero) ── */}
-    <g filter="url(#arch-glow)"><rect x="150" y="216" width="460" height="68" rx="14" class="cb-arch-hubbox"/></g>
-    <text x="380" y="248" text-anchor="middle" class="cb-arch-h">THE HUB</text>
-    <text x="380" y="270" text-anchor="middle" class="cb-arch-hs">round-trip&#160;&#160;·&#160;&#160;trust + moderation&#160;&#160;·&#160;&#160;federation</text>
-
-    {/* ── side captions ── */}
-    <text x="380" y="34" text-anchor="middle" class="cb-arch-cap">publish — swappable commodity</text>
-    <text x="380" y="312" text-anchor="middle" class="cb-arch-cap cb-arch-cap-g">contribute — translated + governed by the hub</text>
-  </svg>
 </div>
 
 ## The tools in play
@@ -253,13 +200,13 @@ What a contributor actually does — start to finish, in the real UI.
     <div class="cb-step-meta">
       <span class="cb-step-num">3</span>
       <div class="cb-step-txt">
-        <div class="cb-step-title">Approved → into your vault</div>
-        <p class="cb-step-desc">You (or a trusted auto-rule) approve. The hub commits the <strong>clean file</strong> straight into your vault — still vanilla Obsidian markdown.</p>
+        <div class="cb-step-title">Approved → committed</div>
+        <p class="cb-step-desc">You (or a trusted auto-rule) approve. The hub commits the <strong>clean file</strong> to your markdown repo — still plain text that opens in Obsidian, VS Code, or anything.</p>
       </div>
     </div>
     <div class="cb-step-viz">
       <div class="cb-tree">
-        <div class="cb-tree-hd"><span class="cb-tree-fold">▾</span> your-vault</div>
+        <div class="cb-tree-hd"><span class="cb-tree-fold">▾</span> your-content</div>
         <div class="cb-tree-row"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>home.md</div>
         <div class="cb-tree-row cb-tree-hot"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>getting-started.md<span class="cb-tree-tag">+1 commit</span></div>
         <div class="cb-tree-row"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>guides.md</div>
@@ -272,7 +219,7 @@ What a contributor actually does — start to finish, in the real UI.
       <span class="cb-step-num">4</span>
       <div class="cb-step-txt">
         <div class="cb-step-title">…and it's live</div>
-        <p class="cb-step-desc">The renderer rebuilds and the change is on the web — loop closed. Your vault still opens perfectly in plain Obsidian.</p>
+        <p class="cb-step-desc">The renderer rebuilds and the change is on the web — loop closed. It's still plain markdown — open it in Obsidian, or any editor.</p>
       </div>
     </div>
     <div class="cb-step-viz">
