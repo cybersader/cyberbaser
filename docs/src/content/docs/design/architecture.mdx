@@ -14,9 +14,45 @@ tags: [design, architecture]
 - **Hub = the product** — renderer-agnostic: the reverse **round-trip** (web edit → clean vault file), **trust + moderation**, and **federation**.
 - **v1** = one hub, a few vaults. **v2+** = the same hub over a [federation](/cyberbaser/research/source-of-truth/#federation-mixed-privacy-and-role-based-access).
 
-Below: the picture, the tools, then the loop in four steps.
+Below: a one-glance picture, the tools, then a zoom into each piece.
 
-## The big picture
+## In one glance
+
+<div class="cb-mock">
+  <div class="cb-mock-bar">
+    <span class="cb-mock-dot cb-mock-dot-r"></span>
+    <span class="cb-mock-dot cb-mock-dot-y"></span>
+    <span class="cb-mock-dot cb-mock-dot-g"></span>
+    <span class="cb-mock-url">cyberbase.wiki/dns-tunneling</span>
+    <span class="cb-mock-btn">✏️ Edit this page</span>
+  </div>
+  <div class="cb-mock-body">
+    <div class="cb-mock-h">DNS Tunneling</div>
+    <div class="cb-mock-line"></div>
+    <div class="cb-mock-line cb-mock-line-85"></div>
+    <div class="cb-mock-callout"><span class="cb-mock-callout-i">!</span> Detection — watch for high-volume TXT queries to a single domain.</div>
+    <div class="cb-mock-edit">
+      <span class="cb-mock-edit-txt">…and flag NXDOMAIN spikes<span class="cb-mock-caret"></span></span>
+      <span class="cb-mock-save">Suggest edit</span>
+    </div>
+  </div>
+</div>
+
+<div class="cb-flow" role="img" aria-label="Contribution flow: anyone edits, then trust and moderation, then merged into your vault, then live.">
+  <span class="cb-flow-step">anyone edits in place</span>
+  <span class="cb-flow-arr">→</span>
+  <span class="cb-flow-step cb-flow-step-g">trust&nbsp;+&nbsp;moderation</span>
+  <span class="cb-flow-arr">→</span>
+  <span class="cb-flow-step">merged to your vault</span>
+  <span class="cb-flow-arr">→</span>
+  <span class="cb-flow-step">live</span>
+</div>
+
+One idea: **your vault becomes a wiki anyone can improve — and every edit returns as a clean file you still own.** Everything below zooms into a piece of that.
+
+## Zoom in: the contribution loop
+
+The round-trip in motion — follow the green path back from the web into the vault.
 
 <div class="cb-arch-wrapper" role="img" aria-label="A rectangular loop. Top edge (muted): a vault is rendered into a published wiki — a swappable commodity. Down the right edge, an edit; across the bottom sits the hub (round-trip, trust, moderation, federation); up the left edge the hub writes a clean file back to the vault.">
   <svg viewBox="0 0 760 340" preserveAspectRatio="xMidYMid meet" class="cb-arch-svg">
