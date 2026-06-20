@@ -1,6 +1,6 @@
 ---
 title: Getting Started
-description: What cyberbaser is, why it exists, what phase it's in, and how to approach it.
+description: What cyberbaser is, the mental model, what phase it's in, and where to look first.
 sidebar:
   order: 0
 status: research
@@ -8,42 +8,50 @@ status: research
 
 ## What cyberbaser is
 
-Cyberbaser is the tooling project for **cyberbase** — a distributed, contributable cybersecurity knowledge wiki. The content itself lives in a separate repo (`cybersader/cyberbase`) and originates in an Obsidian vault. Cyberbaser is the publishing pipeline, the translation layer R&D, and the first-principles thinking that answers *"how do you turn an Obsidian vault into a public, contributable wiki without losing anything Obsidian makes possible?"*
+Cyberbaser turns **any markdown knowledge base into a public wiki anyone can contribute to** — authored from wherever you like (Obsidian, an edit button on the page, a web CMS, GitHub), kept faithful and reviewed by a central **hub**, and published as a website. It's a general contributability layer / CMS for markdown content — **not a tool for one domain.** (We dogfood it on a cybersecurity vault, [`cybersader/cyberbase`](https://github.com/cybersader/cyberbase) — but that's just the first content, not the point.)
+
+**The mental model:** [write wherever you like → the hub translates every surface into the *same* faithful markdown and reviews each change → that markdown, with full history, is the single source of truth → the wiki is a generated view of it](/cyberbaser/design/architecture/).
 
 Two repos, easy to confuse:
 
 | Repo | Role |
 |---|---|
-| `cybersader/cyberbase` | The live Obsidian content vault — source of truth |
-| `cybersader/cyberbaser` (this repo) | The tooling: Astro+Starlight, translation layer, CMS integration, deployment |
+| [`cybersader/cyberbaser`](https://github.com/cybersader/cyberbaser) (this repo) | The tooling **and** the thinking: the hub, translation layer, CMS integration, deployment, and the first-principles research |
+| [`cybersader/cyberbase`](https://github.com/cybersader/cyberbase) | The example content vault we dogfood on — plain markdown, one example, not the scope |
 
 ## Current phase — Research & Foundations
 
-Cyberbaser is in **Phase R** right now: building up first-principles thinking before shipping new implementation. The [Roadmap](/cyberbaser/getting-started/roadmap/) is explicit — Phase 0 (publishing prototype) is parked, and no later phase gets concrete steps until the problem, ecosystem, concepts, prior art, and principles have real content.
+Cyberbaser is in **Phase R**: building first-principles understanding before shipping implementation. The [Roadmap](/cyberbaser/getting-started/roadmap/) is explicit — the Phase-0 publishing prototype is parked, and no later phase gets concrete steps until the problem, principles, and key decisions have real content.
 
-This is a deliberate constraint. The old approach jumped to implementation before the principles justified the choices. The reinit inverted that: write the thinking, then write the code.
+This is deliberate. The old approach jumped to code before the principles justified the choices; the reinit inverted that — write the thinking, then write the code. A lot of that thinking is now done (see the research findings below).
 
 ## Where to look
 
 <div class="cb-grid">
+  <a class="cb-card" href="/cyberbaser/design/architecture/">
+    <span class="cb-card-label">★ Start here</span>
+    <span class="cb-card-title">How it all fits together</span>
+    <span class="cb-card-desc">The system, visually: author from anywhere → the hub translates + governs → one markdown source of truth → a published wiki. With mockups of what it's like to use.</span>
+  </a>
+  <a class="cb-card" href="/cyberbaser/concepts/problem/">
+    <span class="cb-card-title">The problem</span>
+    <span class="cb-card-desc">What it actually solves — Obsidian fidelity + low-friction contribution + no lock-in, and why contribution is a curve, not a wall.</span>
+  </a>
   <a class="cb-card" href="/cyberbaser/getting-started/vision/">
-    <span class="cb-card-label">10–11 · Vision</span>
-    <span class="cb-card-title">What this becomes</span>
-    <span class="cb-card-desc">The end-state narrative — three contribution paths, one source of truth, round-trip everywhere.</span>
+    <span class="cb-card-title">The vision</span>
+    <span class="cb-card-desc">What it becomes, told as user journeys — author from anywhere, one faithful source of truth, contributable by anyone.</span>
   </a>
   <a class="cb-card" href="/cyberbaser/getting-started/principles/">
-    <span class="cb-card-label">12 · Principles</span>
-    <span class="cb-card-title">The rules</span>
-    <span class="cb-card-desc">What constrains every future decision. GitHub is truth. Obsidian semantics round-trip. Contributors don't need git.</span>
+    <span class="cb-card-title">The principles</span>
+    <span class="cb-card-desc">The rules that constrain every decision: markdown is the source of truth, semantics round-trip, contributors don't need git.</span>
+  </a>
+  <a class="cb-card" href="/cyberbaser/research/">
+    <span class="cb-card-label">Decisions</span>
+    <span class="cb-card-title">Research findings</span>
+    <span class="cb-card-desc">What's been decided and what hasn't been tested — the SSOT analysis, the v1 architecture, and the living risk register.</span>
   </a>
   <a class="cb-card" href="/cyberbaser/getting-started/roadmap/">
-    <span class="cb-card-label">20 · Roadmap</span>
-    <span class="cb-card-title">Phased plan</span>
-    <span class="cb-card-desc">Phase R → 1 → 2 → 3 → 4. Currently Phase R is the only active one, with hard exit criteria.</span>
-  </a>
-  <a class="cb-card" href="/cyberbaser/concepts/">
-    <span class="cb-card-label">01–03 · Problem space</span>
-    <span class="cb-card-title">Concepts</span>
-    <span class="cb-card-desc">The problem, the ecosystem, and the primitives the rest of the project reasons about.</span>
+    <span class="cb-card-title">The roadmap</span>
+    <span class="cb-card-desc">Phased plan. Phase R is the only active one, with hard exit criteria; later phases stay deferred until the research justifies them.</span>
   </a>
 </div>
