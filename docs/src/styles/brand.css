@@ -1439,6 +1439,17 @@ main .content-panel:has(+ .content-panel .cb-hero) {
 }
 .sl-markdown-content .cb-hub-job-k { font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--sl-color-accent-high); }
 .sl-markdown-content .cb-hub-job-v { font-size: 0.79rem; color: var(--sl-color-gray-1); }
+.sl-markdown-content .cb-hub-arr {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--sl-color-gray-3);
+  font-size: 1.3rem;
+}
+@media (max-width: 780px) {
+  .sl-markdown-content .cb-hub-arr { display: none; }
+}
 
 /* ── Step-by-step contribution walkthrough ── */
 .sl-markdown-content .cb-steps { display: flex; flex-direction: column; gap: 1.4rem; margin: 1.4rem 0; }

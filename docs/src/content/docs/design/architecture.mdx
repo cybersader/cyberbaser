@@ -27,7 +27,7 @@ Below: a one-glance picture, the tools, then a zoom into each piece.
       <div class="cb-tree-row"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>reference.md</div>
       <div class="cb-tree-hd cb-tree-sub"><span class="cb-tree-fold">▸</span> archive</div>
     </div>
-    <figcaption class="cb-glance-cap">Plain markdown — yours, in git</figcaption>
+    <figcaption class="cb-glance-cap">Plain markdown — yours, every edit saved</figcaption>
   </figure>
 
   <div class="cb-glance-link" aria-hidden="true">
@@ -74,30 +74,34 @@ Below: a one-glance picture, the tools, then a zoom into each piece.
 
 One idea: **author from anywhere — Obsidian, the web, a CMS, GitHub — and the hub keeps it all one faithful set of markdown files you still own.**
 
-## Inside the hub
+## How it all fits together
 
-It isn't a black box. People author from wherever they like, and the hub does two concrete jobs: it **translates** every surface into one faithful set of markdown files (nothing corrupted), and it **governs** what gets in.
+**The mental model:** write wherever you like → the hub keeps every surface the *same* faithful markdown and reviews each change → that markdown, with its full edit history, is the single **source of truth** → the published wiki is just a generated view of it.
 
 <div class="cb-hub" role="img" aria-label="Author from Obsidian, in-page web edits, a web CMS, or GitHub. The hub translates every surface and governs contributions, producing one faithful set of markdown files — your vault — and a published wiki.">
   <div class="cb-hub-col">
-    <div class="cb-hub-cap">author from anywhere</div>
+    <div class="cb-hub-cap">① author from anywhere</div>
     <div class="cb-surf"><svg class="cb-surf-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.355 18.538a68.967 68.959 0 0 0 1.858-2.954.81.81 0 0 0-.062-.9c-.516-.685-1.504-2.075-2.042-3.362-.553-1.321-.636-3.375-.64-4.377a1.707 1.707 0 0 0-.358-1.05l-3.198-4.064a3.744 3.744 0 0 1-.076.543c-.106.503-.307 1.004-.536 1.5-.134.29-.29.6-.446.914l-.31.626c-.516 1.068-.997 2.227-1.132 3.59-.124 1.26.046 2.73.815 4.481.128.011.257.025.386.044a6.363 6.363 0 0 1 3.326 1.505c.916.79 1.744 1.922 2.415 3.5zM8.199 22.569c.073.012.146.02.22.02.78.024 2.095.092 3.16.29.87.16 2.593.64 4.01 1.055 1.083.316 2.198-.548 2.355-1.664.114-.814.33-1.735.725-2.58l-.01.005c-.67-1.87-1.522-3.078-2.416-3.849a5.295 5.295 0 0 0-2.778-1.257c-1.54-.216-2.952.19-3.84.45.532 2.218.368 4.829-1.425 7.531zM5.533 9.938c-.023.1-.056.197-.098.29L2.82 16.059a1.602 1.602 0 0 0 .313 1.772l4.116 4.24c2.103-3.101 1.796-6.02.836-8.3-.728-1.73-1.832-3.081-2.55-3.831zM9.32 14.01c.615-.183 1.606-.465 2.745-.534-.683-1.725-.848-3.233-.716-4.577.154-1.552.7-2.847 1.235-3.95.113-.235.223-.454.328-.664.149-.297.288-.577.419-.86.217-.47.379-.885.46-1.27.08-.38.08-.72-.014-1.043-.095-.325-.297-.675-.68-1.06a1.6 1.6 0 0 0-1.475.36l-4.95 4.452a1.602 1.602 0 0 0-.513.952l-.427 2.83c.672.59 2.328 2.316 3.335 4.711.09.21.175.43.253.653z"/></svg>Obsidian</div>
     <div class="cb-surf"><svg class="cb-surf-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>Edit on the page</div>
     <div class="cb-surf"><svg class="cb-surf-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.947 13.177c0 3.263-2 5.649-4.736 5.649h-2.773v-5.65H6.282v10.387h7.93c5.403 0 9.788-4.668 9.788-10.386h-5.052ZM7.894.476 0 1.212l.948 10.352 5.157-.456-.526-5.615 2.737-.245c2.737-.246 4.91 1.93 5.227 5.193l5.052-.458c-.49-5.752-5.297-9.998-10.7-9.507Z"/></svg>Web CMS</div>
     <div class="cb-surf"><svg class="cb-surf-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>GitHub</div>
   </div>
+  <div class="cb-hub-arr" aria-hidden="true">→</div>
   <div class="cb-hub-core">
-    <div class="cb-hub-name">the hub</div>
-    <div class="cb-hub-tag">sits between every surface and keeps them in sync</div>
+    <div class="cb-hub-name">② the hub</div>
+    <div class="cb-hub-tag">keeps every surface in sync and reviews each change</div>
     <div class="cb-hub-job"><span class="cb-hub-job-k">translate</span><span class="cb-hub-job-v">faithful round-trip — wikilinks, callouts, embeds survive every surface</span></div>
     <div class="cb-hub-job"><span class="cb-hub-job-k">govern</span><span class="cb-hub-job-v">the maintainer's trust curve + a moderation queue</span></div>
   </div>
+  <div class="cb-hub-arr" aria-hidden="true">→</div>
   <div class="cb-hub-col">
-    <div class="cb-hub-cap">one faithful form</div>
-    <div class="cb-surf cb-surf-out"><svg class="cb-surf-ico-o" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2.5h8.5L18.5 6.5V21.5H6z M14.5 2.5V6.5H18.5"/></svg>Markdown files (git)</div>
-    <div class="cb-surf cb-surf-out"><svg class="cb-surf-ico-o" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5a9.5 9.5 0 1 0 0 19 9.5 9.5 0 0 0 0-19z M2.5 12h19 M12 2.5c3.2 3 3.2 16 0 19 M12 2.5c-3.2 3-3.2 16 0 19"/></svg>Published wiki</div>
+    <div class="cb-hub-cap">③ one source of truth</div>
+    <div class="cb-surf cb-surf-out"><svg class="cb-surf-ico-o" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2.5h8.5L18.5 6.5V21.5H6z M14.5 2.5V6.5H18.5"/></svg>Markdown files · every edit saved</div>
+    <div class="cb-surf cb-surf-out"><svg class="cb-surf-ico-o" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5a9.5 9.5 0 1 0 0 19 9.5 9.5 0 0 0 0-19z M2.5 12h19 M12 2.5c3.2 3 3.2 16 0 19 M12 2.5c-3.2 3-3.2 16 0 19"/></svg>Published wiki · a generated site</div>
   </div>
 </div>
+
+**Under the hood:** your content is one folder of plain markdown files kept under **version control** — that's what *git* is: every edit is saved for good, the full history is there, and you own the whole thing. The published wiki is just a website **generated** from those files (and the generator is swappable). Nothing here is locked to one app or one company.
 
 ## The tools in play
 
