@@ -35,6 +35,17 @@ test.describe('Layout regression: equal-height components', () => {
       expect(Math.abs(b.top - top0)).toBeLessThanOrEqual(1); // same row top
     }
   });
+
+  test('is/isn\'t ledger columns are equal height', async ({ page }) => {
+    await page.goto(`${BASE}/concepts/problem/`);
+    const cols = page.locator('.cb-ledger-col');
+    await expect(cols.first()).toBeVisible();
+    const heights = await cols.evaluateAll((els) =>
+      els.map((e) => Math.round(e.getBoundingClientRect().height)),
+    );
+    expect(heights.length).toBe(2);
+    expect(Math.abs(heights[0] - heights[1])).toBeLessThanOrEqual(1);
+  });
 });
 
 test.describe('Layout regression: no Starlight margin-top leak in components', () => {
@@ -43,6 +54,9 @@ test.describe('Layout regression: no Starlight margin-top leak in components', (
   const checks: [string, string][] = [
     ['/concepts/problem/', '.cb-dial-bar'],
     ['/concepts/problem/', '.cb-dial-seg'],
+    ['/concepts/problem/', '.cb-ledger'],
+    ['/concepts/problem/', '.cb-ledger-col'],
+    ['/concepts/problem/', '.cb-wins'],
     ['/design/architecture/', '.cb-hub'],
     ['/design/architecture/', '.cb-step'],
     ['/design/architecture/', '.cb-glance'],

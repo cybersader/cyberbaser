@@ -146,22 +146,55 @@ Same content, different governance, set by whoever runs it. **Denial-of-service 
 
 Every surface feeds the *same* maintainer-configured pipeline: contribution → (whatever identity/trust step the maintainer set) → moderation queue → merge → live. **Compose, don't build from scratch:** trust levels, identity, moderation queues, and rate-limiting all have mature implementations ([Discourse](https://www.discourse.org/)-style trust, moderation tooling, serverless contribution bots like [Contribunator](https://github.com/Contribunator/Contribunator) / [Staticman](https://staticman.net/), edge WAF). Cyberbaser's job is to *wire them into a coherent pipeline* — a tech-stack design problem, not a from-scratch build. This is the direct answer to the two biggest [product risks](/cyberbaser/research/assumptions-and-risks/) (the account wall, and moderation).
 
-## Scope boundaries
+## What it is, what it isn't
 
-Equally important: what cyberbaser is **not** trying to solve, so it doesn't scope-creep.
+Just as important: the things cyberbaser deliberately leaves to other tools, so it doesn't scope-creep.
 
-- **It is general, not a cyber tool.** It works on any markdown knowledge base, for any domain. The `cybersader/cyberbase` vault is the first dogfooding corpus, not the scope. (An earlier draft had this backwards as "cyber-first"; contributability is the point.)
-- **Renderers are swappable, not rivals.** Publish targets like Quartz or Obsidian Publish are things the layer can sit in front of, not competitors to beat.
-- **Not a content host.** Cyberbaser reads from a markdown repo you own; it doesn't store or own your content.
-- **Not a comments / discussion system.** GitHub Issues is the fallback.
-- **Not a real-time collaborative editor (v1).** Conflicts resolve through git, not CRDT. (Real-time is gated on the [block↔markdown round-trip](/cyberbaser/research/v1-architecture/#block-markdown-fidelity--the-keystone-rd), deferred to v2+.)
+<div class="cb-ledger" role="img" aria-label="What cyberbaser is, and what it deliberately is not. It is: works on any markdown knowledge base, sits in front of your renderer, reads a repo you own, turns edits into reviewed contributions, resolves conflicts through git. It is not: a cyber tool, a Quartz or Obsidian Publish rival, a content host, a comments or discussion system, or a real-time co-editor in v1.">
+  <div class="cb-ledger-col cb-ledger-is">
+    <div class="cb-ledger-hd">What it is</div>
+    <div class="cb-ledger-row"><span class="cb-ledger-ic cb-ledger-yes" aria-hidden="true">✓</span><span class="cb-ledger-tx"><strong>Works on any markdown KB</strong><span class="cb-ledger-sub">the cyberbase vault is just our dogfood corpus</span></span></div>
+    <div class="cb-ledger-row"><span class="cb-ledger-ic cb-ledger-yes" aria-hidden="true">✓</span><span class="cb-ledger-tx"><strong>Sits in front of your renderer</strong><span class="cb-ledger-sub">Quartz, Obsidian Publish, Starlight</span></span></div>
+    <div class="cb-ledger-row"><span class="cb-ledger-ic cb-ledger-yes" aria-hidden="true">✓</span><span class="cb-ledger-tx"><strong>Reads a repo you own</strong><span class="cb-ledger-sub">plain files, in your storage</span></span></div>
+    <div class="cb-ledger-row"><span class="cb-ledger-ic cb-ledger-yes" aria-hidden="true">✓</span><span class="cb-ledger-tx"><strong>Turns edits into reviewed contributions</strong><span class="cb-ledger-sub">one moderated pipeline, then merge</span></span></div>
+    <div class="cb-ledger-row"><span class="cb-ledger-ic cb-ledger-yes" aria-hidden="true">✓</span><span class="cb-ledger-tx"><strong>Resolves conflicts through git</strong><span class="cb-ledger-sub">one deterministic source of truth</span></span></div>
+  </div>
+  <div class="cb-ledger-col cb-ledger-not">
+    <div class="cb-ledger-hd">What it isn't</div>
+    <div class="cb-ledger-row"><span class="cb-ledger-ic cb-ledger-no" aria-hidden="true">✕</span><span class="cb-ledger-tx"><strong>Not a cyber tool</strong><span class="cb-ledger-sub">cyber is the content, not the scope</span></span></div>
+    <div class="cb-ledger-row"><span class="cb-ledger-ic cb-ledger-no" aria-hidden="true">✕</span><span class="cb-ledger-tx"><strong>Not a Quartz or Obsidian Publish rival</strong><span class="cb-ledger-sub">renderers are swappable, not competitors</span></span></div>
+    <div class="cb-ledger-row"><span class="cb-ledger-ic cb-ledger-no" aria-hidden="true">✕</span><span class="cb-ledger-tx"><strong>Not a content host</strong><span class="cb-ledger-sub">it never stores or owns your content</span></span></div>
+    <div class="cb-ledger-row"><span class="cb-ledger-ic cb-ledger-no" aria-hidden="true">✕</span><span class="cb-ledger-tx"><strong>Not a comments or discussion system</strong><span class="cb-ledger-sub">GitHub Issues is the fallback</span></span></div>
+    <div class="cb-ledger-row"><span class="cb-ledger-ic cb-ledger-no" aria-hidden="true">✕</span><span class="cb-ledger-tx"><strong>Not a real-time co-editor in v1</strong><span class="cb-ledger-sub">CRDT and live cursors are v2+</span></span></div>
+  </div>
+</div>
 
-## Success looks like
+## When it's working
 
-Cyberbaser is successful when:
+Cyberbaser is doing its job when one page can be all of this at once.
 
-- A reader lands on a wiki page from a Google search and doesn't notice that it came from an Obsidian vault — it just reads as a well-maintained wiki.
-- That same reader can submit a typo fix in three clicks, without learning git, and see it live within minutes.
-- The maintainer reviews and merges the edit without leaving Obsidian as their primary authoring surface.
-- The vault repo remains fully usable in Obsidian standalone — nothing cyberbaser-specific leaks into it.
-- Ten independent contributors, with different git fluencies, produce identical-quality edits to the same set of pages.
+<div class="cb-pinned" role="img" aria-label="A published wiki page in a browser. It reads as an ordinary well-kept wiki, an Obsidian callout rendered intact, a reader fixing a typo inline with a Save button, and a toast showing the edit merged and live in about two minutes.">
+  <div class="cb-mock">
+    <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">wiki.example.org/guides/getting-started</span><span class="cb-mock-live">● Published</span></div>
+    <div class="cb-mock-body">
+      <div class="cb-mock-h">Getting started</div>
+      <div class="cb-mock-line"></div>
+      <div class="cb-mock-line cb-mock-line-85"></div>
+      <div class="cb-mock-callout"><span class="cb-mock-callout-i">i</span> Community-maintained. Edits are reviewed before they go live.</div>
+      <div class="cb-mock-edit"><span class="cb-mock-edit-txt">…fixing a small typo here<span class="cb-mock-caret"></span></span><span class="cb-mock-save">Save</span></div>
+    </div>
+  </div>
+  <span class="cb-toast">merged · live in ~2 min</span>
+  <span class="cb-pin" aria-hidden="true" style="top:25%;left:4%">1</span>
+  <span class="cb-pin" aria-hidden="true" style="top:73%;left:4%">2</span>
+  <span class="cb-pin" aria-hidden="true" style="top:49%;left:4%">3</span>
+  <span class="cb-pin" aria-hidden="true" style="top:85%;left:59%">4</span>
+</div>
+
+<div class="cb-wins">
+  <div class="cb-win"><span class="cb-win-n">1</span><span>Lands from a search and just reads as a well-kept wiki. The markdown vault behind it is invisible.</span></div>
+  <div class="cb-win"><span class="cb-win-n">2</span><span>A reader fixes a typo in three clicks, no git and no account, and sees it live within minutes.</span></div>
+  <div class="cb-win"><span class="cb-win-n">3</span><span>Obsidian syntax survived the trip: callouts and wikilinks render intact (the <a href="/cyberbaser/research/v1-architecture/#block-markdown-fidelity--the-keystone-rd">round-trip keystone</a>).</span></div>
+  <div class="cb-win"><span class="cb-win-n">4</span><span>Every edit is reviewed and merged through moderation before it goes live.</span></div>
+  <div class="cb-win"><span class="cb-win-n">5</span><span>The same vault still opens clean in Obsidian standalone, and contributors of any git fluency produce identical-quality edits.</span></div>
+</div>
