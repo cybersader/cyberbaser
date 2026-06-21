@@ -62,10 +62,26 @@ test.describe('Layout regression: equal-height components', () => {
       for (const h of hs) expect(Math.abs(h - hs[0])).toBeLessThanOrEqual(1);
     });
   }
+
+  const principleGroups: [string, string][] = [
+    ['principles versus columns', '.cb-versus-col'],
+    ['principles path lanes', '.cb-path'],
+    ['principles PR gate cards', '.cb-gate-cellwrap'],
+  ];
+  for (const [name, sel] of principleGroups) {
+    test(`${name} are equal height`, async ({ page }) => {
+      await page.goto(`${BASE}/getting-started/principles/`);
+      const loc = page.locator(sel);
+      await expect(loc.first()).toBeVisible();
+      const hs = await loc.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height)));
+      expect(hs.length).toBeGreaterThan(1);
+      for (const h of hs) expect(Math.abs(h - hs[0])).toBeLessThanOrEqual(1);
+    });
+  }
 });
 
 test.describe('Layout regression: no horizontal overflow on diagram pages', () => {
-  const pages = ['/concepts/primitives/', '/concepts/problem/', '/concepts/ecosystem/'];
+  const pages = ['/concepts/primitives/', '/concepts/problem/', '/concepts/ecosystem/', '/getting-started/principles/'];
   const widths = [360, 768, 1280];
   for (const path of pages) {
     for (const w of widths) {
@@ -98,6 +114,13 @@ test.describe('Layout regression: no Starlight margin-top leak in components', (
     ['/concepts/primitives/', '.cb-xlate-tiers'],
     ['/concepts/primitives/', '.cb-trip'],
     ['/concepts/primitives/', '.cb-openauth'],
+    ['/getting-started/principles/', '.cb-own'],
+    ['/getting-started/principles/', '.cb-own-trapped'],
+    ['/getting-started/principles/', '.cb-rt-pair'],
+    ['/getting-started/principles/', '.cb-versus'],
+    ['/getting-started/principles/', '.cb-paths'],
+    ['/getting-started/principles/', '.cb-shed'],
+    ['/getting-started/principles/', '.cb-gate'],
     ['/design/architecture/', '.cb-hub'],
     ['/design/architecture/', '.cb-step'],
     ['/design/architecture/', '.cb-glance'],
