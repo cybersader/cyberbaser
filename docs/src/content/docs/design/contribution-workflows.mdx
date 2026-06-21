@@ -1,6 +1,6 @@
 ---
 title: Contribution Workflows
-description: Three independent contribution paths — Web CMS, Obsidian+Git, Direct GitHub — with end-to-end flows and constraints.
+description: Three independent contribution paths (Web CMS, Obsidian+Git, Direct GitHub) with end-to-end flows and constraints.
 sidebar:
   order: 23
 status: research
@@ -9,19 +9,19 @@ tags: [design, contribution]
 
 Cyberbaser promises three contribution paths. Every path must work **independently** — no path is allowed to depend on another being running (see [Principle 4](/cyberbaser/getting-started/principles/#4-every-contribution-path-must-work-independently)). This page specifies each path end-to-end.
 
-## Path A — Web CMS (Decap, Open Authoring)
+## Path A: Web CMS (Decap, Open Authoring)
 
 **Target user:** domain expert, zero git knowledge. This path uses Decap, which signs in with a GitHub account, so here that account is a trust signal, not a wall. Contribution overall never forces an account: it is gated by the maintainer's trust curve and a moderation queue, and a no-account path (a serverless contribution bot) is tracked separately.
 
 ### Flow
 
-1. **Discovery** — reader lands on a wiki page, sees a prominent "Suggest edit" button
-2. **Auth** — clicking it opens Decap; GitHub OAuth modal appears
-3. **Editor** — Decap renders the page's markdown in a rich editor (not raw). Tier 1 features (wikilinks, callouts) render as interactive widgets; Tier 2/3 render read-only
-4. **Preview** — live preview pane shows the rendered page
-5. **Submit** — contributor writes a one-line commit message, clicks Submit
-6. **Behind the scenes** — Decap forks `cybersader/cyberbase` to the contributor's account, creates a branch, commits the change, opens a PR to the source repo
-7. **Feedback** — contributor sees a PR link and "your edit is pending review"
+1. **Discovery**: reader lands on a wiki page, sees a prominent "Suggest edit" button
+2. **Auth**: clicking it opens Decap; GitHub OAuth modal appears
+3. **Editor**: Decap renders the page's markdown in a rich editor (not raw). Tier 1 features (wikilinks, callouts) render as interactive widgets; Tier 2/3 render read-only
+4. **Preview**: live preview pane shows the rendered page
+5. **Submit**: contributor writes a one-line commit message, clicks Submit
+6. **Behind the scenes**: Decap forks `cybersader/cyberbase` to the contributor's account, creates a branch, commits the change, opens a PR to the source repo
+7. **Feedback**: contributor sees a PR link and "your edit is pending review"
 
 ### Constraints
 
@@ -36,17 +36,17 @@ Cyberbaser promises three contribution paths. Every path must work **independent
 - What OAuth scopes are minimal? (Read: `public_repo`; write: needs fork + PR creation)
 - How does the editor surface Tier 2/3 features it can't render inline?
 
-## Path B — Obsidian + Git
+## Path B: Obsidian + Git
 
 **Target user:** vault-native power user. Comfortable with either git or an Obsidian git plugin (obsidian-git).
 
 ### Flow
 
-1. **Clone** — clone `cybersader/cyberbase` as an Obsidian vault
-2. **Edit locally** — full Obsidian affordances (wikilinks, callouts, graph view, templates)
-3. **Commit & push** — either via obsidian-git plugin or terminal
-4. **Build trigger** — GitHub Actions sees the push and triggers the build and deploy (GitHub Pages is the current deploy target)
-5. **Live** — within ~60-90 seconds the change is on the published site
+1. **Clone**: clone `cybersader/cyberbase` as an Obsidian vault
+2. **Edit locally**: full Obsidian affordances (wikilinks, callouts, graph view, templates)
+3. **Commit & push**: either via obsidian-git plugin or terminal
+4. **Build trigger**: GitHub Actions sees the push and triggers the build and deploy (GitHub Pages is the current deploy target)
+5. **Live**: within ~60-90 seconds the change is on the published site
 
 ### Constraints
 
@@ -57,20 +57,20 @@ Cyberbaser promises three contribution paths. Every path must work **independent
 ### Open questions
 
 - Is direct push to `main` allowed for the maintainer, or always-PR?
-- What's the branch model for larger changes — feature branches?
+- What's the branch model for larger changes: feature branches?
 - Should there be a pre-commit hook that validates frontmatter?
 
-## Path C — Direct GitHub
+## Path C: Direct GitHub
 
 **Target user:** developer, knows git, doesn't use Obsidian, wants to fix something quickly.
 
 ### Flow
 
-1. **Page footer link** — every page has "Edit this page on GitHub"
-2. **GitHub web editor** — opens the raw markdown in GitHub's web UI
-3. **Edit** — contributor edits the file; they see Obsidian-flavored syntax but don't need to understand it
-4. **Commit** — commit via the web UI; if they don't have write access, GitHub offers to open a PR
-5. **Merge** — same PR review flow as Path A
+1. **Page footer link**: every page has "Edit this page on GitHub"
+2. **GitHub web editor**: opens the raw markdown in GitHub's web UI
+3. **Edit**: contributor edits the file; they see Obsidian-flavored syntax but don't need to understand it
+4. **Commit**: commit via the web UI; if they don't have write access, GitHub offers to open a PR
+5. **Merge**: same PR review flow as Path A
 
 ### Constraints
 

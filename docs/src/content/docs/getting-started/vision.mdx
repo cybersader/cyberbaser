@@ -13,7 +13,7 @@ This page is an early draft. The scenarios below are reasoned forward from the p
 
 ## In one paragraph
 
-Cyberbaser is an interoperability layer for contributable, version-controlled knowledge bases. It turns *any* markdown knowledge base (Obsidian is the first-class surface we dogfood) into a living, contributable public wiki — one that anyone can read on the web, edit in place, or extend from their own Obsidian vault, without any of those paths corrupting the others. Today the vault lives in git, which acts as the single source of truth; the layer doesn't force git on contributors. Obsidian semantics round-trip, so an edit made on the website serializes back to clean markdown. And contribution isn't a wall — it's a **trust curve the maintainer controls**, from fully-anonymous-but-moderated to KYC-gated, whatever fits the community. The shared safety net is *moderation, not identity*.
+Cyberbaser is an interoperability layer for contributable, version-controlled knowledge bases. It turns *any* markdown knowledge base (Obsidian is the first-class surface we dogfood) into a living, contributable public wiki, one that anyone can read on the web, edit in place, or extend from their own Obsidian vault, without any of those paths corrupting the others. Today the vault lives in git, which acts as the single source of truth; the layer doesn't force git on contributors. Obsidian semantics round-trip, so an edit made on the website serializes back to clean markdown. And contribution isn't a wall — it's a **trust curve the maintainer controls**, from fully-anonymous-but-moderated to KYC-gated, whatever fits the community. The shared safety net is *moderation, not identity*.
 
 > The journeys below mix general examples (a course page, a company handbook, an open standard) with security ones, since security is the first vault we dogfood. Cyberbaser is domain-agnostic: swap in a research group's vault, a company handbook, a course, an open standard, and the story is the same.
 
@@ -21,35 +21,35 @@ Cyberbaser is an interoperability layer for contributable, version-controlled kn
 
 Architecturally, cyberbaser is a **hub-and-spoke** system — and being clear about which half is which is what keeps the product honest.
 
-**The spokes are commodities.** Each published wiki is a *spoke*: a vault rendered to a static site by some forward renderer (Quartz, Starlight, Obsidian Publish — interchangeable), plus the surfaces people touch it through (the rendered page, a web editor, Obsidian, GitHub). The forward "vault → web" render is a solved, free problem — [Quartz already does it better than a bespoke stack](/cyberbaser/research/assumptions-and-risks/#tested-quartz-prior-art-audit-2026-06-19). So the renderer is a **swappable commodity**, not the product, and cyberbaser must never couple itself to one SSG.
+**The spokes are commodities.** Each published wiki is a *spoke*: a vault rendered to a static site by some forward renderer (Quartz, Starlight, Obsidian Publish, all interchangeable), plus the surfaces people touch it through (the rendered page, a web editor, Obsidian, GitHub). The forward "vault → web" render is a solved, free problem — [Quartz already does it better than a bespoke stack](/cyberbaser/research/assumptions-and-risks/#tested-quartz-prior-art-audit-2026-06-19). So the renderer is a **swappable commodity**, not the product, and cyberbaser must never couple itself to one SSG.
 
 **The hub is the product.** Everything that's actually hard and actually *ours* lives in the renderer-agnostic **hub**:
 
-- **Round-trip** — turning a browser edit back into a clean, Obsidian-valid vault file. The one thing no static-site generator can do.
-- **Trust + moderation** — the [maintainer-controlled trust curve](/cyberbaser/concepts/problem/#contribution-on-your-terms) and moderation queue that make open contribution safe.
-- **Federation** — *one central hub orchestrating many vaults/wikis*, with DNS-style discovery so they can reference each other.
+- **Round-trip**: turning a browser edit back into a clean, Obsidian-valid vault file. The one thing no static-site generator can do.
+- **Trust + moderation**: the [maintainer-controlled trust curve](/cyberbaser/concepts/problem/#contribution-on-your-terms) and moderation queue that make open contribution safe.
+- **Federation**: *one central hub orchestrating many vaults/wikis*, with DNS-style discovery so they can reference each other.
 
 v1 is one hub governing one (or a few) vaults; the [v2+ vision](/cyberbaser/research/source-of-truth/#federation-mixed-privacy-and-role-based-access) is that same hub orchestrating a federation of them. Either way: **the spokes stay swappable; the hub is the hard part and the part that's ours.**
 
 ## From a reader's perspective
 
-A student lands on `coursebase.wiki/linear-algebra/eigenvectors/` from a Google search. The page loads fast (static HTML, GitHub Pages). It reads like a well-maintained wiki — clean typography, code blocks with syntax highlighting, callouts for gotchas, cross-links to related pages. At the bottom: an "Edit this page" link. Next to each heading: a tiny anchor to copy a direct link. A "last updated" date that matches the git commit. They bookmark it, copy a paragraph into their notes, move on.
+A student lands on `coursebase.wiki/linear-algebra/eigenvectors/` from a Google search. The page loads fast (static HTML, GitHub Pages). It reads like a well-maintained wiki: clean typography, code blocks with syntax highlighting, callouts for gotchas, cross-links to related pages. At the bottom: an "Edit this page" link. Next to each heading: a tiny anchor to copy a direct link. A "last updated" date that matches the git commit. They bookmark it, copy a paragraph into their notes, move on.
 
 They don't know or care that it came from an Obsidian vault.
 
 ## From an Obsidian-native contributor's perspective
 
-Cybersader notices a gap in the DNS tunneling page — a detection technique isn't mentioned. Opens Obsidian, finds the file in the vault, adds a `> [!tip]` callout with the technique, wikilinks it to the detection overview page. Commits via the obsidian-git plugin. Push happens automatically. Within a minute, the GitHub Pages build completes and the change is live on `cyberbase.wiki`.
+Cybersader notices a gap in the DNS tunneling page: a detection technique isn't mentioned. Opens Obsidian, finds the file in the vault, adds a `> [!tip]` callout with the technique, wikilinks it to the detection overview page. Commits via the obsidian-git plugin. Push happens automatically. Within a minute, the GitHub Pages build completes and the change is live on `cyberbase.wiki`.
 
 Friction points that should NOT happen: losing the Obsidian link graph; the new callout rendering as plain text on the web; the translation layer dropping the wikilink.
 
 ## From a zero-git contributor's perspective
 
-An HR lead at a company reads the employee-handbook onboarding page and spots an outdated reference. They click **edit right on the page** and fix it inline — what they see is what they get, because the [translation layer](/cyberbaser/design/translation-layer/) round-trips their change back to clean Obsidian markdown (no corrupted wikilinks, no flattened callouts).
+An HR lead at a company reads the employee-handbook onboarding page and spots an outdated reference. They click **edit right on the page** and fix it inline. What they see is what they get, because the [translation layer](/cyberbaser/design/translation-layer/) round-trips their change back to clean Obsidian markdown (no corrupted wikilinks, no flattened callouts).
 
 What happens next is the *maintainer's* choice, set by the [trust curve](/cyberbaser/concepts/problem/#contribution-on-your-terms) they configured. On an open wiki, the edit submits anonymously; on a tighter one, the contributor verifies an email or signs in first. Either way the edit does **not** go straight live — it lands in a **moderation queue**. The maintainer (or a trusted reviewer) approves it, it merges to the vault, and it deploys.
 
-They never clone anything, never learn git, and — if the maintainer allows it — never make an account. The moderation queue is what keeps the wiki safe, so identity can be as light as the maintainer wants.
+They never clone anything, never learn git, and (if the maintainer allows it) never make an account. The moderation queue is what keeps the wiki safe, so identity can be as light as the maintainer wants.
 
 ## From a direct-GitHub contributor's perspective
 
@@ -59,26 +59,26 @@ The wikilink they ignored still resolves correctly on the wiki because the trans
 
 ## From Cybersader's perspective (the maintainer)
 
-Most changes arrive in the **moderation queue**, each with a preview so Cybersader sees it rendered before approving. The maintainer set the **trust curve** when they stood up the wiki: anonymous edits are heavily queued, verified contributors get faster review, long-trusted contributors edit directly. Trivial diffs from trusted contributors can auto-approve. Non-trivial changes get a quick look in Obsidian locally — the branch checks out, the file looks right, approve. The loop takes 60–90 seconds.
+Most changes arrive in the **moderation queue**, each with a preview so Cybersader sees it rendered before approving. The maintainer set the **trust curve** when they stood up the wiki: anonymous edits are heavily queued, verified contributors get faster review, long-trusted contributors edit directly. Trivial diffs from trusted contributors can auto-approve. Non-trivial changes get a quick look in Obsidian locally: the branch checks out, the file looks right, approve. The loop takes 60–90 seconds.
 
-Critically: the maintainer never has to leave Obsidian as their primary authoring surface, and they never had to *build* the trust/moderation machinery — it's composed from existing tools and wired to the queue. Web contributions flow into the same file the maintainer edits by hand. No parallel systems to keep in sync.
+Critically: the maintainer never has to leave Obsidian as their primary authoring surface, and they never had to *build* the trust/moderation machinery. It's composed from existing tools and wired to the queue. Web contributions flow into the same file the maintainer edits by hand. No parallel systems to keep in sync.
 
 ## A day in the life
 
 On a Tuesday, three things happen without anyone coordinating:
 
-1. **09:14** — A reader in Berlin finds a typo in an open standard's spec page and fixes it in place on the page, anonymously. It lands in the moderation queue with a preview attached. Cybersader approves it on their phone during coffee.
-2. **11:47** — A consultant in Austin pushes a commit directly to main from their Obsidian vault: three new pages about Kerberoasting detection, fully wikilinked to existing content. The build deploys. The new pages are immediately discoverable via search on the wiki.
-3. **16:22** — A grad student opens a PR via GitHub web with one-line code block fixes across four pages. They've never used Obsidian. Their PR passes preview. Merged.
+1. **09:14**: A reader in Berlin finds a typo in an open standard's spec page and fixes it in place on the page, anonymously. It lands in the moderation queue with a preview attached. Cybersader approves it on their phone during coffee.
+2. **11:47**: A consultant in Austin pushes a commit directly to main from their Obsidian vault: three new pages about Kerberoasting detection, fully wikilinked to existing content. The build deploys. The new pages are immediately discoverable via search on the wiki.
+3. **16:22**: A grad student opens a PR via GitHub web with one-line code block fixes across four pages. They've never used Obsidian. Their PR passes preview. Merged.
 
 None of these contributors know the others exist. None of them had to pick a "correct" entry point. All three paths produced identical-quality edits to the same vault.
 
 ## Anti-features (what this deliberately does NOT do)
 
 - **Does not host the Obsidian vault.** Cyberbaser reads from a vault repo you own (e.g. `cybersader/cyberbase`); it doesn't store or own your content.
-- **Does not support realtime collaborative editing (v1).** Conflicts resolve via git, not CRDT — fine for an async contribution rate. (Real-time is gated on the [round-trip keystone](/cyberbaser/research/v1-architecture/#blockmarkdown-fidelity--the-keystone-rd); deferred to v2+.)
+- **Does not support realtime collaborative editing (v1).** Conflicts resolve via git, not CRDT, fine for an async contribution rate. (Real-time is gated on the [round-trip keystone](/cyberbaser/research/v1-architecture/#blockmarkdown-fidelity--the-keystone-rd); deferred to v2+.)
 - **Does not replace Obsidian as a primary authoring tool.** Maintainers still use Obsidian locally; the web surfaces are for contributors who don't.
-- **It IS general-purpose** — any Obsidian vault, any domain. The cyber vault is just the first content we dogfood it on, not the scope. (Earlier drafts said the opposite; that was backwards — contributability is the product.)
+- **It IS general-purpose**: any Obsidian vault, any domain. The cyber vault is just the first content we dogfood it on, not the scope. (Earlier drafts said the opposite; that was backwards: contributability is the product.)
 - **Does not build the trust/identity/moderation stack from scratch.** It composes existing tools (Discourse-style trust, moderation queues, contribution bots, edge rate-limiting) into one pipeline.
 - **Does not solve search in the vault itself.** Wiki search is whatever the renderer provides (Pagefind, in the current Starlight prototype). In-vault search stays in Obsidian.
 
