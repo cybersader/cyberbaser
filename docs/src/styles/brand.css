@@ -1505,7 +1505,7 @@ main .content-panel:has(+ .content-panel .cb-hero) {
   .cb-pinned, .cb-wins, .cb-win,
   .cb-tools, .cb-tool, .cb-tool-hd,
   .cb-navchip, .cb-tree, .cb-tree-hd, .cb-tree-row, .cb-def,
-  .cb-ssot, .cb-ssot-core, .cb-ssot-spokes, .cb-ssot-spoke,
+  .cb-ssot, .cb-ssot-core, .cb-ssot-spokes, .cb-ssot-spoke, .cb-ssot-view,
   .cb-backlinks, .cb-bl-hd, .cb-xlate, .cb-xlate-row, .cb-xlate-cell,
   .cb-xlate-flow, .cb-xlate-pipe, .cb-xlate-tiers, .cb-xlate-tier,
   .cb-openauth, .cb-oa-cell, .cb-ghflow, .cb-ghflow-row,
@@ -1819,12 +1819,13 @@ main .content-panel:has(+ .content-panel .cb-hero) {
 .sl-markdown-content .cb-ssot-core { display: flex; flex-direction: column; gap: 0.4rem; padding: 0.9rem; border: 1px solid var(--sl-color-accent); border-radius: 12px; background: rgba(16, 185, 129, 0.05); }
 .sl-markdown-content .cb-ssot-src { text-align: center; font-size: 0.74rem; font-weight: 700; color: var(--sl-color-accent-high); }
 .sl-markdown-content .cb-ssot-spokes { display: flex; flex-direction: column; gap: 0.7rem; min-width: 0; }
-.sl-markdown-content .cb-ssot-spoke { display: grid; grid-template-columns: 1.4rem minmax(0, 1fr); align-items: center; gap: 0.5rem; min-width: 0; }
-.sl-markdown-content .cb-ssot-spoke .cb-mock { max-width: none; margin: 0; }
-.sl-markdown-content .cb-ssot-spoke .cb-tree-mini { grid-column: 2; }
-.sl-markdown-content .cb-ssot-arr { color: var(--sl-color-gray-3); font-size: 1.1rem; text-align: center; }
-.sl-markdown-content .cb-ssot-arr-two { color: var(--sl-color-accent-high); }
-.sl-markdown-content .cb-ssot-lab { grid-column: 2; font-size: 0.72rem; color: var(--sl-color-gray-3); }
+.sl-markdown-content .cb-ssot-spoke { display: flex; align-items: center; gap: 0.55rem; min-width: 0; }
+.sl-markdown-content .cb-ssot-arrow { width: 26px; height: 26px; flex: 0 0 auto; fill: none; stroke: var(--sl-color-gray-3); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.sl-markdown-content .cb-ssot-arrow-2 { stroke: var(--sl-color-accent-high); }
+.sl-markdown-content .cb-ssot-view { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 0.7rem; padding: 0.7rem 0.95rem; border: 1px solid var(--sl-color-gray-5); border-radius: 10px; background: var(--sl-color-gray-6); }
+.sl-markdown-content .cb-ssot-icon { width: 27px; height: 27px; flex: 0 0 auto; fill: none; stroke: var(--sl-color-gray-1); stroke-width: 1.3; }
+.sl-markdown-content .cb-ssot-icon-fill { fill: var(--sl-color-gray-1); stroke: none; }
+.sl-markdown-content .cb-ssot-vlab { min-width: 0; font-size: 0.92rem; font-weight: 600; color: var(--sl-color-white); }
 
 /* Wikilink: source token + rendered chip */
 .sl-markdown-content .cb-srctoken { font-family: ui-monospace, monospace; font-size: 0.82em; color: var(--sl-color-white); background: var(--sl-color-gray-5); border-radius: 4px; padding: 0.02rem 0.3rem; }
