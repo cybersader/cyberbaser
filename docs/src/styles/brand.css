@@ -1159,6 +1159,7 @@ main .content-panel:has(+ .content-panel .cb-hero) {
 .sl-markdown-content .cb-mock-dot-g { background: #28c840; }
 .sl-markdown-content .cb-mock-url {
   flex: 1;
+  min-width: 0;
   margin-left: 0.5rem;
   padding: 0.28rem 0.6rem;
   border-radius: 6px;
@@ -1166,6 +1167,9 @@ main .content-panel:has(+ .content-panel .cb-hero) {
   color: var(--sl-color-gray-2);
   font-size: 0.76rem;
   font-family: ui-monospace, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sl-markdown-content .cb-mock-btn {
   flex: 0 0 auto;
@@ -1481,8 +1485,9 @@ main .content-panel:has(+ .content-panel .cb-hero) {
 
 /* ── Step-by-step contribution walkthrough ── */
 .sl-markdown-content .cb-steps { display: flex; flex-direction: column; gap: 1.4rem; margin: 1.4rem 0; }
-.sl-markdown-content .cb-step { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 1.4rem; }
-.sl-markdown-content .cb-step-meta { flex: 1 1 230px; display: flex; gap: 0.7rem; align-items: flex-start; }
+.sl-markdown-content .cb-step { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 1rem 1.4rem; }
+@media (max-width: 640px) { .sl-markdown-content .cb-step { grid-template-columns: 1fr; } }
+.sl-markdown-content .cb-step-meta { display: flex; gap: 0.7rem; align-items: flex-start; min-width: 0; }
 .sl-markdown-content .cb-step-num {
   flex: 0 0 auto;
   width: 1.9rem;
@@ -1499,7 +1504,7 @@ main .content-panel:has(+ .content-panel .cb-hero) {
 }
 .sl-markdown-content .cb-step-title { font-weight: 700; color: var(--sl-color-white); font-size: 1rem; margin-bottom: 0.2rem; }
 .sl-markdown-content .cb-step-desc { font-size: 0.87rem; color: var(--sl-color-gray-2); margin: 0; }
-.sl-markdown-content .cb-step-viz { flex: 1 1 270px; min-width: 250px; max-width: 410px; }
+.sl-markdown-content .cb-step-viz { min-width: 0; }
 .sl-markdown-content .cb-step-viz .cb-mock { max-width: none; margin: 0; }
 .sl-markdown-content .cb-mock-sm .cb-mock-body { padding: 0.8rem 1rem 0.95rem; }
 .sl-markdown-content .cb-mock-live { flex: 0 0 auto; font-size: 0.68rem; color: var(--sl-color-accent-high); font-weight: 700; }

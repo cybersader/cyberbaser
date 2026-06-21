@@ -100,6 +100,13 @@ Any design decision anywhere in the project should be checked against the transl
 - Prefer plain, concrete language over clever section titles. If a heading needs a beat to parse, rename it.
 - Don't over-anchor on Obsidian: cyberbaser is for markdown knowledge bases in general; Obsidian is a first-class surface, not the whole point or the only one.
 
+## Starlight component layout (read before building any multi-column visual)
+
+The recurring "the left column is bigger / a component overflows the content width" bug in Starlight comes from two flexbox defaults. Fix it by default, don't rediscover it:
+
+- **Flex children default to `min-width: auto`**, so they refuse to shrink below their content's intrinsic width. A long URL, a code span, or a wide mockup then forces the whole row wider and throws off the balance. **Put `min-width: 0` on every flex child** (and `overflow: hidden; text-overflow: ellipsis; white-space: nowrap` on ones holding long unbreakable text like URLs).
+- **Never cap one column's `max-width` while leaving its sibling uncapped** — that is the literal cause of "left is bigger." For a balanced two-column block, use `display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)` (the `minmax(0, …)` is what lets the columns actually shrink) and stack to `1fr` under ~640px. Reach for grid over flex whenever the two columns should be equal.
+
 ## Don't
 
 - Extend the Phase-0 Astro site without a principle in `.claude/12-PRINCIPLES.md` that justifies the extension
