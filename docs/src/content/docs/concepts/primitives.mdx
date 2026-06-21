@@ -1,13 +1,124 @@
 ---
 title: First-Principles Primitives
-description: The core concepts the rest of the project reasons about. If you understand these, every design decision downstream makes sense.
+description: The map of core ideas the rest of the project reasons about. Eight primitives, each with a picture and a link into the page that goes deeper. Understand these and every design decision downstream makes sense.
 sidebar:
   order: 3
 status: research
 tags: [concepts, primitives]
 ---
 
-These are the primitives. Everything in [Design](/cyberbaser/design/) reduces to combinations and constraints on these concepts.
+This page is the map. Every design decision in cyberbaser, and every harder document in [Design](/cyberbaser/design/) and [Research](/cyberbaser/research/), reduces to the eight primitives below. Read them once and the rest of the project stops looking like a pile of features and starts looking like a few ideas applied over and over.
+
+Two of them carry more weight than the rest. **Translation Layer** and **Round-Trip Editability** are the load-bearing walls: get them right and the contribution paths, stable URLs, and single source of truth all compose cleanly; get them wrong and the rest is aspiration. Each entry is the same shape (what it is, why it matters, how cyberbaser uses it) followed by a small picture built from real interface, plus a link into the page that goes deeper.
+
+<nav class="cb-grid-nav" aria-label="Primitives map">
+  <a class="cb-navchip" href="#vault"><span class="cb-navchip-n">01</span><span class="cb-navchip-t">Vault</span></a>
+  <a class="cb-navchip" href="#single-source-of-truth-ssot"><span class="cb-navchip-n">02</span><span class="cb-navchip-t">Single Source of Truth</span></a>
+  <a class="cb-navchip" href="#wikilink"><span class="cb-navchip-n">03</span><span class="cb-navchip-t">Wikilink</span></a>
+  <a class="cb-navchip" href="#backlink"><span class="cb-navchip-n">04</span><span class="cb-navchip-t">Backlink</span></a>
+  <a class="cb-navchip cb-navchip-hard" href="#translation-layer"><span class="cb-navchip-n">05 · core</span><span class="cb-navchip-t">Translation Layer</span></a>
+  <a class="cb-navchip cb-navchip-hard" href="#round-trip-editability"><span class="cb-navchip-n">06 · core</span><span class="cb-navchip-t">Round-Trip Editability</span></a>
+  <a class="cb-navchip" href="#open-authoring"><span class="cb-navchip-n">07</span><span class="cb-navchip-t">Open Authoring</span></a>
+  <a class="cb-navchip" href="#content-addressable--stable-urls"><span class="cb-navchip-n">08</span><span class="cb-navchip-t">Stable URLs</span></a>
+</nav>
+
+<p class="cb-navmap-cap">Eight ideas. Everything downstream is a combination or a constraint on these.</p>
+
+---
+
+## Vault
+
+<div class="cb-def">
+  <div class="cb-def-what">
+    <span class="cb-def-label">What</span>
+    <p>In Obsidian parlance, a folder of markdown files + a `.obsidian/` config directory that behaves as a self-contained knowledge base. (Obsidian is the first-class example; any folder of markdown qualifies.)</p>
+  </div>
+  <div class="cb-def-why">
+    <span class="cb-def-label">Why it matters</span>
+    <p>The vault is the <em>unit of content</em> cyberbaser operates on. It's the durable artifact; cyberbaser is the delivery mechanism. If cyberbaser disappears, the vault still opens and works.</p>
+  </div>
+  <div class="cb-def-how">
+    <span class="cb-def-label">How cyberbaser uses it</span>
+    <p>The cyberbase vault lives in its own repo (<code>cybersader/cyberbase</code>). Cyberbaser reads from it (a submodule or a build-time clone) and publishes it. The vault must stay a fully functional Obsidian vault, independent of cyberbaser.</p>
+  </div>
+</div>
+
+<div class="cb-tree cb-tree-fig" role="img" aria-label="A self-contained markdown vault: a folder of .md files plus an .obsidian config directory, which opens in Obsidian with no cyberbaser-specific files.">
+  <div class="cb-tree-hd"><span class="cb-tree-fold">▾</span> cyberbase/<span class="cb-tree-tag">Obsidian vault</span></div>
+  <div class="cb-tree-row"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>home.md</div>
+  <div class="cb-tree-row"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>getting-started.md<span class="cb-tree-tag">wikilinks + props</span></div>
+  <div class="cb-tree-row"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>composting.md</div>
+  <div class="cb-tree-hd cb-tree-sub"><span class="cb-tree-fold">▾</span> .obsidian/<span class="cb-tree-note">config travels here</span></div>
+  <div class="cb-tree-row cb-tree-cfg"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>app.json</div>
+  <div class="cb-tree-row cb-tree-cfg"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>graph.json</div>
+  <div class="cb-tree-row cb-tree-cfg"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M1.8 4.2h3.8l1.3 1.5h7.3v8H1.8z"/></svg>plugins/</div>
+  <div class="cb-tree-hd cb-tree-sub"><span class="cb-tree-fold">▸</span> archive/</div>
+  <p class="cb-tree-foot">Opens in Obsidian with zero cyberbaser. The folder <em>is</em> the knowledge base.</p>
+</div>
+
+<a class="cb-deeper" href="/cyberbaser/getting-started/">Go deeper: how a vault becomes a site →</a>
+
+---
+
+## Single Source of Truth (SSOT)
+
+<div class="cb-def">
+  <div class="cb-def-what">
+    <span class="cb-def-label">What</span>
+    <p>The principle that exactly one authoritative place exists for any given piece of content. Every other representation is derived.</p>
+  </div>
+  <div class="cb-def-why">
+    <span class="cb-def-label">Why it matters</span>
+    <p>Prevents drift between representations, makes conflict resolution tractable (one side always wins), and keeps the mental model of the system simple.</p>
+  </div>
+  <div class="cb-def-how">
+    <span class="cb-def-label">How cyberbaser uses it</span>
+    <p><code>cybersader/cyberbase</code> is the SSOT. The web wiki is derived at build time. The Obsidian vault (local files on the maintainer's machine) is a read-view of the repo's current <code>main</code>. The Web CMS produces edits against the repo; it holds no state of its own.</p>
+  </div>
+</div>
+
+<div class="cb-ssot" role="img" aria-label="One authoritative source, the git repo of markdown files, with three derived views: the published web wiki, the Obsidian read-view, and the stateless Web CMS that commits back to the repo.">
+  <div class="cb-ssot-core">
+    <div class="cb-hub-cap">authoritative</div>
+    <div class="cb-tree">
+      <div class="cb-tree-hd"><span class="cb-tree-fold">▾</span> cyberbase · main<span class="cb-tree-tag">git</span></div>
+      <div class="cb-tree-row"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>problem.md</div>
+      <div class="cb-tree-row"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>architecture.md</div>
+      <div class="cb-tree-row"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>README.md</div>
+    </div>
+    <div class="cb-ssot-src">one source of truth</div>
+  </div>
+  <div class="cb-ssot-spokes">
+    <div class="cb-ssot-spoke">
+      <span class="cb-ssot-arr" aria-hidden="true">→</span>
+      <div class="cb-mock cb-mock-sm">
+        <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">wiki.example.org/problem</span><span class="cb-mock-live">● Published</span></div>
+        <div class="cb-mock-body"><div class="cb-mock-h">The Problem</div><div class="cb-mock-line"></div><div class="cb-mock-line cb-mock-line-85"></div></div>
+      </div>
+      <span class="cb-ssot-lab">Web wiki · built from the repo</span>
+    </div>
+    <div class="cb-ssot-spoke">
+      <span class="cb-ssot-arr" aria-hidden="true">→</span>
+      <div class="cb-tree cb-tree-mini">
+        <div class="cb-tree-hd"><span class="cb-tree-fold">▾</span> vault · main</div>
+        <div class="cb-tree-row"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>problem.md</div>
+      </div>
+      <span class="cb-ssot-lab">Obsidian · read-view of main</span>
+    </div>
+    <div class="cb-ssot-spoke">
+      <span class="cb-ssot-arr cb-ssot-arr-two" aria-hidden="true">⇄</span>
+      <div class="cb-mock cb-mock-sm">
+        <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">edit · Web CMS</span></div>
+        <div class="cb-mock-body"><div class="cb-mock-edit"><span class="cb-mock-edit-txt">## The Problem<span class="cb-mock-caret"></span></span><span class="cb-mock-save">Save</span></div></div>
+      </div>
+      <span class="cb-ssot-lab">Web CMS · holds no state, commits to the repo</span>
+    </div>
+  </div>
+</div>
+
+<p class="cb-fig-cap">One authoritative source. The wiki, the Obsidian view, and the Web CMS are all built from it. Change the repo and every view follows.</p>
+
+<a class="cb-deeper" href="/cyberbaser/research/source-of-truth/">Go deeper: why git is the source of truth (and the alternatives) →</a>
 
 ---
 
@@ -28,6 +139,32 @@ These are the primitives. Everything in [Design](/cyberbaser/design/) reduces to
   </div>
 </div>
 
+<div class="cb-glance" role="img" aria-label="On the left, a markdown source with a wikilink token. On the right, the same paragraph published, with the wikilink rendered as a real link. The connector resolves by title, not file path.">
+  <figure class="cb-glance-panel">
+    <div class="cb-mock cb-mock-sm">
+      <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">composting-basics.md</span></div>
+      <div class="cb-mock-body"><div class="cb-mock-textline">A balanced pile is about 2 parts brown to 1 part green.</div><div class="cb-mock-textline">See <span class="cb-srctoken">&#91;&#91;Composting Basics|composting&#93;&#93;</span> for the full method.</div></div>
+    </div>
+    <figcaption class="cb-glance-cap">raw token you type</figcaption>
+  </figure>
+  <div class="cb-glance-link" aria-hidden="true">
+    <span class="cb-glance-lab">match by</span>
+    <span class="cb-flowline cb-flowline-r"></span>
+    <span class="cb-glance-lab cb-glance-lab-g">title, not path</span>
+  </div>
+  <figure class="cb-glance-panel">
+    <div class="cb-mock cb-mock-sm">
+      <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">wiki.example.org/guides/composting</span><span class="cb-mock-live">● Published</span></div>
+      <div class="cb-mock-body"><div class="cb-mock-textline">A balanced pile is about 2 parts brown to 1 part green.</div><div class="cb-mock-textline">See <span class="cb-linkchip">composting</span> for the full method.</div></div>
+    </div>
+    <figcaption class="cb-glance-cap">one resolved link, by identity</figcaption>
+  </figure>
+</div>
+
+<p class="cb-fig-cap">Move the file? The link still works, because it never pointed at a path.</p>
+
+<a class="cb-deeper" href="/cyberbaser/design/translation-layer/">Go deeper: wikilinks in the translation layer (Tier 1 fidelity) →</a>
+
 ---
 
 ## Backlink
@@ -43,9 +180,30 @@ These are the primitives. Everything in [Design](/cyberbaser/design/) reduces to
   </div>
   <div class="cb-def-how">
     <span class="cb-def-label">How cyberbaser uses it</span>
-    <p>Backlinks must be computed at build time (scanning the full vault) and rendered in a standard position on every page — bottom of content, or in a right-sidebar panel. The `starlight-site-graph` plugin gets us partway; the rest is a translation-layer responsibility.</p>
+    <p>Backlinks must be computed at build time (scanning the full vault) and rendered in a standard position on every page, either at the bottom of content or in a right-sidebar panel. The <code>starlight-site-graph</code> plugin gets us partway; the rest is a translation-layer responsibility.</p>
   </div>
 </div>
+
+<div class="cb-mock cb-backlinks-fig" role="img" aria-label="A published page with a Linked mentions panel listing three pages that wikilink to it, auto-computed at build time.">
+  <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">wiki.example.org/concepts/wikilinks</span><span class="cb-mock-live">● Published</span></div>
+  <div class="cb-mock-body">
+    <div class="cb-mock-h">Wikilinks</div>
+    <div class="cb-mock-line"></div>
+    <div class="cb-mock-line cb-mock-line-85"></div>
+    <div class="cb-backlinks">
+      <div class="cb-bl-hd"><span>Linked mentions</span><span class="cb-tree-tag">3 · auto-computed</span></div>
+      <div class="cb-tree-row"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>Translation layer</div>
+      <div class="cb-bl-snip">"…round-trips every &#91;&#91;wikilink&#93;&#93; back to the vault…"</div>
+      <div class="cb-tree-row"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>Contribution workflows</div>
+      <div class="cb-bl-snip">"…an edit to &#91;&#91;Wikilinks&#93;&#93; flows through review…"</div>
+      <div class="cb-tree-row"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>Architecture</div>
+      <div class="cb-bl-snip">"…the graph from &#91;&#91;wikilinks&#93;&#93; is built at…"</div>
+    </div>
+    <p class="cb-bl-note">Nobody maintains this list. It's the <code>&#91;&#91;wikilink&#93;&#93;</code> graph, inverted at build time.</p>
+  </div>
+</div>
+
+<a class="cb-deeper" href="/cyberbaser/design/translation-layer/">Go deeper: how the graph is built →</a>
 
 ---
 
@@ -58,32 +216,48 @@ These are the primitives. Everything in [Design](/cyberbaser/design/) reduces to
   </div>
   <div class="cb-def-why">
     <span class="cb-def-label">Why it matters</span>
-    <p>This is the single hardest and most load-bearing concept in the project. Get this right and the three contribution paths compose cleanly; get it wrong and the entire "round-trip editability" principle is an aspiration instead of a property. See <a href="/cyberbaser/design/translation-layer/">Design · Translation Layer</a> for the deep treatment.</p>
+    <p>This is the single hardest and most load-bearing concept in the project. Get this right and the contribution paths compose cleanly; get it wrong and "round-trip editability" is an aspiration instead of a property.</p>
   </div>
   <div class="cb-def-how">
     <span class="cb-def-label">How cyberbaser uses it</span>
-    <p>A tiered feature list: Tier 1 (full support, must round-trip), Tier 2 (partial support, best-effort), Tier 3 (not supported, documented workaround). Each Tier 1 feature gets a fixture page + expected output + round-trip correctness snapshot.</p>
+    <p>A tiered feature list: Tier 1 (full support, must round-trip), Tier 2 (partial, best-effort), Tier 3 (not supported, documented workaround). Each Tier 1 feature gets a fixture page + expected output + a round-trip correctness snapshot.</p>
   </div>
 </div>
 
----
-
-## Open Authoring
-
-<div class="cb-def">
-  <div class="cb-def-what">
-    <span class="cb-def-label">What</span>
-    <p>A CMS pattern (popularized by Decap/Netlify CMS) where an unauthenticated or lightly-authenticated user can propose changes via a forked-PR workflow, without needing direct commit access to the source repo.</p>
+<div class="cb-xlate" role="img" aria-label="Vault markdown flows through a remark and rehype pipeline to a published page; edits return clean to the source. Below, a three-tier scale of what survives the round-trip.">
+  <div class="cb-xlate-row">
+    <div class="cb-xlate-cell">
+      <div class="cb-xlate-lab">vault markdown</div>
+      <div class="cb-xlate-src"><span class="cb-xlate-l"># Composting</span><span class="cb-xlate-l">&gt; [!note]+ Ratio</span><span class="cb-xlate-l">&#91;&#91;Brown vs green|browns&#93;&#93;</span><span class="cb-xlate-l">!&#91;&#91;pile.png&#93;&#93;</span></div>
+    </div>
+    <div class="cb-glance-link cb-xlate-conn" aria-hidden="true"><span class="cb-glance-lab">publish</span><span class="cb-flowline cb-flowline-r"></span><span class="cb-glance-lab cb-glance-lab-g">edit returns clean</span></div>
+    <div class="cb-xlate-cell">
+      <div class="cb-xlate-lab">published page</div>
+      <div class="cb-mock cb-mock-sm">
+        <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">wiki/composting</span><span class="cb-mock-live">● Pub</span></div>
+        <div class="cb-mock-body"><div class="cb-mock-h">Composting</div><div class="cb-mock-callout"><span class="cb-mock-callout-i">i</span> Ratio</div><div class="cb-mock-line cb-mock-line-85"></div></div>
+      </div>
+    </div>
   </div>
-  <div class="cb-def-why">
-    <span class="cb-def-label">Why it matters</span>
-    <p>Removes the biggest contribution barrier. Without Open Authoring, "contributors shouldn't need git" is impossible — you'd either need direct write access (which is a security problem) or contributors would have to fork manually (which is exactly the friction we're trying to eliminate).</p>
+  <div class="cb-xlate-flow">
+    <span class="cb-xlate-lab cb-xlate-flow-lab">remark → rehype</span>
+    <span class="cb-xlate-plug">mask tokens</span>
+    <span class="cb-xlate-plug">remark-wiki-link</span>
+    <span class="cb-xlate-plug">remark-obsidian-callout</span>
+    <span class="cb-xlate-plug">rehype-mermaid</span>
+    <span class="cb-xlate-plug cb-xlate-plug-g">restore tokens</span>
   </div>
-  <div class="cb-def-how">
-    <span class="cb-def-label">How cyberbaser uses it</span>
-    <p>Primary contribution path for the Web CMS entry point. Decap handles the fork-and-PR dance; an OAuth proxy (Cloudflare Pages Function) handles the GitHub auth handshake.</p>
+  <div class="cb-xlate-tierhd">what survives the round-trip</div>
+  <div class="cb-xlate-tiers">
+    <div class="cb-xlate-tier cb-dial-open"><div class="cb-xlate-tier-t">Tier 1 · full</div><div class="cb-xlate-tier-d">wikilinks, callouts, embeds, code, math, mermaid, tables. Round-trips ✓</div></div>
+    <div class="cb-xlate-tier cb-dial-mid"><div class="cb-xlate-tier-t">Tier 2 · partial</div><div class="cb-xlate-tier-d">simple Dataview, block refs, aliases, frontmatter. Never lossy</div></div>
+    <div class="cb-xlate-tier cb-dial-locked"><div class="cb-xlate-tier-t">Tier 3 · none</div><div class="cb-xlate-tier-d">Canvas, DataviewJS, graph. Documented workaround</div></div>
   </div>
 </div>
+
+<p class="cb-fig-cap">One pipeline, three artifacts. Tier 1 is the contract: an edit on the right must return to the left byte-for-byte the same.</p>
+
+<a class="cb-deeper" href="/cyberbaser/design/translation-layer/">Go deeper: the full tier list + per-feature rules →</a>
 
 ---
 
@@ -92,17 +266,93 @@ These are the primitives. Everything in [Design](/cyberbaser/design/) reduces to
 <div class="cb-def cb-def-hard">
   <div class="cb-def-what">
     <span class="cb-def-label">What</span>
-    <p>The property that a contributor can edit the same page in Obsidian, in the Web CMS, or on GitHub, and the other surfaces see the change without corruption. A → B → A === A.</p>
+    <p>The property that a contributor can edit the same page in Obsidian, in the Web CMS, or on GitHub, and the other surfaces see the change without corruption.</p>
   </div>
   <div class="cb-def-why">
     <span class="cb-def-label">Why it matters</span>
-    <p>Without this, contributors get locked into whichever surface they started with, and the whole "three independent paths" vision collapses. It's also the only way the maintainer can keep using Obsidian as their primary authoring tool without dreading web contributions.</p>
+    <p>Without this, contributors get locked into whichever surface they started with, and the whole "three independent paths" vision collapses. It's also the only way the maintainer can keep using Obsidian as their primary tool without dreading web contributions.</p>
   </div>
   <div class="cb-def-how">
     <span class="cb-def-label">How cyberbaser uses it</span>
-    <p>Constrains every translation-layer decision. No lossy transforms. No "CMS-specific" schema that's different from the vault schema. Every Tier 1 feature gets a round-trip test fixture.</p>
+    <p>Constrains every translation-layer decision. No lossy transforms. No "CMS-specific" schema that differs from the vault schema. Every Tier 1 feature gets a round-trip test fixture.</p>
   </div>
 </div>
+
+<p class="cb-fig-cap">Edit in any surface. The file the other two read back is byte-for-byte the same.</p>
+
+<div class="cb-trip" role="img" aria-label="The same markdown shown in three surfaces, Obsidian, the Web CMS, and GitHub. The callout body is identical in all three.">
+  <div class="cb-mock cb-mock-sm">
+    <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">vault/notes/composting.md</span></div>
+    <div class="cb-mock-body"><div class="cb-mock-callout"><span class="cb-mock-callout-i">i</span> Turn the pile about once a week.</div></div>
+  </div>
+  <div class="cb-mock cb-mock-sm">
+    <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">wiki.example.org/composting</span><span class="cb-mock-live">● Pub</span></div>
+    <div class="cb-mock-body"><div class="cb-mock-callout"><span class="cb-mock-callout-i">i</span> Turn the pile about once a week.</div></div>
+  </div>
+  <div class="cb-mock cb-mock-sm">
+    <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">cybersader/cyberbase ▸ composting.md</span></div>
+    <div class="cb-mock-body"><div class="cb-mock-callout"><span class="cb-mock-callout-i">i</span> Turn the pile about once a week.</div></div>
+  </div>
+</div>
+
+<div class="cb-trip-tags" aria-hidden="true"><span>Obsidian · edit here ↺</span><span>Web CMS · edit here ↺</span><span>GitHub · edit here ↺</span></div>
+
+<div class="cb-trip-rail"><span class="cb-trip-eqx">A → B → A <span class="cb-trip-eq">===</span> A</span><span class="cb-trip-note">same .md source, no drift, no corruption</span></div>
+
+<a class="cb-deeper" href="/cyberbaser/research/v1-architecture/#blockmarkdown-fidelity--the-keystone-rd">Go deeper: the round-trip keystone spike →</a>
+
+---
+
+## Open Authoring
+
+<div class="cb-def">
+  <div class="cb-def-what">
+    <span class="cb-def-label">What</span>
+    <p>A CMS pattern (popularized by Decap/Netlify CMS, continued by Sveltia) where an unauthenticated or lightly-authenticated user can propose changes via a forked-PR workflow, without needing direct commit access to the source repo.</p>
+  </div>
+  <div class="cb-def-why">
+    <span class="cb-def-label">Why it matters</span>
+    <p>Removes the biggest contribution barrier. Without Open Authoring, "contributors shouldn't need git" is impossible: you'd either need direct write access (a security problem) or contributors would have to fork manually (exactly the friction we're eliminating).</p>
+  </div>
+  <div class="cb-def-how">
+    <span class="cb-def-label">How cyberbaser uses it</span>
+    <p>Primary contribution path for the Web CMS entry point. Decap (or Sveltia) handles the fork-and-PR dance; a small OAuth proxy handles the auth handshake. The contributor never sees git.</p>
+  </div>
+</div>
+
+<div class="cb-openauth" role="img" aria-label="A reader edits a page with no account and no git. Behind the scenes that becomes a fork, branch, commit, and pull request. The maintainer reviews the resulting diff.">
+  <div class="cb-oa-cell">
+    <div class="cb-mock cb-mock-sm">
+      <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">cyberbase.org/composting</span></div>
+      <div class="cb-mock-body"><div class="cb-mock-h">Composting</div><div class="cb-mock-edit"><span class="cb-mock-edit-txt">Turn the pile about once a week.<span class="cb-mock-caret"></span></span><span class="cb-mock-save">Suggest edit</span></div></div>
+    </div>
+    <span class="cb-oa-lab">You edit. No account, no git.</span>
+  </div>
+  <span class="cb-flowline cb-flowline-r cb-oa-conn" aria-hidden="true"></span>
+  <div class="cb-oa-cell">
+    <div class="cb-ghflow">
+      <div class="cb-ghflow-hd">generated for you</div>
+      <div class="cb-ghflow-sub">you never see this</div>
+      <div class="cb-ghflow-row"><span class="cb-ghflow-k">fork</span> cyberbase</div>
+      <div class="cb-ghflow-row"><span class="cb-ghflow-k">branch</span> patch-1</div>
+      <div class="cb-ghflow-row"><span class="cb-ghflow-k">commit</span> "fix composting"</div>
+      <div class="cb-ghflow-row"><span class="cb-ghflow-k">open</span> pull request</div>
+      <span class="cb-ghflow-tag">automatic</span>
+    </div>
+    <span class="cb-oa-lab">It becomes a pull request.</span>
+  </div>
+  <span class="cb-flowline cb-flowline-r cb-oa-conn" aria-hidden="true"></span>
+  <div class="cb-oa-cell">
+    <div class="cb-review">
+      <div class="cb-review-hd"><span class="cb-review-av">j</span><span class="cb-review-who">jordan <span class="cb-review-trust">trust: new</span></span><span class="cb-review-status">wants to merge</span></div>
+      <div class="cb-review-diff"><div class="cb-diff cb-diff-rm">- Turn the pile every day</div><div class="cb-diff cb-diff-add">+ Turn the pile about once a week.</div></div>
+      <div class="cb-review-actions"><span class="cb-review-btn cb-review-approve">✓ Approve</span><span class="cb-review-btn cb-review-reject">Request changes</span></div>
+    </div>
+    <span class="cb-oa-lab">Maintainer reviews.</span>
+  </div>
+</div>
+
+<a class="cb-deeper" href="/cyberbaser/design/contribution-workflows/">Go deeper: the contribution workflows →</a>
 
 ---
 
@@ -119,99 +369,37 @@ These are the primitives. Everything in [Design](/cyberbaser/design/) reduces to
   </div>
   <div class="cb-def-how">
     <span class="cb-def-label">How cyberbaser uses it</span>
-    <p>Open question for now — frontmatter slug? permanent hash? simple title-slug with redirects on rename? See <a href="/cyberbaser/reference/open-questions/">Open Questions</a>.</p>
+    <p>Open question for now: frontmatter slug? permanent hash? simple title-slug with redirects on rename? See <a href="/cyberbaser/reference/open-questions/">Open Questions</a>.</p>
   </div>
 </div>
 
----
+<div class="cb-url-lock" role="img" aria-label="A browser URL bar that stays identical while the underlying file moves to a different folder in the vault.">
+  <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">wiki.example.org/guides/composting</span><span class="cb-mock-live">URL unchanged</span></div>
+</div>
+<p class="cb-fig-cap cb-fig-cap-tight">same address before and after the move ↓</p>
 
-## Single Source of Truth (SSOT)
-
-<div class="cb-def">
-  <div class="cb-def-what">
-    <span class="cb-def-label">What</span>
-    <p>The principle that exactly one authoritative place exists for any given piece of content. Every other representation is derived.</p>
-  </div>
-  <div class="cb-def-why">
-    <span class="cb-def-label">Why it matters</span>
-    <p>Prevents drift between representations, makes conflict resolution tractable (one side always wins), and keeps the mental model of the system simple.</p>
-  </div>
-  <div class="cb-def-how">
-    <span class="cb-def-label">How cyberbaser uses it</span>
-    <p><code>cybersader/cyberbase</code> is the SSOT. The web wiki is derived at build time. The Obsidian vault (as local files on the maintainer's machine) is a read-view of the repo's current `main` branch. The Web CMS produces edits against the repo; it doesn't hold any state.</p>
-  </div>
+<div class="cb-glance">
+  <figure class="cb-glance-panel">
+    <div class="cb-tree cb-tree-mini">
+      <div class="cb-tree-hd"><span class="cb-tree-fold">▾</span> vault</div>
+      <div class="cb-tree-hd cb-tree-sub"><span class="cb-tree-fold">▾</span> notes</div>
+      <div class="cb-tree-row cb-tree-cfg"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>inbox.md</div>
+      <div class="cb-tree-row cb-tree-cfg cb-tree-hot"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>composting.md</div>
+    </div>
+    <figcaption class="cb-glance-cap">Before · /notes/composting.md</figcaption>
+  </figure>
+  <div class="cb-glance-link" aria-hidden="true"><span class="cb-glance-lab">vault</span><span class="cb-flowline cb-flowline-r"></span><span class="cb-glance-lab cb-glance-lab-g">reorganized</span></div>
+  <figure class="cb-glance-panel">
+    <div class="cb-tree cb-tree-mini">
+      <div class="cb-tree-hd"><span class="cb-tree-fold">▾</span> vault</div>
+      <div class="cb-tree-hd cb-tree-sub"><span class="cb-tree-fold">▾</span> guides</div>
+      <div class="cb-tree-row cb-tree-cfg cb-tree-hot"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>composting.md<span class="cb-tree-tag">moved</span></div>
+      <div class="cb-tree-row cb-tree-cfg"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>watering.md</div>
+    </div>
+    <figcaption class="cb-glance-cap">After · /guides/composting.md</figcaption>
+  </figure>
 </div>
 
----
+<p class="cb-fig-cap">The file moved folders. The link did not break.</p>
 
-## Vault
-
-<div class="cb-def">
-  <div class="cb-def-what">
-    <span class="cb-def-label">What</span>
-    <p>In Obsidian parlance, a folder of markdown files + a `.obsidian/` config directory that behaves as a self-contained knowledge base.</p>
-  </div>
-  <div class="cb-def-why">
-    <span class="cb-def-label">Why it matters</span>
-    <p>The vault is the <em>unit of content</em> cyberbaser operates on. It's the durable artifact; cyberbaser is the delivery mechanism.</p>
-  </div>
-  <div class="cb-def-how">
-    <span class="cb-def-label">How cyberbaser uses it</span>
-    <p>The cyberbase vault lives in its own GitHub repo (<code>cybersader/cyberbase</code>). Cyberbaser reads from it (possibly as a git submodule, possibly as a build-time clone) and publishes it. The vault must remain a fully functional Obsidian vault independent of cyberbaser.</p>
-  </div>
-</div>
-
-<style>{`
-  .cb-def {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 0.9rem;
-    padding: 1.4rem;
-    background: var(--sl-color-gray-6);
-    border: 1px solid var(--sl-color-gray-4);
-    border-radius: 10px;
-    margin: 1.5rem 0 2rem;
-    position: relative;
-  }
-  .cb-def::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 2px;
-    background: var(--cb-gradient-primary-soft);
-    border-radius: 10px 10px 0 0;
-    opacity: 0.5;
-  }
-  .cb-def-hard::before {
-    opacity: 1;
-    height: 3px;
-  }
-  .cb-def > div {
-    display: grid;
-    grid-template-columns: 110px 1fr;
-    gap: 0.8rem;
-    align-items: start;
-  }
-  .cb-def-label {
-    font-size: 0.65rem;
-    font-weight: 700;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--sl-color-gray-3);
-    padding-top: 0.25rem;
-  }
-  .cb-def-what .cb-def-label { color: var(--sl-color-gray-2); }
-  .cb-def-why .cb-def-label { color: var(--sl-color-accent); }
-  .cb-def-how .cb-def-label { color: var(--sl-color-gray-1); }
-  .cb-def p {
-    margin: 0;
-    color: var(--sl-color-gray-1);
-    line-height: 1.6;
-  }
-  @media (max-width: 640px) {
-    .cb-def > div {
-      grid-template-columns: 1fr;
-      gap: 0.3rem;
-    }
-  }
-`}</style>
+<a class="cb-deeper" href="/cyberbaser/reference/open-questions/">Go deeper: the open question of how URLs stay stable →</a>

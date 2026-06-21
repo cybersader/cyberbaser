@@ -46,6 +46,37 @@ test.describe('Layout regression: equal-height components', () => {
     expect(heights.length).toBe(2);
     expect(Math.abs(heights[0] - heights[1])).toBeLessThanOrEqual(1);
   });
+
+  const equalGroups: [string, string][] = [
+    ['primitives nav chips', '.cb-navchip'],
+    ['translation-layer tiers', '.cb-xlate-tier'],
+    ['round-trip surfaces', '.cb-trip > .cb-mock'],
+  ];
+  for (const [name, sel] of equalGroups) {
+    test(`${name} are equal height`, async ({ page }) => {
+      await page.goto(`${BASE}/concepts/primitives/`);
+      const loc = page.locator(sel);
+      await expect(loc.first()).toBeVisible();
+      const hs = await loc.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height)));
+      expect(hs.length).toBeGreaterThan(1);
+      for (const h of hs) expect(Math.abs(h - hs[0])).toBeLessThanOrEqual(1);
+    });
+  }
+});
+
+test.describe('Layout regression: no horizontal overflow on diagram pages', () => {
+  const pages = ['/concepts/primitives/', '/concepts/problem/', '/concepts/ecosystem/'];
+  const widths = [360, 768, 1280];
+  for (const path of pages) {
+    for (const w of widths) {
+      test(`${path} has no horizontal scroll @${w}px`, async ({ page }) => {
+        await page.setViewportSize({ width: w, height: 1000 });
+        await page.goto(`${BASE}${path}`);
+        const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+        expect(overflow).toBeLessThanOrEqual(2);
+      });
+    }
+  }
 });
 
 test.describe('Layout regression: no Starlight margin-top leak in components', () => {
@@ -60,6 +91,13 @@ test.describe('Layout regression: no Starlight margin-top leak in components', (
     ['/concepts/ecosystem/', '.cb-tools'],
     ['/concepts/ecosystem/', '.cb-tool'],
     ['/concepts/ecosystem/', '.cb-tool-hd'],
+    ['/concepts/primitives/', '.cb-def'],
+    ['/concepts/primitives/', '.cb-grid-nav'],
+    ['/concepts/primitives/', '.cb-ssot'],
+    ['/concepts/primitives/', '.cb-xlate'],
+    ['/concepts/primitives/', '.cb-xlate-tiers'],
+    ['/concepts/primitives/', '.cb-trip'],
+    ['/concepts/primitives/', '.cb-openauth'],
     ['/design/architecture/', '.cb-hub'],
     ['/design/architecture/', '.cb-step'],
     ['/design/architecture/', '.cb-glance'],

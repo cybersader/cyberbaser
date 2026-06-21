@@ -77,9 +77,10 @@ test.describe('Rich content fixtures (custom components)', () => {
     await expect(page.locator('.cb-triangle-svg')).toBeVisible();
   });
 
-  test('architecture page has the arch diagram', async ({ page }) => {
+  test('architecture page has the hub + glance diagrams', async ({ page }) => {
     await page.goto(`${BASE}/design/architecture/`);
-    await expect(page.locator('.cb-arch-svg')).toBeVisible();
+    await expect(page.locator('.cb-hub')).toBeVisible();
+    await expect(page.locator('.cb-glance')).toBeVisible();
   });
 
   test('ecosystem page has layered stack', async ({ page }) => {
