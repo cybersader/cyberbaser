@@ -102,10 +102,13 @@ Any design decision anywhere in the project should be checked against the transl
 
 ## Starlight component layout (read before building any multi-column visual)
 
-The recurring "the left column is bigger / a component overflows the content width" bug in Starlight comes from two flexbox defaults. Fix it by default, don't rediscover it:
+Custom flex/grid components inside `.sl-markdown-content` keep coming out lopsided ("the left box is taller," "a column overflows"). Three causes, fix them by default instead of rediscovering them:
 
-- **Flex children default to `min-width: auto`**, so they refuse to shrink below their content's intrinsic width. A long URL, a code span, or a wide mockup then forces the whole row wider and throws off the balance. **Put `min-width: 0` on every flex child** (and `overflow: hidden; text-overflow: ellipsis; white-space: nowrap` on ones holding long unbreakable text like URLs).
-- **Never cap one column's `max-width` while leaving its sibling uncapped** — that is the literal cause of "left is bigger." For a balanced two-column block, use `display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)` (the `minmax(0, …)` is what lets the columns actually shrink) and stack to `1fr` under ~640px. Reach for grid over flex whenever the two columns should be equal.
+1. **Starlight injects `margin-top` onto consecutive flow elements; this is the one that "comes back like the plague."** That margin lands on the children of your flex/grid containers, and the first child is spared, so the 2nd and 3rd items get shoved down and equal-height breaks. Neutralize it on the container's children: `.sl-markdown-content :is(<your-container-classes>) > * { margin-top: 0; }` (class-level specificity beats Starlight's injection), then let the component space itself with `gap` and `padding`. See the `cb-dial-bar` / `cb-step` block in `brand.css` for the live example.
+2. **Flex children default to `min-width: auto`** and refuse to shrink below their content. A long URL or wide mockup then forces the row wider. Put `min-width: 0` on every flex child, plus `overflow: hidden; text-overflow: ellipsis; white-space: nowrap` for long unbreakable text.
+3. **Never cap one column's `max-width` while leaving its sibling uncapped.** For balanced columns use `display: grid; grid-template-columns: repeat(N, minmax(0, 1fr))` (the `minmax(0, …)` is what lets them actually shrink) and stack to `1fr` under ~640px.
+
+When unsure, verify instead of guessing: serve the built site and measure the boxes headless with `getBoundingClientRect` (that is how the trust dial was pinned down), rather than eyeballing a screenshot.
 
 ## Don't
 

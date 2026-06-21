@@ -1457,9 +1457,14 @@ main .content-panel:has(+ .content-panel .cb-hero) {
 
 /* ── Trust dial (Problem page) ── */
 .sl-markdown-content .cb-dial { margin: 1.3rem 0; }
-.sl-markdown-content .cb-dial-bar { display: flex; gap: 0.45rem; }
+.sl-markdown-content .cb-dial-bar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 0.45rem;
+}
 .sl-markdown-content .cb-dial-seg {
-  flex: 1 1 0;
+  min-width: 0;
   padding: 0.7rem 0.8rem;
   border-radius: 10px;
   border: 1px solid;
@@ -1480,7 +1485,24 @@ main .content-panel:has(+ .content-panel .cb-hero) {
 }
 .sl-markdown-content .cb-dial-cap { font-size: 0.82rem; color: var(--sl-color-gray-2); margin-top: 0.55rem; }
 @media (max-width: 640px) {
-  .sl-markdown-content .cb-dial-bar { flex-direction: column; }
+  .sl-markdown-content .cb-dial-bar { grid-template-columns: 1fr; }
+}
+
+/* ── THE fix for the recurring "left box is taller / misaligned" bug ──
+   Starlight auto-spaces flow content by adding margin-top to consecutive elements
+   inside .sl-markdown-content. On the children of our flex/grid components that
+   injected margin lands on flex/grid items and breaks equal-height + alignment
+   (only the 1st child is spared, so the rest get shoved down). Neutralize the
+   injected top-margin on the direct children of our flex/grid containers; the
+   components space themselves with gap and padding. Specificity (0,2,0) beats
+   Starlight's (0,1,0) injection. */
+.sl-markdown-content :is(
+  .cb-dial-bar, .cb-dial-seg, .cb-hub, .cb-hub-core, .cb-hub-col,
+  .cb-glance, .cb-glance-link, .cb-steps, .cb-step, .cb-step-meta,
+  .cb-mock-bar, .cb-review-hd, .cb-review-actions, .cb-flow,
+  .cb-stack, .cb-stack-row
+) > * {
+  margin-top: 0;
 }
 
 /* ── Step-by-step contribution walkthrough ── */

@@ -113,8 +113,8 @@ Three constraints fall out of the principles. Each existing solution fails at le
 
 The deepest part of cyberbaser isn't the publisher, or even the translation layer. It's *how contribution is governed*. The web is adversarial, so the usual reflex is to demand identity up front (an account, an email, KYC) to keep bad actors out. That reflex is mostly wrong here, for two reasons:
 
-- **Identity gates are mostly theater.** Requiring an email to "reduce abuse" doesn't — email aliasing is trivial. A GitHub-account requirement mainly filters *out the person you want* (the domain expert who spotted the error) while barely slowing a determined adversary. Friction on the front door buys very little safety.
-- **The real question isn't "who are you?" — it's "can this hurt anything before a human approves it?"** If every contribution lands in a **moderation queue** and nothing goes live until it's reviewed, an anonymous edit *cannot* hurt the content. Moderation, not identity, is the load-bearing safety mechanism.
+- **Identity gates are mostly theater.** Requiring an email to "reduce abuse" doesn't work; email aliasing is trivial. A GitHub-account requirement mainly filters *out the person you want* (the domain expert who spotted the error) while barely slowing a determined adversary. Friction on the front door buys very little safety.
+- **The real question isn't "who are you?" but "can this hurt anything before a human approves it?"** If every contribution lands in a **moderation queue** and nothing goes live until it's reviewed, an anonymous edit *cannot* hurt the content. Moderation, not identity, is the load-bearing safety mechanism.
 
 So the model is simple: **the maintainer controls the trust curve.** Like [Discourse's trust levels](https://blog.discourse.org/2018/06/understanding-discourse-trust-levels/), a contributor earns capability as they prove themselves, and you choose how steep that curve is and what each level requires:
 
