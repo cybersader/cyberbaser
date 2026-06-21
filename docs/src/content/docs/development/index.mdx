@@ -40,9 +40,8 @@ bun run test:e2e:ui      # Playwright UI mode
 
 ## Deploy
 
-Currently: dev-only. Push to Cloudflare Pages is wired via `.github/workflows/deploy.yml` but the Pages project was deleted; the workflow will fail until a new project is created or the workflow is updated. **This is intentional during Phase R** — no public deploy until the content is ready.
+Currently: dev-only. Deploy is wired to **GitHub Pages** via `.github/workflows/deploy.yml` (it builds with Bun, then uses `actions/upload-pages-artifact` and `actions/deploy-pages`). It's held during Phase R: no public deploy until the content is ready. GitHub Pages is the current target only; the renderer and host are swappable, and self-hosting (for example behind Forgejo) is the preferred path for anything that needs identity. Cloudflare, if used at all, is an edge layer (CDN, WAF, rate-limiting), not the host.
 
-When deploying:
-1. Create a new Cloudflare Pages project named `cyberbaser`
-2. Set `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` in GitHub Actions secrets
-3. Push to `main` — the workflow deploys automatically
+When you're ready to publish:
+1. Enable GitHub Pages for the repo (Settings → Pages → Source: GitHub Actions).
+2. Push to `main`. The workflow builds the site and deploys it via `actions/deploy-pages`. No extra secrets are required.

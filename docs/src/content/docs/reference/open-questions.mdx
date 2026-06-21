@@ -75,9 +75,9 @@ tags: [research]
 
 **Asked:** 2026-04-11
 **Source:** [Architecture](/cyberbaser/design/architecture/)
-**Why it matters:** Decap's Open Authoring needs an OAuth proxy so the GitHub OAuth client secret isn't exposed in the browser. The proxy is a few lines of code but needs a hosting target.
+**Why it matters:** Decap's Open Authoring needs an OAuth proxy so the GitHub OAuth client secret isn't exposed in the browser (this is specific to the GitHub-backed Decap path; other paths in the trust-curve + moderation model don't require a contributor account). The proxy is a few lines of code but needs a hosting target.
 **Blocks:** Web CMS setup in Phase 2.
-**Status:** probably Cloudflare Pages Functions (matches sibling pattern); needs verification that Functions supports the redirect dance.
+**Status:** undecided. A self-hosted endpoint (for example alongside Forgejo) is preferred; an edge function is one fallback. Cloudflare is edge-only (CDN/WAF/rate-limit), not a host.
 
 ---
 

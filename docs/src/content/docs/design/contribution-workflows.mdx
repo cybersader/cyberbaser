@@ -11,7 +11,7 @@ Cyberbaser promises three contribution paths. Every path must work **independent
 
 ## Path A — Web CMS (Decap, Open Authoring)
 
-**Target user:** domain expert, zero git knowledge, has a GitHub account (or willing to make one in 90 seconds).
+**Target user:** domain expert, zero git knowledge. This path uses Decap, which signs in with a GitHub account, so here that account is a trust signal, not a wall. Contribution overall never forces an account: it is gated by the maintainer's trust curve and a moderation queue, and a no-account path (a serverless contribution bot) is tracked separately.
 
 ### Flow
 
@@ -32,7 +32,7 @@ Cyberbaser promises three contribution paths. Every path must work **independent
 
 ### Open questions
 
-- Where does the OAuth proxy live? (Probably Cloudflare Pages Functions)
+- Where does the OAuth proxy live? Self-hosted (for example alongside Forgejo) is preferred; an edge function is one fallback. (This is specific to the GitHub-backed Decap path.)
 - What OAuth scopes are minimal? (Read: `public_repo`; write: needs fork + PR creation)
 - How does the editor surface Tier 2/3 features it can't render inline?
 
@@ -45,8 +45,8 @@ Cyberbaser promises three contribution paths. Every path must work **independent
 1. **Clone** — clone `cybersader/cyberbase` as an Obsidian vault
 2. **Edit locally** — full Obsidian affordances (wikilinks, callouts, graph view, templates)
 3. **Commit & push** — either via obsidian-git plugin or terminal
-4. **Build trigger** — GitHub Actions sees the push, triggers the Cloudflare Pages deploy
-5. **Live** — within ~60-90 seconds the change is on `cyberbase.wiki`
+4. **Build trigger** — GitHub Actions sees the push and triggers the build and deploy (GitHub Pages is the current deploy target)
+5. **Live** — within ~60-90 seconds the change is on the published site
 
 ### Constraints
 
@@ -107,7 +107,7 @@ Trusted contributors are designated in a `.github/trusted-contributors.yml` file
 
 ### Preview / staging
 
-Every PR gets a Cloudflare Pages preview deployment. The maintainer reviews the rendered preview before merging. This is the CI gate — if the preview fails to build, the PR can't merge.
+Every PR gets a preview deployment from the same pipeline that builds the site. The maintainer reviews the rendered preview before merging. This is the CI gate: if the preview fails to build, the PR can't merge.
 
 ### Attribution
 

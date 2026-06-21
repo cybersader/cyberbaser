@@ -17,11 +17,11 @@ These are the current working set for the research phase. They're candidates, no
 
 ---
 
-## 1. GitHub is the single source of truth
+## 1. A single source of truth you own
 
-**Rule:** The `cybersader/cyberbase` repo on GitHub is authoritative for all content. Every contribution path — Web CMS, Obsidian+Git, direct GitHub — ultimately produces commits to this repo. No sidecar databases, no parallel content stores, no vendor-proprietary formats.
+**Rule:** One authoritative copy of the content, in a version-controlled vault the maintainer owns. In the current manifestation that is a git repo (`cybersader/cyberbase` on GitHub today), and every contribution path (Web CMS, Obsidian + Git, direct GitHub) ultimately produces commits to it. No sidecar databases, no parallel content stores, no vendor-proprietary formats. Git-backed is how version control happens today; it is the present implementation, not the essence, and the layer never forces git on contributors.
 
-**Why:** Every Obsidian-publishing tool that's taken off has one failure mode in common: they store content in a place the user doesn't own (Notion workspaces, Publish's proprietary CDN, CMS databases). When the tool goes away or changes pricing, the content is trapped. GitHub-as-SSOT means cyberbaser can disappear tomorrow and the vault still works perfectly as a plain Obsidian vault.
+**Why:** Every Obsidian-publishing tool that's taken off has one failure mode in common: they store content in a place the user doesn't own (Notion workspaces, Publish's proprietary CDN, CMS databases). When the tool goes away or changes pricing, the content is trapped. A user-owned, version-controlled source of truth means cyberbaser can disappear tomorrow and the vault still works perfectly on its own.
 
 **Rules out:**
 - Sidecar databases for "enriched" content
@@ -33,7 +33,7 @@ These are the current working set for the research phase. They're candidates, no
 
 ## 2. Obsidian semantics must round-trip
 
-**Rule:** Any Obsidian feature that renders in the vault and also renders on the web must survive a round-trip edit. If a contributor edits via the Web CMS, the file the maintainer sees in Obsidian must be functionally identical (same wikilinks resolved, same callouts, same block refs) — not a flattened, downgraded version.
+**Rule:** Any authoring-tool feature that renders in the vault and also renders on the web must survive a round-trip edit (Obsidian is the first-class case). If a contributor edits via the Web CMS, the file the maintainer sees in their editor must be functionally identical (same wikilinks resolved, same callouts, same block refs), not a flattened, downgraded version.
 
 **Why:** This is the invariant that makes three independent contribution paths possible. If web edits corrupt Obsidian-specific syntax, contributors get locked into whichever tool they started with. The project collapses into "just another publisher" or "just another CMS" rather than a bridge.
 
@@ -51,7 +51,7 @@ These are the current working set for the research phase. They're candidates, no
 
 **Rule:** At least one contribution path must work for a domain expert who has never used git, cloned a repo, or understood branching. The Web CMS exists for this reason.
 
-**Why:** The biggest barrier to community contribution on existing Obsidian-based wikis is that they require git fluency. The audience cyberbaser targets — cyber practitioners, compliance professionals, students — includes many people who can write excellent content but would bounce off `git clone`. The awesome-list model on GitHub is the floor: edit the file in the web UI, click "Propose change." Cyberbaser must be at least that easy.
+**Why:** The biggest barrier to community contribution on existing markdown wikis is that they require git fluency. The contributors these knowledge bases target (domain experts, subject-matter writers, students; cyber practitioners are just our first dogfood audience) include many people who can write excellent content but would bounce off `git clone`. The awesome-list model on GitHub is the floor: edit the file in the web UI, click "Propose change." Cyberbaser must be at least that easy.
 
 **Rules out:**
 - "Just send a PR" as the only contribution path
@@ -76,7 +76,7 @@ These are the current working set for the research phase. They're candidates, no
 
 ## 5. The vault is primary; cyberbaser is derivative
 
-**Rule:** If cyberbaser disappears tomorrow, `cybersader/cyberbase` must remain a fully functional Obsidian vault. No cyberbaser-specific files should be required to make the vault usable in Obsidian alone.
+**Rule:** If cyberbaser disappears tomorrow, the underlying knowledge base must remain fully functional in its native authoring tool (Obsidian, in our case) on its own. No cyberbaser-specific files should be required to use it.
 
 **Why:** This is the vendor-lock-in escape hatch. It also forces good architectural hygiene — if you find yourself adding a build artifact to the vault, or requiring cyberbaser-side tooling to use the vault locally, you've violated separation of concerns. The vault is the durable artifact; cyberbaser is the delivery mechanism.
 

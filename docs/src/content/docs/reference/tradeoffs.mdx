@@ -83,8 +83,8 @@ These are decisions we know we'll need to make. When one gets decided, move it f
 
 - **SSG choice: Astro vs. Quartz vs. custom?** Inherited from Phase 0 as "Astro + Starlight"; not re-validated against current principles
 - **CMS choice: Decap vs. Sveltia vs. Tina?** Not yet made; Decap is the incumbent but Sveltia is worth evaluation
-- **Auth: GitHub OAuth only, or multi-provider?** Default: GitHub only. No principle yet justifies broader.
-- **Hosting: Cloudflare Pages vs. GitHub Pages vs. Vercel?** Inherited as "Cloudflare"; not re-validated
+- **Auth for elevated/maintainer roles: GitHub OAuth vs. self-hosted (Forgejo) vs. multi-provider?** Default: GitHub OAuth for the current Decap path. Note: contribution itself is gated by a maintainer-set trust curve + moderation queue, not a forced contributor account.
+- **Hosting: GitHub Pages (current target) vs. self-hosted (Forgejo)?** GitHub Pages is the current deploy target; the old "Cloudflare" inheritance is superseded. Cloudflare, if used, is edge-only (CDN/WAF/rate-limit), not the host.
 - **Backlinks: build-time compute vs. runtime?** Not yet made. See [Architecture](/cyberbaser/design/architecture/)
 - **Asset hosting: in-vault vs. CDN?** Not yet made
 - **Content addressability: slugs vs. hashes vs. titles?** See [Q06 in Open Questions](/cyberbaser/reference/open-questions/#q06--content-addressability-slugs-hashes-or-title-based-with-redirects)

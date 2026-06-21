@@ -48,7 +48,7 @@ The gradient runs from **emerald** (build once, rooted in first principles) thro
   <div class="cb-wi cb-wi-community" style="--pos:52%"><span class="cb-wi-name">Plugin compat profiles</span><span class="cb-wi-desc">Which plugins work headless</span></div>
   <div class="cb-wi cb-wi-community" style="--pos:58%"><span class="cb-wi-name">Vault templates</span><span class="cb-wi-desc">Starter configs, frontmatter schemas</span></div>
   <div class="cb-wi cb-wi-community" style="--pos:64%"><span class="cb-wi-name">Contribution guidelines</span><span class="cb-wi-desc">CONTRIBUTING.md, PR templates</span></div>
-  <div class="cb-wi cb-wi-ops" style="--pos:74%"><span class="cb-wi-name">Hosting + deploy</span><span class="cb-wi-desc">Cloudflare Pages, CI pipeline</span></div>
+  <div class="cb-wi cb-wi-ops" style="--pos:74%"><span class="cb-wi-name">Hosting + deploy</span><span class="cb-wi-desc">GitHub Pages (current), CI pipeline</span></div>
   <div class="cb-wi cb-wi-ops" style="--pos:80%"><span class="cb-wi-name">Dependency updates</span><span class="cb-wi-desc">Astro, Starlight, plugins</span></div>
   <div class="cb-wi cb-wi-ops" style="--pos:86%"><span class="cb-wi-name">Content moderation</span><span class="cb-wi-desc">Spam, abuse, PR review</span></div>
   <div class="cb-wi cb-wi-user" style="--pos:95%"><span class="cb-wi-name">Content creation</span><span class="cb-wi-desc">Writing the actual wiki</span></div>
@@ -72,11 +72,11 @@ Who owns what across the contributable wiki ecosystem?
 
 | | Translation layer | CMS / contribution | Auth + identity | Publishing pipeline | Content | Plugin abstraction |
 |---|---|---|---|---|---|---|
-| **Cyberbaser core team** | <span style="color:#10b981">●</span> Builds remark/rehype plugins, defines [tier system](/cyberbaser/design/translation-layer/) | <span style="color:#10b981">●</span> Integrates CMS, builds [inline editing](/cyberbaser/getting-started/roadmap/) | <span style="color:#10b981">●</span> Builds OAuth proxy, [auth model](/cyberbaser/getting-started/roadmap/) | <span style="color:#10b981">●</span> Configures Astro + Starlight + deploy | <span style="color:#5c6574">● N/A</span> | <span style="color:#eab308">●</span> Tests [Obsidian CLI/headless](/cyberbaser/getting-started/roadmap/) compat |
+| **Cyberbaser core team** | <span style="color:#10b981">●</span> Builds remark/rehype plugins, defines [tier system](/cyberbaser/design/translation-layer/) | <span style="color:#10b981">●</span> Integrates CMS, builds [inline editing](/cyberbaser/getting-started/roadmap/) | <span style="color:#10b981">●</span> Builds the trust curve + moderation queue (optional OAuth identity), [auth model](/cyberbaser/getting-started/roadmap/) | <span style="color:#10b981">●</span> Configures the renderer (Astro + Starlight currently) + deploy | <span style="color:#5c6574">● N/A</span> | <span style="color:#eab308">●</span> Tests [Obsidian CLI/headless](/cyberbaser/getting-started/roadmap/) compat |
 | **Vault owner** | <span style="color:#5c6574">● N/A</span> | <span style="color:#eab308">●</span> Configures CMS for their vault | <span style="color:#eab308">●</span> Sets up OAuth app, manages trusted contributors | <span style="color:#eab308">●</span> Deploys, maintains domain | <span style="color:#ef4444">●</span> Creates + curates content | <span style="color:#eab308">●</span> Chooses which plugins to enable |
-| **Web contributor** (zero-git) | <span style="color:#5c6574">● N/A</span> | <span style="color:#ef4444">●</span> Uses CMS to edit pages | <span style="color:#10b981">●</span> Signs in via OAuth | <span style="color:#5c6574">● N/A</span> | <span style="color:#ef4444">●</span> Writes + corrects content | <span style="color:#5c6574">● N/A</span> |
+| **Web contributor** (zero-git) | <span style="color:#5c6574">● N/A</span> | <span style="color:#ef4444">●</span> Uses CMS to edit pages | <span style="color:#eab308">●</span> Optionally signs in (raises trust); anonymous queued edits also allowed | <span style="color:#5c6574">● N/A</span> | <span style="color:#ef4444">●</span> Writes + corrects content | <span style="color:#5c6574">● N/A</span> |
 | **Power contributor** (Obsidian+git) | <span style="color:#5c6574">● N/A</span> | <span style="color:#5c6574">● N/A</span> | <span style="color:#5c6574">● N/A</span> (uses git directly) | <span style="color:#5c6574">● N/A</span> | <span style="color:#ef4444">●</span> Writes content with full Obsidian affordances | <span style="color:#eab308">●</span> Uses plugins locally |
-| **Hosting provider** (Cloudflare, GitHub) | <span style="color:#5c6574">● N/A</span> | <span style="color:#5c6574">● N/A</span> | <span style="color:#10b981">●</span> Provides OAuth endpoints | <span style="color:#ef4444">●</span> Serves static files, runs Functions | <span style="color:#5c6574">● N/A</span> | <span style="color:#5c6574">● N/A</span> |
+| **Hosting provider** (GitHub Pages now; self-host preferred) | <span style="color:#5c6574">● N/A</span> | <span style="color:#5c6574">● N/A</span> | <span style="color:#10b981">●</span> Provides OAuth endpoints (GitHub, for the Decap path) | <span style="color:#ef4444">●</span> Serves static files (edge CDN/WAF optional) | <span style="color:#5c6574">● N/A</span> | <span style="color:#5c6574">● N/A</span> |
 | **Obsidian (the company)** | <span style="color:#eab308">●</span> Defines [OFM spec](https://help.obsidian.md/Editing+and+formatting/Obsidian+Flavored+Markdown) | <span style="color:#5c6574">● N/A</span> | <span style="color:#5c6574">● N/A</span> | <span style="color:#5c6574">● N/A</span> | <span style="color:#5c6574">● N/A</span> | <span style="color:#eab308">●</span> Maintains [CLI/headless](https://obsidian.md/cli) runtime |
 | **Community** | <span style="color:#eab308">●</span> Reports edge cases, contributes plugins | <span style="color:#eab308">●</span> Contributes CMS templates | <span style="color:#5c6574">● N/A</span> | <span style="color:#eab308">●</span> Contributes themes, plugins | <span style="color:#ef4444">●</span> Contributes content to vaults | <span style="color:#eab308">●</span> Tests plugin compat, files issues |
 
@@ -134,7 +134,7 @@ Work that recurs because the external world changes. Cannot be eliminated — on
 
 | Work item | Why it recurs | Related |
 |---|---|---|
-| Hosting + deployment | Cloudflare Pages Functions, domain management, SSL | [Architecture](/cyberbaser/design/architecture/) |
+| Hosting + deployment | Static hosting (GitHub Pages now; self-hosted Forgejo preferred), edge layer, domain management, SSL | [Architecture](/cyberbaser/design/architecture/) |
 | Dependency updates (Astro, Starlight, CMS, plugins) | Upstream releases on their own schedule; security patches | [Development](/cyberbaser/development/) |
 | Content moderation (spam, abuse, PR review) | Abuse scales with openness; Open Authoring = open attack surface | [Contribution workflows](/cyberbaser/design/contribution-workflows/) |
 | OAuth proxy maintenance | Token handling, secret rotation, provider API changes | [Roadmap: auth model](/cyberbaser/getting-started/roadmap/) |
@@ -165,7 +165,7 @@ If cyberbaser were a business, where would the money come from?
 | **Tier 1** (first-principles software) | Open-source + grants + sponsorship | The translation layer is MIT-licensed. Anyone can use it. Goodwill + ecosystem gravity. |
 | **Tier 2** (platform engineering) | **Hosted service (SaaS)** | "Bring your vault, get a contributable wiki." Monthly fee covers CMS setup, auth, inline editing, deployment. This is the product. |
 | **Tier 3** (community) | Self-sustaining once critical mass is reached | Plugin compat profiles, vault templates, contribution guidelines — all community-contributed. |
-| **Tier 4** (operations) | **Included in the SaaS fee** | Hosting, dependency updates, content moderation tooling, OAuth proxy — vault owners don't want to manage this. |
+| **Tier 4** (operations) | **Included in the SaaS fee** | Hosting, dependency updates, moderation tooling, identity service. Vault owners don't want to manage this. |
 | **Tier 5** (user work) | **The value proposition** | Cyberbaser sells efficiency, not elimination. "Your wiki, your content, but anyone can contribute without learning git." |
 
 **The core business thesis**: Tier 1 is the technical moat (hard to replicate). Tier 2+4 packaged together is the product (a hosted contributable wiki service). Tier 3 is the ecosystem (community contributions make the platform more valuable). Tier 5 is what the customer actually pays for — making their irreducible work as painless as possible.
@@ -173,8 +173,8 @@ If cyberbaser were a business, where would the money come from?
 **Comparison to existing models**:
 - [Obsidian Publish](https://obsidian.md/publish) charges $10/month for Tier 2+4 — but has NO contribution model (no Tier 5 efficiency)
 - [GitBook](https://www.gitbook.com/) charges per user for Tier 2+4 — but has NO Obsidian fidelity (no Tier 1 moat)
-- [Notion public pages](https://www.notion.so/) is free for read — but has NO git SSOT (violates [Principle 1](/cyberbaser/getting-started/principles/#1-github-is-the-single-source-of-truth))
-- Cyberbaser occupies the intersection: Obsidian fidelity + git SSOT + zero-git contribution + hosted service
+- [Notion public pages](https://www.notion.so/) is free to read, but has no version-controlled source of truth you own (violates [Principle 1](/cyberbaser/getting-started/principles/#1-a-single-source-of-truth-you-own))
+- Cyberbaser occupies the intersection: interoperability across authoring tools + a version-controlled source of truth you own + zero-git contribution + hosted service
 
 ---
 
