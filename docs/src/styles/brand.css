@@ -1891,3 +1891,7 @@ main .content-panel:has(+ .content-panel .cb-hero) {
 .sl-markdown-content .cb-url-lock { max-width: 620px; margin: 1.4rem auto 0.2rem; border-radius: 10px; overflow: hidden; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28); }
 .sl-markdown-content .cb-url-lock .cb-mock-live { color: var(--sl-color-accent-high); border: 1px solid var(--sl-color-accent); border-radius: 999px; padding: 0.05rem 0.45rem; font-size: 0.62rem; }
 
+/* inline tool logos that anchor primitives to real tools */
+.sl-markdown-content .cb-logo { width: 0.95em; height: 0.95em; vertical-align: -0.14em; fill: currentColor; flex: 0 0 auto; margin-right: 0.32rem; opacity: 0.9; }
+.sl-markdown-content .cb-mock-logo { width: 13px; height: 13px; flex: 0 0 auto; fill: var(--sl-color-gray-1); margin: 0 0.1rem 0 0.2rem; }
+
