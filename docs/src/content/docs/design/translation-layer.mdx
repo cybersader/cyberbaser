@@ -1,6 +1,6 @@
 ---
 title: Translation Layer
-description: The hardest problem in cyberbaser — converting Obsidian-flavored markdown to web HTML without losing round-trip fidelity. Tier 1 / 2 / 3 feature list.
+description: The hardest problem in cyberbaser — round-tripping markdown between authoring tools and the web without losing fidelity. Obsidian-flavored markdown is the first-class case, but the layer is surface-agnostic. Tier 1 / 2 / 3 feature list.
 sidebar:
   order: 22
 status: research
@@ -12,7 +12,7 @@ tags: [design, translation-layer, architecture]
 
 ## What it does
 
-A pipeline of `remark` (markdown AST) and `rehype` (HTML AST) plugins composed on top of Astro's content loading. Takes an Obsidian-flavored markdown file as input, produces (a) rendered HTML for the web wiki and (b) enough preserved structure that a Web CMS edit round-trips cleanly back to the source file.
+A pipeline of remark/rehype plugins (markdown AST → HTML AST). In the current prototype these run on top of Astro's content loading, but the translation logic is renderer-agnostic and could sit under any SSG. Takes an Obsidian-flavored markdown file as input, produces (a) rendered HTML for the web wiki and (b) enough preserved structure that a Web CMS edit round-trips cleanly back to the source file.
 
 ```
 ┌──────────────────────┐
@@ -90,7 +90,7 @@ This is the contract. A feature's tier determines its level of support and the a
       <tr>
         <td>Code blocks</td>
         <td>Fenced, language-tagged</td>
-        <td>Astro/Starlight built-in</td>
+        <td>Renderer built-in (Starlight in the current prototype)</td>
         <td><span class="cb-pill cb-pill-stable">OK</span></td>
       </tr>
       <tr>
@@ -145,7 +145,7 @@ This is the contract. A feature's tier determines its level of support and the a
     <li><strong>Complex Dataview JS</strong> — use Tier 2 simple queries or pre-compute a static table.</li>
     <li><strong>Canvas files</strong> (<code>.canvas</code>) — export to SVG/PNG and embed via standard markdown image.</li>
     <li><strong>Templater / DataviewJS plugins</strong> — render output to static markdown before commit.</li>
-    <li><strong>Graph view</strong> — inherently interactive; replaced by <code>starlight-site-graph</code> on the web.</li>
+    <li><strong>Graph view</strong> — inherently interactive; replaced by a web graph view (the Starlight prototype uses <code>starlight-site-graph</code>; the equivalent plugin in another renderer would do the same).</li>
   </ul>
 </div>
 

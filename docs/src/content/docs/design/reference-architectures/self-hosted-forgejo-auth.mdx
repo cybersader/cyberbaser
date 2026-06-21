@@ -55,7 +55,8 @@ Forgejo's OAuth2 **scopes are not yet granular** — a token from the CMS login 
 │ Your box — Docker Compose (or Coolify)                   │
 │                                                          │
 │  Caddy (reverse proxy, auto-HTTPS at the origin)         │
-│    ├── wiki.example.com    → Astro/Starlight static site │
+│    ├── wiki.example.com    → static site (Starlight today;│
+│    │                         any SSG)                      │
 │    │      └── /admin/  = Decap CMS  (PKCE → Forgejo)     │
 │    └── forgejo.example.com → Forgejo (SSOT + OIDC IdP)   │
 │                                                          │

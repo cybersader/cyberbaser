@@ -1,6 +1,6 @@
 ---
 title: Prior Art
-description: Tools and projects that have tried to solve the contributable Obsidian-to-web problem. What each got right, what each gave up, what the lesson is for cyberbaser.
+description: Tools and projects that have tried to solve contributable, version-controlled knowledge bases (the interoperability layer between authoring tools, renderers, and other knowledge bases). Obsidian is one first-class surface here, not the whole problem. What each got right, what each gave up, what the lesson is for cyberbaser.
 sidebar:
   order: 0
 status: research
@@ -26,10 +26,10 @@ For each entry: **what they got right**, **what they gave up**, and **the lesson
 **What they gave up:**
 - **Contribution model** — Publish is read-only from the visitor's perspective. There's no contribution path at all, not even "edit on GitHub."
 - **Vendor lock-in** — content is hosted on Obsidian's CDN in a proprietary format. Leaving means exporting the markdown (which you already have locally) but losing the published URL.
-- **Pricing** — $10/month, which is fine for individuals but rules out the project's "contributable wiki" model where contributors might each need accounts.
+- **Pricing** — $10/month, which is fine for individuals but rules out a contributable model where the friction of per-contributor paid accounts would gate participation. Cyberbaser's model avoids forcing accounts at all: a maintainer-set trust curve plus a moderation queue, not an account wall.
 - **Customization** — very limited theming, no custom components, no plugin ecosystem on the reader side.
 
-**Lesson for cyberbaser:** Obsidian fidelity is the baseline to match, but the contribution gap is the real opportunity. Cyberbaser should aim for Publish-quality fidelity while adding the three contribution paths Publish lacks.
+**Lesson for cyberbaser:** Authoring-tool fidelity (Obsidian being the leading first-class surface) is the baseline to match, but the contribution gap is the real opportunity. Cyberbaser should aim for Publish-quality fidelity while adding the three contribution paths Publish lacks.
 
 ---
 
@@ -49,7 +49,7 @@ For each entry: **what they got right**, **what they gave up**, and **the lesson
 - **Web-based editing** — no CMS layer; readers can't edit, period.
 - **MDX components** — pure markdown in, static HTML out. No rich interactive content in-page.
 
-**Lesson for cyberbaser:** Quartz proves that a Starlight-class Obsidian-aware publisher is viable and not that hard to build. The gap Quartz doesn't fill is *exactly* the contribution layer — which means cyberbaser can learn from Quartz's translation decisions while layering Decap (or similar) on top.
+**Lesson for cyberbaser:** Quartz proves that an Obsidian-aware static publisher is viable and not that hard to build. The gap Quartz doesn't fill is *exactly* the contribution layer — which means cyberbaser can learn from Quartz's translation decisions while layering Decap (or similar) on top.
 
 ---
 
@@ -87,7 +87,7 @@ For each entry: **what they got right**, **what they gave up**, and **the lesson
 - **Vault workflow** — these tools assume docs live in their preferred directory layout (e.g., `/docs/` at the repo root), which is often incompatible with how an Obsidian vault is organized.
 - **Content shape opinions** — they push you toward "documentation" style writing, not "wiki" style. That's a category mismatch for cyberbaser.
 
-**Lesson for cyberbaser:** The reader UX is worth copying from this category — search, typography, mobile responsiveness, navigation — but the content ingestion model is wrong for Obsidian vaults. Starlight sits in a sweet spot because it's markdown-first and doesn't impose a schema.
+**Lesson for cyberbaser:** The reader UX is worth copying from this category — search, typography, mobile responsiveness, navigation — but the content ingestion model is wrong for Obsidian vaults. A markdown-first renderer that doesn't impose a schema (Starlight is the current prototype) sits in a better spot here. The renderer is a swappable spoke, not the point.
 
 ---
 
@@ -107,7 +107,7 @@ For each entry: **what they got right**, **what they gave up**, and **the lesson
 - **No git history** — version control is Notion's internal history, not git. Can't diff a change, can't bisect a regression.
 - **Obsidian incompatibility** — Notion's data model is different enough from Obsidian that round-tripping is not feasible.
 
-**Lesson for cyberbaser:** This is the anti-pattern. The vendor-lock-in and no-git-history problems are *exactly* what cyberbaser's "GitHub is SSOT" principle exists to prevent. Cybersader's own prior attempts with Notion are strong evidence for that principle.
+**Lesson for cyberbaser:** This is the anti-pattern. The vendor-lock-in and no-git-history problems are *exactly* what cyberbaser's version-control-backed, no-lock-in stance exists to prevent. Git/GitHub is the current backing, but the principle is durable, diffable, exportable history, not a specific host. Cybersader's own prior attempts with Notion are strong evidence for that principle.
 
 ---
 
@@ -138,6 +138,6 @@ For each entry: **what they got right**, **what they gave up**, and **the lesson
 > **Zero-friction contribution** is solved by awesome lists / Decap.
 > **No vendor lock-in** is solved by any git-backed solution.
 >
-> **Nothing existing has all three at once.** Cyberbaser's hypothesis is that the gap isn't a missing tool — it's a missing *composition*. Take Quartz-style fidelity (via translation layer plugins), bolt on Decap's Open Authoring for the low-friction path, keep the repo as SSOT. All parts exist; nobody has put them together.
+> **Nothing existing has all three at once.** Cyberbaser's hypothesis is that the gap isn't a missing tool — it's a missing *composition*. Take Quartz-style fidelity (via translation layer plugins), bolt on Decap's Open Authoring for the low-friction path, keep a version-controlled store as the source of truth (a git repo today). All parts exist; nobody has put them together.
 >
 > If the composition works, cyberbaser is novel-by-integration rather than novel-by-invention. That's a much cheaper bet than inventing new primitives.

@@ -103,7 +103,7 @@ Two structural problems for *every* system here: CRDT data models are binary/JSO
 | [Jazz / CoJSON](https://jazz.tools/) | no | **cryptographic roles** | low* | The single best permission story surveyed — but JSON blobs, no `.md`, no federation. |
 
 <Aside type="note">
-**Jazz/CoJSON** is the standout that keeps recurring. Its roles (reader / writer / writeOnly / admin) are enforced *cryptographically client-side* with no trusted central server — and `writeOnly` uniquely models "anonymous contributor submits an edit they can't read others' drafts." It is the heart of the [abandon-git steel-man](#steel-man-abandon-git) below. Its disqualifier for *today*: data is encrypted CoJSON, not plain markdown files.
+**Jazz/CoJSON** is the standout that keeps recurring. Its roles (reader / writer / writeOnly / admin) are enforced *cryptographically client-side* with no trusted central server — and its write-only role uniquely models the case where an anonymous contributor can submit an edit without being able to read other people's drafts. It is the heart of the [abandon-git steel-man](#steel-man-abandon-git) below. Its disqualifier for *today*: data is encrypted CoJSON, not plain markdown files.
 </Aside>
 
 ### Local-first / sync-engine databases
@@ -150,7 +150,7 @@ Logseq's file→DB migration is entering its **fourth year**, with markdown expo
 
 ### Federation + discovery protocols
 
-The DNS-for-knowledge-bases problem. **No existing protocol fully solves it.** The surprise: a 2002 protocol — [OAI-PMH](https://www.openarchives.org/pmh/) — is architecturally *closer* to what cyberbaser needs (crawl + incremental harvest by datestamp) than any modern "decentralized" protocol, because ActivityPub / AT Protocol / Nostr all optimize for ephemeral social delivery and treat durable versioned documents as an afterthought.
+How does one knowledge base find and pull from another, the way DNS lets one site find another? **No existing protocol fully solves this discovery problem.** The surprise: a 2002 protocol — [OAI-PMH](https://www.openarchives.org/pmh/) — is architecturally *closer* to what cyberbaser needs (crawl + incremental harvest by datestamp) than any modern "decentralized" protocol, because ActivityPub / AT Protocol / Nostr all optimize for ephemeral social delivery and treat durable versioned documents as an afterthought.
 
 | Protocol | Solves | Viability | Note |
 |---|---|:---:|---|

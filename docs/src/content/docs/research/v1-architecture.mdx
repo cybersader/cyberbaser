@@ -20,9 +20,9 @@ A **20-agent research run**: twelve parallel lead agents (one per open task — 
 
 ## What cyberbaser is (for v1)
 
-> **Cyberbaser is a publishing tool that turns an existing Obsidian vault into a public, contributable wiki by round-tripping Obsidian-flavored markdown to the web without corruption — with a git-backed PR contribution path for people who don't know git.**
+> **Cyberbaser is an interoperability layer for contributable, version-controlled knowledge bases.** For v1 it manifests as a round-trip and contribution layer between an Obsidian-flavored markdown vault and the web (git-backed today), shipping publishing as table stakes and offering a PR contribution path for people who don't know git.
 
-It is *all three* eventually — publishing tool, wiki platform, collaboration framework — but **for v1 it is a publishing tool first.** The "wiki platform" identity is real but thin in v1 (reader features ship, but the contribution surface is borrowed from existing CMSs, not purpose-built). The "collaboration framework" identity is **explicitly deferred** — every live-collab path is gated behind a serializer that doesn't exist yet.
+It is *all three* eventually — publishing tool, wiki platform, collaboration framework — but **for v1 it leads with the contribution and round-trip interoperability layer.** Publishing is commodity table stakes that ship alongside it. The "wiki platform" identity is real but thin in v1 (reader features ship, but the contribution surface is borrowed from existing CMSs, not purpose-built). The "collaboration framework" identity is **explicitly deferred** — every live-collab path is gated behind a serializer that doesn't exist yet.
 
 <Aside type="caution" title="Update (2026-06-19): 'publishing tool first' is the wrong lead">
 The [Quartz prior-art audit](/cyberbaser/research/assumptions-and-risks/#tested-quartz-prior-art-audit-2026-06-19) showed publishing is a **commodity Quartz already wins for free** — and currently does it *better* than this prototype. So v1 still *ships* publishing as table stakes, but the **identity leads with the contribution + round-trip layer**, not publishing. Quartz's maintainer has explicitly disclaimed the contribution niche, leaving it open. Open strategic question it raises: adopt Quartz's forward transform as a commodity vs. keep the bespoke Astro/Starlight stack.
@@ -35,7 +35,7 @@ The [Quartz prior-art audit](/cyberbaser/research/assumptions-and-risks/#tested-
 
 | Area | v1 decision | Status |
 |---|---|---|
-| **Identity** | Publishing tool: contributable Obsidian→web wiki | ✅ decided |
+| **Identity** | Interoperability + contribution layer for version-controlled markdown KBs; v1 surfaces an Obsidian-flavored vault to web (round-trip keystone) | ✅ decided |
 | **SSOT** | git/GitHub (scoped) — see [SSOT findings](/cyberbaser/research/source-of-truth/) | ✅ decided |
 | **Host** | **GitHub Pages** (`actions/deploy-pages@v4`, ubuntu-latest) | ✅ corrected (was mis-stated as Cloudflare) |
 | **Translation layer** | `starlight-obsidian` v0.13 + `rehype-callouts` v2.2 | 🟢 ~80% solved off-the-shelf |
@@ -82,7 +82,7 @@ What the broader run found about the production path:
   - [`mdast-util-wiki-link`](https://github.com/landakram/mdast-util-wiki-link) **is already bidirectional** (set `aliasDivider: '|'` for Obsidian) — wikilink round-trip is *low* risk.
   - [`mdast-util-directive`](https://github.com/syntax-tree/mdast-util-directive) ships a proven bidirectional container handler; **copy its pattern and retarget output to `> [!type]`** instead of building a callout serializer from scratch.
   - `mdast-util-frontmatter` already does lossless frontmatter.
-- **The right stack:** `mdast-util-to-markdown` for serialization + **CodeMirror 6** as the editor (markdown-as-ground-truth — the file is *always* the markdown, which mirrors Obsidian's own architecture and matches git's text-level merge model). [`kenforthewin/atomic-editor`](https://github.com/kenforthewin/atomic-editor) proves the CM6 + live-preview + byte-identical pattern. Milkdown (remark-bridged ProseMirror) is the higher-UX alternative.
+- **The leading candidate stack** (the hub stays renderer- and editor-agnostic; these are swappable spokes): `mdast-util-to-markdown` for serialization + **CodeMirror 6** as the editor (markdown-as-ground-truth — the file is *always* the markdown, which mirrors Obsidian's own architecture and matches git's text-level merge model). [`kenforthewin/atomic-editor`](https://github.com/kenforthewin/atomic-editor) proves the CM6 + live-preview + byte-identical pattern. Milkdown (remark-bridged ProseMirror) is the higher-UX alternative.
 - **Avoid for a markdown-SSOT system:** BlockSuite/AFFiNE (richer-than-markdown model), BlockNote (self-lossy), Plate.js (outputs MDX/JSX, not OFM), and Tiptap's markdown extension (MarkedJS-based, *not* `mdast` — diverges from the serialization foundation).
 
 **The spike (2–3 weeks, standalone, before any editor work):** parse the hardest OFM → `mdast` → serialize back → diff. De-risk the two things flagged as unproven: (1) character-level CRDT merges producing structurally invalid OFM (a half-merged `> [!warn` header), and (2) `|`-in-alias escaping colliding with GFM table pipes. Keep live transclusion rendering, Dataview execution, and block-level CRDT reorder as v2+.
@@ -93,7 +93,7 @@ This one serializer gates **three** things at once: the Web CMS editing UX (Cons
 
 ## The contribution path (CMS)
 
-The honest v1 constraint is **"a GitHub account or email invite is required, but no git CLI is."** Truly anonymous (zero-account) open authoring does **not** exist in any shipping git-backed CMS as of mid-2026.
+The target model forces no account at all. The honest v1 constraint is a limitation of the tools, not the model: off-the-shelf git-backed CMSs as of mid-2026 still require **a GitHub account or email invite, even though no git CLI is needed.** Truly anonymous (zero-account) open authoring does **not** exist in any shipping git-backed CMS yet, so the serverless contribution-bot pattern (below) is the zero-account path being evaluated.
 
 - **Pages CMS** — v1 pick for *invited* non-technical editors: email magic-link + OTP (no GitHub account needed), raw-markdown mode, MIT, self-hostable. Caveats the verifier caught: latest release is v2.1.8 (June **2025**, not 2026 — the lead was a year off), GitHub-backend only, **single-maintainer bus-factor**. Treat as "slow-cadence but active," log the risk.
 - **Decap** — retained as the only *shipped* open-authoring (fork-and-PR for any GitHub account, no repo write). But it's **maintenance-stagnant** (unpatched Sept-2025 XSS) and its markdown widget was **deprecated April 2026** → use `widget: richtext, modes: ["raw"]`. Design the CMS as a **swappable slot**; Sveltia is the more active successor (1.0 GA mid-2026, gated on GitHub PKCE).

@@ -8,7 +8,7 @@ status: research
 
 ## What cyberbaser is
 
-Cyberbaser turns **any markdown knowledge base into a public wiki anyone can contribute to** — authored from wherever you like (Obsidian, an edit button on the page, a web CMS, GitHub), kept faithful and reviewed by a central **hub**, and published as a website. It's a general contributability layer / CMS for markdown content — **not a tool for one domain.** (We dogfood it on a cybersecurity vault, [`cybersader/cyberbase`](https://github.com/cybersader/cyberbase) — but that's just the first content, not the point.)
+Cyberbaser is **an interoperability layer for contributable, version-controlled knowledge bases.** A central **hub** sits between the surfaces people author from (Obsidian, an edit button on the page, a web CMS, GitHub), the renderers that publish the result, and other knowledge bases, keeping every change faithful as it round-trips between them. CMS-like contribution and a public wiki are things the layer enables, not the whole of what it is. It works on any markdown content, **not just one domain.** (We dogfood it on a cybersecurity vault, [`cybersader/cyberbase`](https://github.com/cybersader/cyberbase); that's just the first content, not the point.)
 
 **The mental model:** [write wherever you like → the hub translates every surface into the *same* faithful markdown and reviews each change → that markdown, with full history, is the single source of truth → the wiki is a generated view of it](/cyberbaser/design/architecture/).
 
@@ -35,7 +35,7 @@ This is deliberate. The old approach jumped to code before the principles justif
   </a>
   <a class="cb-card" href="/cyberbaser/concepts/problem/">
     <span class="cb-card-title">The problem</span>
-    <span class="cb-card-desc">What it actually solves — Obsidian fidelity + low-friction contribution + no lock-in, and why contribution is a curve, not a wall.</span>
+    <span class="cb-card-desc">What it actually solves — lossless round-trip fidelity across markdown surfaces (Obsidian and others) + low-friction contribution + no lock-in, and why contribution is a curve, not a wall.</span>
   </a>
   <a class="cb-card" href="/cyberbaser/getting-started/vision/">
     <span class="cb-card-title">The vision</span>
