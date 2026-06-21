@@ -76,7 +76,7 @@ None of these contributors know the others exist. None of them had to pick a "co
 ## Anti-features (what this deliberately does NOT do)
 
 - **Does not host the Obsidian vault.** Cyberbaser reads from a vault repo you own (e.g. `cybersader/cyberbase`); it doesn't store or own your content.
-- **Does not support realtime collaborative editing (v1).** Conflicts resolve via git, not CRDT — fine for an async contribution rate. (Real-time is gated on the [round-trip keystone](/cyberbaser/research/v1-architecture/#block-markdown-fidelity--the-keystone-rd); deferred to v2+.)
+- **Does not support realtime collaborative editing (v1).** Conflicts resolve via git, not CRDT — fine for an async contribution rate. (Real-time is gated on the [round-trip keystone](/cyberbaser/research/v1-architecture/#blockmarkdown-fidelity--the-keystone-rd); deferred to v2+.)
 - **Does not replace Obsidian as a primary authoring tool.** Maintainers still use Obsidian locally; the web surfaces are for contributors who don't.
 - **It IS general-purpose** — any Obsidian vault, any domain. The cyber vault is just the first content we dogfood it on, not the scope. (Earlier drafts said the opposite; that was backwards — contributability is the product.)
 - **Does not build the trust/identity/moderation stack from scratch.** It composes existing tools (Discourse-style trust, moderation queues, contribution bots, edge rate-limiting) into one pipeline.

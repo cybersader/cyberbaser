@@ -141,7 +141,7 @@ Same content, different governance, set by whoever runs it. **Denial-of-service 
 
 **Multiple surfaces, one pipeline.** A contributor should be able to act *from wherever they are, however suits them* — and the translation layer is what makes the richest of these possible:
 
-- **In-page, what-you-see-is-what-you-get** — click edit on the rendered page and change it right there. This works *only because* the [translation layer](/cyberbaser/design/translation-layer/) round-trips the edit back to clean Obsidian markdown. (This is why the [round-trip keystone](/cyberbaser/research/v1-architecture/#block-markdown-fidelity--the-keystone-rd) is an *enabler* of contribution, not a vanity feature.)
+- **In-page, what-you-see-is-what-you-get** — click edit on the rendered page and change it right there. This works *only because* the [translation layer](/cyberbaser/design/translation-layer/) round-trips the edit back to clean Obsidian markdown. (This is why the [round-trip keystone](/cyberbaser/research/v1-architecture/#blockmarkdown-fidelity--the-keystone-rd) is an *enabler* of contribution, not a vanity feature.)
 - **Web CMS** form/editor · **Obsidian + git** · **direct GitHub** — for those who prefer them.
 
 Every surface feeds the *same* maintainer-configured pipeline: contribution → (whatever identity/trust step the maintainer set) → moderation queue → merge → live. **Compose, don't build from scratch:** trust levels, identity, moderation queues, and rate-limiting all have mature implementations ([Discourse](https://www.discourse.org/)-style trust, moderation tooling, serverless contribution bots like [Contribunator](https://github.com/Contribunator/Contribunator) / [Staticman](https://staticman.net/), edge WAF). Cyberbaser's job is to *wire them into a coherent pipeline* — a tech-stack design problem, not a from-scratch build. This is the direct answer to the two biggest [product risks](/cyberbaser/research/assumptions-and-risks/) (the account wall, and moderation).
@@ -194,7 +194,7 @@ Cyberbaser is doing its job when one page can be all of this at once.
 <div class="cb-wins">
   <div class="cb-win"><span class="cb-win-n">1</span><span>Lands from a search and just reads as a well-kept wiki. The markdown vault behind it is invisible.</span></div>
   <div class="cb-win"><span class="cb-win-n">2</span><span>A reader fixes a typo in three clicks, no git and no account, and sees it live within minutes.</span></div>
-  <div class="cb-win"><span class="cb-win-n">3</span><span>Obsidian syntax survived the trip: callouts and wikilinks render intact (the <a href="/cyberbaser/research/v1-architecture/#block-markdown-fidelity--the-keystone-rd">round-trip keystone</a>).</span></div>
+  <div class="cb-win"><span class="cb-win-n">3</span><span>Obsidian syntax survived the trip: callouts and wikilinks render intact (the <a href="/cyberbaser/research/v1-architecture/#blockmarkdown-fidelity--the-keystone-rd">round-trip keystone</a>).</span></div>
   <div class="cb-win"><span class="cb-win-n">4</span><span>Every edit is reviewed and merged through moderation before it goes live.</span></div>
   <div class="cb-win"><span class="cb-win-n">5</span><span>The same vault still opens clean in Obsidian standalone, and contributors of any git fluency produce identical-quality edits.</span></div>
 </div>
