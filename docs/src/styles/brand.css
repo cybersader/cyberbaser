@@ -1451,6 +1451,34 @@ main .content-panel:has(+ .content-panel .cb-hero) {
   .sl-markdown-content .cb-hub-arr { display: none; }
 }
 
+/* ── Trust dial (Problem page) ── */
+.sl-markdown-content .cb-dial { margin: 1.3rem 0; }
+.sl-markdown-content .cb-dial-bar { display: flex; gap: 0.45rem; }
+.sl-markdown-content .cb-dial-seg {
+  flex: 1 1 0;
+  padding: 0.7rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid;
+}
+.sl-markdown-content .cb-dial-open { background: rgba(16, 185, 129, 0.1); border-color: var(--sl-color-accent); }
+.sl-markdown-content .cb-dial-mid { background: rgba(254, 188, 46, 0.1); border-color: rgba(254, 188, 46, 0.5); }
+.sl-markdown-content .cb-dial-locked { background: rgba(255, 95, 87, 0.1); border-color: rgba(255, 95, 87, 0.5); }
+.sl-markdown-content .cb-dial-seg-t { font-weight: 700; color: var(--sl-color-white); font-size: 0.92rem; margin-bottom: 0.25rem; }
+.sl-markdown-content .cb-dial-seg-d { font-size: 0.78rem; color: var(--sl-color-gray-1); line-height: 1.35; }
+.sl-markdown-content .cb-dial-ends {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.4rem;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--sl-color-gray-3);
+}
+.sl-markdown-content .cb-dial-cap { font-size: 0.82rem; color: var(--sl-color-gray-2); margin-top: 0.55rem; }
+@media (max-width: 640px) {
+  .sl-markdown-content .cb-dial-bar { flex-direction: column; }
+}
+
 /* ── Step-by-step contribution walkthrough ── */
 .sl-markdown-content .cb-steps { display: flex; flex-direction: column; gap: 1.4rem; margin: 1.4rem 0; }
 .sl-markdown-content .cb-step { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 1.4rem; }

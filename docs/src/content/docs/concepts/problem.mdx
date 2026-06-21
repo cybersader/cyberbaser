@@ -9,7 +9,7 @@ tags: [problem, motivation]
 
 ## TL;DR
 
-**An Obsidian vault is a great private knowledge base. Turning *any* vault into a *contributable* public wiki — without losing Obsidian's affordances or locking contributors into git — is a problem nobody has fully solved.** Cyberbaser is the attempt: a general contributable-wiki / CMS layer for Obsidian vaults, for any knowledge domain. (The `cyberbase` vault is just the first content we dogfood it on — not the scope.)
+**A markdown knowledge base is great in private. Turning it into a *contributable* public wiki, without flattening its rich syntax or forcing contributors to learn git, is a problem nobody has fully solved.** That is what cyberbaser is for: an open layer that lets any markdown knowledge base be authored from many tools, contributed to by anyone on your terms, and published anywhere, while it stays plain files you own. (Obsidian is the first-class example; the `cyberbase` vault is just our first dogfood content, not the scope.)
 
 ## The three axes of friction
 
@@ -37,11 +37,11 @@ Three things need to work simultaneously. Existing tools pick one or two and con
     <g filter="url(#pt-glow)">
       <circle cx="260" cy="60" r="42" fill="#141921" stroke="#10b981" stroke-width="2"/>
     </g>
-    <text x="260" y="55" text-anchor="middle" class="cb-tri-label">Obsidian</text>
+    <text x="260" y="55" text-anchor="middle" class="cb-tri-label">Markdown</text>
     <text x="260" y="72" text-anchor="middle" class="cb-tri-label">fidelity</text>
     <text x="260" y="120" text-anchor="middle" class="cb-tri-desc">wikilinks, callouts,</text>
     <text x="260" y="134" text-anchor="middle" class="cb-tri-desc">embeds, graph, round-trip</text>
-    <text x="260" y="152" text-anchor="middle" class="cb-tri-tool-sub">Obsidian Publish lives here — read-only</text>
+    <text x="260" y="152" text-anchor="middle" class="cb-tri-tool-sub">publishers nail this; readers can't edit</text>
 
     {/* Vertex 2 — bottom right: Contribution friction */}
     <g filter="url(#pt-glow)">
@@ -57,7 +57,7 @@ Three things need to work simultaneously. Existing tools pick one or two and con
     </g>
     <text x="50" y="375" text-anchor="middle" class="cb-tri-label">No vendor</text>
     <text x="50" y="392" text-anchor="middle" class="cb-tri-label">lock-in</text>
-    <text x="50" y="422" text-anchor="middle" class="cb-tri-desc">GitHub = SSOT</text>
+    <text x="50" y="422" text-anchor="middle" class="cb-tri-desc">plain files you own</text>
 
     {/* Existing solutions as annotations on edges */}
     <text x="372" y="228" class="cb-tri-tool" text-anchor="start">(the gap)</text>
@@ -71,7 +71,7 @@ Three things need to work simultaneously. Existing tools pick one or two and con
     <text x="260" y="410" class="cb-tri-tool" text-anchor="middle">awesome-list + markdown</text>
     <text x="260" y="424" class="cb-tri-tool-sub" text-anchor="middle">contribution + no lock-in — concedes fidelity</text>
   </svg>
-  <p class="cb-triangle-caption">Every existing Obsidian-to-web tool sits on an <em>edge</em>, not in the middle. Cyberbaser's thesis is that with the right translation layer, you can occupy the interior.</p>
+  <p class="cb-triangle-caption">Every existing markdown-publishing tool sits on an <em>edge</em>, not in the middle. Cyberbaser's bet is that the right translation layer lets you occupy the interior.</p>
 </div>
 
 ## The specific pain
@@ -84,47 +84,60 @@ A knowledge owner — a researcher, a team, a community, a docs maintainer — w
 
 None of these occupy the interior of the triangle. **Cyberbaser's hypothesis is that the gap is a translation-layer problem, not a new-SSG problem** — if you can guarantee round-trip fidelity between Obsidian syntax and a web-edit surface, you can compose an Obsidian-aware publisher with a git-backed CMS and get all three properties.
 
-## Who feels the pain
+## Who it's for
 
-> [!info]- Primary user — the vault-native author
-> Already uses Obsidian. Has a personal or team knowledge base they'd like to share. Values the wiki feel (crosslinks, discovery). Will not move to Notion or Publish because of vendor lock-in. Will not hand-maintain a separate publishing stack because it's too much work.
+Concrete situations, not personas:
 
-> [!info]- Secondary user — the domain-expert contributor
-> Reads the published wiki, spots a gap or error. Knows the topic cold. **Does not know git, and may not have (or want) a GitHub account.** Would contribute if it took three clicks — edit the page in place; will not contribute if it requires an account, a CLI, or learning a new tool. Whether they edit anonymously or sign in is the *maintainer's* call — see the [trust curve](#contribution-is-a-curve-not-a-wall).
+- **You keep a knowledge base in markdown** (usually Obsidian, but any markdown tool) and want to share it publicly, without hand-running a separate publishing stack and without moving into a walled garden like Notion or a paid host.
+- **A reader spots a wrong fact** and knows the right one. They don't know git and may not want an account. They'll fix it if it takes a few clicks on the page; they'll walk away if it needs a CLI or a signup.
+- **A developer wants to fix a typo** the way they fix anything: edit a `.md` file, open a pull request. They shouldn't have to learn anyone's markdown dialect to do it.
+- **An AI agent maintains content**: watching a feed, reconciling sources, drafting updates, and proposing them through the same reviewed pipeline as a human. The tool is built to be agent-friendly, not just human-friendly.
 
-> [!info]- Tertiary user — the git-native developer
-> Comfortable with git but has never used Obsidian. Treats the vault repo like any other docs repo — edit a `.md` file, open a PR. Shouldn't be forced to understand Obsidian syntax to contribute a typo fix.
+Where the value concentrates: making a knowledge base [**contributable** by anyone on your terms](#contribution-on-your-terms), **mapping cleanly into the CMS and authoring tools people already use**, and **working well with agents**, with Obsidian as a first-class citizen.
 
 ## Why existing solutions don't cover this
 
 Three constraints fall out of the principles. Each existing solution fails at least one.
 
-| | Obsidian fidelity | Low-friction contribution | No vendor lock-in |
+| | Markdown fidelity | Low-friction contribution | No vendor lock-in |
 |---|---|---|---|
-| **Obsidian Publish** | ✅ | ❌ (read-only — no contribution) | ❌ (proprietary hosting) |
-| **Quartz v4** | ✅ | ❌ (git required) | ✅ |
-| **Digital Garden** | ✅ | ❌ (git required) | ✅ |
-| **Docusaurus / GitBook / Mintlify** | ❌ (lossy for Obsidian) | ✅ | ⚠️ (platform-specific) |
-| **awesome-list repos** | ❌ (plain markdown only) | ✅ | ✅ |
-| **Notion-as-wiki** | ❌ (no Obsidian import fidelity) | ✅ | ❌ |
-| **cyberbaser (target)** | ✅ | ✅ | ✅ |
+| [**Obsidian Publish**](https://obsidian.md/publish) | ✅ | ❌ (read-only, no contribution) | ❌ (proprietary hosting) |
+| [**Quartz**](https://quartz.jzhao.xyz/) | ✅ | ❌ (git required) | ✅ |
+| [**Digital Garden**](https://github.com/oleeskild/obsidian-digital-garden) | ✅ | ❌ (git required) | ✅ |
+| [**Docusaurus**](https://docusaurus.io/) / [**GitBook**](https://www.gitbook.com/) / [**Mintlify**](https://mintlify.com/) | ❌ (lossy for rich markdown) | ✅ | ⚠️ (platform-specific) |
+| [**awesome-list repos**](https://github.com/topics/awesome) | ❌ (plain markdown only) | ✅ | ✅ |
+| [**Notion**](https://www.notion.so/) as a wiki | ❌ (no markdown import fidelity) | ✅ | ❌ |
+| **cyberbaser** (target) | ✅ | ✅ | ✅ |
 
-## Contribution is a curve, not a wall
+## Contribution on your terms
 
-The deepest part of cyberbaser isn't the publisher, or even the translation layer — it's *how contribution is governed*. The web is adversarial, so the usual reflex is to demand identity up front (an account, an email, KYC) to keep bad actors out. That reflex is mostly wrong here, for two reasons:
+The deepest part of cyberbaser isn't the publisher, or even the translation layer. It's *how contribution is governed*. The web is adversarial, so the usual reflex is to demand identity up front (an account, an email, KYC) to keep bad actors out. That reflex is mostly wrong here, for two reasons:
 
 - **Identity gates are mostly theater.** Requiring an email to "reduce abuse" doesn't — email aliasing is trivial. A GitHub-account requirement mainly filters *out the person you want* (the domain expert who spotted the error) while barely slowing a determined adversary. Friction on the front door buys very little safety.
 - **The real question isn't "who are you?" — it's "can this hurt anything before a human approves it?"** If every contribution lands in a **moderation queue** and nothing goes live until it's reviewed, an anonymous edit *cannot* hurt the content. Moderation, not identity, is the load-bearing safety mechanism.
 
-So the model is: **the maintainer controls the trust curve.** Like [Discourse's trust levels](https://blog.discourse.org/2018/06/understanding-discourse-trust-levels/), a contributor earns capability as they prove themselves — but *how steep that curve is, and what each level requires, is the maintainer's choice*, per wiki:
+So the model is simple: **the maintainer controls the trust curve.** Like [Discourse's trust levels](https://blog.discourse.org/2018/06/understanding-discourse-trust-levels/), a contributor earns capability as they prove themselves, and you choose how steep that curve is and what each level requires:
 
-| Posture | Anonymous edits | Trust progression |
-|---|---|---|
-| **Fully open** | yes, all moderated | trust accrues from accepted edits; IP only for rate-limiting |
-| **Balanced** | yes, heavily queued | email/verified contributors get faster review; long-trusted edit directly |
-| **Locked down** | no | KYC or invite required |
+<div class="cb-dial" role="img" aria-label="A trust dial from fully open to locked down. Fully open: anyone edits, all moderated. Balanced: anonymous edits queued, verified contributors get faster review. Locked down: KYC or invite required. Every edit still passes through moderation.">
+  <div class="cb-dial-bar">
+    <div class="cb-dial-seg cb-dial-open">
+      <div class="cb-dial-seg-t">Fully open</div>
+      <div class="cb-dial-seg-d">anyone edits, all moderated; IP only, for rate-limiting</div>
+    </div>
+    <div class="cb-dial-seg cb-dial-mid">
+      <div class="cb-dial-seg-t">Balanced</div>
+      <div class="cb-dial-seg-d">anonymous edits queued; email / verified get faster review; long-trusted edit directly</div>
+    </div>
+    <div class="cb-dial-seg cb-dial-locked">
+      <div class="cb-dial-seg-t">Locked down</div>
+      <div class="cb-dial-seg-d">KYC or invite required to edit at all</div>
+    </div>
+  </div>
+  <div class="cb-dial-ends"><span>← more open</span><span>more locked →</span></div>
+  <p class="cb-dial-cap">You set where your wiki sits on this dial. Wherever it sits, every edit still passes through the moderation queue before it goes live.</p>
+</div>
 
-Same vault, different governance — set by whoever runs it. **Denial-of-service is a separate problem:** content abuse is caught by the moderation queue; *volumetric* abuse (DoS, spam floods) is handled at the infrastructure edge (rate-limiting, WAF — see [RA-01](/cyberbaser/design/reference-architectures/self-hosted-forgejo-auth/)). Don't conflate the two.
+Same content, different governance, set by whoever runs it. **Denial-of-service is a separate problem.** Content abuse is caught by the moderation queue; *volumetric* abuse (DoS, spam floods) is handled at the infrastructure edge (rate-limiting, WAF, see [RA-01](/cyberbaser/design/reference-architectures/self-hosted-forgejo-auth/)). Don't conflate the two.
 
 **Multiple surfaces, one pipeline.** A contributor should be able to act *from wherever they are, however suits them* — and the translation layer is what makes the richest of these possible:
 
@@ -135,13 +148,13 @@ Every surface feeds the *same* maintainer-configured pipeline: contribution → 
 
 ## Scope boundaries
 
-Equally important — what cyberbaser is **not** trying to solve, so future-me doesn't scope-creep.
+Equally important: what cyberbaser is **not** trying to solve, so it doesn't scope-creep.
 
-- **It IS a general contributable-wiki / CMS platform** — not a cyber tool. It turns *any* Obsidian vault into a contributable wiki, for any knowledge domain. The `cybersader/cyberbase` vault is the first dogfooding corpus, not the scope. (Earlier drafts framed this as "cyberbase-first, generalization is a stretch goal" — that was backwards; contributability is the product.)
-- **Not a replacement for Obsidian Publish.** It's a parallel option with different trade-offs.
-- **Not a vault host.** Cyberbaser reads from a vault repo you own (e.g. `cybersader/cyberbase`); it doesn't store or own your content.
+- **It is general, not a cyber tool.** It works on any markdown knowledge base, for any domain. The `cybersader/cyberbase` vault is the first dogfooding corpus, not the scope. (An earlier draft had this backwards as "cyber-first"; contributability is the point.)
+- **Renderers are swappable, not rivals.** Publish targets like Quartz or Obsidian Publish are things the layer can sit in front of, not competitors to beat.
+- **Not a content host.** Cyberbaser reads from a markdown repo you own; it doesn't store or own your content.
 - **Not a comments / discussion system.** GitHub Issues is the fallback.
-- **Not a realtime-collaborative editor (v1).** Conflicts resolve via git, not CRDT. (Real-time is gated on the [block↔markdown round-trip](/cyberbaser/research/v1-architecture/#block-markdown-fidelity--the-keystone-rd), deferred to v2+.)
+- **Not a real-time collaborative editor (v1).** Conflicts resolve through git, not CRDT. (Real-time is gated on the [block↔markdown round-trip](/cyberbaser/research/v1-architecture/#block-markdown-fidelity--the-keystone-rd), deferred to v2+.)
 
 ## Success looks like
 

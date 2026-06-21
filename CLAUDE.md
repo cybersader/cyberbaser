@@ -94,6 +94,12 @@ Any design decision anywhere in the project should be checked against the transl
 - **Published wiki content** (inside `docs/src/content/docs/`): kebab-case topic folders, per Astro Starlight conventions
 - **Research goes INTO files, not chat.** When researching a topic, update the relevant numbered file or create a new one in `docs/src/content/docs/research/`.
 
+## Writing style
+
+- **Use em-dashes sparingly.** They're fine occasionally for genuine emphasis or an aside, but don't reach for them as the default connector. Prefer commas, periods, colons, or parentheses. Two em-dashes in a paragraph is usually one too many. Applies to docs content and chat.
+- Prefer plain, concrete language over clever section titles. If a heading needs a beat to parse, rename it.
+- Don't over-anchor on Obsidian: cyberbaser is for markdown knowledge bases in general; Obsidian is a first-class surface, not the whole point or the only one.
+
 ## Don't
 
 - Extend the Phase-0 Astro site without a principle in `.claude/12-PRINCIPLES.md` that justifies the extension
