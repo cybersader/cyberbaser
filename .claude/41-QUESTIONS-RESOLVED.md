@@ -45,3 +45,9 @@
 - **Answer**: The **docs site** (`docs/src/content/docs/`) is the canonical KB. The `.claude/` numbered files are pointer stubs with greppable summaries; `PROJECT_CONTEXT.md` + `FOCUS.md` are the orientation layer.
 - **Rationale**: the numbered files froze in April while the docs matured through research + the vision sweep — two disagreeing brains, and agents read the stale one first. One canonical home per fact; the orientation layer must be updated in the same session as any locked decision.
 - **Consequence**: 12 numbered files converted to stubs; roadmap exit criteria re-anchored to docs pages; CLAUDE.md updated.
+
+### [R08] Does v1 need external demand validation before building?
+- **Asked**: 2026-06-19 (red-team #1 meta-risk) · **Resolved**: 2026-06-21
+- **Answer**: **No.** The maintainer is user #1 and will use it regardless — dogfooding is the v1 validation. External demand becomes a growth/adoption question, not a build gate.
+- **Rationale**: maintainer decision; the red-team's "unverified demand" risk applied to a product framing, not a dogfood-first tool.
+- **Consequence**: the Phase-R open gate shifts to the cheap falsification tests (PR probe, moderation policy, LICENSE) and the zero-account path; CMS/plugin hands-on unblocks after those.

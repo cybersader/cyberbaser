@@ -14,8 +14,8 @@
 - [x] Existing work inventoried — `reference/existing-work.mdx` 🌳
 - [x] Vision written from the locked essence — `getting-started/vision.mdx` 🌳
 - [x] Principles justified (Rule/Why/Rules-out each) — `getting-started/principles.mdx` 🌳
-- [ ] **The pain confirmed by at least 2-3 external KB maintainers** ← the open gate
-- [ ] **Cheap falsification tests run** (LLM→vault PR probe · moderation policy draft · vault LICENSE) — see `FOCUS.md`
+- [x] **Demand** — waived as a gate 2026-06-21: the maintainer is user #1; dogfooding is the v1 validation (R08). External demand = growth question, not a build gate.
+- [ ] **Cheap falsification tests run** (LLM→vault PR probe · moderation policy draft · vault LICENSE) ← the open gate — see `FOCUS.md`
 - [ ] Open questions ≤ 5 unresolved blockers — currently 7 on `reference/open-questions.mdx`; several are near-resolvable
 
 **In scope during Phase R:** research into the canonical docs pages; the validation tests above; keeping this `.claude/` orientation layer aligned in the same session as any locked decision.

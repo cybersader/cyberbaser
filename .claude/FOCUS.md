@@ -22,12 +22,13 @@ Last updated: 2026-06-21
 - Docs site = **the canonical KB** (vision-swept 2026-06-21). `.claude/` numbered files are now pointer stubs; see `PROJECT_CONTEXT.md` → knowledge-ops map.
 - Problem, ecosystem, primitives, prior art, vision, principles, architecture, translation-layer, contribution-workflows: all substantive with visuals. Roadmap exit criteria re-anchored (see `20-ROADMAP.md`).
 
-## What's Next (highest-severity, cheapest tests first — per the 2026-06-19 red-team)
+## What's Next
 
-1. **Validate the pain externally.** Get real people (2-3 KB maintainers, not just cyber) to confirm they want contributable wikis. Demand survey. *No building until this happens.* (#1 meta-risk: everything else is polished supply with unverified demand.)
-2. **Cheap falsification tests** (~1 day each): LLM→vault PR probe (agent-contribution claim) · a 2-paragraph moderation policy (test the trust-curve story concretely) · commit a vault `LICENSE` (unblocks public contribution legally).
-3. **Zero-account contribution path:** evaluate the serverless contribution-bot pattern (Contribunator/Staticman-style) against the trust-curve model — the honest gap left after the account-wall reframe.
-4. **CMS finalists hands-on** (Decap vs Sveltia vs EmDash) and **plugin execution testing** (Obsidian CLI/headless) — only after demand is validated.
+**Demand-validation gate waived (2026-06-21, maintainer decision):** the maintainer is user #1 and will use it regardless — dogfooding *is* the v1 validation. External demand becomes a growth question, not a build gate. (Logged as R08 in `41-QUESTIONS-RESOLVED.md`.)
+
+1. **Cheap falsification tests** (~1 day each): LLM→vault PR probe (agent-contribution claim) · a 2-paragraph moderation policy (test the trust-curve story concretely) · commit a vault `LICENSE` (unblocks public contribution legally).
+2. **Zero-account contribution path:** evaluate the serverless contribution-bot pattern (Contribunator/Staticman-style) against the trust-curve model — the honest gap left after the account-wall reframe.
+3. **CMS finalists hands-on** (Decap vs Sveltia vs EmDash) and **plugin execution testing** (Obsidian CLI/headless).
 
 **Done recently:** vision sweep across 26 pages (identity/renderer/host/account-wall/jargon) · principles + primitives + problem + ecosystem pages rebuilt with logo-anchored visuals · Quartz prior-art audit · SSOT challenge answered · RA-01 self-hosted auth · OFM round-trip spike · `.claude/` layer de-duplicated to pointer stubs (this file).
 
