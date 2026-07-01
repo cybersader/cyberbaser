@@ -56,6 +56,14 @@ The "Quartz already ships the publish half" test (risk #4) is **done**, and it c
 
 **Net:** lead with the essence: **an interoperability layer for contributable, version-controlled knowledge bases.** Concretely, the contribution + round-trip layer that sits between authoring tools (Obsidian is first-class, but not the only surface), renderers, and other knowledge bases. Treat forward publishing as a commodity to *adopt*, not build, and pour engineering into the one thing no SSG can do — turning a browser edit back into a clean, Obsidian-valid vault file under maintainer control.
 
+### Tested: agent PR probe + moderation policy + LICENSE (2026-06-21)
+
+Three of the cheap tests ran in one pass. Context shift first: **the demand survey is waived** — the maintainer is user #1 and will use it regardless, so dogfooding is the v1 validation and external demand becomes a growth question (decision R08 in the `.claude/` log).
+
+- **LLM→vault PR probe (scoped-down version): works.** An agent found a real defect in vault content (a doubled word in the Detection Engineering note), produced a surgical one-word OFM-safe fix, and opened [cyberbase#2](https://github.com/cybersader/cyberbase/pull/2) through the normal branch→PR pipeline. Bonus finding: a path with emoji + spaces + `&` traversed git/gh on WSL without issue (one of the flagged data-sync risks). Honest caveats: it used the maintainer's own credentials (a third-party agent needs the fork-PR path or the zero-account bot), and this was fix-a-defect, not the full feed→draft→PR pipeline from the original test spec; that fuller version stays open.
+- **Moderation reality: the policy wrote cleanly in two paragraphs** (see [the policy, concretely](/cyberbaser/design/contribution-workflows/#the-policy-concretely-cyberbases-own)) — queue-everything, trusted-list auto-merge for typos only, source-required for factual claims, three merged edits to earn trust, one bad submission to lose it, maintainer's call final. No deferrals needed, so the open-authoring surface passes this test.
+- **LICENSE: drafted and opened as [cyberbase#3](https://github.com/cybersader/cyberbase/pull/3)** — CC BY-SA 4.0 scoped with personal-content carve-outs, third-party-material exception, MIT for standalone code, and a contributor inbound-license clause. Merging it is the maintainer's decision (the carve-out list needs their eye). The binary-size/LFS half of the original test remains unrun.
+
 ### What to watch (long-term direction-changers)
 
 - A verifiably **lossless Obsidian-markdown↔block serializer** shipping → flips the [SSOT off-ramp](/cyberbaser/research/source-of-truth/) and unlocks block-native UX on plain `.md`. (Watch Logseq DB, Anytype.)

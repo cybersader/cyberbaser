@@ -15,7 +15,7 @@
 - [x] Vision written from the locked essence — `getting-started/vision.mdx` 🌳
 - [x] Principles justified (Rule/Why/Rules-out each) — `getting-started/principles.mdx` 🌳
 - [x] **Demand** — waived as a gate 2026-06-21: the maintainer is user #1; dogfooding is the v1 validation (R08). External demand = growth question, not a build gate.
-- [ ] **Cheap falsification tests run** (LLM→vault PR probe · moderation policy draft · vault LICENSE) ← the open gate — see `FOCUS.md`
+- [x] **Cheap falsification tests run** (2026-06-21): agent PR probe = cyberbase#2 · moderation policy = written into contribution-workflows · LICENSE = cyberbase#3. Pending maintainer merge of the two PRs; the fuller feed→draft→PR pipeline and LFS-size check stay open items in `FOCUS.md`.
 - [ ] Open questions ≤ 5 unresolved blockers — currently 7 on `reference/open-questions.mdx`; several are near-resolvable
 
 **In scope during Phase R:** research into the canonical docs pages; the validation tests above; keeping this `.claude/` orientation layer aligned in the same session as any locked decision.

@@ -105,6 +105,14 @@ Cyberbaser promises three contribution paths. Every path must work **independent
 
 Trusted contributors are designated in a `.github/trusted-contributors.yml` file (or similar). Moving someone onto that list is a conscious act.
 
+### The policy, concretely (cyberbase's own)
+
+This is the actual moderation policy for the dogfood vault, written out to prove the trust-curve story survives contact with specifics. Any maintainer using cyberbaser would write their own version of these two paragraphs, and the trust dial is exactly which parts they tighten or loosen.
+
+> **Every edit lands in the moderation queue; nothing goes live unreviewed** except typo-level fixes from contributors already on the trusted list. The maintainer reviews the rendered preview (not just the diff) and aims to act within a few days; "act" means merge, request changes, or reject with a one-line reason. Accepted edits are ones that make the content more true, more current, or more clear, and that cite a source for any factual claim that isn't self-evident. Anonymous edits are welcome on the same terms; identity is never required, it just speeds review as trust accrues.
+>
+> **Held or rejected without debate:** spam and promotion, edits to the personal folders (out of scope for contribution), factual changes with no source, drive-by rewrites of a page's voice or structure, and anything the maintainer judges to be generated bulk content. Contributors earn the trusted list after roughly three merged, unproblematic edits, and drop off it on the first spam or bad-faith submission; repeat abuse gets blocked at the repo (and, if volumetric, handled at the edge, which is [a separate problem](/cyberbaser/concepts/problem/#contribution-on-your-terms)). The maintainer's call is final; there is no appeals process at this scale, and that's a feature, not a gap.
+
 ### Preview / staging
 
 Every PR gets a preview deployment from the same pipeline that builds the site. The maintainer reviews the rendered preview before merging. This is the CI gate: if the preview fails to build, the PR can't merge.
