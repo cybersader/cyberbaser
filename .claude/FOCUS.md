@@ -26,7 +26,7 @@ Last updated: 2026-06-21
 
 **Demand-validation gate waived (2026-06-21, maintainer decision):** the maintainer is user #1 and will use it regardless — dogfooding *is* the v1 validation. External demand becomes a growth question, not a build gate. (Logged as R08 in `41-QUESTIONS-RESOLVED.md`.)
 
-1. ~~Cheap falsification tests~~ **RUN 2026-06-21** (results in `research/assumptions-and-risks.mdx` "Tested" section): agent PR probe worked ([cyberbase#2](https://github.com/cybersader/cyberbase/pull/2)); moderation policy wrote cleanly in two paragraphs (now on the contribution-workflows page); LICENSE drafted as [cyberbase#3](https://github.com/cybersader/cyberbase/pull/3). **Maintainer action: review/merge PRs #2 and #3** (the LICENSE carve-out list especially). Still open from the original specs: the full feed→draft→PR agent pipeline, and the vault binary-size/LFS check.
+1. ~~Cheap falsification tests~~ **RUN + MERGED 2026-06-21** (results in `research/assumptions-and-risks.mdx` "Tested" section): agent PR probe worked and merged (cyberbase#2); the vault is now licensed (CC BY-SA 4.0 scoped, cyberbase#3 merged); moderation policy written into contribution-workflows; a maintainer-facing **Legal & Governance** docs page now teaches all of it (`design/legal-and-governance.mdx`). Still open from the original specs: the full feed→draft→PR agent pipeline, and the vault binary-size/LFS check.
 2. **Zero-account contribution path:** evaluate the serverless contribution-bot pattern (Contribunator/Staticman-style) against the trust-curve model — the honest gap left after the account-wall reframe.
 3. **CMS finalists hands-on** (Decap vs Sveltia vs EmDash) and **plugin execution testing** (Obsidian CLI/headless).
 

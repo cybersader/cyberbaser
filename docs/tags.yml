@@ -89,3 +89,6 @@ tags:
   federation:
     label: Federation
     description: Cross-KB discovery, decentralized identity, mixed-privacy access
+  governance:
+    label: Governance
+    description: Licensing, moderation policy, and the legal side of running a contributable wiki

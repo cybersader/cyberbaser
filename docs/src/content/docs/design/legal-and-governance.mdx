@@ -1,0 +1,81 @@
+---
+title: Legal & Governance
+description: The in-practice layer of running a contributable wiki with cyberbaser — content licensing, the contributor clause, and a written moderation policy. Two documents cover almost all of it.
+sidebar:
+  order: 24
+status: research
+tags: [design, contribution, governance]
+---
+
+Making a knowledge base contributable isn't only a technical problem. The moment strangers can read and edit your content, two boring documents start doing load-bearing work: a **content license** and a **moderation policy**. Both are cheap to write and painful to retrofit. This page is the in-practice guide, using our own dogfood vault as the worked example.
+
+:::note
+This is practical guidance from running a contributable wiki, not legal advice.
+:::
+
+## Two licenses for two different things
+
+The most common confusion first. There are two separate licensing questions, and they never touch each other:
+
+| | What it governs | Example |
+|---|---|---|
+| **Tool license** | The software that runs your wiki (cyberbaser, the renderer, plugins) | MIT, Apache-2.0, AGPL |
+| **Content license** | The writing itself — your notes, pages, images | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), [CC BY](https://creativecommons.org/licenses/by/4.0/), [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
+
+Licensing your wiki's content does nothing to the tool, and the tool's license does nothing to your content. This page is about the content side. (For tool licenses, [choosealicense.com](https://choosealicense.com/) is the standard reference.)
+
+## Why your content needs a license at all
+
+Without one, the default is **all rights reserved**. That has two consequences that quietly break the contributable-wiki model:
+
+1. **Readers can't legally reuse anything.** Someone quoting your page in a blog post or copying a section into their own notes is technically infringing, even though your wiki is public. Publishing makes content *visible*, not *reusable*.
+2. **Incoming edits belong to the contributor.** When someone contributes a paragraph through [any of the contribution paths](/cyberbaser/design/contribution-workflows/), they own that paragraph by default. Without an inbound-license clause, every accepted edit adds a tiny ownership question mark to your own wiki.
+
+A content license fixes both: it grants readers defined permissions, and its contributor clause makes every accepted edit shareable under the same terms.
+
+## Choosing a content license
+
+For wikis, the realistic menu is short:
+
+- **CC BY-SA 4.0** (the wiki standard; Wikipedia's choice): anyone may share and adapt with attribution, and derivatives must stay under the same license. ShareAlike keeps your commons open.
+- **CC BY 4.0**: same but without ShareAlike. More permissive; people can build closed derivatives of your content.
+- **CC BY-NC variants**: block commercial reuse. Sounds protective, but "NC" creates real friction — other wikis, aggregators, and even ad-supported blogs can't cleanly reuse your content.
+- **CC0**: public domain, maximum freedom, no attribution required. Right for reference data; unusual for a wiki with authorship.
+
+Our dogfood vault picked **CC BY-SA 4.0** ([the actual LICENSE.md](https://github.com/cybersader/cyberbase/blob/main/LICENSE.md)).
+
+## Mixed vaults: carve out what isn't for reuse
+
+Real personal knowledge bases rarely contain only public-facing content. Our vault mixes cyber reference material with journals, finance notes, and resumes. A blanket "anyone may copy and adapt this" would grant the world rights over the journal too.
+
+The pattern: license the public content, and **list explicit exceptions**:
+
+- Personal folders (journal, finance, private projects): all rights reserved.
+- Third-party material (quotes, embedded images, referenced works): stays with its owners.
+- Standalone code in the repo: a code license (MIT), since Creative Commons isn't designed for code.
+
+This maps cleanly onto the [trust-dial idea](/cyberbaser/concepts/problem/#contribution-on-your-terms): just as the maintainer sets where contribution sits between open and locked, the maintainer sets which slices of the vault are legally reusable.
+
+## The contributor clause
+
+One sentence in the license does the work of a heavyweight contributor agreement:
+
+> By contributing to this vault, you agree that your contribution is licensed under CC BY-SA 4.0 and may be redistributed under these terms.
+
+For a personal or community wiki, this is enough: accepting a PR means accepting content you're allowed to keep publishing. Larger organizations sometimes want a formal [CLA](https://en.wikipedia.org/wiki/Contributor_License_Agreement) or [DCO](https://developercertificate.org/) instead; that's an escalation of the same idea, not a different one.
+
+## The moderation policy
+
+The second load-bearing document. If the license answers "who may reuse this?", the policy answers "what happens when someone edits it?" It should fit in two paragraphs; if it can't be written without deferrals, the open-contribution surface isn't ready to ship. Ours is written out at [The policy, concretely](/cyberbaser/design/contribution-workflows/#the-policy-concretely-cyberbases-own): everything queues, review criteria are stated, trust is earned in merged edits and lost in one bad submission.
+
+## Attribution
+
+Mostly free: in a git-backed wiki, authorship rides along in commit history, and fork-based contribution paths preserve the contributor as the commit author (see [attribution in the contribution workflows](/cyberbaser/design/contribution-workflows/#attribution)). The license's attribution requirement points at exactly that record.
+
+## The checklist
+
+1. Pick a content license (default: CC BY-SA 4.0).
+2. Write the exceptions list for anything personal or third-party.
+3. Include the contributor clause.
+4. Write the two-paragraph moderation policy.
+5. Commit both before inviting contributors, not after.
