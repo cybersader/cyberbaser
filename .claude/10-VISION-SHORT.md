@@ -1,13 +1,9 @@
 # 10 — Vision (Short)
 
-> **Status**: 🌱 Skeleton. One paragraph max, once grounded.
+> **Status**: ✅ Superseded. The canonical, maintained version of this content is the docs page below. This stub keeps the key facts greppable and points there. **Do not extend this file; edit the docs page instead.**
+>
+> **Canonical**: `docs/src/content/docs/getting-started/vision.mdx` · published at `/cyberbaser/getting-started/vision/`
 
-> TODO: one paragraph. If deleted, should make `11-VISION-LONG.md` feel unmoored.
+## Current truth (summary, 2026-06-21)
 
-## Draft (replace with real pitch after 01–05 are filled in)
-
-Cyberbaser is the pipeline that turns an Obsidian cyber knowledge vault into a living, contributable public wiki — one that anyone can read on the web, edit via a zero-git CMS, or extend from their own Obsidian vault, without any of those paths corrupting the others. GitHub is the single source of truth; Obsidian semantics round-trip; contribution is frictionless at every skill level.
-
----
-
-> Writing guide: after filling in 01-PROBLEM, 02-ECOSYSTEM, 04-PRIOR-ART, try to rewrite the paragraph above without looking at the draft. If the new version is sharper, replace. If it's the same, the draft was already load-bearing.
+**Cyberbaser is an interoperability layer for contributable, version-controlled knowledge bases.** It turns any markdown knowledge base (Obsidian is the first-class surface we dogfood) into a living, contributable public wiki: read on the web, edit in place, or extend from your own vault, and no path corrupts the others. Today the vault lives in git as the single source of truth; the layer never forces git on contributors. Contribution is a maintainer-controlled trust curve with a moderation queue: **contributable, not controllable**.

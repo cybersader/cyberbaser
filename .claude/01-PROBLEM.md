@@ -1,42 +1,13 @@
-# 01 — The Problem
+# 01 — Problem
 
-> **Status**: 🌱 Skeleton. Replace TODO prompts with real articulation.
+> **Status**: ✅ Superseded. The canonical, maintained version of this content is the docs page below. This stub keeps the key facts greppable and points there. **Do not extend this file; edit the docs page instead.**
+>
+> **Canonical**: `docs/src/content/docs/concepts/problem.mdx` · published at `/cyberbaser/concepts/problem/`
 
-## TL;DR (one sentence)
+## Current truth (summary, 2026-06-21)
 
-> TODO: one sentence that, if deleted, would make the rest of this project pointless. What problem — precisely — does cyberbaser solve?
-
-## The Pain
-
-> TODO: who feels pain today, doing what? Describe the actual friction someone hits when they try to (a) read a cyber knowledge vault, (b) contribute a correction, (c) share a page externally. Be specific — name the steps, not the abstraction.
-
-Candidate friction points to explore:
-
-- Obsidian vaults are private by default. Sharing requires either Obsidian Publish (paid, vendor-locked, limited features) or a static site generator + custom tooling (brittle, loses Obsidian affordances).
-- Contributing to someone else's vault requires cloning the repo, installing Obsidian, and learning git — a massive barrier for casual domain experts.
-- Existing "Obsidian→web" tools either (a) silently drop Obsidian-specific syntax, (b) require maintenance burden on the vault owner, or (c) break round-trip editing.
-- Cyber-specific wikis (awesome-lists, gitbook-based wikis, Notion-based public pages) don't compose well with a personal Obsidian workflow.
-
-> TODO: for each bullet above, either expand into a real finding or delete it.
-
-## Why Existing Solutions Don't Cover This
-
-> TODO: this is *not* prior-art analysis (that goes in `04-PRIOR-ART.md`). This is a summary of *why* none of them are a fit, phrased as constraints on cyberbaser.
-
-## Scope Boundaries
-
-> TODO: equally important — what problem cyberbaser is *not* trying to solve, so future-you doesn't scope-creep.
-
-Candidates to explicitly rule out (or in):
-
-- Is this a general-purpose Obsidian publisher, or only for cyber content? (currently: cyber-focused, but the tooling should generalize)
-- Is this a replacement for Obsidian Publish, or a parallel option? (currently: parallel)
-- Does it try to solve vault hosting, or just publishing? (currently: just publishing; the vault lives in `cybersader/cyberbase`)
-
-## Whose Pain Motivates This
-
-> TODO: write the one or two real users whose frustration this is built to address. Could be "me, when I want to share a page from my vault without committing to Publish" or "the generic cyber practitioner who wants to contribute a tool correction but doesn't know git."
-
-## Success Looks Like
-
-> TODO: a paragraph describing the state of the world if cyberbaser is successful. Not features — outcomes. What happens that couldn't happen before?
+- **TL;DR:** a markdown knowledge base is great in private; turning it into a *contributable* public wiki, without flattening its rich syntax or forcing contributors to learn git, is a problem nobody has fully solved. Cyberbaser is the open layer that solves it.
+- **Three axes of friction** (the triangle): markdown fidelity · low-friction contribution · no vendor lock-in. Every existing tool sits on an edge; cyberbaser's bet is the interior, unlocked by the translation layer.
+- **Who it's for:** anyone with a markdown KB (Obsidian first-class, not the only one), readers who spot wrong facts, developers who PR, and **AI agents** proposing changes through the same reviewed pipeline.
+- **Contribution on your terms:** a maintainer-set trust dial (fully open → locked down); every edit passes moderation. Identity gates are mostly theater; moderation is the load-bearing safety mechanism.
+- ⚠ **The pain is not yet externally validated** — no one outside the project has confirmed demand. That is the #1 open risk (see FOCUS.md).

@@ -1,21 +1,23 @@
 # Cyberbaser
 
-> Tooling repo for **Cyberbase** — a distributed, contributable cybersecurity knowledge wiki built on Obsidian + GitHub.
+> **An interoperability layer for contributable, version-controlled knowledge bases.** It sits between authoring tools (Obsidian first-class, any markdown surface), swappable renderers, and — eventually — other knowledge bases. General, not a cyber tool: the `cybersader/cyberbase` vault is the first dogfood content, not the scope.
 
 ## Read These First (in order)
 
 When starting any Claude session in this repo:
 
-1. **`.claude/PROJECT_CONTEXT.md`** — what cyberbaser is, who it's for, how it relates to sibling repos
-2. **`.claude/FOCUS.md`** — current phase, what's active right now, what's explicitly out of scope
+1. **`.claude/PROJECT_CONTEXT.md`** — the locked identity, hard constraints, knowledge-ops map, sibling repos
+2. **`.claude/FOCUS.md`** — current state, what's locked, what's next, what's out of scope
 3. **`.claude/KNOWLEDGE_BASE_PHILOSOPHY.md`** — the living-KB pattern used across all Cybersader projects
-4. **`.claude/00-INDEX.md`** — navigation to the numbered first-principles files (01 through 41)
+4. **`.claude/00-INDEX.md`** — how the two-layer KB works + the stub → canonical-page map
 
 Most questions about "what is this / where does this belong / what should I do" are answered by those four files.
 
+**Knowledge-ops rule:** the **canonical KB is the docs site** (`docs/src/content/docs/` — problem, principles, vision, architecture, research). The `.claude/` layer orients agents and points there. When a decision gets locked, update `.claude/` (FOCUS, 41-QUESTIONS-RESOLVED, PROJECT_CONTEXT if direction changed) **in the same session** — a stale orientation layer sends fresh agents in an old direction.
+
 ## Current Phase
 
-**Research & Foundations** 🔴 — see `.claude/20-ROADMAP.md`. No shipping-oriented implementation work until the `.claude/01-PROBLEM.md` through `.claude/12-PRINCIPLES.md` files have substantive content. The Phase-0 Astro + Starlight prototype in `docs/` exists and works, but it's parked — don't extend it without a principle to justify the extension.
+**Research & Foundations** 🔴 — see `.claude/20-ROADMAP.md`. The foundational content is written (the docs pages for problem through principles are substantive and vision-swept); the **open gate is external validation** — confirming real demand and running the cheap falsification tests in `.claude/FOCUS.md`. No CMS/auth/editor implementation until then. The Phase-0 Astro + Starlight prototype in `docs/` publishes the research and is otherwise parked — don't extend it without a principle to justify the extension.
 
 ## Repo Layout
 
@@ -27,7 +29,7 @@ cyberbaser/
 │   ├── KNOWLEDGE_BASE_PHILOSOPHY.md
 │   ├── DOCUMENTATION_STYLE.md
 │   ├── RESEARCH_SOURCES.md
-│   ├── 00-INDEX.md … 41-QUESTIONS-RESOLVED.md  # first-principles KB
+│   ├── 00-INDEX.md … 41-QUESTIONS-RESOLVED.md  # pointer stubs → canonical docs pages + the decision log
 │   └── settings.local.json
 │
 ├── .workspace/           # Personal scratch (folder tracked, contents ignored)
@@ -55,19 +57,22 @@ bun run build        # Production build
 bun run test:e2e     # Playwright tests
 ```
 
-## Key Invariants (candidate principles, see `.claude/12-PRINCIPLES.md`)
+## Key Invariants (the six principles, canonical: `docs/src/content/docs/getting-started/principles.mdx`)
 
-These are working hypotheses, not yet fully grounded. Treat them as constraints unless research explicitly overturns them.
+Grounded and justified on the principles page; treat as hard constraints unless new evidence overturns them.
 
-1. **GitHub is the single source of truth.** The vault repo (`cybersader/cyberbase`) is authoritative.
-2. **Obsidian semantics must round-trip.** Web edits must not corrupt Obsidian files and vice versa.
-3. **Contributors shouldn't need to learn git.** Every contribution path must work independently.
-4. **The vault is primary; cyberbaser is derivative.** If cyberbaser disappears, the vault still works.
-5. **Research before implementation.** Code follows principles, not the other way around.
+1. **A single source of truth you own.** One authoritative, version-controlled copy (a git repo today — the current manifestation, not the essence; contributors are never forced onto git).
+2. **Authoring semantics must round-trip.** Web edits must not corrupt vault files and vice versa (Obsidian is the first-class case). Proven feasible: `spikes/ofm-roundtrip/`, 20/21.
+3. **Contributors shouldn't need to learn git.** Contribution = maintainer-set trust curve + moderation queue; accounts optional, never a wall.
+4. **Every contribution path works independently.** Web CMS, Obsidian+Git, direct GitHub; no path is a client of another.
+5. **The vault is primary; cyberbaser is derivative.** If cyberbaser disappears, the vault still works.
+6. **Research before implementation.** Code follows principles, not the other way around.
+
+Plus two architecture constraints: **the hub is renderer-agnostic** (SSGs are swappable spokes; never couple to one) and **no hyperscalers** (GitHub Pages current host, Cloudflare edge-only, self-hosted Forgejo preferred for identity).
 
 ## The Critical Problem: Translation Layer
 
-The hardest part of cyberbaser is converting Obsidian content to web without losing fidelity. The full treatment lives in `.claude/22-TRANSLATION-LAYER.md`. Short version of the tier system:
+The hardest part of cyberbaser is round-tripping markdown between authoring tools and the web without loss. The full treatment lives in `docs/src/content/docs/design/translation-layer.mdx` (stub: `.claude/22-TRANSLATION-LAYER.md`). Short version of the tier system:
 
 - **Tier 1 (Full)**: Wikilinks, callouts, embeds, code, math, Mermaid, tables
 - **Tier 2 (Partial)**: Simple Dataview, block refs, aliases, frontmatter metadata
@@ -80,6 +85,8 @@ Any design decision anywhere in the project should be checked against the transl
 - **cybersader/crosswalker** — most mature `.claude/` layout; the numbered-file convention here was copied from it
 - **cybersader/cyberchaste** — source of `KNOWLEDGE_BASE_PHILOSOPHY.md` and `DOCUMENTATION_STYLE.md` (identical across both)
 - **cybersader/agentic-workflow-and-tech-stack** — meta scaffold for agent workflows
+- **Retake Forge** — Obsidian in the browser (strategically adjacent: a potential authoring spoke for the web-edit path)
+- **Sinario** — cyber scenarios tooling (content-adjacent)
 
 ## External Context
 
@@ -92,7 +99,7 @@ Any design decision anywhere in the project should be checked against the transl
 - **`.claude/` KB files**: `SCREAMING_SNAKE_CASE.md` (e.g., `TRANSLATION_LAYER.md`)
 - **Numbered meta files**: `NN-TITLE.md` where NN groups by topic (00 index, 01-05 problem space, 10-12 vision/principles, 20-29 roadmap/architecture, 30-39 decisions, 40-49 questions)
 - **Published wiki content** (inside `docs/src/content/docs/`): kebab-case topic folders, per Astro Starlight conventions
-- **Research goes INTO files, not chat.** When researching a topic, update the relevant numbered file or create a new one in `docs/src/content/docs/research/`.
+- **Research goes INTO files, not chat.** New findings go to the canonical docs page (or a new page in `docs/src/content/docs/research/`); locked decisions also land in `.claude/41-QUESTIONS-RESOLVED.md`, and in `FOCUS.md`/`PROJECT_CONTEXT.md` if they change direction.
 
 ## Writing style
 
@@ -112,7 +119,9 @@ When unsure, verify instead of guessing: serve the built site and measure the bo
 
 ## Don't
 
-- Extend the Phase-0 Astro site without a principle in `.claude/12-PRINCIPLES.md` that justifies the extension
-- Write principles before the evidence in 01/02/04 justifies them
+- Extend the Phase-0 Astro site without a principle (canonical: `getting-started/principles.mdx`) that justifies the extension
+- Relitigate the locked decisions in `.claude/FOCUS.md` / `41-QUESTIONS-RESOLVED.md` without new evidence
+- Start CMS/auth/editor implementation before the demand-validation gate in FOCUS.md is passed
 - Populate later roadmap phases with concrete steps while Phase R is still active
+- Let the `.claude/` orientation layer drift: locked decisions propagate there in the same session
 - Edit files in `.workspace/_archive-phase-0-docs/` — it's an archive, not a live doc source

@@ -1,42 +1,15 @@
 # 12 — Principles
 
-> **Status**: 🌱 Skeleton. Don't write principles before the evidence that justifies them (see 01, 02, 04, 05 first).
+> **Status**: ✅ Superseded. The canonical, maintained version of this content is the docs page below. This stub keeps the key facts greppable and points there. **Do not extend this file; edit the docs page instead.**
+>
+> **Canonical**: `docs/src/content/docs/getting-started/principles.mdx` · published at `/cyberbaser/getting-started/principles/`
 
-Design principles are constraints on future decisions. Each principle should:
-1. State a rule
-2. Justify it with a reason (ideally grounded in a prior-art lesson or a concrete incident)
-3. Say what it *rules out*, so it's falsifiable
+## Current truth (summary, 2026-06-21)
 
-## Candidate Principles (to validate after research)
-
-### 1. GitHub is the single source of truth.
-- **Why**: TODO — grounded in the "vendor lock-in is the enemy" lesson from ecosystem and prior-art surveys.
-- **Rules out**: sidecar databases; CMSes that store content outside the repo; solutions that put the vault in a proprietary format.
-
-### 2. Obsidian semantics must round-trip.
-- **Why**: TODO — if wikilinks break or callouts don't survive web editing, contributors are forced into one tool.
-- **Rules out**: lossy transforms; publishing pipelines that flatten Obsidian syntax to plain HTML without reverse mapping.
-
-### 3. Contributors shouldn't need to learn git.
-- **Why**: TODO — the biggest barrier to community contribution on existing Obsidian vaults.
-- **Rules out**: "Just send a PR" as the only path.
-
-### 4. Every contribution path must work independently.
-- **Why**: TODO — if Web CMS depends on Obsidian being running, it's not really a separate path.
-- **Rules out**: architectures where one path is a privileged client of another.
-
-### 5. The vault is primary; cyberbaser is derivative.
-- **Why**: TODO — if cyberbaser disappears, the vault should still be a fully functional Obsidian vault.
-- **Rules out**: vault-side tooling that can't be removed without breaking the vault.
-
-### 6. Prefer open-source, composable tools over bundled platforms.
-- **Why**: TODO — grounded in the "no vendor lock-in" lesson and the sibling-project pattern of small composable parts.
-- **Rules out**: solutions where the SSG, CMS, auth, and hosting come from a single vendor and can't be swapped.
-
-### 7. Research before implementation.
-- **Why**: TODO — this is meta-principle, but the reinit itself is evidence. The Phase-0 scaffolding was built before the first-principles thinking; now we're retro-fitting principles.
-- **Rules out**: writing code to "see what happens" before the relevant numbered file has substantive content.
-
----
-
-> Once validated, promote these into `CLAUDE.md` as the project's invariants.
+Six principles, each with Rule / Why / Rules-out and a visual on the docs page:
+1. **A single source of truth you own** — git repo today; *current manifestation, not essence*; the layer never forces git on contributors.
+2. **Authoring semantics must round-trip** — a web edit returns byte-faithful markdown (wikilinks, callouts, block refs intact).
+3. **Contributors shouldn't need to learn git** — floor = "as easy as editing an awesome-list" (Edit · type · Propose).
+4. **Every contribution path works independently** — Web CMS, Obsidian+Git, direct GitHub; no path is a client of another.
+5. **The vault is primary; cyberbaser is derivative** — delete cyberbaser and the vault still opens clean.
+6. **Research before implementation** — no feature without a written justification first.

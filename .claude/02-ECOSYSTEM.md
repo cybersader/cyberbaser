@@ -1,89 +1,11 @@
 # 02 — Ecosystem
 
-> **Status**: 🌱 Skeleton. Each tool gets a real section after actual research.
+> **Status**: ✅ Superseded. The canonical, maintained version of this content is the docs page below. This stub keeps the key facts greppable and points there. **Do not extend this file; edit the docs page instead.**
+>
+> **Canonical**: `docs/src/content/docs/concepts/ecosystem.mdx` · published at `/cyberbaser/concepts/ecosystem/`
 
-The landscape of tools that touch the problem space cyberbaser operates in. This is not prior-art analysis (that's `04-PRIOR-ART.md`) — this is an inventory of *what exists*, grouped by the role each thing plays. Prior-art is about "what did they try and learn"; this file is about "what shelf do I grab a component from if I want X."
+## Current truth (summary, 2026-06-21)
 
-## Static Site Generators (the "publisher" layer)
-
-### Astro (current choice)
-> TODO: why we started here. Strengths: flexible, ecosystem, MDX support. Weaknesses: TODO.
-
-### Starlight
-> TODO: what it is, why we layered it on Astro. Navigation autogeneration, docs-specific defaults. Weaknesses: opinionated layout.
-
-### Quartz v4
-> TODO: the current baseline for "Obsidian→web" in the community. What it does well, what it gives up.
-
-### Docusaurus
-> TODO: the docs-site incumbent. What it teaches us about large wiki navigation.
-
-### MkDocs Material
-> TODO: Python-based, very polished. Why we didn't pick it.
-
-### Logseq Publish
-> TODO: parallel ecosystem, worth understanding because some concepts transfer.
-
-## Obsidian-Native Publishing
-
-### Obsidian Publish (official)
-> TODO: the paid offering. What it includes, what it costs, why it's not a fit for cyberbaser.
-
-### Digital Garden (plugin)
-> TODO: community plugin. How it works. Lessons.
-
-### Obsidian Export (plugin family)
-> TODO: assorted plugins that turn a vault into markdown for another system.
-
-## Headless CMS / Git-Backed CMS (the "contribution" layer)
-
-### Decap CMS
-> TODO: formerly Netlify CMS. Open Authoring is the killer feature.
-
-### Sveltia CMS
-> TODO: modern fork of Decap, worth tracking.
-
-### TinaCMS
-> TODO: another git-backed CMS. Different model (inline editing).
-
-### GitHub Web Editor + PR workflow
-> TODO: the baseline. No CMS at all — just the "Edit this page" link.
-
-## Translation / Markdown Processing (the "round-trip" layer)
-
-### unified / remark / rehype
-> TODO: the AST ecosystem. Everything else is built on this.
-
-### remark-wiki-link
-> TODO: handles `[[wikilinks]]` → HTML.
-
-### astro-loader-obsidian
-> TODO: currently a dependency. What it does, where it falls short.
-
-### Pandoc
-> TODO: heavyweight alternative. Worth knowing about even if not used.
-
-## Hosting
-
-### Cloudflare Pages (current choice)
-> TODO: why. Strengths: global CDN, free tier, Pages Functions. Weaknesses: TODO.
-
-### GitHub Pages
-> TODO: the baseline free option. Why not.
-
-### Vercel / Netlify
-> TODO: commercial alternatives with generous free tiers.
-
-## Auth (for contribution workflows)
-
-### GitHub OAuth
-> TODO: the primary auth mechanism for Open Authoring. Requires OAuth proxy.
-
-### Other identity providers
-> TODO: not in scope for now but worth noting as an extension point.
-
----
-
-## Gap Analysis
-
-> TODO: after filling in the above, write one paragraph here: what's missing from the ecosystem? What combination of these tools does cyberbaser need that doesn't exist as a ready-made product? That gap is the reason cyberbaser exists.
+- Four layers: **publishing/SSG** (commodity, swappable: Astro/Starlight today, Quartz, Docusaurus, MkDocs), **translation** (unified/remark/rehype, astro-loader-obsidian unproven for Tier 1), **contribution/CMS** (Decap Open Authoring, Sveltia, Tina, GitHub web editor), **hosting + auth** (GitHub Pages current, Forgejo self-host preferred, Cloudflare edge-only, GitHub OAuth = one option).
+- The docs page has a logo+link card per tool (21 tools).
+- Hypothesis: an SSG + a competent translation layer + Open Authoring + static host + self-hostable identity *composition* satisfies all three corners of the problem triangle; no single tool does.

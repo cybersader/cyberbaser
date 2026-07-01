@@ -1,73 +1,39 @@
 # Cyberbaser Knowledge Base — Index
 
-> Navigation for the numbered first-principles files. Start at 01 and read forward; the files build on each other.
+> **How this KB works (two layers):** the **canonical knowledge base is the docs site** (`docs/src/content/docs/`) — mature, vision-swept, test-covered. This `.claude/` layer is the **orientation + pointer layer** for agents: read `PROJECT_CONTEXT.md` then `FOCUS.md` to get the direction, then follow stub pointers into the docs for depth. The numbered files below are greppable stubs, each summarizing current truth and linking its canonical page. **Locked a decision? Update this layer in the same session** (see `41-QUESTIONS-RESOLVED.md` R07).
 
-## Meta (read first)
+## Meta (read first, in order)
 
 | File | What it's for |
 |---|---|
-| [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) | What cyberbaser is, who it's for, how it relates to siblings |
-| [KNOWLEDGE_BASE_PHILOSOPHY.md](./KNOWLEDGE_BASE_PHILOSOPHY.md) | Shared KB pattern across all Cybersader projects |
-| [FOCUS.md](./FOCUS.md) | Current state and what's active right now (dated snapshot) |
+| [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) | The locked identity, hard constraints, knowledge-ops map, siblings |
+| [FOCUS.md](./FOCUS.md) | Current state, what's locked, what's next (dated snapshot) |
+| [KNOWLEDGE_BASE_PHILOSOPHY.md](./KNOWLEDGE_BASE_PHILOSOPHY.md) | Shared living-KB pattern across Cybersader projects |
 | [DOCUMENTATION_STYLE.md](./DOCUMENTATION_STYLE.md) | Naming, structure, tone conventions |
-| [RESEARCH_SOURCES.md](./RESEARCH_SOURCES.md) | Primary sources, vaults, sibling repos |
+| [RESEARCH_SOURCES.md](./RESEARCH_SOURCES.md) | Curated primary sources (real content, not a stub) |
 
-## Problem Space (01–05)
+## Numbered stubs → canonical docs pages
 
-| File | What it answers |
+| Stub | Canonical page |
 |---|---|
-| [01-PROBLEM.md](./01-PROBLEM.md) | What problem does cyberbaser actually solve? |
-| [02-ECOSYSTEM.md](./02-ECOSYSTEM.md) | What's the landscape of tools around this problem? |
-| [03-CONCEPTS.md](./03-CONCEPTS.md) | What primitives does the project reason about? |
-| [04-PRIOR-ART.md](./04-PRIOR-ART.md) | Who has tried this before and what did they learn? |
-| [05-EXISTING-WORK.md](./05-EXISTING-WORK.md) | What has *we* already built toward this? |
-
-## Vision & Principles (10–12)
-
-| File | What it answers |
-|---|---|
-| [10-VISION-SHORT.md](./10-VISION-SHORT.md) | One-paragraph pitch |
-| [11-VISION-LONG.md](./11-VISION-LONG.md) | End-state narrative; user journeys |
-| [12-PRINCIPLES.md](./12-PRINCIPLES.md) | Design principles that constrain future decisions |
-
-## Roadmap & Architecture (20–29)
-
-| File | What it answers |
-|---|---|
-| [20-ROADMAP.md](./20-ROADMAP.md) | Phased plan (current phase: Research & Foundations) |
-| [21-ARCHITECTURE.md](./21-ARCHITECTURE.md) | Technical architecture |
-| [22-TRANSLATION-LAYER.md](./22-TRANSLATION-LAYER.md) | The hard problem: Obsidian syntax → web HTML |
-| [23-CONTRIBUTION-WORKFLOWS.md](./23-CONTRIBUTION-WORKFLOWS.md) | Three contribution paths and who each serves |
-
-## Decisions (30–39)
-
-| File | What it answers |
-|---|---|
-| [31-TRADEOFFS.md](./31-TRADEOFFS.md) | Key design trade-offs and rationale |
-
-## Questions (40–49)
-
-| File | What it answers |
-|---|---|
-| [40-QUESTIONS-OPEN.md](./40-QUESTIONS-OPEN.md) | Unresolved blockers |
-| [41-QUESTIONS-RESOLVED.md](./41-QUESTIONS-RESOLVED.md) | Answered questions with rationale |
-
----
+| [01-PROBLEM](./01-PROBLEM.md) | `concepts/problem.mdx` |
+| [02-ECOSYSTEM](./02-ECOSYSTEM.md) | `concepts/ecosystem.mdx` |
+| [03-CONCEPTS](./03-CONCEPTS.md) | `concepts/primitives.mdx` |
+| [04-PRIOR-ART](./04-PRIOR-ART.md) | `research/prior-art/` |
+| [05-EXISTING-WORK](./05-EXISTING-WORK.md) | `reference/existing-work.mdx` |
+| [10-VISION-SHORT](./10-VISION-SHORT.md) / [11-VISION-LONG](./11-VISION-LONG.md) | `getting-started/vision.mdx` |
+| [12-PRINCIPLES](./12-PRINCIPLES.md) | `getting-started/principles.mdx` |
+| [20-ROADMAP](./20-ROADMAP.md) | `getting-started/roadmap.mdx` (this one is a real operating view, not just a stub) |
+| [21-ARCHITECTURE](./21-ARCHITECTURE.md) | `design/architecture.mdx` |
+| [22-TRANSLATION-LAYER](./22-TRANSLATION-LAYER.md) | `design/translation-layer.mdx` |
+| [23-CONTRIBUTION-WORKFLOWS](./23-CONTRIBUTION-WORKFLOWS.md) | `design/contribution-workflows.mdx` |
+| [31-TRADEOFFS](./31-TRADEOFFS.md) | `reference/tradeoffs.mdx` |
+| [40-QUESTIONS-OPEN](./40-QUESTIONS-OPEN.md) | `reference/open-questions.mdx` |
+| [41-QUESTIONS-RESOLVED](./41-QUESTIONS-RESOLVED.md) | **Live here** — the agent-side decision log with rationale |
 
 ## Status Legend
 
-Each file below starts as a **skeleton** — headings and TODO prompts, not finished content. Progress is measured by replacing TODOs with real thinking.
+- ✅ Superseded stub (canonical content lives on the docs page; stub keeps key facts greppable)
+- 🌳 Live in this layer (PROJECT_CONTEXT, FOCUS, 20-ROADMAP, 40/41, RESEARCH_SOURCES)
 
-- 🌱 Skeleton only (TODOs, no content yet)
-- 🌿 Partially filled
-- 🌳 Substantive content
-- ✅ Stable (subject to updates as understanding deepens)
-
-Current state (2026-04-11):
-
-- 01–05: 🌱
-- 10–12: 🌱
-- 20: 🌱 (roadmap explicitly says we're in Research & Foundations — do not populate further phases yet)
-- 21–23: 🌱
-- 31: 🌱
-- 40–41: 🌱 (40 will fill up as research surfaces blockers)
+Current state (2026-06-21): orientation layer fully re-aligned to the locked vision; drift eliminated (was frozen at 2026-04-11).

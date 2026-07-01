@@ -1,81 +1,61 @@
 # 20 — Roadmap
 
-> **Status**: 🌱 Skeleton. Only Phase R is active. Do not populate later phases with concrete steps until the research outputs justify them.
+> **Status**: 🌳 Current (re-anchored 2026-06-21). The canonical public roadmap is `docs/src/content/docs/getting-started/roadmap.mdx` (`/cyberbaser/getting-started/roadmap/`); this file is the agent-side operating view. Only Phase R is active; later phases stay sketches until research justifies them.
 
 ## Current Phase: **R — Research & Foundations** 🔴 ACTIVE
 
-**Goal**: Produce substantive content in `.claude/01-PROBLEM.md` through `.claude/12-PRINCIPLES.md` so that every subsequent phase can cite a specific file/section as its justification. No implementation work in this phase except minor fixes to the parked Phase-0 prototype if it blocks research.
+**Goal (updated):** the foundations are *written* — the canonical KB (the docs site) now has substantive, vision-swept content for problem, ecosystem, primitives, prior art, vision, principles, architecture, translation layer, and contribution workflows. What Phase R still owes is **external validation**: evidence that someone besides us wants this, and that the contribution model holds up outside our heads.
 
-**Exit criteria** (all must be true to leave Phase R):
-- [ ] `01-PROBLEM.md` is 🌳 — one-sentence TL;DR plus an articulated pain, whose pain it is, and explicit scope boundaries.
-- [ ] `02-ECOSYSTEM.md` is 🌿 or better — every tool listed has a real paragraph, not a TODO.
-- [ ] `03-CONCEPTS.md` is 🌳 — every primitive has "What / Why / How" filled in.
-- [ ] `04-PRIOR-ART.md` is 🌳 — every entry has a "Lesson for cyberbaser" sentence.
-- [ ] `05-EXISTING-WORK.md` is ✅ — inventory is complete and audited against reality.
-- [ ] `10-VISION-SHORT.md` rewritten (not the draft) after reading 01–05.
-- [ ] `11-VISION-LONG.md` is 🌳 — every stakeholder perspective has a real narrative.
-- [ ] `12-PRINCIPLES.md` is 🌳 — every principle has a justified "Why" grounded in 01/02/04 content, not a TODO.
-- [ ] `40-QUESTIONS-OPEN.md` has at most 5 unresolved blockers (the rest have been moved to 41-RESOLVED).
+**Exit criteria** (content criteria re-anchored to the canonical docs pages):
+- [x] Problem articulated (TL;DR, whose pain, scope) — `concepts/problem.mdx` 🌳
+- [x] Ecosystem surveyed, every tool substantive — `concepts/ecosystem.mdx` 🌳
+- [x] Primitives defined (what/why/how + visuals) — `concepts/primitives.mdx` 🌳
+- [x] Prior art with lessons — `research/prior-art/` 🌳 (incl. the tested Quartz audit)
+- [x] Existing work inventoried — `reference/existing-work.mdx` 🌳
+- [x] Vision written from the locked essence — `getting-started/vision.mdx` 🌳
+- [x] Principles justified (Rule/Why/Rules-out each) — `getting-started/principles.mdx` 🌳
+- [ ] **The pain confirmed by at least 2-3 external KB maintainers** ← the open gate
+- [ ] **Cheap falsification tests run** (LLM→vault PR probe · moderation policy draft · vault LICENSE) — see `FOCUS.md`
+- [ ] Open questions ≤ 5 unresolved blockers — currently 7 on `reference/open-questions.mdx`; several are near-resolvable
 
-**In scope during Phase R**:
-- Reading and writing into the numbered `.claude/` files
-- Auditing the local Obsidian research vault  for prior thinking to port in
-- Mining `.workspace/_archive-phase-0-docs/` for content that should be hoisted into the numbered files (especially for 21-ARCHITECTURE and 22-TRANSLATION-LAYER)
-- Surveying sibling projects (crosswalker, cyberchaste) for patterns worth borrowing
-- Minor bug fixes to the parked Phase-0 prototype *only* if a research path requires running the site
+**In scope during Phase R:** research into the canonical docs pages; the validation tests above; keeping this `.claude/` orientation layer aligned in the same session as any locked decision.
 
-**Explicitly out of scope during Phase R**:
-- New features in `docs/` (the Astro Starlight site)
-- Refactoring Astro configuration, Starlight theme, or test infrastructure
-- Alternative SSG evaluation (unless research explicitly calls for it)
-- Decap CMS / Open Authoring integration work
-- Translation layer implementation
-- Any code that isn't a direct consequence of an already-written principle in `12-PRINCIPLES.md`
+**Explicitly out of scope during Phase R:** CMS/auth/editor/collaboration implementation; extending the Phase-0 prototype beyond publishing the research; alternative-SSG evaluation (the renderer is a commodity spoke by principle); any code not justified by a written principle or trade-off.
 
 ---
 
 ## Phase 0: Foundation (PARKED)
 
-**Status**: ⚪ Paused. Prototype exists in `docs/`. Not actively developed.
+**Status**: ⚪ Paused. The Astro + Starlight prototype in `docs/` publishes the research; it is not the product.
 
-What was built before the reinit (captured here only so future-me doesn't forget):
-- Astro + Starlight scaffold
-- Playwright E2E smoke tests
-- Cloudflare Pages deploy workflow
-- Bun migration from npm
-- Custom domain + Cloudflare Pages project creation
+Built before/around the reinit: Astro + Starlight scaffold (Nova theme), Playwright layout + smoke suites, GitHub Pages deploy workflow (`actions/deploy-pages@v4`; the old Cloudflare Pages workflow is a dead artifact), Bun toolchain, the visual component library in `brand.css` (mockups, trees, diffs, dials), the OFM round-trip spike in `spikes/`.
 
-What was intentionally *not* built (because there was no principle to justify it yet):
-- Translation layer (wikilinks, callouts, embeds)
-- Decap CMS integration
-- GitHub OAuth proxy
-- Backlinks rendering
-- Obsidian-aware navigation generation
+Intentionally *not* built (no principle justified it yet): translation-layer implementation, CMS integration, auth, backlinks rendering, Obsidian-aware nav.
 
-Phase 0 may resume after Phase R, possibly with a rewrite if principles say so.
+Phase 0 may resume after Phase R, possibly as a rewrite if principles say so — and renderer-agnostic by principle either way.
 
 ---
 
 ## Future Phases (Deferred — do not flesh out yet)
 
-These are placeholders. Each will get a real outline only after Phase R exits and the relevant principles are written.
+Placeholders only; each gets a real outline when Phase R exits.
 
-### Phase 1 — Translation Layer Spike
-> TODO (after Phase R). Likely focus: prove the Tier 1 translation layer (wikilinks, callouts, embeds, math, Mermaid) with real vault content.
+### Phase 1 — Translation Layer Hands-On
+> Prove Tier 1 against real vault content (`astro-loader-obsidian` sufficiency vs custom remark/rehype); build on the 20/21 spike.
 
 ### Phase 2 — Contribution Workflows
-> TODO (after Phase R). Likely focus: implement at least two of the three contribution paths (Web CMS + Direct GitHub is probably the MVP pair).
+> Implement ≥2 of the three paths (Web CMS + direct GitHub likely MVP pair); trust curve + moderation queue; the zero-account contribution-bot path; Forgejo/RA-01 substrate decision.
 
 ### Phase 3 — Publish the Real Vault
-> TODO (after Phase R). Likely focus: point cyberbaser at `cybersader/cyberbase` content and deploy to a real domain.
+> Point at `cybersader/cyberbase`, deploy to a real domain (stable-URL scheme decided by then).
 
 ### Phase 4 — Community Onboarding
-> TODO (after Phase R). Likely focus: CONTRIBUTING.md, docs, examples, first external contributor.
+> CONTRIBUTING.md, LICENSE follow-through, first external contributor.
 
 ---
 
 ## Roadmap Operating Rules
 
-1. **Roadmap is downstream of principles.** If you find yourself adding a step here that isn't justified by a principle in `12-PRINCIPLES.md`, stop and write the principle first (or decide you don't need the step).
-2. **Phase R exits only by the exit criteria above.** No "close enough" shortcuts. The whole point of the reinit was to resist the pull to implementation before thinking is done.
-3. **Update this file when a phase exits or scope changes.** Keep `FOCUS.md` as the short-term snapshot and this file as the long-term plan.
+1. **Roadmap is downstream of principles.** A step that no principle justifies means: write the principle first or drop the step. (Principles: `getting-started/principles.mdx`.)
+2. **Phase R exits only by the exit criteria above** — and the open gate is now *validation*, not writing. Resist "the docs look done, so we're done."
+3. **Update this file when a phase exits or scope changes.** `FOCUS.md` is the short-term snapshot; this file is the long-term plan; the docs roadmap page is the public canon.
