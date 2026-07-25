@@ -38,7 +38,7 @@ Phase 0 may resume after Phase R, possibly as a rewrite if principles say so —
 
 ## Future Phases (Deferred — do not flesh out yet)
 
-Placeholders only; each gets a real outline when Phase R exits.
+Placeholders only; each gets a real outline when Phase R exits. **⚠ Phases 1-2 as written are under challenge (2026-07-25):** the plan critique and design pass argue Phase 1 presupposes a renderer chain the Quartz audit already beat, and Phase 2's "≥2 paths" is padding. Their replacements are gated on R09 (the corpus measurement) — see `/cyberbaser/research/v1-build-plan/`. Do not outline these phases until R09 resolves.
 
 ### Phase 1 — Translation Layer Hands-On
 > Prove Tier 1 against real vault content (`astro-loader-obsidian` sufficiency vs custom remark/rehype); build on the 20/21 spike.
@@ -48,6 +48,7 @@ Placeholders only; each gets a real outline when Phase R exits.
 
 ### Phase 3 — Publish the Real Vault
 > Point at `cybersader/cyberbase`, deploy to a real domain (stable-URL scheme decided by then).
+> **Prerequisite (2026-07-25): the publish boundary.** Phase 3 needs the include/exclude mechanism (publish filter + leak tests) before pointing a renderer at the vault — as a *feature* (the maintainer's access-flexibility requirement), not a remediation: per R11 the vault's public content is intentional and the exposure-triage track is waived. Design: `/cyberbaser/research/proposal-selective-publishing/`.
 
 ### Phase 4 — Community Onboarding
 > CONTRIBUTING.md, LICENSE follow-through, first external contributor.

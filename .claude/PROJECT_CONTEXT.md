@@ -60,7 +60,7 @@ Shared `.claude/` workspace convention across Cybersader projects:
 - **crosswalker** — ontology lifecycle management system for knowledge bases (GRC crosswalking). Most mature `.claude/` layout; the numbered-file convention came from it. Its identity phrasing rhymes with cyberbaser's on purpose.
 - **cyberchaste** — device-level content filtering research. Source of `KNOWLEDGE_BASE_PHILOSOPHY.md` and `DOCUMENTATION_STYLE.md`.
 - **agentic-workflow-and-tech-stack** — meta scaffold for filesystem-based agent workflows.
-- **Retake Forge** — Obsidian in the browser. Strategically adjacent: a browser-native Obsidian surface is a potential authoring spoke for cyberbaser's web-edit path.
+- **A private browser-Obsidian sibling** — strategically adjacent: a browser-native Obsidian surface is a potential trusted-contributor authoring spoke, and that project owns the mixed-privacy/RBAC/real-time-collaboration scope that is out of cyberbaser's roadmap. Tracked privately in `.workspace/sibling-boundary-analysis.md` (gitignored; not for the public repo). Corrected 2026-07-25: this role was previously misattributed to Retake Forge, which is unrelated.
 - **Sinario** — cyber scenarios tooling. Content-adjacent (scenario content could live on a cyberbase-style wiki).
 
 When in doubt about convention, check crosswalker first.

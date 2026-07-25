@@ -85,7 +85,7 @@ Any design decision anywhere in the project should be checked against the transl
 - **cybersader/crosswalker** — most mature `.claude/` layout; the numbered-file convention here was copied from it
 - **cybersader/cyberchaste** — source of `KNOWLEDGE_BASE_PHILOSOPHY.md` and `DOCUMENTATION_STYLE.md` (identical across both)
 - **cybersader/agentic-workflow-and-tech-stack** — meta scaffold for agent workflows
-- **Retake Forge** — Obsidian in the browser (strategically adjacent: a potential authoring spoke for the web-edit path)
+- **A private browser-Obsidian sibling** — strategically adjacent (a potential trusted-contributor authoring surface, and the owner of mixed-privacy/RBAC/real-time scope). Tracked privately; details in `.workspace/sibling-boundary-analysis.md` (gitignored). An earlier version of this file misattributed this role to Retake Forge, which is unrelated.
 - **Sinario** — cyber scenarios tooling (content-adjacent)
 
 ## External Context

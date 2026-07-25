@@ -64,10 +64,10 @@ export default defineConfig({
         starlightAnnouncement({
           announcements: [
             {
-              id: 'research-phase-2026-04',
-              content: '🧠 Research & Foundations phase — building the KB from the ground up.',
-              link: { text: 'See the roadmap →', href: '/cyberbaser/getting-started/roadmap/' },
-              variant: 'caution',
+              id: 'v1-build-2026-07',
+              content: '🔨 v1 shape locked by measurement (R12) — building the validator, the CI gate, and the publish boundary.',
+              link: { text: 'See where we are →', href: '/cyberbaser/getting-started/roadmap/' },
+              variant: 'tip',
               dismissible: true,
             },
           ],

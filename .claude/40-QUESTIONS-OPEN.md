@@ -4,18 +4,16 @@
 
 Keep the canonical list short (≤ ~15). Resolve before adding.
 
-## Current state (2026-06-21)
+## Current state (2026-07-25)
 
-Open on the canonical page:
-- **Q01** local research vault audit (are we re-researching prior notes?)
-- **Q02** `astro-loader-obsidian` sufficiency for Tier 1 (config problem vs build problem)
-- **Q03** Web CMS preview: rendered vs raw markdown
-- **Q04** round-trip *enforcement* framework (the spike proved achievability, 20/21; property-based tests on a fixture corpus don't exist yet)
-- **Q05** incremental builds for 1000+ page vaults
-- **Q06** stable-URL mechanism (frontmatter slug vs hash vs redirects) — blocks any production deploy
-- **Q07** OAuth-proxy hosting for the Decap path (self-hosted preferred; near-resolved by RA-01 — on Forgejo the proxy disappears entirely)
+Most of the register now has a **proposed answer awaiting the R09 gate** (the corpus round-trip measurement + census — see `/cyberbaser/research/v1-build-plan/` and `41-QUESTIONS-RESOLVED.md` R09). Status per question:
 
-Not on the page yet but tracked in `FOCUS.md` as the real Phase-R gate:
-- **External demand validation** (the #1 meta-risk)
-- **Zero-account contribution path** (serverless contribution bot vs the trust curve)
-- **Vault LICENSE + a concrete moderation policy** (cheap falsification tests)
+- **Q01** local research vault audit — proposed KILL (audits the wrong vault; the real-vault census in the gate answers it empirically)
+- **Q02** `astro-loader-obsidian` sufficiency — proposed CLOSE as not-applicable (`/cyberbaser/research/proposal-renderer-urls/` adopts Quartz for the vault; the gate's checklist run is the kill criterion)
+- **Q03** CMS preview rendered vs raw — proposed answer: **both, on opposite sides of a one-way boundary** (raw editing surface, read-only rendered preview; `/cyberbaser/research/proposal-write-path/`)
+- **Q04** round-trip enforcement — fully specified as the packaged serializer + required CI check + fidelity-break log (`/cyberbaser/research/proposal-write-path/`); becomes the first build item under most shapes
+- **Q05** incremental builds — answered by one measurement inside the gate run
+- **Q06** stable URLs — two competing conventions (path-slug + `aliases` vs `permalink`); `/cyberbaser/research/proposal-renderer-urls/` argues the former; the gate's path census (slug collisions) feeds the call
+- **Q07** OAuth-proxy hosting — unchanged (near-resolved by RA-01; disappears on Forgejo)
+
+The old FOCUS-tracked gates are superseded: external demand validation was waived (R08); the zero-account path and the CMS bake-off were retired by the plan critique (`/cyberbaser/research/plan-critique/`). The live gates now are **selective publishing** (blocks roadmap Phase 3) and **R09** (blocks the v1 shape).
