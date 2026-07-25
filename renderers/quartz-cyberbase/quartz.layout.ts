@@ -1,5 +1,12 @@
 import { PageLayout, SharedLayout } from "./quartz/cfg"
 import * as Component from "./quartz/components"
+// Cyberbaser-local component, copied in by setup.sh (not part of upstream Quartz).
+import EditThisPage from "./quartz/components/EditThisPage"
+
+// Source of truth for the vault repo. Declared once; the footer link and the
+// "Edit this page" link both read it, so there is no second copy to drift.
+const VAULT_REPO_URL = "https://github.com/cybersader/cyberbase"
+const VAULT_REPO_BRANCH = "main"
 
 // components shared across all pages
 export const sharedPageComponents: SharedLayout = {
@@ -8,7 +15,7 @@ export const sharedPageComponents: SharedLayout = {
   afterBody: [],
   footer: Component.Footer({
     links: {
-      Vault: "https://github.com/cybersader/cyberbase",
+      Vault: VAULT_REPO_URL,
       Cyberbaser: "https://github.com/cybersader/cyberbaser",
     },
   }),
@@ -23,6 +30,8 @@ export const defaultContentPageLayout: PageLayout = {
     }),
     Component.ArticleTitle(),
     Component.ContentMeta(),
+    // Contribution Path C entry point: opens the file in GitHub's web editor.
+    EditThisPage({ repoUrl: VAULT_REPO_URL, branch: VAULT_REPO_BRANCH }),
     Component.TagList(),
   ],
   left: [
@@ -49,7 +58,15 @@ export const defaultContentPageLayout: PageLayout = {
 
 // components for pages that display lists of pages (e.g. tags or folders)
 export const defaultListPageLayout: PageLayout = {
-  beforeBody: [Component.Breadcrumbs(), Component.ArticleTitle(), Component.ContentMeta()],
+  // Folder and tag pages share this layout. EditThisPage renders nothing on
+  // synthetic pages (no source file) and self-skips tag pages, so folder notes
+  // get the link and generated index pages do not.
+  beforeBody: [
+    Component.Breadcrumbs(),
+    Component.ArticleTitle(),
+    Component.ContentMeta(),
+    EditThisPage({ repoUrl: VAULT_REPO_URL, branch: VAULT_REPO_BRANCH }),
+  ],
   left: [
     Component.PageTitle(),
     Component.MobileOnly(Component.Spacer()),

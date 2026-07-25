@@ -28,10 +28,11 @@ Consequences that are load-bearing, not stylistic:
 
 | File | Purpose |
 | --- | --- |
-| `setup.sh` | Clone Quartz at the pinned tag into a target dir, `npm ci`, copy configs over the defaults. Idempotent. |
+| `setup.sh` | Clone Quartz at the pinned tag into a target dir, `npm ci`, copy configs and `components/` over the defaults. Idempotent. |
 | `build.sh` | Point a projected content tree at that checkout and run `npx quartz build`. |
 | `quartz.config.ts` | Site config: `baseUrl`, plugin/emitter chain, theme. |
-| `quartz.layout.ts` | Component layout. Quartz imports this from the repo root, so it must be shipped even if it barely differs from upstream. |
+| `quartz.layout.ts` | Component layout. Quartz imports this from the repo root, so it must be shipped even if it barely differs from upstream. Also holds `VAULT_REPO_URL`, the single declaration of the source repo. |
+| `components/*.tsx` | Cyberbaser-local Quartz components, copied into `<quartz>/quartz/components/` by `setup.sh`. Imports are written relative to that destination, and `quartz.layout.ts` imports them by path so upstream's `components/index.ts` stays untouched. Currently: `EditThisPage.tsx`, the contribution Path C entry point (GitHub web editor link, built from `fileData.relativePath` — the VERBATIM projection makes that the vault repo path). |
 
 ## The pin
 

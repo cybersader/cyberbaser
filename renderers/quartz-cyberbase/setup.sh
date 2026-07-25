@@ -45,6 +45,19 @@ echo "==> copying renderer config over Quartz defaults"
 cp "$HERE/quartz.config.ts" "$QUARTZ_DIR/quartz.config.ts"
 cp "$HERE/quartz.layout.ts" "$QUARTZ_DIR/quartz.layout.ts"
 
+# Cyberbaser-local components. They import Quartz internals by relative path
+# (./types, ../util/lang), so they must land in quartz/components/. Plain
+# overwrite-copy every run: idempotent, and it re-lays the current version over
+# whatever a previous run left behind.
+if [ -d "$HERE/components" ]; then
+  echo "==> copying renderer components into quartz/components/"
+  for f in "$HERE"/components/*.tsx; do
+    [ -e "$f" ] || continue
+    echo "    + $(basename "$f")"
+    cp "$f" "$QUARTZ_DIR/quartz/components/"
+  done
+fi
+
 # Quartz ships a sample content/ dir; build.sh replaces it with the projection.
 echo "==> setup complete: $QUARTZ_DIR"
 echo "    next: ./build.sh <CONTENT_DIR> $QUARTZ_DIR"
