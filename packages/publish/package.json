@@ -1,0 +1,14 @@
+{
+  "name": "@cyberbaser/publish",
+  "version": "0.1.0",
+  "description": "The vault projection: publish-boundary selector (default-deny, audience-parameterized), path safety lint, slug contract, and leak reporting. Filters the file set; never transforms file contents.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  }
+}
