@@ -1,0 +1,22 @@
+{
+  "name": "@cyberbaser/ofm",
+  "version": "0.1.0",
+  "description": "OFM (Obsidian-flavored markdown) validator: masking core, round-trip diagnostic, change classifier, corpus reporter. A corruption detector for tools that re-serialize markdown — not a writer.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "ofm-check": "bin/ofm-check.js"
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "remark-frontmatter": "^5.0.0",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
+    "remark-parse": "^11.0.0",
+    "remark-stringify": "^11.0.0",
+    "unified": "^11.0.5"
+  }
+}
