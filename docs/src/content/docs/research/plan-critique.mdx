@@ -1,0 +1,129 @@
+---
+title: "Plan-of-record critique"
+description: "Four independent adversarial lenses on the technical plan, run 2026-07-02. They converged: R08 changed what v1 is, and the plan was never re-minimized afterward. The findings, what they agreed on, and what each one saw alone."
+sidebar:
+  label: "Plan critique"
+  order: 9
+status: research
+tags: [research, planning, roadmap]
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+On 2026-07-02 four sub-agents audited the technical plan-of-record, each through a different lens. They finished. The three agents that were supposed to rebuild the plan from their findings all died on a session limit, nothing was committed, and the critiques sat in a temporary workflow journal for three weeks.
+
+This page is that recovered output. The rebuilt plan lives in [the v1 build plan](/cyberbaser/research/v1-build-plan/).
+
+<Aside type="caution" title="Unanimity here is weak evidence, not strong">
+All four agents read the same dossier, so agreement between them partly measures shared source material rather than independent confirmation. A [dissenting pass](/cyberbaser/research/dissent/) was run later specifically to attack the consensus below, and it overturned parts of it. Read both.
+</Aside>
+
+## The four lenses
+
+| Lens | Asked |
+| --- | --- |
+| YAGNI / scope | Is the plan building more than v1 needs? |
+| Sequencing (dogfood-first) | What is the shortest path to daily use on the real vault? |
+| Architecture | Is "the hub" buildable software, and are we building the right components? |
+| Risk & reality | What breaks on contact with the messy 1439-file vault? |
+
+## What they agreed on
+
+### R08 changed what v1 is, and nothing was re-minimized
+
+The demand-validation gate was waived on 2026-06-21: the maintainer is user #1 and dogfooding *is* the validation. That should have re-derived the whole plan. It did not.
+
+`FOCUS.md` still lists a zero-account contribution bot, a three-way CMS bake-off, and Obsidian plugin-execution testing as immediate work. All three serve contributors who do not exist yet. The same file still carries the pre-R08 justification "demand unvalidated" as a reason not to build, on line 37, several lines below the paragraph that waives it.
+
+The YAGNI critic put the consequence plainly: if dogfooding is v1 validation, then v1 is *"the maintainer edits his own vault from a browser and nothing corrupts"*, and most of What's-Next does not serve that.
+
+### The forge is already most of the hub
+
+Decomposed into components, a git forge already ships: PRs as the moderation queue, protected branches plus CODEOWNERS plus auto-merge rules as the trust curve, merge as the write-back, and git history as attribution.
+
+The project's own [contribution workflows](/cyberbaser/design/contribution-workflows/) page already specs it exactly that way, with trust state in a `.github/trusted-contributors.yml` file and the review model as a PR table. Meanwhile [architecture](/cyberbaser/design/architecture/) still lists *"Where does the hub runtime live?"* as an open question on the page that declares the hub the product.
+
+The architecture critic's summary: the hub in the diagram is "a styled div labeled translate / govern, not software." What v1 actually has to build is glue plus one library. The forge does not provide the lossless serializer, a static edit widget, or one anonymous write-back endpoint. Everything else is configuration.
+
+That collapses roadmap Phase 2 from "build the platform" to "configure the forge and ship the serializer."
+
+### The Quartz fork is unresolved and everything downstream assumes an answer
+
+[Assumptions and risks](/cyberbaser/research/assumptions-and-risks/) records that Quartz v5 beats cyberbaser's own Starlight prototype on Obsidian-flavored-markdown fidelity, for free, and flags adopting it as "worth a spike before investing further in the bespoke Astro/Starlight pipeline."
+
+That spike was never scheduled. Roadmap Phase 1 and open question Q02 both presuppose the Starlight chain, and [v1 architecture](/cyberbaser/research/v1-architecture/) still recommends the starlight-obsidian stack on one page while documenting on another that `astro-loader-obsidian` silently corrupts `#hex` and shell-comment tags.
+
+Three of the four lenses independently called resolving this the highest-leverage decision available, because its answer deletes Phase 1 as written and moots Q02.
+
+### The CMS bake-off tests the wrong thing
+
+Every finalist re-serializes markdown through its own AST on save, which the architecture's own boundaries table forbids. Decap round-trips through remark@10 and is "not inherently safe passthrough"; Sveltia has a known global-asterisk-escaping serializer bug; TinaCMS is already hard-disqualified.
+
+The escape hatch, raw mode, reduces every candidate to an authenticated textarea, at which point the real edit surface is the project's own CodeMirror 6 widget and the evaluation answered nothing.
+
+The kill criterion is therefore a five-minute byte-diff, not a feature matrix: open a note with callouts, wikilinks, embeds and nested frontmatter, make a one-word edit in the rich editor, save, diff the bytes. The risk critic noted that if all three finalists fail that test, the correct conclusion is a materially different roadmap that the current plan never prices.
+
+The design and research layers also contradict each other outright here. `contribution-workflows.mdx` line 20 promises Decap rendering wikilinks and callouts as interactive widgets; `v1-architecture.mdx` line 65 proves neither Decap widget is "inherently safe passthrough" and that the earlier "markdown widget = raw" framing was wrong. Whoever implements Path A picks a spec at random, and one of the two choices corrupts the vault on first edit.
+
+There is a third disagreement the critics missed. `FOCUS.md` line 31 names the finalists as Decap, Sveltia, and EmDash. `v1-architecture.mdx` lines 42 and 98 name the v1 pick as **Pages CMS** for invited editors plus Decap for open authoring. Pages CMS is absent from the task layer's shortlist and EmDash is absent from the research. The two layers do not agree on which tools are even candidates.
+
+### Where the critics overreached
+
+Two claims did not survive checking, and the corrected versions matter:
+
+- **"The round-trip CI gate is scheduled nowhere."** It is specified, in `v1-architecture.mdx` line 150, as *"Round-trip fixture spike — the gate for everything… No CMS ships until this passes."* The problem is narrower and more typical than absence: it exists in the research layer and never propagated to `FOCUS.md` or the roadmap. That is documentation drift, which is a knowledge-ops failure rather than a planning gap, and it is fixed by propagation rather than by new design work.
+- **"Nobody has looked at the vault."** One critic did, and got the 592 MB answer in a single command. The finding is not that the check was impossible, it is that a one-hour check sat unrun for weeks while visual polish shipped. That is a prioritization failure, and naming it correctly matters because the fix is different.
+
+### Two live risks with no tasks anywhere
+
+**Selective publishing.** `cybersader/cyberbase` is a public 592 MB repo whose own description says "mixed with some personal", and the [legal and governance](/cyberbaser/design/legal-and-governance/) page admits it holds journals, finance notes, and resumes. The only mitigation written anywhere is a license carve-out, which is prose, not access control. A grep of the whole orientation layer for selective-publish, include/exclude, or role-based returns nothing, yet roadmap Phase 3 ("publish the real vault") silently presumes the mechanism exists.
+
+The exposure is live now, and it compounds: git-as-SSOT plus Obsidian Git backups plus already-merged external PRs pin the history, so retroactive removal means a history rewrite that breaks the project's own SSOT invariant.
+
+**The Notion sync leg.** The vault is Notion, Obsidian, and GitHub synced. Notion is an uncontrolled third writer into the source of truth, and its exporter is known to flatten wikilinks, callouts, and frontmatter. The 20/21 round-trip proof modeled a two-party round-trip, so it does not cover this vault as it actually operates. Notion appears in the docs only as a competitor, never as a write path.
+
+### Per-PR previews are unimplementable as specified
+
+The written moderation policy commits the maintainer to reviewing "the rendered preview, not just the diff." GitHub Pages deploys exactly one environment via `actions/deploy-pages@v4`. Per-PR previews need artifact-serving tricks, a second host, or self-hosted infrastructure. This appears in no phase, no open question, and no task.
+
+The safety mechanism the entire contribution model rests on has no implementation path on the chosen host.
+
+### Q06 blocks production deploy and has no owner
+
+Stable URLs self-describes on the open-questions register as blocking any production deploy. It has sat unmoved while non-gating work took the What's-Next slots. Every lens that looked at it agreed it is a one-day convention decision, not a research question.
+
+## What each lens saw alone
+
+The **risk critic** was the only one to actually check the repository rather than reason from the docs. It ran the binary/LFS check that had been listed as a one-hour pre-public blocker and "remains unrun", and got the answer in a single command: 592 MB, public, last pushed the previous day by the active sync. It also flagged two things nobody else raised: the filename policy contradiction (v1-architecture prescribes ASCII kebab-case CI lint while the vault demonstrably contains emoji, spaces, and `&` in paths, with exactly one successful WSL traversal as the entire evidence base), and the working tree sitting on `/mnt/c` under WSL2, where the 9p filesystem penalty on file-heavy operations is commonly 5-20x native and has never been measured.
+
+The **sequencing critic** made the sharpest single reframe: the 1439-file vault is not the payload waiting at the end of the roadmap, it is the test harness. Nearly every open question scheduled as research (Q01, Q04, Q05, Q06, media and LFS weight, path handling, the Quartz fork, the Notion leg) is answered faster and more honestly by publishing the real vault and editing it through one CMS than by studying any of them in isolation.
+
+The **architecture critic** was alone in noticing that the one component genuinely needing a server, the anonymous write endpoint, has no decided home under the stated constraints, and that "evaluate the serverless contribution-bot pattern" is the wrong verb because the pattern is proven prior art. The open question is placement, abuse handling, and rate limiting.
+
+The **YAGNI critic** was alone in pointing out that counting "direct GitHub" as one of the two contribution paths Phase 2 promises to implement is padding, since it already works and cost nothing.
+
+## Kill, defer, narrow
+
+| Item | Verdict | Why |
+| --- | --- | --- |
+| Plugin execution testing (Obsidian CLI/headless) | **Kill** | Tier-3 by the project's own tier system; couples to Obsidian against the "general, not Obsidian" lock; advances neither the round-trip nor the deploy |
+| Q01 local research vault audit | **Kill** | Audits the wrong vault; the real vault answers the question empirically in days |
+| Any v1 renderer-adapter layer | **Kill** | Renderer-agnosticism for v1 is a boundary, not code. The hub touches only markdown in git. A second renderer, when it exists, is the test |
+| Phase 1 as written (astro-loader-obsidian vs custom remark/rehype) | **Kill in current form** | Presupposes the Starlight renderer; likely deleted by the Quartz fork |
+| Zero-account contribution bot | **Defer** | Serves anonymous strangers who do not exist. The principle is honored by offering the path when they appear, not by building it now |
+| Stand up the Forgejo mirror now | **Defer** | Ops burden with no v1 payoff, and it would multiply the personal-content exposure before the boundary is fixed |
+| Q05 incremental builds at 1000+ pages | **Defer** | Premature. Measure one full build first, open it only if slow |
+| Three-way CMS bake-off | **Narrow** | Run one candidate through the existing 21 round-trip fixtures. Fall back only on failure |
+| Phase 2 "implement ≥2 of three paths" | **Narrow** | One built web path is v1. Direct GitHub already works |
+
+## Verified against the repo
+
+These were re-checked on 2026-07-25 before the critiques were published, since three weeks had passed:
+
+- `cybersader/cyberbase`: public, 605990 KB, description confirms "mixed with some personal" and the Notion/Obsidian/GitHub sync. Last push 2026-07-01.
+- No selective-publish, include/exclude, or role-based task exists in the orientation layer. The concept appears only as forward-looking prose in [vision](/cyberbaser/getting-started/vision/) and [architecture](/cyberbaser/design/architecture/).
+- Notion appears across the docs only as an ecosystem or competitor reference, never as a vault write path.
+
+## Task list
+
+The rebuilt, sequenced plan is on [the v1 build plan](/cyberbaser/research/v1-build-plan/) page. The critiques above are the input to it, not a task list in themselves.
