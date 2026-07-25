@@ -9,7 +9,7 @@ Keep the canonical list short (≤ ~15). Resolve before adding.
 Most of the register now has a **proposed answer awaiting the R09 gate** (the corpus round-trip measurement + census — see `/cyberbaser/research/v1-build-plan/` and `41-QUESTIONS-RESOLVED.md` R09). Status per question:
 
 - **Q01** local research vault audit — proposed KILL (audits the wrong vault; the real-vault census in the gate answers it empirically)
-- **Q02** `astro-loader-obsidian` sufficiency — proposed CLOSE as not-applicable (`/cyberbaser/research/proposal-renderer-urls/` adopts Quartz for the vault; the gate's checklist run is the kill criterion)
+- **Q02** — **CLOSED 2026-07-25 (R14)**: Quartz adopted on measurement, 20/20 checklist (`/cyberbaser/research/quartz-spike-results/`)
 - **Q03** CMS preview rendered vs raw — proposed answer: **both, on opposite sides of a one-way boundary** (raw editing surface, read-only rendered preview; `/cyberbaser/research/proposal-write-path/`)
 - **Q04** round-trip enforcement — fully specified as the packaged serializer + required CI check + fidelity-break log (`/cyberbaser/research/proposal-write-path/`); becomes the first build item under most shapes
 - **Q05** incremental builds — answered by one measurement inside the gate run

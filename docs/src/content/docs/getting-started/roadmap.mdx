@@ -42,8 +42,8 @@ Every entry links to evidence. The full log lives in `.claude/41-QUESTIONS-RESOL
 
 - [x] **`@cyberbaser/ofm` v0.1** — the validator: masking core, change classifier (`clean | suspect | damage`), corpus reporter, CLI. Built + 10 tests green + smoke-tested on the real vault (2026-07-25).
 - [ ] **CI gate on the vault repo** — `ofm-check diff` on every markdown-touching PR, report-only first, then required. This makes [Principle 2](/cyberbaser/getting-started/principles/) enforced instead of aspirational.
-- [ ] **The publish boundary** — the include/exclude selector + leak tests from [selective publishing](/cyberbaser/research/proposal-selective-publishing/); a feature prerequisite for publishing the vault (per R11, not a safety emergency).
-- [ ] **Renderer + URL execution** — the Quartz vault-site spike, slug contract, safety lint, and projection step per [the renderer decisions](/cyberbaser/research/proposal-renderer-urls/).
+- [x] **The publish boundary, selector half** — `@cyberbaser/publish` v0.1 (2026-07-25): the default-deny selector, slug contract, and safety lint, 91 tests green. Remaining: the maintainer authors the real `publish.yml`, plus projection wiring.
+- [x] **Renderer decided by measurement** — Quartz adopted for the vault site (R14, 2026-07-25): the real vault builds in 1:55 and scores 20/20 on the OFM checklist; the path census killed the mass-rename question (0 collisions, 2 violations). [Results + the fine print](/cyberbaser/research/quartz-spike-results/). Remaining: projection wiring, pre-publish fixes, the v4-vs-v5 pick.
 - [ ] **Edit path, when triggered** — the raw CM6 widget ships when a real non-git contributor is blocked or mobile dogfood friction recurs; until then "edit on GitHub" is the web path. The [suggestion unit](/cyberbaser/research/option-space/) (CriticMarkup + reject-all invariance) is the candidate beyond that.
 
 **Exit criteria for v1 Build:**
