@@ -1,0 +1,18 @@
+{
+  "name": "@cyberbaser/projection",
+  "version": "0.1.0",
+  "description": "The vault projection: copies the published set into a renderer-agnostic content tree with lowercased paths, injects the natural-case alias into the projected copy's frontmatter, and fails the build on bad frontmatter, case collisions or a boundary leak. Knows nothing about any renderer.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "cb-project": "bin/cb-project.js"
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@cyberbaser/publish": "file:../publish",
+    "js-yaml": "^4.1.0"
+  }
+}
