@@ -29,7 +29,8 @@ Last updated: 2026-07-25 (evening — R09 gate run, R12 locked)
 1. ~~The gate measurement~~ **RUN 2026-07-25** (results in `/cyberbaser/research/v1-build-plan/`): 4.6% byte-identical, 0 mask leaks, 0 parse errors, 83.1% of files OFM-free, 7.3 s full pass on ext4, ~780x 9p penalty measured, 0 files >100 MB. Q05 + the LFS check closed as side effects.
 2. ~~Lock the shape~~ **LOCKED 2026-07-25 (R12)**: byte-preservation by construction + validator + governance. No whole-file re-serialization in the write path, ever.
 3. **Build `@cyberbaser/ofm`** (~2 d, in progress): the validator package — corpus runner, two-version diff classifier, masking core, 21 fixtures + corpus-derived cases as tests, `ofm-check` CLI. The first artifact the maintainer can actually run.
-4. **Wire the CI gate** on cyberbase PRs (report-only first), then the **Notion-leg audit** (~1 d): the seven empirical questions + fence-or-cut triggers in `/cyberbaser/research/proposal-write-path/` — now runnable via `ofm-check` over sync-touched files.
+4. ~~Wire the CI gate~~ **LIVE 2026-07-25** (cyberbase#4 merged, report-only): every markdown PR on the vault now gets `ofm-check` classification (clean/suspect/damage). Flip to required after the observation window by removing `continue-on-error` + branch protection. ~~Notion-leg audit~~ **DONE 2026-07-25 (R13)**: sync dormant since 2024-08, frozen and absorbed — `/cyberbaser/research/notion-writer-audit/`.
+5. **Next up:** the publish boundary (selector + leak tests, per `/cyberbaser/research/proposal-selective-publishing/`) and the Quartz vault-site spike (per `/cyberbaser/research/proposal-renderer-urls/`).
 
 **Exposure triage waived (2026-07-25, maintainer decision — R11):** the vault's public content is intentional; no secrets-scan/purge remediation track. Selective publishing stays on the roadmap as the **publish-boundary feature** (the access-flexibility requirement below), a Phase 3 prerequisite rather than a safety emergency.
 
