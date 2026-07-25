@@ -40,14 +40,14 @@ test('rule 4: anything outside the allowlist is denied by default', () => {
 });
 
 test('rule 1 beats rule 3: publish:false wins inside an allowlisted folder', () => {
-  const files = vault({ 'cyber/incident-notes/client-acme.md': fm({ publish: false, title: 'Acme' }) });
+  const files = vault({ 'cyber/incident-notes/client-acme.md': fm({ 'cb-publish': false, title: 'Acme' }) });
   const { published, report } = run(files);
   expect(published).not.toContain('cyber/incident-notes/client-acme.md');
   expect(deniedRule(report, 'cyber/incident-notes/client-acme.md')).toBe(RULES.DENY_FLAG);
 });
 
 test('rule 2: publish:true outside the allowlist with an explicit slug publishes', () => {
-  const files = vault({ 'journal/one-shareable-entry.md': fm({ publish: true, slug: 'notes/one-shareable-entry' }) });
+  const files = vault({ 'journal/one-shareable-entry.md': fm({ 'cb-publish': true, slug: 'notes/one-shareable-entry' }) });
   const { published, errors, report } = run(files);
   expect(published).toContain('journal/one-shareable-entry.md');
   expect(errors).toHaveLength(0);
@@ -55,7 +55,7 @@ test('rule 2: publish:true outside the allowlist with an explicit slug publishes
 });
 
 test('rule 2: publish:true outside the allowlist without a slug is an error and does not publish', () => {
-  const files = vault({ 'journal/leaky.md': fm({ publish: true, title: 'Leaky' }) });
+  const files = vault({ 'journal/leaky.md': fm({ 'cb-publish': true, title: 'Leaky' }) });
   const { published, errors, report } = run(files);
   expect(published).not.toContain('journal/leaky.md');
   expect(errors.map((e) => e.code)).toContain(RULES.MISSING_SLUG);
@@ -64,24 +64,48 @@ test('rule 2: publish:true outside the allowlist without a slug is an error and 
 });
 
 test('rule 2: publish:true inside the allowlist needs no slug', () => {
-  const files = vault({ 'cyber/extra.md': fm({ publish: true }) });
+  const files = vault({ 'cyber/extra.md': fm({ 'cb-publish': true }) });
   const { published, errors } = run(files);
   expect(published).toContain('cyber/extra.md');
   expect(errors).toHaveLength(0);
 });
 
 test('the "mostly private" shape: empty allow list plus publish:true and slug', () => {
-  const files = { 'journal/a.md': fm({ title: 'A' }), 'journal/b.md': fm({ publish: true, slug: 'b' }) };
+  const files = { 'journal/a.md': fm({ title: 'A' }), 'journal/b.md': fm({ 'cb-publish': true, slug: 'b' }) };
   const { published, errors } = run(files, { allow: [] });
   expect(published).toEqual(['journal/b.md']);
   expect(errors).toHaveLength(0);
 });
 
-test('a non-boolean publish value fails closed', () => {
-  const files = vault({ 'journal/weird.md': `---\npublish: maybe\n---\n\nbody\n` });
+test('a non-boolean cb-publish value fails closed', () => {
+  const files = vault({ 'journal/weird.md': `---\ncb-publish: maybe\n---\n\nbody\n` });
   const { published, errors } = run(files);
   expect(published).not.toContain('journal/weird.md');
   expect(errors.map((e) => e.code)).toContain('invalid-publish-value');
+});
+
+// R15: the real vault has 587 stale legacy `publish: true` flags (incl. daily
+// notes and journals) from an earlier publishing era. Grants come only from
+// the namespaced key; legacy flags act only in the deny direction.
+test('R15: legacy publish:true outside the allowlist is inert noise, not a grant and not an error', () => {
+  const files = vault({ 'journal/stale.md': `---\npublish: true\n---\n\nan old daily note\n` });
+  const { published, errors } = run(files);
+  expect(published).not.toContain('journal/stale.md');
+  expect(errors).toHaveLength(0);
+});
+
+test('R15: legacy publish:false still denies an allowlisted file', () => {
+  const files = vault({ 'cyber/legacy-private.md': `---\npublish: false\n---\n\nbody\n` });
+  const { published, report } = run(files);
+  expect(published).not.toContain('cyber/legacy-private.md');
+  expect(report.denied.find((d) => d.path === 'cyber/legacy-private.md').rule).toBe('rule-1-publish-false');
+});
+
+test('R15: legacy publish:maybe garbage is ignored entirely', () => {
+  const files = vault({ 'journal/garbage.md': `---\npublish: maybe\n---\n\nbody\n` });
+  const { published, errors } = run(files);
+  expect(published).not.toContain('journal/garbage.md');
+  expect(errors).toHaveLength(0);
 });
 
 // ---------------------------------------------------------- asset reachability
@@ -206,7 +230,7 @@ test('a config that is not a mapping fails closed with an error', () => {
 test('an empty publish.yml fails closed even when files ask to be published', () => {
   const dir = tempVault({
     'publish.yml': '# nothing granted yet\n',
-    'cyber/index.md': fm({ publish: true, slug: 'index' }),
+    'cyber/index.md': fm({ 'cb-publish': true, slug: 'index' }),
   });
   const { published, errors } = select(dir);
   expect(published).toEqual([]);
@@ -214,7 +238,7 @@ test('an empty publish.yml fails closed even when files ask to be published', ()
 });
 
 test('a missing publish.yml fails closed', () => {
-  const dir = tempVault({ 'cyber/index.md': fm({ publish: true, slug: 'index' }) });
+  const dir = tempVault({ 'cyber/index.md': fm({ 'cb-publish': true, slug: 'index' }) });
   const { published, errors, report } = select(dir);
   expect(published).toEqual([]);
   expect(errors[0].code).toBe('config-missing');
@@ -244,7 +268,7 @@ test('select() reads a vault from disk and honours the same precedence', () => {
   const dir = tempVault({
     'publish.yml': 'allow:\n  - cyber/**\n',
     'cyber/index.md': fm({ title: 'Cyber' }, 'See ![[diagram.png]].\n'),
-    'cyber/private.md': fm({ publish: false }),
+    'cyber/private.md': fm({ 'cb-publish': false }),
     'shared/diagram.png': 'PNGBYTES',
     'shared/unused.png': 'PNGBYTES',
     'journal/2024-05.md': fm({ title: 'May' }),

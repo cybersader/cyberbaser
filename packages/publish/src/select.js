@@ -270,14 +270,21 @@ export function selectFiles(fileMap, config, opts = {}) {
       deny(p, RULES.FRONTMATTER_ERROR, 'frontmatter could not be parsed');
       continue;
     }
-    const { flag, invalid } = readPublishFlag(fm.data.publish);
-    if (invalid) {
-      errors.push({ code: 'invalid-publish-value', path: p, message: `\`publish:\` must be true or false, got ${JSON.stringify(fm.data.publish)}; failing closed` });
-      deny(p, RULES.DEFAULT_DENY, 'invalid `publish:` value');
+    // Key namespacing (2026-07-25, R15): the real vault has 587 files carrying
+    // stale `publish: true` from an earlier publishing era — including daily
+    // notes and journals — so the bare key cannot be trusted as ALLOW intent.
+    // Grants are read only from the cyberbaser-owned `cb-publish:`; denies are
+    // read from either key, because noise in the deny direction is harmless.
+    const grantRead = readPublishFlag(fm.data['cb-publish']);
+    if (grantRead.invalid) {
+      errors.push({ code: 'invalid-publish-value', path: p, message: `\`cb-publish:\` must be true or false, got ${JSON.stringify(fm.data['cb-publish'])}; failing closed` });
+      deny(p, RULES.DEFAULT_DENY, 'invalid `cb-publish:` value');
       continue;
     }
+    const legacyDeny = readPublishFlag(fm.data.publish).flag === false;
+    const flag = grantRead.flag === false || legacyDeny ? false : grantRead.flag;
 
-    if (flag === false) { deny(p, RULES.DENY_FLAG, '`publish: false` beats every grant'); continue; }
+    if (flag === false) { deny(p, RULES.DENY_FLAG, '`cb-publish: false` (or legacy `publish: false`) beats every grant'); continue; }
 
     const inAllow = matchesAny(p, cfg.patterns);
     const slug = typeof fm.data.slug === 'string' && fm.data.slug.trim() !== '' ? fm.data.slug.trim() : null;
@@ -287,7 +294,7 @@ export function selectFiles(fileMap, config, opts = {}) {
         errors.push({
           code: RULES.MISSING_SLUG,
           path: p,
-          message: `\`publish: true\` outside the allowlist requires an explicit \`slug:\`; the generated URL would name the folder "${dirOf(p) || '/'}"`,
+          message: `\`cb-publish: true\` outside the allowlist requires an explicit \`slug:\`; the generated URL would name the folder "${dirOf(p) || '/'}"`,
         });
         deny(p, RULES.MISSING_SLUG, 'published out of a non-allowlisted folder without a slug');
         continue;
