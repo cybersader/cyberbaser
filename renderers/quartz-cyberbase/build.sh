@@ -17,7 +17,19 @@ fi
 
 CONTENT_DIR="$(cd "$1" && pwd)"
 QUARTZ_DIR="${2:-$HOME/bench/quartz-site}"
+# Absolutize before any cd: a relative QUARTZ_DIR ("quartz") otherwise turns the
+# -d/-o flags into quartz/quartz/... after `cd $QUARTZ_DIR`, which is exactly how
+# the first CI run built 0 pages into a directory nobody checked.
+if [ ! -d "$QUARTZ_DIR" ]; then
+  echo "ERROR: QUARTZ_DIR '$QUARTZ_DIR' does not exist. Run setup.sh first." >&2
+  exit 1
+fi
+QUARTZ_DIR="$(cd "$QUARTZ_DIR" && pwd)"
 OUTPUT_DIR="${OUTPUT_DIR:-$QUARTZ_DIR/public}"
+case "$OUTPUT_DIR" in
+  /*) ;;
+  *) OUTPUT_DIR="$(pwd)/$OUTPUT_DIR" ;;
+esac
 
 if [ ! -d "$QUARTZ_DIR/quartz" ]; then
   echo "ERROR: $QUARTZ_DIR is not a Quartz checkout. Run setup.sh first." >&2
