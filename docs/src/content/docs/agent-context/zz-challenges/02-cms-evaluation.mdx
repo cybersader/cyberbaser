@@ -8,6 +8,16 @@ status: research
 tags: [research, cms, contribution]
 ---
 
+:::tip[Resolved — verdict inverted. The answer is "adopt none," and it was reached empirically]
+**Decided 2026-07-25 by [R12](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25). Answer type: empirical.**
+
+The brief's own item 7 (the "no CMS" counter-argument) turned out to be the winning answer. The [write-path proposal](/cyberbaser/research/proposal-write-path/) evaluated Decap, Sveltia, TinaCMS, EmDash and Pages CMS and disqualified **every one** for the same reason: each re-serializes the whole file on save. R12 then generalized it into a standing constraint after running the round-trip against all 1430 real vault files and getting **4.6% byte-identity** — no whole-file re-serialization in any write path, ever. That closes the category, not just the finalists.
+
+The brief's stated incumbent assumption ("Decap CMS with Open Authoring") is dead. The shipped edit surface is GitHub's plain-text web editor, and the surviving open questions are not CMS questions: they are [Q09 (no-account contribution)](/cyberbaser/reference/open-questions/#q09--what-is-the-contribution-path-for-someone-with-no-account) and the [per-PR preview](/cyberbaser/research/proposal-hub-bom/#per-pr-rendered-previews).
+
+This is the one brief that later work actually cited while superseding it.
+:::
+
 ## The assignment
 
 The [vault has 20+ CMS options](/cyberbaser/agent-context/zz-log/2026-04-13-vault-tech-stack-mining/) researched at varying depths. The current assumption is [Decap CMS with Open Authoring](https://decapcms.org/docs/open-authoring/). **Your job: challenge that assumption.** Evaluate the top candidates against cyberbaser's specific requirements and narrow to 2-3 finalists with evidence. No cheerleading — if Decap is the wrong choice, say so.

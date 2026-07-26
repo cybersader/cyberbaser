@@ -8,6 +8,27 @@ status: research
 tags: [research, attribution, contribution]
 ---
 
+:::caution[Still open — and it was falsely marked answered for three months. Reopened 2026-07-26.]
+**Status: none of the six investigation items was addressed and none of the four deliverables was produced.** [v1 architecture](/cyberbaser/research/v1-architecture/) lists this brief among the challenges it answers; its entire attribution content is one phrase inside a "Deferred to v2+" list. A deferral was recorded as a resolution.
+
+**The honest current statement, which appeared nowhere in the KB until this banner:** cyberbaser has no contributor attribution. Credit exists only in git history, its correctness across the web path has **never been observed**, the content license's attribution obligation depends on that unobserved mechanism, and nothing on any published page tells a reader who wrote it.
+
+**What exists today, against this brief's own deliverable table:**
+
+| Path | How identified | What a reader sees |
+|---|---|---|
+| Obsidian + Git push | commit author | nothing |
+| Web CMS PR | n/a — no CMS in the write path (R12) | n/a |
+| GitHub "Edit this page" | commit author on the fork, **unverified** | nothing |
+| Anonymous | **no mechanism exists** | nothing |
+
+The live site's layout is breadcrumbs, title, date and reading time, tags, and an edit link. There is no author component, no contributor list, no avatar, no contributors page. The one person-shaped element points *outward* to GitHub: it invites contribution, it does not credit it.
+
+**Item 1 is now a ten-minute check, not a research project.** One `git log --format='%an %ae'` over the merged contribution PRs plus one PR from a second account settles it. The two live contribution PRs run in R17 were both authored by the maintainer's own account and could not have answered it. Tracked as [Q08](/cyberbaser/reference/open-questions/#q08--does-the-fork-flow-actually-attribute-the-contributor).
+
+**Why this matters beyond UX.** The untested assertion at [Contribution Workflows · Attribution](/cyberbaser/design/contribution-workflows/#attribution) hardened into a legal dependency: [Legal & Governance](/cyberbaser/design/legal-and-governance/) makes commit history the attribution record the license points at, and a downstream proposal then made "don't rewrite history" a project invariant on that basis. Item 2 (pseudonymous identity) does have one real piece of design, in the [hub BOM](/cyberbaser/research/proposal-hub-bom/): a fixed bot identity plus a stable pseudonymous submission ID, and never a network identifier in a commit, since git history is permanent. That design does not cite this brief and covers one of six items.
+:::
+
 ## The assignment
 
 The [vault vision](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/) includes **"show contributors at the top of each page with pic and contributors page."** Contributions come from 3+ surfaces: Obsidian+Git push, Web CMS PR (fork-and-PR via Decap), and GitHub direct edit. **Your job: design a unified attribution model that works across all paths.**

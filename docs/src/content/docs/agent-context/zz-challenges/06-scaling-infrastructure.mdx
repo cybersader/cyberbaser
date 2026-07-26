@@ -8,6 +8,24 @@ status: research
 tags: [research, scaling, architecture]
 ---
 
+:::note[Partially resolved, entirely by accident. Most of the numbers now exist; nobody ever checked them against this brief.]
+**Answer type: empirical, produced for unrelated reasons across R12, R14, R16 and R18. This brief is cited by no research page, decision record or roadmap entry.**
+
+| Brief item | Status | Evidence |
+|---|---|---|
+| Repo size / binary footprint | ✅ Answered | R12: 0 files >100 MB, 725 MB tree. The publish boundary must exclude unreferenced assets for the Pages 1 GB cap |
+| Build performance | ✅ Answered | R14: 1420 pages in 1:55 local. R16: 160 s in CI, deploy 16 s, artifact at 25.1% of the cap. R12: full OFM corpus pass in 7.3 s on ext4, and a **~780x penalty** measured for many-small-file reads on a 9p mount |
+| Search at scale | ⚠️ Implicit | Quartz's own search replaced Pagefind at 933 pages. Never benchmarked |
+| Windows MAX_PATH | ❌ Open, and live | R19 accepted percent-encoded emoji paths and declined 43 folder renames — precisely the deep-nested-path risk this brief flagged |
+| Media outside git (Cloudinary / R2 / tus) | ❌ Open | [v1 architecture](/cyberbaser/research/v1-architecture/) asserts Cloudflare R2. Unbuilt, uncited |
+| IPFS | ❌ Never revisited | — |
+| "What breaks first" ranking | ❌ Never produced | — |
+
+**The brief was right about the shape of the risk and wrong about the item.** The first real ceiling was link integrity: R18's first linkcheck run found **1145 broken internal links**, and R19 classified 669 of them as inherited content debt. Link integrity at scale is not on this brief's list, and it should be.
+
+Also note the deploy number that matters for the feedback loop the brief cared about: five successful end-to-end runs took **3m07s to 4m52s**, and every push triggers a full rebuild. See [Q05](/cyberbaser/reference/open-questions/#q05--whats-the-incremental-build-story-for-a-vault-of-thousands-of-pages).
+:::
+
 ## The assignment
 
 Cyberbaser's [architecture](/cyberbaser/design/architecture/) assumes a static-site-generation model (Astro build → Cloudflare Pages). **Your job: find where this breaks.** What happens at 500 pages? 2000? 10,000? What about media-heavy vaults? Windows users? Search at scale?

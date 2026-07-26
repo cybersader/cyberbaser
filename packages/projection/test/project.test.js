@@ -9,6 +9,7 @@ import {
   verifyProjection,
   preflightFrontmatter,
   findCaseCollisions,
+  lintPathSafety,
   injectAlias,
   projectedPath,
 } from '../src/index.js';
@@ -276,6 +277,99 @@ describe('derived-path lint', () => {
     expect(w.key).toBe('tags');
     expect(w.chars).toContain(':');
     expect(result.ok).toBe(true);
+  });
+});
+
+// ------------------------------------------------------------ path safety lint
+
+describe('path safety lint (rules 1-5 warn, rule 6 gates)', () => {
+  test('rules 1-5 are warnings, never failures: inherited content debt is out of scope', () => {
+    const long = `${Array.from({ length: 10 }, (_, i) => `dir${i}-${'x'.repeat(15)}`).join('/')}/n.md`;
+    expect(long.length).toBeGreaterThan(200);
+    const r = lintPathSafety([long, 'Notes/ Leading Space.md'], false);
+    expect(r.failures).toEqual([]);
+    expect(r.warnings.map((w) => w.code).sort()).toEqual(['edge-whitespace-or-dot', 'path-too-long']);
+    expect(r.warnings.every((w) => w.kind === 'path-lint')).toBe(true);
+    expect(r.census.violations).toBe(2);
+  });
+
+  test('a slug collision that is real today is a failure', () => {
+    const r = lintPathSafety(['Areas/Threat Modeling.md', 'Areas/Threat-Modeling.md'], false);
+    expect(r.failures.length).toBe(1);
+    expect(r.failures[0].kind).toBe('slug-collision');
+    expect(r.failures[0].sources.length).toBe(2);
+    expect(r.warnings).toEqual([]);
+    expect(r.census.collisionGroups).toBe(1);
+  });
+
+  test('a case-only collision warns under verbatim paths and fails under lowercasing', () => {
+    const pair = ['Notes/Readme.md', 'Notes/README.md'];
+
+    const verbatim = lintPathSafety(pair, false);
+    expect(verbatim.failures).toEqual([]);
+    expect(verbatim.warnings.length).toBe(1);
+    expect(verbatim.warnings[0].kind).toBe('slug-collision-case-only');
+    expect(verbatim.census.caseOnlyCollisionGroups).toBe(1);
+
+    const folded = lintPathSafety(pair, true);
+    expect(folded.failures.length).toBe(1);
+    expect(folded.failures[0].kind).toBe('slug-collision');
+  });
+
+  test('the emoji census is report-only and bounded', () => {
+    const many = Array.from({ length: 80 }, (_, i) => `📥 In${i}/note.md`);
+    const r = lintPathSafety([...many, 'Areas/plain.md'], false);
+    expect(r.failures).toEqual([]);
+    expect(r.warnings).toEqual([]);
+    expect(r.census.emoji.pathsWithEmoji).toBe(80);
+    expect(r.census.emoji.directory.total).toBe(80);
+    expect(r.census.emoji.directory.items.length).toBe(50);
+    expect(r.census.emoji.directory.truncated).toBe(true);
+  });
+
+  test('a clean set produces no findings at all', () => {
+    const r = lintPathSafety(['Areas/Threat Modeling.md', 'assets/diagram.png'], false);
+    expect(r.failures).toEqual([]);
+    expect(r.warnings).toEqual([]);
+    expect(r.census.collisionGroups).toBe(0);
+  });
+});
+
+describe('project runs the path safety lint on the published set', () => {
+  test('the census reaches the report and the counts', () => {
+    expect(result.pathLint).toBeDefined();
+    expect(result.pathLint.paths).toBe(result.counts.pages + result.counts.assets);
+    expect(result.counts.pathViolations).toBe(0);
+    expect(result.counts.slugCollisions).toBe(0);
+    const report = JSON.parse(fs.readFileSync(path.join(base, 'projection-report.json'), 'utf8'));
+    expect(report.pathLint.paths).toBe(5);
+    expect(report.lowercase).toBe(true);
+  });
+
+  test('an over-length published path warns without failing the build', () => {
+    const v = mkroot('longpath');
+    write(v, 'publish.yml', 'allow:\n  - pub\n');
+    const deep = `pub/${Array.from({ length: 10 }, (_, i) => `dir${i}-${'x'.repeat(15)}`).join('/')}/n.md`;
+    expect(deep.length).toBeGreaterThan(200);
+    write(v, deep, '---\ntitle: Deep\n---\n\nbody\n');
+    const r = project(v, path.join(mkroot('longpath-out'), 'content'), { writeReport: false });
+    expect(r.ok).toBe(true);
+    expect(r.warnings.find((w) => w.code === 'path-too-long').path).toBe(deep);
+    expect(r.counts.pathViolations).toBe(1);
+  });
+
+  test('a slug collision fails the build before anything is written', () => {
+    const v = mkroot('collide');
+    write(v, 'publish.yml', 'allow:\n  - pub\n');
+    write(v, 'pub/Threat Modeling.md', '---\ntitle: A\n---\n\na\n');
+    write(v, 'pub/Threat-Modeling.md', '---\ntitle: B\n---\n\nb\n');
+    const out = path.join(mkroot('collide-out'), 'content');
+    const r = project(v, out, { writeReport: false });
+    expect(r.ok).toBe(false);
+    const f = r.failures.find((x) => x.kind === 'slug-collision');
+    expect(f.sources.sort()).toEqual(['pub/Threat Modeling.md', 'pub/Threat-Modeling.md']);
+    // The copy never ran: a build that is going to lose a page must not produce a tree.
+    expect(fs.existsSync(out)).toBe(false);
   });
 });
 

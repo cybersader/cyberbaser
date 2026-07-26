@@ -57,6 +57,15 @@ function main() {
         `${result.leakTest.checked.sampledTitles} denied titles sampled, ${result.leakTest.titleMatchCount} title match(es) reported)`,
     );
   }
+  if (result.pathLint) {
+    const pl = result.pathLint;
+    const byRule = Object.entries(pl.byRule).map(([k, n]) => `${k} ${n}`).join(', ') || 'none';
+    console.log(
+      `path lint: ${pl.paths} paths, ${pl.violations} violation(s) [${byRule}], ` +
+        `${pl.collisionGroups} slug collision group(s) (${pl.caseOnlyCollisionGroups} case-only), ` +
+        `${pl.emoji.pathsWithEmoji} path(s) with emoji`,
+    );
+  }
   if (result.reportPath) console.log(`report: ${result.reportPath}`);
 
   for (const w of result.warnings.slice(0, 20)) console.warn(`warning [${w.kind}] ${w.path ?? ''} ${w.message ?? ''}`.trim());

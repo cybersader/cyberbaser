@@ -4,6 +4,7 @@ export {
   preflightFrontmatter,
   findCaseCollisions,
   lintDerivedPaths,
+  lintPathSafety,
   injectAlias,
   projectedPath,
   naturalCaseAlias,

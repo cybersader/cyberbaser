@@ -25,14 +25,17 @@
  *   5. Lints frontmatter-derived paths (tags, aliases, slug) for characters that are
  *      illegal in file paths. Warnings in v1, because renderers vary in which of these
  *      they turn into an output path.
- *   6. Verifies the boundary after the copy: nothing under the output tree may come from
+ *   6. Runs the path safety lint over the published set: rules 1-5 as warnings (inherited
+ *      content debt is out of scope, R19) and rule 6, slug collisions, as a build failure
+ *      when the collision is real under the current path contract.
+ *   7. Verifies the boundary after the copy: nothing under the output tree may come from
  *      a path the selector denied.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 import yaml from 'js-yaml';
-import { select } from '@cyberbaser/publish';
+import { select, lintVault } from '@cyberbaser/publish';
 import { parseFrontmatter } from '@cyberbaser/publish/src/select.js';
 
 // Mirrors select.js. Kept local rather than imported so the two can never disagree
@@ -131,6 +134,13 @@ export function preflightFrontmatter(vaultDir, pages) {
 /**
  * Two source paths that lowercase to one projected path. One silently overwrites the
  * other and no renderer reports it, so it fails the build here.
+ *
+ * Note the scope: this compares *projected file paths*. Under `lowercase = false` (the
+ * v0 default, R16) `projectedPath` is the identity function and the source paths came
+ * from a filesystem walk, so this check cannot fire. It is the guard for the day
+ * lowercasing turns on. The collision that can happen *today* is a collision in the
+ * renderer's emitted URL, where `Threat Modeling.md` and `Threat-Modeling.md` are two
+ * files but one page. That one is caught by `lintPathSafety` below, rule 6.
  */
 export function findCaseCollisions(sourcePaths, lowercase = true) {
   const byProjected = new Map();
@@ -185,6 +195,113 @@ export function lintDerivedPaths(frontmatter) {
     }
   }
   return warnings;
+}
+
+// ----------------------------------------------------------- path safety lint
+
+/** Bound on how many census entries reach the report. Counts are always exact. */
+const CENSUS_LIMIT = 50;
+
+function cap(list) {
+  return list.length <= CENSUS_LIMIT
+    ? { items: list, truncated: false, total: list.length }
+    : { items: list.slice(0, CENSUS_LIMIT), truncated: true, total: list.length };
+}
+
+/**
+ * Run `@cyberbaser/publish`'s path safety lint over the set that is actually about to be
+ * published, and split its output into build policy.
+ *
+ * Rules 1-5 (illegal characters, reserved device names, edge whitespace, over-length,
+ * non-NFC) are **warnings**. They describe a vault that already exists and that the
+ * maintainer authored before any of this ran; failing on them would fail every build on
+ * inherited content debt, which R19 puts out of scope. They still have to be visible,
+ * because each one is a file that some contributor on some platform cannot check out.
+ *
+ * Rule 6, slug collisions, is different: it is not debt, it is data loss. Two vault files
+ * whose names slug to one URL means the renderer emits one page and drops the other with
+ * no error. That is the failure the vault has zero of today, so gating on it costs
+ * nothing now and catches the restructure that introduces one.
+ *
+ * The exception is a `caseOnly` collision. Under the verbatim path contract those are two
+ * distinct URLs on a case-sensitive host and nothing is lost, so they are a warning
+ * naming the hazard. When `lowercase` is on they become the same URL, and then they fail.
+ *
+ * @param {string[]} publishedPaths pages + assets, as the selector returned them
+ * @param {boolean} lowercase whether the projection is lowercasing paths
+ * @returns {{failures: object[], warnings: object[], census: object}}
+ */
+export function lintPathSafety(publishedPaths, lowercase = false) {
+  const { violations, collisions, emojiCensus } = lintVault(publishedPaths);
+  const failures = [];
+  const warnings = [];
+
+  for (const v of violations) {
+    if (v.rule === 6) continue; // reported per collision group below, not per path
+    warnings.push({
+      kind: 'path-lint',
+      rule: v.rule,
+      code: v.code,
+      path: v.path,
+      segment: v.segment,
+      message: v.message,
+    });
+  }
+
+  for (const c of collisions) {
+    const entry = {
+      path: c.key,
+      key: c.key,
+      slugs: c.slugs,
+      sources: c.paths,
+      exact: c.exact,
+      caseOnly: c.caseOnly,
+    };
+    if (c.caseOnly && !lowercase) {
+      warnings.push({
+        ...entry,
+        kind: 'slug-collision-case-only',
+        message:
+          `${c.paths.length} source paths differ only by case and slug to "${c.key}": ` +
+          `${c.paths.join(', ')}. Distinct URLs on a case-sensitive host today; one page ` +
+          'the moment the projection starts lowercasing (D2 / R16).',
+      });
+      continue;
+    }
+    failures.push({
+      ...entry,
+      kind: 'slug-collision',
+      message:
+        `${c.paths.length} source paths slug to "${c.key}": ${c.paths.join(', ')}. ` +
+        'The renderer emits one page for all of them and reports nothing.',
+    });
+  }
+
+  const census = {
+    paths: publishedPaths.length,
+    violations: violations.filter((v) => v.rule !== 6).length,
+    byRule: violations.reduce((acc, v) => {
+      if (v.rule !== 6) acc[v.code] = (acc[v.code] ?? 0) + 1;
+      return acc;
+    }, {}),
+    collisionGroups: collisions.length,
+    caseOnlyCollisionGroups: collisions.filter((c) => c.caseOnly).length,
+    emoji: {
+      pathsWithEmoji: emojiCensus.pathsWithEmoji,
+      directory: {
+        paths: emojiCensus.directory.paths,
+        codepoints: emojiCensus.directory.codepoints,
+        ...cap(emojiCensus.directory.segments),
+      },
+      basename: {
+        paths: emojiCensus.basename.paths,
+        codepoints: emojiCensus.basename.codepoints,
+        ...cap(emojiCensus.basename.files),
+      },
+    },
+  };
+
+  return { failures, warnings, census };
 }
 
 // ------------------------------------------------------------- alias injection
@@ -397,6 +514,7 @@ export function project(vaultDir, outDir, opts = {}) {
   const warnings = [];
   const aliases = [];
   let leakTest = null;
+  let pathLint = null;
   let counts = { pages: 0, assets: 0, aliasesInjected: 0, aliasesSkipped: 0, caseChangedPages: 0, caseChangedAssets: 0, warnings: 0 };
 
   const finish = () => {
@@ -407,11 +525,13 @@ export function project(vaultDir, outDir, opts = {}) {
       vaultDir: path.resolve(vaultDir),
       outDir: path.resolve(outDir),
       audience,
+      lowercase,
       durationMs: Date.now() - startedAt,
       counts,
       failures,
       warnings,
       aliases,
+      pathLint,
       leakTest,
       selectCounts: selectResult?.report?.counts ?? null,
     };
@@ -423,7 +543,7 @@ export function project(vaultDir, outDir, opts = {}) {
         warnings.push({ kind: 'report', message: `could not write ${reportPath} (${e.message})` });
       }
     }
-    return { ok: report.ok, failures, warnings, counts, aliases, leakTest, reportPath: writeReport ? reportPath : null, report, selectResult };
+    return { ok: report.ok, failures, warnings, counts, aliases, pathLint, leakTest, reportPath: writeReport ? reportPath : null, report, selectResult };
   };
 
   const selectResult = opts.selectResult ?? select(vaultDir, { audience });
@@ -460,6 +580,15 @@ export function project(vaultDir, outDir, opts = {}) {
 
   // 5. Derived-path lint (warnings only).
   warnings.push(...lintDerivedPaths(pre.frontmatter));
+
+  // 6. Path safety lint over the published set. Rules 1-5 warn; a slug collision that is
+  //    real under the current path contract fails, before anything is written.
+  const safety = lintPathSafety([...pages, ...assets], lowercase);
+  pathLint = safety.census;
+  counts.pathViolations = safety.census.violations;
+  counts.slugCollisions = safety.census.collisionGroups;
+  warnings.push(...safety.warnings);
+  failures.push(...safety.failures);
 
   if (failures.length) return finish();
 
@@ -508,7 +637,7 @@ export function project(vaultDir, outDir, opts = {}) {
     });
   }
 
-  // 6. Boundary check on what actually landed on disk.
+  // 7. Boundary check on what actually landed on disk.
   if (verify) {
     leakTest = verifyProjection(vaultDir, outDir, selectResult, { sampleSize: opts.sampleSize, lowercase });
     if (!leakTest.ok) {

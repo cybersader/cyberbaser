@@ -1,86 +1,99 @@
 ---
 title: Contribution Workflows
-description: Three independent contribution paths (Web CMS, Obsidian+Git, Direct GitHub) with end-to-end flows and constraints.
+description: How a change actually reaches the published site today, which paths exist, and which parts of the moderation policy nothing currently enforces.
 sidebar:
   order: 23
 status: research
 tags: [design, contribution]
 ---
 
-Cyberbaser promises three contribution paths. Every path must work **independently** — no path is allowed to depend on another being running (see [Principle 4](/cyberbaser/getting-started/principles/#4-every-contribution-path-must-work-independently)). This page specifies each path end-to-end.
+:::caution[Corrected 2026-07-26. The earlier version of this page described a system that was never built.]
+It specified a Decap-based web CMS path, per-PR preview deployments, and a CI gate that blocks merges. None of those exist. The CMS path was ruled out permanently by [R12](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25), and the preview and the gate are designed but unbuilt. Every claim below is now labelled **built** (ours), **borrowed** (GitHub's or Quartz's), or **designed, unbuilt**.
+:::
 
-## Path A: Web CMS (Decap, Open Authoring)
+Cyberbaser's design calls for contribution paths that work **independently** — no path may depend on another being running (see [Principle 4](/cyberbaser/getting-started/principles/#4-every-contribution-path-must-work-independently)). This page states each path as it stands, and separates the shipped mechanics from the commitments that are still on paper.
 
-**Target user:** domain expert, zero git knowledge. This path uses Decap, which signs in with a GitHub account, so here that account is a trust signal, not a wall. Contribution overall never forces an account: it is gated by the maintainer's trust curve and a moderation queue, and a no-account path (a serverless contribution bot) is tracked separately.
+## Status at a glance
 
-### Flow
+| Piece | State | Where it lives |
+|---|---|---|
+| Path A · Web CMS (Decap, Sveltia, Tina, Pages CMS) | **Withdrawn.** R12 disqualifies the whole category | [Write-path proposal §1](/cyberbaser/research/proposal-write-path/) |
+| Path B · Obsidian + Git | **Built and in daily use** by the maintainer | `publish-site.yml` in the vault repo |
+| Path C · GitHub web editor | **Built.** The only path open to an outside contributor | `EditThisPage.tsx` → `github.com/.../edit/` |
+| Zero-account contribution | **Does not exist.** No design has shipped | [Risk register, rated critical](/cyberbaser/research/assumptions-and-risks/#the-real-gating-risks-ranked) |
+| OFM damage check on a PR | **Built, report-only.** `continue-on-error: true`, blocks nothing | `@cyberbaser/ofm` via `ofm-check.yml` |
+| Trust classification on a PR | **Built, decision-only.** Emits a label and a summary table | `@cyberbaser/trust` via `trust-gate.yml` |
+| Auto-merge for the auto-merge route | **Designed, disabled.** The step is commented out in the workflow | `trust-gate.yml` |
+| Branch protection / required checks | **Does not exist.** No protection rule, no ruleset on `main` | — |
+| Per-PR rendered preview | **Designed, unbuilt** | [Hub BOM · H5](/cyberbaser/research/proposal-hub-bom/#per-pr-rendered-previews) |
+| Link check in the pipeline | **Built as a CLI, wired into no workflow** | `@cyberbaser/linkcheck` |
 
-1. **Discovery**: reader lands on a wiki page, sees a prominent "Suggest edit" button
-2. **Auth**: clicking it opens Decap; GitHub OAuth modal appears
-3. **Editor**: Decap renders the page's markdown in a rich editor (not raw). Tier 1 features (wikilinks, callouts) render as interactive widgets; Tier 2/3 render read-only
-4. **Preview**: live preview pane shows the rendered page
-5. **Submit**: contributor writes a one-line commit message, clicks Submit
-6. **Behind the scenes**: Decap forks `cybersader/cyberbase` to the contributor's account, creates a branch, commits the change, opens a PR to the source repo
-7. **Feedback**: contributor sees a PR link and "your edit is pending review"
+The single most important line in that table: **nothing in the pipeline can block a merge today.** The checks report; a human decides.
 
-### Constraints
+## Path A: Web CMS — withdrawn
 
-- Must NOT require Obsidian running anywhere
-- Must NOT hold edit state outside the repo
-- Must NOT require the maintainer to do anything special to accept the edit
-- The fork + PR flow must be invisible to the contributor — they should never see the word "fork"
+**Status: withdrawn, not deferred.** This path specified a rich web editor (Decap with Open Authoring) that would render the page's markdown, offer wikilink and callout widgets, show a live preview, and open a fork-and-PR invisibly.
 
-### Open questions
+It was ruled out on measurement, not taste. The [write-path proposal](/cyberbaser/research/proposal-write-path/) evaluated Decap, Sveltia, TinaCMS, EmDash and Pages CMS and disqualified every one for the same reason: each re-serializes the whole file on save. [R12](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25) then generalized that into a standing constraint after running the round-trip against all 1430 real vault files and getting **4.6% byte-identity**: no whole-file re-serialization in any write path, ever. That closes the category, not just the finalists.
 
-- Where does the OAuth proxy live? Self-hosted (for example alongside Forgejo) is preferred; an edge function is one fallback. (This is specific to the GitHub-backed Decap path.)
-- What OAuth scopes are minimal? (Read: `public_repo`; write: needs fork + PR creation)
-- How does the editor surface Tier 2/3 features it can't render inline?
+**What this means for the three-path framing.** Path A's users have not been given a different editor. They have been handed Path C. In practice there are **two** paths today, one of which (Path B) only the maintainer uses:
+
+- Path B, Obsidian + Git, for someone who already has the vault cloned.
+- Path C, GitHub's web editor, for everyone else.
+
+**The persona Principle 3 exists for has no path at all.** A domain expert with no GitHub account and no wish to make one cannot contribute today: GitHub's editor requires an account, and the anonymous intake endpoint that would replace it is designed ([`cb-intake` in the hub BOM](/cyberbaser/research/proposal-hub-bom/)) and unbuilt. The risk register rates this **critical** and has since before the pipeline shipped. Nothing on this page should be read as claiming otherwise.
 
 ## Path B: Obsidian + Git
 
-**Target user:** vault-native power user. Comfortable with either git or an Obsidian git plugin (obsidian-git).
+**Status: built. This is the maintainer's daily path.**
+
+**Target user:** vault-native power user, comfortable with git or an Obsidian git plugin.
 
 ### Flow
 
 1. **Clone**: clone `cybersader/cyberbase` as an Obsidian vault
 2. **Edit locally**: full Obsidian affordances (wikilinks, callouts, graph view, templates)
-3. **Commit & push**: either via obsidian-git plugin or terminal
-4. **Build trigger**: GitHub Actions sees the push and triggers the build and deploy (GitHub Pages is the current deploy target)
-5. **Live**: within ~60-90 seconds the change is on the published site
+3. **Commit & push**: either via obsidian-git or a terminal
+4. **Build trigger**: `publish-site.yml` fires on push to `main` and runs the publish boundary, the projection, and the Quartz build, then deploys to GitHub Pages
+5. **Live**: **3 to 5 minutes later** the change is on the published site
+
+> [!info] The build time, measured
+> Five successful end-to-end runs (push to bytes live) took **3m07s, 3m15s, 3m22s, 3m27s and 4m52s**. An earlier version of this page promised "~60-90 seconds"; that number was never measured and is 2-5x optimistic. The site is 933 pages and the build is a full rebuild every time — see [Q05](/cyberbaser/reference/open-questions/) on incremental builds.
 
 ### Constraints
 
-- Must not require any cyberbaser-specific plugins or tooling inside Obsidian
+- Must not require any cyberbaser-specific plugins or tooling inside Obsidian (holds: the vault repo carries only `publish.yml` and two workflow files)
 - The vault must work as a plain Obsidian vault even if cyberbaser doesn't exist
 - Pre-commit hooks (if any) must be optional, not required
 
-### Open questions
+### What is not enforced on this path
 
-- Is direct push to `main` allowed for the maintainer, or always-PR?
-- What's the branch model for larger changes: feature branches?
-- Should there be a pre-commit hook that validates frontmatter?
+The maintainer pushes to `main` directly, and `ofm-check` and `trust-gate` are both `pull_request`-triggered. **A direct push is validated by nothing.** The contributor path has more checks than the maintainer path, not fewer. That asymmetry is deliberate for now (requiring PRs for all changes would break daily authoring from Obsidian), but it is a gap, not a design.
 
 ## Path C: Direct GitHub
 
-**Target user:** developer, knows git, doesn't use Obsidian, wants to fix something quickly.
+**Status: built, and it is the only path an outside contributor can use.**
+
+**Target user:** originally scoped as "developer, knows git, wants a quick fix." In practice it is now everyone who is not the maintainer.
 
 ### Flow
 
-1. **Page footer link**: every page has "Edit this page on GitHub"
-2. **GitHub web editor**: opens the raw markdown in GitHub's web UI
-3. **Edit**: contributor edits the file; they see Obsidian-flavored syntax but don't need to understand it
-4. **Commit**: commit via the web UI; if they don't have write access, GitHub offers to open a PR
-5. **Merge**: same PR review flow as Path A
+1. **Edit link**: every page carries an "✎ Edit this page" link. It sits under the article title next to the page metadata, not in the footer, and it is small grey text rather than a prominent button. 931 of 931 pages verified as carrying it
+2. **GitHub web editor**: opens the raw markdown in GitHub's web UI. The contributor sees `[[wikilinks]]`, `> [!note]` and `%%comments%%` as plain text, with no rendering and no preview
+3. **Auth**: GitHub prompts for an account. There is no way past this step without one
+4. **Commit**: GitHub forks the repo behind the scenes, creates a branch, and opens a PR
+5. **Checks**: `ofm-check` annotates any OFM damage; `trust-gate` applies a `trust:<route>` label. Both are advisory
+6. **Merge**: the maintainer reads the diff on github.com and clicks Merge
 
 ### Constraints
 
-- Contributor must NOT need to understand Obsidian syntax to make safe edits
-- Wikilinks and callouts should be visible as raw text but must not break when round-tripped
-- The "Edit on GitHub" link must go to the exact file that renders the current page (not an approximation)
+- Contributor must NOT need to understand Obsidian syntax to make safe edits (partially met: the syntax is visible and unexplained, but `ofm-check` catches damage after the fact)
+- Wikilinks and callouts should be visible as raw text but must not break when round-tripped (met by construction: GitHub's editor writes back only the bytes the contributor typed)
+- The "Edit this page" link must go to the exact file that renders the current page (met: `EditThisPage.tsx` builds the link from the projection's verbatim path)
 
 ### Open questions
 
-- Do we hide Obsidian-specific syntax behind a collapsible comment block in the raw view?
+- Do we surface a syntax hint for Obsidian-specific constructs in the raw view?
 - Should the PR template auto-fill with the page being edited?
 
 ## Cross-path concerns
@@ -95,45 +108,76 @@ Cyberbaser promises three contribution paths. Every path must work **independent
 
 ### Review model
 
-| PR type | Reviewer | Auto-merge |
-|---|---|---|
-| Typo fix from trusted contributor | none | ✅ auto |
-| Typo fix from anonymous | maintainer | ❌ manual |
-| Content change from trusted | maintainer (quick) | ❌ manual |
-| Content change from anonymous | maintainer (full) | ❌ manual |
-| Structural / navigation change | maintainer + second review | ❌ manual |
+The trust classifier computes a route for every PR. What happens next is entirely manual.
 
-Trusted contributors are designated in a `.github/trusted-contributors.yml` file (or similar). Moving someone onto that list is a conscious act.
+| PR type | Computed route | What actually happens |
+|---|---|---|
+| Typo fix from trusted contributor | `auto-merge` | Label applied. **Nothing merges.** The auto-merge step is commented out and no required check exists |
+| Typo fix from anonymous | `full-review` | Label applied, maintainer merges by hand |
+| Content change from trusted | `quick-review` | Label applied, maintainer merges by hand |
+| Content change from anonymous | `full-review` | Label applied, maintainer merges by hand |
+| Structural / navigation change | `full-review` | Label applied, maintainer merges by hand |
+
+Trusted contributors are designated in **`.cyberbaser/trust.yml`** in the vault repo (not `.github/trusted-contributors.yml`; the file moved out of the forge's namespace deliberately, per [dissent §1.4](/cyberbaser/research/dissent/)). Moving someone onto that list is a conscious act, and the policy is read from the base ref, so a PR cannot promote its own author.
+
+**Nothing has ever auto-merged, and nothing can.** Enabling it needs three things that do not exist: branch protection on `main`, the site build as a required check, and the commented-out step turned on. The first of those collides with the maintainer's direct-push workflow, which is why it has not happened.
 
 ### The policy, concretely (cyberbase's own)
 
 This is the actual moderation policy for the dogfood vault, written out to prove the trust-curve story survives contact with specifics. Any maintainer using cyberbaser would write their own version of these two paragraphs, and the trust dial is exactly which parts they tighten or loosen.
 
-> **Every edit lands in the moderation queue; nothing goes live unreviewed** except typo-level fixes from contributors already on the trusted list. The maintainer reviews the rendered preview (not just the diff) and aims to act within a few days; "act" means merge, request changes, or reject with a one-line reason. Accepted edits are ones that make the content more true, more current, or more clear, and that cite a source for any factual claim that isn't self-evident. Anonymous edits are welcome on the same terms; identity is never required, it just speeds review as trust accrues.
+> **Every edit lands in the moderation queue; nothing goes live unreviewed** except typo-level fixes from contributors already on the trusted list. The maintainer reviews **the diff on the PR page**, plus the `ofm-check` annotations and the `trust:<route>` label, and aims to act within a few days; "act" means merge, request changes, or reject with a one-line reason. Accepted edits are ones that make the content more true, more current, or more clear, and that cite a source for any factual claim that isn't self-evident. Anonymous edits are welcome on the same terms; identity is never required, it just speeds review as trust accrues.
 >
 > **Held or rejected without debate:** spam and promotion, edits to the personal folders (out of scope for contribution), factual changes with no source, drive-by rewrites of a page's voice or structure, and anything the maintainer judges to be generated bulk content. Contributors earn the trusted list after roughly three merged, unproblematic edits, and drop off it on the first spam or bad-faith submission; repeat abuse gets blocked at the repo (and, if volumetric, handled at the edge, which is [a separate problem](/cyberbaser/concepts/problem/#contribution-on-your-terms)). The maintainer's call is final; there is no appeals process at this scale, and that's a feature, not a gap.
 
+> [!warning] What this policy used to say, and why it changed
+> It committed the maintainer to reviewing "the rendered preview (not just the diff)." No rendered preview exists anywhere in the pipeline, so that clause made the written policy uncheckable. It is amended above to describe what a reviewer can actually see today. If per-PR previews ship, amend it back.
+
 ### Preview / staging
 
-Every PR gets a preview deployment from the same pipeline that builds the site. The maintainer reviews the rendered preview before merging. This is the CI gate: if the preview fails to build, the PR can't merge.
+**There is no preview deployment. No PR has ever been rendered before merge.**
+
+Three separate claims in the earlier version of this section were false, and they are worth stating individually because each fails for a different reason:
+
+| Claim | Why it is false |
+|---|---|
+| "Every PR gets a preview deployment from the same pipeline that builds the site" | `publish-site.yml` triggers only on `push` to `main` and `workflow_dispatch`. It deliberately refuses a `pull_request_target` trigger, because that would run fork-authored content in a job holding write scopes on the vault ([pwn-request](https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/)). The refusal is a security decision, not an oversight |
+| "The maintainer reviews the rendered preview before merging" | Nothing renders it. The maintainer reads a raw markdown diff on github.com |
+| "This is the CI gate: if the preview fails to build, the PR can't merge" | `ofm-check.yml` is `continue-on-error: true`, `trust-gate.yml` is decision-only, and `main` has **no branch protection and no rulesets**. No check can block any merge |
+
+**The commitment stands; the implementation does not exist.** The design is written and costed: two CI jobs split across a trust boundary, a `pull_request` build job with no secrets producing an artifact, and a `workflow_run` publish job running base-branch code that never checks out the contributor's branch, publishing into a subpath of a second Pages site on its own origin. See [Hub BOM · Per-PR rendered previews](/cyberbaser/research/proposal-hub-bom/#per-pr-rendered-previews) for the full shape and the reason GitHub Pages cannot do it in one repo (one site, one environment, one concurrency group).
+
+A quarter-day interim exists too: have the PR job run the same projection and Quartz build and **upload the output as a workflow artifact**, which the maintainer downloads and serves locally. No second host, no policy exception. Written up in [renderer URLs · adjacent](/cyberbaser/research/proposal-renderer-urls/#adjacent-per-pr-previews-flagged-not-owned-here).
 
 ### Attribution
 
-Contributor names appear in git history automatically. For web contributions via Decap's fork flow, the fork's commit author = the contributor's GitHub account, so attribution is preserved without any special handling.
+> [!warning] Unverified, and three pages depend on it
+> The claim that "contributor names appear in git history automatically, so attribution is preserved without any special handling" has **never been observed working**. It was written about Decap's fork flow, which no longer exists in the write path.
+>
+> The mechanism today is GitHub's own edit-and-fork flow, and the expectation is that the fork's commit author is the contributor's account and survives the merge. That is an expectation, not a measurement. The two live contribution PRs run during [R17](/cyberbaser/getting-started/roadmap/) were both authored by the maintainer's own account, so they could not have tested it.
+>
+> This matters beyond UX: [Legal & Governance](/cyberbaser/design/legal-and-governance/) makes commit history the attribution record the content license points at. An untested claim is currently load-bearing for a licensing obligation.
+>
+> Tracked as an open question — see [Q08 · Does the fork flow actually attribute the contributor?](/cyberbaser/reference/open-questions/#q08--does-the-fork-flow-actually-attribute-the-contributor) and the reopened brief [07 · Contributor attribution](/cyberbaser/agent-context/zz-challenges/07-contributor-attribution/). The check is roughly ten minutes of work: one `git log --format='%an %ae'` over the merged contribution PRs, plus one PR opened from a second account.
+
+**What a reader sees today: nothing.** The published site's page layout is breadcrumbs, title, date and reading time, tags, and the edit link. There is no author line, no contributor list, no avatar, and no contributors page. The vault vision's "show contributors at the top of each page with pic and contributors page" has not been designed, costed, scheduled, or explicitly declined.
 
 ### Licensing
 
-Contribution only works legally if the vault has a content license with a contributor clause; without one, every accepted edit is owned by its contributor and readers can't reuse anything. The full treatment (license choice, mixed-vault carve-outs, the contributor clause) lives at [Legal & Governance](/cyberbaser/design/legal-and-governance/).
+Contribution only works legally if the vault has a content license with a contributor clause; without one, every accepted edit is owned by its contributor and readers can't reuse anything. The full treatment (license choice, mixed-vault carve-outs, the contributor clause) lives at [Legal & Governance](/cyberbaser/design/legal-and-governance/). Note the dependency flagged above: that page's attribution argument rests on the unverified claim.
 
 ### Abuse / spam
 
-> [!warning]+ Anonymous contribution has an abuse surface
-> Anonymous contributions via Path A need protection:
-> - Rate limiting per GitHub account (Decap / the OAuth proxy enforces this)
-> - Optional manual approval for first-time contributors
-> - GitHub's anti-spam already covers most automated abuse
-> - Pathological bad actors can be blocked at the repo level
+> [!warning]+ Abuse handling today is entirely GitHub's
+> There is no OAuth proxy, no rate limiter, and no cyberbaser-operated intake endpoint. What actually protects the repo:
+> - GitHub's own account requirement and anti-spam on fork PRs
+> - The maintainer reading every PR, since nothing auto-merges
+> - Repo-level blocking for a persistent bad actor
+>
+> The per-account rate limiting the earlier version credited to "Decap / the OAuth proxy" does not exist, because neither component does. Rate limiting becomes a real requirement the moment an anonymous intake endpoint ships, and it is part of that design rather than a separate control.
 
 ## Minimum viable contribution set
 
-Based on prior art ([awesome-list repos](/cyberbaser/research/prior-art/#awesome-list-repos)), the floor for Path A is: **"as easy as editing an awesome-list repo on GitHub."** That's 3 clicks: Edit → type → Propose change. Any path that's harder than that has failed Principle 3.
+Based on prior art ([awesome-* repos](/cyberbaser/research/prior-art/#awesome--repos)), the floor was set as **"as easy as editing an awesome-list repo on GitHub"** — 3 clicks: Edit → type → Propose change.
+
+That floor is met, and entirely by GitHub's editor rather than by anything cyberbaser built. It is worth being precise about what that does and does not prove: it clears the bar for a contributor who already has a GitHub account, and it does not touch [Principle 3](/cyberbaser/getting-started/principles/) at all for a contributor who does not. Principle 3's actual claim is that contributors shouldn't need to learn git *and* shouldn't be forced into an account. Half of it is currently unmet.

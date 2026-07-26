@@ -8,6 +8,16 @@ status: research
 tags: [research, translation-layer, testing]
 ---
 
+:::note[Partially resolved — the question was redefined rather than answered, and the redefinition is better than what was asked for]
+**Answer type: empirical. Deciding decision: [R12](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25), 2026-07-25.**
+
+**What got answered.** The `spikes/ofm-roundtrip/` corpus (21 fixtures, R05) proved masking protects OFM constructs through a parse. R12 then ran those semantics against all 1430 real vault files: **4.6% byte-identity, zero mask leaks, zero parse errors**, with failures dominated by formatting normalization rather than OFM damage. R12 re-scoped enforcement from "does the whole file survive re-serialization" to **"no construct damage in a change"** — which is a direct answer to this brief's actual subject ("what does *equal* mean") and a better one than the brief anticipated.
+
+The equivalence rules now exist as `@cyberbaser/ofm`'s `clean | suspect | damage` classifier: construct-inventory multiset diff plus three normalization fingerprints.
+
+**What is still open.** The rules live in code, not in the per-feature document a test engineer was supposed to receive. The specific variant questions this brief asked — is `[[Foo]]` ≡ `[[Foo|Foo]]`, is `> [!NOTE]` ≡ `> [!note]`, must `![[img.png|200]]` survive — have no written answer. [Source of truth](/cyberbaser/research/source-of-truth/) also handed two unresolved items here on 2026-06-17 ("the edit widget is where wikilink/callout corruption would actually happen, and that wasn't exercised"); that hand-off was never picked up. See the residue on [Q04](/cyberbaser/reference/open-questions/#q04--how-do-we-guarantee-no-lossy-round-trip-in-practice).
+:::
+
 ## The assignment
 
 [Principle 2](/cyberbaser/getting-started/principles/#2-obsidian-semantics-must-round-trip) says Obsidian semantics must round-trip. The [existing challenge](/cyberbaser/agent-context/zz-challenges/translation-layer-round-trip-enforcement/) asks HOW to enforce this. **This challenge asks WHAT "round-trip correct" means for each specific feature.** Define the equivalence rules — which variations are semantically identical and which are corruption?

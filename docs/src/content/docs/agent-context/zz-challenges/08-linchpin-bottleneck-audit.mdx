@@ -8,6 +8,21 @@ status: research
 tags: [research, architecture, design]
 ---
 
+:::tip[Resolved in substance — superseded by the 2026-07-25 adversarial wave, which did this brief's job without citing it]
+**Answer type: argument, then confirmed by measurement. Deciding decisions: R09 → [R12](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25).**
+
+Do not re-run this brief. Read these three pages instead, which between them execute every item on it:
+
+| Brief item | Where it was done |
+|---|---|
+| 1 · identify the linchpins · 6 · steel-man the wrong architecture | [dissent](/cyberbaser/research/dissent/) — four steelmen with WINS / PARTIALLY-WINS / LOSES verdicts, then "the assumption that costs the most, and the cheapest test," which named the single load-bearing assumption and specified a half-day falsification |
+| 3 · map the solution space | [option space](/cyberbaser/research/option-space/) — eight options, including CRDT-for-sessions with git as durable SSOT, and the interop identity taken literally as a conformance suite |
+| 5 · the v1 critical path | [plan critique](/cyberbaser/research/plan-critique/) — the kill/keep table |
+| 2 · dependency depth | R09 → R12 resolved the graph **by measurement rather than argument**: the gate ran, returned 4.6% byte-identity, and locked the v1 shape the same day |
+
+The one thing worth carrying forward: R12's restated moat (byte-preservation by construction, plus mechanical validation, plus governance) currently lives only in a decision-log consequence line. It is a materially different product claim from the one the vision and problem pages still make, and nobody has adopted or rejected the "conformance suite, not a spec document" framing that anticipated it.
+:::
+
 ## The assignment
 
 The cyberbaser architecture has many moving parts: translation layer, CMS integration, auth, plugin execution, contribution workflows, hosting, sync, search, attribution. Some of these are **linchpins** — if they fail, nothing else works. Others are **incidental** — nice to have, replaceable, or deferrable.

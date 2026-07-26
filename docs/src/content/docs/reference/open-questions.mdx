@@ -1,63 +1,59 @@
 ---
 title: Open Questions
-description: Unresolved questions that surfaced during Phase R research. Kept deliberately short — if this list grows beyond ~15, slow down and resolve some.
+description: The register of unresolved questions, with the deciding R-number on every one that closed. Kept deliberately short.
 sidebar:
   order: 40
 status: research
 tags: [research]
 ---
 
-> Kept deliberately short. If this list grows past ~15 items, we're accumulating questions faster than we're resolving them — slow research down and resolve some before adding more.
+> Kept deliberately short. If the open list grows past ~15 items, we're accumulating questions faster than we're resolving them — slow research down and resolve some before adding more.
 
-## Current questions
+**Rewritten 2026-07-26.** Q01-Q07 were all written on 2026-04-11 and none had been updated since, so this page was telling arriving readers that decisions taken in R12, R14 and R16 were still open. Every entry below now carries its current status. Closed questions keep their heading and their number so inbound links stay valid; per R20 in the decision log, a knowledge-ops pass may re-point or re-file an open question, never delete one.
 
-### Q01 — What's in the local Obsidian research vault?
+## The register
 
-**Asked:** 2026-04-11
-**Source:** Existing Work audit
-**Why it matters:** we may be re-researching things that already exist in prior notes in the local Obsidian research vault (local research vault).
-**Blocks:** efficient use of Phase R time.
-**Status:** needs a manual audit pass.
+| # | Question | Status | Decided by |
+|---|---|---|---|
+| Q01 | Local research vault audit | **Closed — declined** | Plan critique, 2026-07-25 |
+| Q02 | Is `astro-loader-obsidian` enough for Tier 1? | **Closed — not applicable** | R14 |
+| Q03 | Web CMS: rendered preview or raw markdown? | **Closed — moot** | R12 |
+| Q04 | How do we guarantee no lossy round-trip? | **Answered, unenforced** | R12 |
+| Q05 | Incremental builds at thousands of pages | **Closed on scale, residue named** | R12, R14, R16 |
+| Q06 | Content addressability: slugs, hashes, or titles? | 🔴 **Open** | — |
+| Q07 | Where does the Decap OAuth proxy live? | **Closed — moot**, superseded by Q09 | R12 |
+| Q08 | Does the fork flow actually attribute the contributor? | 🔴 **Open** (reopened) | — |
+| Q09 | What is the contribution path for someone with no account? | 🔴 **Open** | — |
+| Q10 | What enforces the moderation policy? | 🔴 **Open** | — |
 
----
+Four genuinely open. Q08, Q09 and Q10 are new here; all three were being treated as settled somewhere in the docs without ever having been decided.
 
-### Q02 — Is `astro-loader-obsidian` sufficient for Tier 1 translation?
+## Open
 
-**Asked:** 2026-04-11
-**Source:** [Translation Layer](/cyberbaser/design/translation-layer/)
-**Why it matters:** determines whether the translation layer is a "wire up existing plugins" problem or a "write custom plugins" problem. Changes the scope of Phase 1 by 5-10x.
-**Blocks:** Phase 1 translation layer spike.
-**Status:** unknown. Needs hands-on testing with a vault of real Obsidian-flavored content.
+### Q08 — Does the fork flow actually attribute the contributor?
 
----
-
-### Q03 — Should the Web CMS show rendered Obsidian preview, or raw markdown?
-
-**Asked:** 2026-04-11
-**Source:** [Contribution Workflows](/cyberbaser/design/contribution-workflows/)
-**Why it matters:** determines whether Decap needs a custom preview pipeline that can render Tier 1 features, or whether we accept "raw markdown with syntax highlighting" as the editing surface.
-**Blocks:** Web CMS design in Phase 2.
-**Status:** depends on how Decap / Sveltia / Tina each handle custom preview components.
+**Asked:** 2026-04-11 as [challenge brief 07](/cyberbaser/agent-context/zz-challenges/07-contributor-attribution/); reopened as a numbered question 2026-07-26.
+**Why it matters:** [Legal & Governance](/cyberbaser/design/legal-and-governance/) makes commit history the attribution record the content license points at. If the merge commit, rather than the contributor's account, ends up as the author on a fork-and-PR contribution, that record does not say what the license needs it to say.
+**Blocks:** the licensing argument, and any contributor-facing credit UI.
+**Status:** 🔴 **unverified.** [Contribution Workflows](/cyberbaser/design/contribution-workflows/#attribution) asserted it works "without any special handling" from 2026-04 until this rewrite; nobody ever checked. The two live contribution PRs in R17 were authored by the maintainer's own account and so could not test it. The check is about ten minutes: `git log --format='%an %ae'` over the merged contribution PRs, plus one PR opened from a second account.
 
 ---
 
-### Q04 — How do we guarantee no lossy round-trip in practice?
+### Q09 — What is the contribution path for someone with no account?
 
-**Asked:** 2026-04-11
-**Source:** [Translation Layer](/cyberbaser/design/translation-layer/), [Principle 2](/cyberbaser/getting-started/principles/#2-obsidian-semantics-must-round-trip)
-**Why it matters:** Principle 2 is only a principle if it's enforceable. Otherwise it's an aspiration.
-**Blocks:** the claim of "round-trip editability" in vision and principles.
-**Status:** probably property-based tests on a vault fixture corpus, but the framework for this doesn't exist yet.
+**Asked:** 2026-07-26 (the honest replacement for Q07).
+**Why it matters:** [Principle 3](/cyberbaser/getting-started/principles/) says contributors shouldn't need to learn git and shouldn't be forced into an account. Half of that is met. The other half has no implementation: GitHub's web editor, the only path open to an outside contributor, requires a GitHub account.
+**Blocks:** Principle 3's core persona, and any claim that "accounts are optional."
+**Status:** 🔴 **open, rated critical** in the [risk register](/cyberbaser/research/assumptions-and-risks/#the-real-gating-risks-ranked). A design exists — the `cb-intake` anonymous submission endpoint in the [hub BOM](/cyberbaser/research/proposal-hub-bom/) — and nothing is built. The abuse controls (rate limiting, first-time-contributor holds) belong to the same design, not to a separate CMS or proxy.
 
 ---
 
-### Q05 — What's the incremental build story for a vault of thousands of pages?
+### Q10 — What enforces the moderation policy?
 
-**Asked:** 2026-04-11
-**Source:** [Architecture](/cyberbaser/design/architecture/), carried forward from archived Phase-0 docs
-**Why it matters:** if every edit triggers a full rebuild of a 1000-page vault, the feedback loop breaks and contributors lose trust in the pipeline.
-**Blocks:** scaling, but not Phase R itself.
-**Status:** Astro 5+ has improved incremental support; needs benchmarking on a realistic vault.
+**Asked:** 2026-07-26.
+**Why it matters:** the trust classifier computes routes and `ofm-check` classifies damage, but `ofm-check.yml` is `continue-on-error: true`, `trust-gate.yml`'s auto-merge step is commented out, and `main` carries no branch protection and no rulesets. **No check can block any merge.** Every gate in the written policy is currently a human reading a diff.
+**Blocks:** the auto-merge route (it can never fire without a required check), and any claim that the pipeline enforces anything.
+**Status:** 🔴 **open, and constrained.** The obvious fix, branch protection with required checks, collides with a hard constraint: the maintainer pushes to `main` directly from Obsidian Git, and a PR-for-everything rule would break daily authoring. The question is what enforcement looks like that survives that constraint, not whether to turn protection on.
 
 ---
 
@@ -66,26 +62,54 @@ tags: [research]
 **Asked:** 2026-04-11
 **Source:** [Primitives · Content-Addressable URLs](/cyberbaser/concepts/primitives/#stable-urls)
 **Why it matters:** breaking external URLs when the vault is reorganized is unacceptable for a wiki; links must survive reorganization.
-**Blocks:** any production deploy.
-**Status:** no decision yet. Three candidates: explicit frontmatter slug, content-hash, or auto-slug with a redirect table.
+**Blocks:** it no longer blocks the deploy (the vault is live), which makes it worse rather than better: **933 pages now have URLs derived from their current file paths**, so every deferral increases the cost of choosing a convention later.
+**Status:** 🔴 **open, and the oldest genuinely unresolved question on this page.** R16 shipped verbatim paths as a v0 default and R16/R19 declined the folder renames, but no `permalink` convention, alias handling, or redirect table was ever decided. [Renderer URLs](/cyberbaser/research/proposal-renderer-urls/) argues for path-slug plus `aliases`; [dissent §1.3](/cyberbaser/research/dissent/) calls it a half-day convention decision with no owner. Still no owner.
+
+## Answered, with a named residue
+
+### Q04 — How do we guarantee no lossy round-trip in practice?
+
+**Asked:** 2026-04-11 · **Answered:** 2026-07-25 by [R12](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25), empirically.
+**The answer, and the redefinition it required:** the gate ran the round-trip over all 1430 real vault files and returned **4.6% byte-identity, zero mask leaks, zero parse errors**. Whole-file re-serialization cannot preserve real files, so it is banned from every write path. Enforcement was re-scoped from "does the file survive re-serialization" to **"no construct damage in a change,"** which is what `@cyberbaser/ofm`'s `clean | suspect | damage` classifier computes.
+**Residue, and it is real:** the check runs report-only (see Q10), and the per-feature equivalence rules the original question implied — is `[[Foo]]` ≡ `[[Foo|Foo]]`, does `![[img.png|200]]` have to survive — were never written down. They live in the classifier's code, not in a document. That half sits with [challenge 05](/cyberbaser/agent-context/zz-challenges/05-translation-equivalence/).
+
+---
+
+### Q05 — What's the incremental build story for a vault of thousands of pages?
+
+**Asked:** 2026-04-11 · **Closed on scale:** R12, then measured again in R14 and R16.
+**What was measured:** the full OFM corpus pass over 1430 files takes **7.3 s** on ext4 (R12); Quartz builds the 1420-page vault in **1:55** locally (R14) and **160 s** in CI (R16). Scale was never the problem. Note the ~780x penalty measured for many-small-file reads on a 9p mount, which is why benchmarks run on ext4.
+**Residue:** there is still no incremental build. Every push to `main` triggers a full rebuild, and the measured end-to-end deploys ran **3m07s to 4m52s** across five successful runs. That is tolerable at 933 pages and is the number to watch, not the theoretical ceiling.
+
+## Closed
+
+### Q01 — What's in the local Obsidian research vault?
+
+**Closed as declined**, 2026-07-25. The [plan critique](/cyberbaser/research/plan-critique/) killed it: it audits the wrong vault, and the real vault answers the same questions empirically in days. The gate's census of 1430 real files is the answer that was actually wanted. Not separately ratified with an R-number.
+
+---
+
+### Q02 — Is `astro-loader-obsidian` sufficient for Tier 1 translation?
+
+**Closed as not applicable**, 2026-07-25 by **R14**. Quartz was adopted as the vault renderer on measurement (1420 pages in 1:55, 20/20 on the OFM checklist). The vault site does not use Astro, so the loader's Tier 1 coverage no longer decides anything. Starlight, and this docs site with it, remains the second spoke. [Quartz spike results](/cyberbaser/research/quartz-spike-results/).
+
+---
+
+### Q03 — Should the Web CMS show rendered Obsidian preview, or raw markdown?
+
+**Closed as moot**, 2026-07-25 by **R12**. There is no web CMS. Decap, Sveltia, TinaCMS, EmDash and Pages CMS were all disqualified for re-serializing the file on save ([write-path proposal](/cyberbaser/research/proposal-write-path/)). The editing surface today is GitHub's plain-text editor: raw markdown, no preview. The surviving form of the question — should a contributor see a rendered view of their change before it merges — is the per-PR preview, which is [designed and unbuilt](/cyberbaser/research/proposal-hub-bom/#per-pr-rendered-previews).
 
 ---
 
 ### Q07 — How does the OAuth proxy for Decap get hosted?
 
-**Asked:** 2026-04-11
-**Source:** [Architecture](/cyberbaser/design/architecture/)
-**Why it matters:** Decap's Open Authoring needs an OAuth proxy so the GitHub OAuth client secret isn't exposed in the browser (this is specific to the GitHub-backed Decap path; other paths in the trust-curve + moderation model don't require a contributor account). The proxy is a few lines of code but needs a hosting target.
-**Blocks:** Web CMS setup in Phase 2.
-**Status:** undecided. A self-hosted endpoint (for example alongside Forgejo) is preferred; an edge function is one fallback. Cloudflare is edge-only (CDN/WAF/rate-limit), not a host.
-
----
+**Closed as moot**, 2026-07-25 by **R12**. No Decap, so no OAuth proxy to host. The need it stood in for — letting someone contribute without a GitHub account — is real and unmet; it is now **Q09**.
 
 ## How to resolve a question
 
 1. Spend the research time (could be a session, could be a sprint)
 2. Write the answer and rationale in [Trade-offs](/cyberbaser/reference/tradeoffs/) or in the relevant design page
-3. Move the question out of this file into a "Resolved Questions" log with date + answer + what-it-unblocked
+3. Mark the entry here closed, with the deciding R-number and a one-line residue if anything survives. Keep the heading and the number so inbound links don't break
 4. If the answer reveals deeper questions, those become new entries here
 
-A good answer usually creates two new questions, and that's fine. Better to have precise questions than vague confidence.
+A good answer usually creates two new questions, and that's fine. Better to have precise questions than vague confidence. What is not fine is what happened to Q01-Q07: answered in a decision record and never marked here, so the page kept asserting for months that settled things were open.

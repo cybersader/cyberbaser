@@ -1,20 +1,43 @@
 ---
 title: Open challenges
-description: Hard problems currently being chewed on. Not questions to ask later — active exploration.
+description: The eleven research briefs, each with its current verdict, the decision that closed it, and whether the answer was empirical or asserted.
 sidebar:
   order: 0
 status: research
 tags: [meta]
 ---
 
-This folder holds **active problems**, not settled ones. A challenge is:
+:::caution[Read this before treating any brief here as open]
+Between 2026-06-21 and 2026-07-26 this folder was not written to at all, while R09 through R20 decided most of what it asks. Exactly one brief carried a resolution banner in that window, so a fresh agent reading the folder was told all eleven were still open. **Six were not.** Every brief now carries a banner at the top with its verdict, the deciding R-number or research page, and whether the answer was empirical or asserted. The table below indexes those verdicts.
+:::
+
+## Status of every brief
+
+| # | Brief | Verdict | Answer type | Decided by |
+|---|---|---|---|---|
+| 01 | [Identity + operational model](/cyberbaser/agent-context/zz-challenges/01-identity-operational-model/) | ⚠️ **Partially resolved** — naming answered, operational half never attempted | asserted (naming); nothing (revenue, license, competitors) | R02 |
+| 02 | [CMS evaluation](/cyberbaser/agent-context/zz-challenges/02-cms-evaluation/) | ✅ **Resolved, verdict inverted** — adopt none | empirical | R12 |
+| 03 | [Plugin execution](/cyberbaser/agent-context/zz-challenges/03-plugin-execution-testing/) | ⛔ **Killed, re-confirmed 2026-07-26** — two recorded reasons were wrong, the kill stands | measured census plus a locked decision | R12 |
+| 04 | [Competitive landscape](/cyberbaser/agent-context/zz-challenges/04-competitive-landscape/) | 🔴 **Open, never started** — zero references anywhere in the repo | none | — |
+| 05 | [Translation equivalence](/cyberbaser/agent-context/zz-challenges/05-translation-equivalence/) | ⚠️ **Partially resolved** — the question was redefined, better than asked | empirical | R12 |
+| 06 | [Scaling + infrastructure](/cyberbaser/agent-context/zz-challenges/06-scaling-infrastructure/) | ⚠️ **Partially resolved by accident** — most numbers exist, three items open | empirical, scattered | R12, R14, R16, R18 |
+| 07 | [Contributor attribution](/cyberbaser/agent-context/zz-challenges/07-contributor-attribution/) | 🔴 **Open, and was falsely marked answered** | a deferral recorded as a resolution | — |
+| 08 | [Linchpin + bottleneck audit](/cyberbaser/agent-context/zz-challenges/08-linchpin-bottleneck-audit/) | ✅ **Superseded** — done better by the adversarial wave, and uncited by it | argument, then measurement | R09 → R12 |
+| 09 | [Source of truth alternatives](/cyberbaser/agent-context/zz-challenges/09-source-of-truth-alternatives/) | ✅ **Resolved.** The model case for how this should work | argued at scale, partly re-tested | R01 |
+| — | [Round-trip enforcement](/cyberbaser/agent-context/zz-challenges/translation-layer-round-trip-enforcement/) | ✅ **Resolved by reframing** — but the check is still report-only | empirical | R12 |
+| — | [MDX auto-wrapping](/cyberbaser/agent-context/zz-challenges/mdx-auto-wrapping/) | ✅ **Resolved, still true, now narrower** — a permanent reference, not a challenge | empirical | R14 narrowed its scope |
+
+**Genuinely open and worth someone's time: 04 and 07.** 04 owns the "is this just tools that already exist?" question and has never been started. 07's headline item is now a ten-minute check that three pages depend on.
+
+## What a challenge is
+
+This folder holds briefs for problems too messy to state as a question. A challenge is:
 
 - Grounded in a real observed friction or failure mode
-- Not yet resolved
 - Worth multiple sessions of thinking
 - Blocking progress on something upstream
 
-**The difference from [Open Questions](/cyberbaser/reference/open-questions/):** open questions are precise and waiting for an answer. Challenges are messier — they're the "I don't even know how to frame this yet" pile.
+**The difference from [Open Questions](/cyberbaser/reference/open-questions/):** open questions are precise and waiting for an answer. Challenges are the "I don't even know how to frame this yet" pile.
 
 **Lifecycle of a challenge:**
 
@@ -26,7 +49,8 @@ This folder holds **active problems**, not settled ones. A challenge is:
       │
       ├─► promoted to Design/ page  (when the shape of the solution is clear)
       ├─► promoted to Concepts/ page (when it turns out to be a primitive)
-      └─► demoted to Reference/open-questions (when it's crisp enough to just be a question)
+      ├─► demoted to Reference/open-questions (when it's crisp enough to just be a question)
+      └─► closed with a banner  (verdict + deciding R-number + empirical or asserted)
 ```
 
-Challenges accumulate; there's no rush to resolve them. Some will sit here for weeks while the relevant concepts mature.
+The last branch is the one that was missing. A brief is not closed when the decision gets made somewhere else; it is closed when the banner lands on the brief. The one brief that was properly closed is the one that had a banner, and that is not a coincidence.

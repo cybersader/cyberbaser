@@ -66,6 +66,20 @@ describe('sluggify: the slug contract (D2)', () => {
     expect(slugKey('A and B.md')).toBe('a-and-b')
     expect(slugKey('# Heading.md')).toBe('heading')
   })
+
+  test('lowercase is a parameter: false gives the slug a case-sensitive host serves today', () => {
+    expect(sluggify('Areas/Threat Modeling.md', false)).toBe('Areas/Threat-Modeling')
+    expect(sluggify('Areas/Threat Modeling.md', true)).toBe('areas/threat-modeling')
+    expect(slugKey('A & B.md', false)).toBe('A-and-B')
+    expect(slugKey('A and B.md', false)).toBe('A-and-B')
+  })
+
+  test('every other step of the contract is unchanged when lowercasing is off', () => {
+    expect(sluggify('R&D/Q1 Plan.md', false)).toBe('R-and-D/Q1-Plan')
+    expect(sluggify('100%.md', false)).toBe('100-percent')
+    expect(sluggify('What Now?.md', false)).toBe('What-Now')
+    expect(sluggify('Café/Résumé.md'.normalize('NFD'), false)).toBe('Café/Résumé')
+  })
 })
 
 describe('lintPath rule 1: Windows-illegal characters', () => {
@@ -255,6 +269,36 @@ describe('lintVault rule 6: slug collisions', () => {
     const { collisions, violations } = lintVault(['a/Note.md', 'b/Note.md'])
     expect(collisions).toEqual([])
     expect(violations).toEqual([])
+  })
+
+  test('caseOnly marks the group that only collides once you lowercase', () => {
+    const { collisions } = lintVault(['Notes/Readme.md', 'Notes/README.md'])
+    expect(collisions[0].caseOnly).toBe(true)
+  })
+
+  test('caseOnly is false when the paths collide with lowercasing off', () => {
+    const { collisions } = lintVault(['Threat Modeling.md', 'Threat-Modeling.md'])
+    expect(collisions[0].caseOnly).toBe(false)
+  })
+
+  test('a mixed group is not case-only: two of its paths collide before folding', () => {
+    // Readme/README differ only by case, but "Readme?" collides with "Readme" regardless
+    // of case, so the group is losing a page today and must not be softened to a warning.
+    const { collisions } = lintVault(['Readme.md', 'README.md', 'Readme?.md'])
+    expect(collisions.length).toBe(1)
+    expect(collisions[0].paths.length).toBe(3)
+    expect(collisions[0].caseOnly).toBe(false)
+  })
+
+  test('rule 6 violations carry caseOnly and say so in the message', () => {
+    const { violations } = lintVault(['Notes/Readme.md', 'Notes/README.md'])
+    const six = violations.find((v) => v.rule === 6)
+    expect(six.caseOnly).toBe(true)
+    expect(six.message).toContain('case-folding only')
+
+    const other = lintVault(['A & B.md', 'A and B.md']).violations.find((v) => v.rule === 6)
+    expect(other.caseOnly).toBe(false)
+    expect(other.message).not.toContain('case-folding only')
   })
 
   test('a clean vault produces nothing', () => {

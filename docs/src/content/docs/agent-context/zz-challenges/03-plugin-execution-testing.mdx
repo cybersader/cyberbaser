@@ -8,6 +8,29 @@ status: research
 tags: [research, plugins, architecture]
 ---
 
+:::note[Killed, and re-examined 2026-07-26. The kill stands. Two of the recorded reasons were wrong.]
+**Verdict: stay killed. Answer type: mixed — the decisive argument is a locked decision ([R12](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25)), supported by two fresh measurements.**
+
+The brief was killed documentarily in July 2026 without anyone running the test it asked for. A 2026-07-26 revisit confirmed the verdict and corrected the record. **The reasons below replace the ones written down elsewhere.**
+
+**Corrections to the record — the previously recorded reasons that were wrong or stale:**
+
+| Recorded reason | Correction |
+|---|---|
+| "Tier-3 by the project's own tier system" | **Category error.** The tier system classifies *syntax fidelity*, not *execution capability*. It says nothing about whether running a tool in CI is valuable. Strike it |
+| "Catalyst license required" (this brief, item 1 and item 5) | **False since 2026-02-27.** Obsidian CLI left early access in 1.12.4 and ships in the free public build. [Obsidian is free for all purposes, including commercial](https://obsidian.md/license). Licensing is **not** a blocker |
+| "Community plugins don't run through the CLI" | **False.** They do. `obsidian eval code="Object.keys(app.plugins.plugins)"` enumerates every loaded community plugin. The nuance that matters: the CLI is **not a runtime**. It is IPC remote control of a *running* Electron desktop app, so plugins load because it *is* the app. The real constraint is "can the desktop app run where you need it," which is an Xvfb question |
+| "`obsidian-headless` is an option" | It is Sync/Publish only, requires a paid subscription, and **explicitly excludes plugin support**. [Issue #8](https://github.com/obsidianmd/obsidian-headless/issues/8), asking for headless vault management in Docker, was closed **not planned**. The blocker is "unsupported," not "unlicensed" |
+
+**The decisive reason, which the original kill never gave: [R12](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25) forecloses every write-path use.** Linting, formatting and metadata write-back are the only uses with recurring value, and all three are whole-file rewriters. R12 says no whole-file re-serialization in any write path, ever. A green test result would change no decision.
+
+**The one remaining use is worth 14 files.** A fresh census of the vault (2026-07-26, 1441 files): 11 `dataview` blocks, 3 `dataviewjs`, **0.97% of files**. Zero Templater syntax, zero `.base` files, zero `.canvas`. And Obsidian is moving dynamic queries into core as **Bases**, a documented YAML schema any renderer can implement with a YAML parser and no Obsidian runtime. That is a spoke feature, not a plugin-execution feature.
+
+**Third argument, still valid:** coupling to the OFM *format* is compatible with the identity lock; coupling to the Obsidian *runtime* is not. Plugin execution can only ever be Obsidian-shaped, which would give a Logseq vault or a plain-markdown repo a permanently degraded tier through a hub that is supposed to be neutral.
+
+**Do not run the rest of this brief.** The three-vault-size performance matrix, the plugin-by-plugin matrix and the sandbox audit have no decision attached to them. A 1.0-maintainer-day falsification test (Obsidian 1.12.7 AppImage under `xvfb-run`, two `obsidian eval` assertions) is defined and priced in the 2026-07-26 revisit if it is ever wanted, along with three named revival triggers, none of which have fired: an officially supported headless runtime that loads plugins, a target vault measuring >15% plugin-dependent files, or `.base` files appearing in target vaults (which is a spoke trigger, not this one). That revisit has not yet landed as a research page.
+:::
+
 ## The assignment
 
 The [vault vision](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/) identified **"creating an engine where community plugins can run on multiple platforms"** as the hardest unsolved problem. Since then, Obsidian has released an [official CLI](https://obsidian.md/cli) + [headless runtime](https://github.com/obsidianmd/obsidian-headless).

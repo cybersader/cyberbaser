@@ -1,7 +1,7 @@
 {
   "name": "@cyberbaser/projection",
   "version": "0.1.0",
-  "description": "The vault projection: copies the published set into a renderer-agnostic content tree with lowercased paths, injects the natural-case alias into the projected copy's frontmatter, and fails the build on bad frontmatter, case collisions or a boundary leak. Knows nothing about any renderer.",
+  "description": "The vault projection: copies the published set into a renderer-agnostic content tree at verbatim paths (no lowercasing, no renames — R16), and fails the build on bad frontmatter, case collisions or a boundary leak. Lowercasing and the natural-case alias injection that goes with it are implemented but off by default, deferred to projection v2. Knows nothing about any renderer.",
   "license": "MIT",
   "type": "module",
   "main": "src/index.js",

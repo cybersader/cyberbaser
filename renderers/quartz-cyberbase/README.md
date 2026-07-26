@@ -15,9 +15,14 @@ Consequences that are load-bearing, not stylistic:
 - **The vault carries no renderer files.** `cybersader/cyberbase` holds content
   and `publish.yml`. Everything Quartz-specific lives here, in cyberbaser.
 - **The input is a projection, not the vault.** By the time `build.sh` runs, the
-  content tree has already been filtered against `publish.yml`, lowercased per
-  segment, pre-flighted for bad frontmatter, and had natural-case `aliases:`
-  injected. The projection is a disposable build input; the vault is never
+  content tree has already been filtered against `publish.yml`, pre-flighted for
+  bad frontmatter, checked for case collisions, and leak-tested. **Paths are
+  verbatim**: the projection copies each published file to its vault path
+  byte-for-byte, with no lowercasing and no renames (`project.js` defaults
+  `lowercase = false`; R16 deferred lowercasing to projection v2, because
+  lowercased pages beside natural-case assets break relative references). Alias
+  injection only fires on a case change, so under verbatim projection nothing is
+  injected either. The projection is a disposable build input; the vault is never
   modified.
 - **Nothing here may become load-bearing for the content.** If a second renderer
   (Starlight, Hugo, something else) is added tomorrow, the projection must not
@@ -50,7 +55,9 @@ Known behavior of this version, all confirmed by measurement:
 
 - **No per-file error isolation.** One file with invalid YAML frontmatter aborts
   the entire build. The projection must pre-flight and fail those files closed.
-- **Path case is preserved.** Lowercasing is the projection's job, not Quartz's.
+- **Path case is preserved.** Quartz does not lowercase. If lowercasing is ever
+  wanted it is the projection's job, and today the projection does not do it
+  either (R16: verbatim paths).
 - **`ignorePatterns` globs are case-sensitive**, and are passed straight to
   globby, which skips dot-directories by default.
 - **Derived output paths can contain colons** (e.g. URLs inside a `tags:` array).
@@ -153,8 +160,9 @@ renderer and the pipeline are cloned from cyberbaser (public):
 
 1. Check out `cybersader/cyberbase` (the content).
 2. Check out `cybersader/cyberbaser` (this directory + `packages/publish`).
-3. Run the projection: `publish.yml` boundary, per-segment lowercasing,
-   frontmatter pre-flight, alias injection. Output: a projected content tree.
+3. Run the projection: `publish.yml` boundary, frontmatter pre-flight,
+   case-collision guard, verbatim path copy, post-hoc leak test. Output: a
+   projected content tree.
 4. `renderers/quartz-cyberbase/setup.sh "$RUNNER_TEMP/quartz"`
 5. `renderers/quartz-cyberbase/build.sh "$PROJECTED" "$RUNNER_TEMP/quartz"`
 6. `actions/upload-pages-artifact` on `$RUNNER_TEMP/quartz/public`, then

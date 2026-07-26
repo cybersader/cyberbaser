@@ -5,6 +5,19 @@ status: research
 tags: [translation-layer, testing]
 ---
 
+:::tip[Resolved by reframing — and one of this brief's own cost objections was wrong by orders of magnitude]
+**Answer type: empirical. Deciding decision: [R12](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25), 2026-07-25.**
+
+- **Approach B (fixture corpus) shipped.** 21 fixtures, 20/21, R05.
+- **Approach C (real-vault diffing) shipped too, and this brief was wrong to rank it last.** It was rejected here as "requires network I/O at test time, slow, flaky." The R12 gate ran exactly that over all 1430 files in **7.3 seconds** on ext4, from a local checkout.
+- **The definition question this brief called the actual blocker was answered by changing it.** Enforcement now means "no construct damage in a change," not "the file survives re-serialization" — because R12 measured that whole-file re-serialization preserves 4.6% of real files and banned it from every write path.
+- **The pipeline is live.** `@cyberbaser/ofm` runs on every vault PR via `ofm-check.yml`, with a recorded classification in R17 (`verdict: clean, churn 0.005, escapes 0→0`).
+
+**One thing this brief predicted about itself came true.** It estimated "2-3 sessions of work once Phase R exits," which is how a load-bearing gate gets deferred indefinitely; it sat unscheduled until a proposal called that out by name.
+
+**What is still not done:** the check is **report-only**. `ofm-check.yml` is `continue-on-error: true` and `main` has no branch protection, so nothing it finds can block a merge. Enforcement in the sense this brief's title uses does not exist yet — see [Q10](/cyberbaser/reference/open-questions/#q10--what-enforces-the-moderation-policy). The per-feature equivalence rules remain with [challenge 05](/cyberbaser/agent-context/zz-challenges/05-translation-equivalence/).
+:::
+
 ## The core problem
 
 [Principle 2](/cyberbaser/getting-started/principles/#2-obsidian-semantics-must-round-trip) says Obsidian semantics must round-trip between the Web CMS and the vault without corruption. That's enforceable only if:

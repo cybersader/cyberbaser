@@ -5,6 +5,14 @@ status: research
 tags: [meta, gotcha]
 ---
 
+:::note[Resolved and still true, but narrower than it reads. This is a permanent reference, not an open challenge.]
+**Answer type: empirical.** The gotcha is real, the workaround below is correct, and both are in daily use on this docs site.
+
+**Scope correction, 2026-07-26.** R14 adopted Quartz as the vault renderer, so Starlight renders only the project docs. This applies to **one of the two spokes**, not to published vault content. Its lineage did continue, though: the "Starlight component layout" rules in `CLAUDE.md` (margin-top leakage onto flex children, `min-width: 0`, `minmax(0, 1fr)` grids) are descendants of the same class of bug.
+
+It sits in a folder defined as "not yet resolved" only for historical reasons; it belongs with the development notes.
+:::
+
 ## The gotcha
 
 When you write MDX like this:

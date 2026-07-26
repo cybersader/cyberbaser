@@ -53,10 +53,16 @@ function stripMarkdownExtension(p) {
  *
  * Input is normalized to NFC first so the same logical name in NFD and NFC produces one
  * slug. Rule 5 still reports the NFD path itself as a violation.
+ *
+ * `lowercase` is a parameter rather than a constant because the projection ships verbatim
+ * paths today (R16 deferred the lowercase step) while D2 still specifies it. Passing
+ * `false` gives the slug a case-sensitive host actually serves; the default `true` gives
+ * the slug D2 will produce once lowercasing lands. `lintVault` computes both so it can
+ * tell a collision that exists today from one that only appears under case-folding.
  */
-export function sluggify(vaultPath) {
+export function sluggify(vaultPath, lowercase = true) {
   const normalized = stripSlashes(String(vaultPath).normalize('NFC'))
-  return stripMarkdownExtension(normalized)
+  const slug = stripMarkdownExtension(normalized)
     .split('/')
     .map((segment) =>
       segment
@@ -68,7 +74,7 @@ export function sluggify(vaultPath) {
     )
     .join('/')
     .replace(/\/$/, '')
-    .toLowerCase()
+  return lowercase ? slug.toLowerCase() : slug
 }
 
 /**
@@ -78,8 +84,8 @@ export function sluggify(vaultPath) {
  * collision). Every exact slug collision is also a key collision, so stricter here means
  * no false negatives on the one rule that catches silent data loss.
  */
-export function slugKey(vaultPath) {
-  return sluggify(vaultPath)
+export function slugKey(vaultPath, lowercase = true) {
+  return sluggify(vaultPath, lowercase)
     .split('/')
     .map((segment) => segment.replace(/-{2,}/g, '-').replace(/^-+|-+$/g, ''))
     .join('/')
@@ -225,8 +231,18 @@ function emojiCensusOf(paths) {
  * plus the report-only emoji census.
  *
  * Returns `{ violations, collisions, emojiCensus }`. A collision group is
- * `{ key, slugs, paths, exact }`; `exact` is true when every path in the group produces
- * a byte-identical slug (as opposed to colliding only on the stricter key).
+ * `{ key, slugs, paths, exact, caseOnly }`.
+ *
+ * `exact` is true when every path in the group produces a byte-identical slug (as opposed
+ * to colliding only on the stricter key).
+ *
+ * `caseOnly` is true when the group stops colliding entirely once you drop the lowercase
+ * step: `Readme.md` and `README.md` are two distinct URLs on a case-sensitive host today,
+ * and become one URL the moment the projection starts lowercasing (D2, deferred by R16).
+ * It is false as soon as any two paths in the group collide with lowercasing off, which
+ * is why the test is "every path has its own case-preserving key", not "the keys differ".
+ * A consumer that ships verbatim paths should treat `caseOnly` groups as a warning and
+ * every other group as data loss happening now.
  */
 export function lintVault(paths) {
   const list = [...paths].map(String)
@@ -246,7 +262,11 @@ export function lintVault(paths) {
 
   const collisions = [...byKey.values()]
     .filter((g) => g.paths.length > 1)
-    .map((g) => ({ ...g, exact: g.slugs.length === 1 }))
+    .map((g) => ({
+      ...g,
+      exact: g.slugs.length === 1,
+      caseOnly: new Set(g.paths.map((p) => slugKey(p, false))).size === g.paths.length,
+    }))
     .sort((a, b) => b.paths.length - a.paths.length || a.key.localeCompare(b.key))
 
   for (const group of collisions) {
@@ -255,8 +275,11 @@ export function lintVault(paths) {
         violation(6, path, {
           key: group.key,
           slug: sluggify(path),
+          caseOnly: group.caseOnly,
           collidesWith: group.paths.filter((p) => p !== path),
-          message: `slug collision on "${group.key}" with ${group.paths.length - 1} other path(s)`,
+          message: group.caseOnly
+            ? `slug collision on "${group.key}" with ${group.paths.length - 1} other path(s), under case-folding only`
+            : `slug collision on "${group.key}" with ${group.paths.length - 1} other path(s)`,
         }),
       )
     }
