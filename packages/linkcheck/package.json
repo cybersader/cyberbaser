@@ -1,0 +1,14 @@
+{
+  "name": "@cyberbaser/linkcheck",
+  "version": "0.1.0",
+  "description": "Post-build internal link checker for a rendered static site. Renderer-agnostic: it reads emitted HTML and the files on disk, nothing else. Exists because Quartz ships broken links silently.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "cb-linkcheck": "bin/cb-linkcheck.js"
+  },
+  "scripts": {
+    "test": "bun test"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "name": "@cyberbaser/trust",
+  "version": "0.1.0",
+  "description": "The trust gate: classifies a proposed contribution into a review route (auto-merge | quick-review | full-review | reject) from a .cyberbaser/trust.yml policy. Mechanical gates only — it decides routing, it never writes files and never merges.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "cb-trust": "bin/cb-trust.js"
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@cyberbaser/ofm": "file:../ofm",
+    "js-yaml": "^4.1.0"
+  }
+}
