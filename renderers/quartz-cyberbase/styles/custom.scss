@@ -338,3 +338,32 @@ $cb-callout-dark: (
 .graph > .graph-outer {
   border-radius: 6px;
 }
+
+/* ---------------------------------------------------------------------------
+ * 8. Tag list: left-align, and stop it colliding with the title on narrow
+ *    viewports.
+ *
+ * Upstream (components/TagList.tsx, inline style) sets
+ * `justify-content: flex-end` on `ul.tags`. With `flex-wrap: wrap` that is
+ * fine on one line and ugly on several: each wrapped row right-aligns
+ * independently, so a page with a few long hierarchical tags
+ * (`areas/kms/test/test`) produces a ragged stack pushed against the right
+ * edge. This vault uses nested tags heavily, so it is the common case, not
+ * the edge case.
+ *
+ * Left-aligning makes wrapped rows read as one block against the same margin
+ * as the body text. The `#quartz-body` qualifier matches upstream specificity
+ * (its rule carries an id).
+ * ------------------------------------------------------------------------ */
+.page > #quartz-body ul.tags,
+ul.tags {
+  justify-content: flex-start;
+  row-gap: 0.35rem;
+}
+
+/* Long hierarchical tags should wrap inside the pill rather than force the
+   row wider than the column. */
+.tag-link {
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
