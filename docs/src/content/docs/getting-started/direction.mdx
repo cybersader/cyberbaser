@@ -1,0 +1,643 @@
+---
+title: Direction
+description: The alignment check. Where cyberbaser actually is, how that compares to the vision it was started from, and the forks that need a decision rather than more research.
+sidebar:
+  order: 11
+status: research
+tags: [vision, planning, identity]
+---
+
+<style>{`
+/* Starlight injects margin-top onto consecutive flow elements. Inside a flex or
+   grid container that shoves every child but the first downward and breaks equal
+   heights. Neutralise it at class specificity (0,2,0) beats Starlight's (0,1,0). */
+.sl-markdown-content :is(
+  .cbd-score, .cbd-row, .cbd-row-hd, .cbd-cols, .cbd-cell,
+  .cbd-mocks, .cbd-win, .cbd-bar, .cbd-body, .cbd-lines, .cbd-panel, .cbd-panel-actions,
+  .cbd-field, .cbd-surfaces, .cbd-chips, .cbd-legend, .cbd-legend-item,
+  .cbd-truth, .cbd-truth-col, .cbd-item, .cbd-forks, .cbd-fork, .cbd-fork-hd,
+  .cbd-opts, .cbd-opt, .cbd-opt-hd, .cbd-rec, .cbd-nots, .cbd-not
+) > * { margin-top: 0; }
+
+.sl-markdown-content .cbd-score { display: flex; flex-direction: column; gap: 0.8rem; margin: 1.5rem 0; }
+.sl-markdown-content .cbd-row {
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 12px;
+  background: var(--sl-color-gray-6);
+  padding: 0.9rem 1rem 1rem;
+}
+.sl-markdown-content .cbd-row-hd { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.7rem; }
+.sl-markdown-content .cbd-topic { min-width: 0; font-weight: 700; color: var(--sl-color-white); font-size: 1rem; }
+.sl-markdown-content .cbd-chip {
+  flex: 0 0 auto;
+  font-size: 0.64rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 700;
+  padding: 0.16rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+.sl-markdown-content .cbd-on { color: #34d399; background: rgba(52, 211, 153, 0.10); }
+.sl-markdown-content .cbd-part { color: #fbbf24; background: rgba(251, 191, 36, 0.10); }
+.sl-markdown-content .cbd-off { color: #f87171; background: rgba(248, 113, 113, 0.10); }
+.sl-markdown-content .cbd-none { color: var(--sl-color-gray-3); background: rgba(128, 128, 128, 0.10); }
+:root[data-theme='light'] .sl-markdown-content .cbd-on { color: #047857; }
+:root[data-theme='light'] .sl-markdown-content .cbd-part { color: #b45309; }
+:root[data-theme='light'] .sl-markdown-content .cbd-off { color: #b91c1c; }
+
+.sl-markdown-content .cbd-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.9rem 1.2rem; }
+@media (max-width: 640px) { .sl-markdown-content .cbd-cols { grid-template-columns: 1fr; } }
+.sl-markdown-content .cbd-cell { min-width: 0; font-size: 0.92rem; line-height: 1.55; }
+.sl-markdown-content .cbd-lab {
+  display: block;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--sl-color-gray-3);
+  margin-bottom: 0.25rem;
+}
+
+/* ── Real-experience mockups ── */
+.sl-markdown-content .cbd-mocks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.1rem; margin: 1.5rem 0 0.6rem; }
+@media (max-width: 720px) { .sl-markdown-content .cbd-mocks { grid-template-columns: 1fr; } }
+.sl-markdown-content .cbd-win {
+  min-width: 0;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--sl-color-gray-6);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.24);
+}
+.sl-markdown-content .cbd-bar {
+  display: flex; align-items: center; gap: 0.4rem;
+  padding: 0.5rem 0.7rem;
+  background: var(--sl-color-gray-5);
+  border-bottom: 1px solid var(--sl-color-gray-4);
+}
+.sl-markdown-content .cbd-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+.sl-markdown-content .cbd-dot-r { background: #ff5f57; }
+.sl-markdown-content .cbd-dot-y { background: #febc2e; }
+.sl-markdown-content .cbd-dot-g { background: #28c840; }
+.sl-markdown-content .cbd-url {
+  flex: 1; min-width: 0; margin-left: 0.4rem;
+  padding: 0.24rem 0.55rem;
+  border-radius: 6px;
+  background: var(--sl-color-gray-6);
+  color: var(--sl-color-gray-2);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.7rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sl-markdown-content .cbd-body { padding: 0.95rem 1rem 1.1rem; }
+.sl-markdown-content .cbd-mh { font-weight: 700; color: var(--sl-color-white); font-size: 1rem; margin-bottom: 0.6rem; }
+.sl-markdown-content .cbd-lines { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.9rem; }
+.sl-markdown-content .cbd-line { height: 7px; border-radius: 4px; background: var(--sl-color-gray-4); }
+.sl-markdown-content .cbd-panel {
+  border: 1px dashed var(--sl-color-accent);
+  border-radius: 9px;
+  padding: 0.7rem 0.75rem 0.8rem;
+  background: rgba(16, 185, 129, 0.07);
+}
+.sl-markdown-content .cbd-panel-warn { border: 1px solid var(--sl-color-gray-4); border-style: solid; background: var(--sl-color-gray-5); }
+.sl-markdown-content .cbd-panel-lab { font-size: 0.7rem; color: var(--sl-color-gray-2); margin-bottom: 0.5rem; }
+.sl-markdown-content .cbd-field {
+  height: 26px; border-radius: 6px;
+  border: 1px solid var(--sl-color-gray-4);
+  background: var(--sl-color-gray-6);
+  margin-bottom: 0.45rem;
+  display: flex; align-items: center;
+  padding: 0 0.5rem;
+  font-size: 0.72rem; color: var(--sl-color-gray-3);
+  min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.sl-markdown-content .cbd-btn {
+  display: inline-block;
+  padding: 0.26rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  background: var(--sl-color-accent);
+  color: #04130d;
+}
+.sl-markdown-content .cbd-btn-mute { background: var(--sl-color-gray-4); color: var(--sl-color-white); }
+.sl-markdown-content .cbd-cap { font-size: 0.82rem; color: var(--sl-color-gray-2); margin-top: 0.55rem; }
+
+/* ── Surface tally ── */
+.sl-markdown-content .cbd-surfaces { margin: 1.4rem 0; padding: 1rem 1.1rem 1.1rem; border: 1px solid var(--sl-color-gray-5); border-radius: 12px; background: var(--sl-color-gray-6); }
+.sl-markdown-content .cbd-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.sl-markdown-content .cbd-s {
+  font-size: 0.74rem;
+  padding: 0.22rem 0.55rem;
+  border-radius: 7px;
+  border: 1px solid currentColor;
+  max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sl-markdown-content .cbd-s-gh { color: #f87171; background: rgba(248, 113, 113, 0.09); }
+.sl-markdown-content .cbd-s-qz { color: #60a5fa; background: rgba(96, 165, 250, 0.09); }
+.sl-markdown-content .cbd-s-txt { color: var(--sl-color-gray-3); background: rgba(128, 128, 128, 0.09); }
+.sl-markdown-content .cbd-s-ours { color: #34d399; background: rgba(52, 211, 153, 0.10); }
+:root[data-theme='light'] .sl-markdown-content .cbd-s-gh { color: #b91c1c; }
+:root[data-theme='light'] .sl-markdown-content .cbd-s-qz { color: #1d4ed8; }
+:root[data-theme='light'] .sl-markdown-content .cbd-s-ours { color: #047857; }
+.sl-markdown-content .cbd-legend { display: flex; flex-wrap: wrap; gap: 0.9rem; margin-top: 0.85rem; font-size: 0.8rem; color: var(--sl-color-gray-2); }
+.sl-markdown-content .cbd-legend-item { min-width: 0; }
+.sl-markdown-content .cbd-k { font-weight: 700; }
+.sl-markdown-content .cbd-k-gh { color: #f87171; }
+.sl-markdown-content .cbd-k-qz { color: #60a5fa; }
+.sl-markdown-content .cbd-k-txt { color: var(--sl-color-gray-3); }
+.sl-markdown-content .cbd-k-ours { color: #34d399; }
+:root[data-theme='light'] .sl-markdown-content .cbd-k-gh { color: #b91c1c; }
+:root[data-theme='light'] .sl-markdown-content .cbd-k-qz { color: #1d4ed8; }
+:root[data-theme='light'] .sl-markdown-content .cbd-k-ours { color: #047857; }
+
+/* ── True vs claimed ── */
+.sl-markdown-content .cbd-truth { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.1rem; margin: 1.4rem 0; }
+@media (max-width: 780px) { .sl-markdown-content .cbd-truth { grid-template-columns: 1fr; } }
+.sl-markdown-content .cbd-truth-col { min-width: 0; border: 1px solid var(--sl-color-gray-5); border-radius: 12px; background: var(--sl-color-gray-6); padding: 0.95rem 1rem 1.05rem; }
+.sl-markdown-content .cbd-truth-hd { font-weight: 700; color: var(--sl-color-white); margin-bottom: 0.7rem; font-size: 0.95rem; }
+.sl-markdown-content .cbd-item { display: flex; gap: 0.55rem; align-items: flex-start; font-size: 0.9rem; line-height: 1.5; margin-bottom: 0.6rem; }
+.sl-markdown-content .cbd-mark { flex: 0 0 auto; font-weight: 700; }
+.sl-markdown-content .cbd-mark-y { color: #34d399; }
+.sl-markdown-content .cbd-mark-n { color: #f87171; }
+:root[data-theme='light'] .sl-markdown-content .cbd-mark-y { color: #047857; }
+:root[data-theme='light'] .sl-markdown-content .cbd-mark-n { color: #b91c1c; }
+.sl-markdown-content .cbd-item-tx { min-width: 0; }
+
+/* ── Forks ── */
+.sl-markdown-content .cbd-forks { display: flex; flex-direction: column; gap: 1.1rem; margin: 1.4rem 0; }
+.sl-markdown-content .cbd-fork { border: 1px solid var(--sl-color-gray-5); border-left: 3px solid var(--sl-color-accent); border-radius: 12px; background: var(--sl-color-gray-6); padding: 1rem 1.1rem 1.1rem; }
+.sl-markdown-content .cbd-fork-q { font-weight: 700; color: var(--sl-color-white); font-size: 1.02rem; margin-bottom: 0.35rem; }
+.sl-markdown-content .cbd-fork-why { font-size: 0.9rem; color: var(--sl-color-gray-2); margin-bottom: 0.85rem; }
+.sl-markdown-content .cbd-opts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
+@media (max-width: 780px) { .sl-markdown-content .cbd-opts { grid-template-columns: 1fr; } }
+.sl-markdown-content .cbd-opt { min-width: 0; border: 1px solid var(--sl-color-gray-4); border-radius: 9px; padding: 0.6rem 0.7rem 0.7rem; background: var(--sl-color-gray-5); font-size: 0.86rem; line-height: 1.45; }
+.sl-markdown-content .cbd-opt-hd { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.35rem; }
+.sl-markdown-content .cbd-opt-n { font-weight: 700; color: var(--sl-color-white); min-width: 0; }
+.sl-markdown-content .cbd-price { flex: 0 0 auto; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 0.74rem; color: var(--sl-color-accent); }
+.sl-markdown-content .cbd-rec { margin-top: 0.85rem; padding: 0.6rem 0.75rem; border-radius: 8px; background: rgba(16, 185, 129, 0.09); border: 1px solid rgba(16, 185, 129, 0.28); font-size: 0.9rem; line-height: 1.5; }
+
+/* ── Not doing ── */
+.sl-markdown-content .cbd-nots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.7rem; margin: 1.3rem 0; }
+@media (max-width: 780px) { .sl-markdown-content .cbd-nots { grid-template-columns: 1fr; } }
+.sl-markdown-content .cbd-not { min-width: 0; border: 1px solid var(--sl-color-gray-5); border-radius: 10px; background: var(--sl-color-gray-6); padding: 0.65rem 0.8rem 0.75rem; font-size: 0.88rem; line-height: 1.5; }
+.sl-markdown-content .cbd-not-t { font-weight: 700; color: var(--sl-color-white); display: block; margin-bottom: 0.15rem; }
+`}</style>
+
+**Cyberbaser today is a content-integrity pipeline with governance.** A default-deny boundary decides what leaves your vault, a commodity renderer turns that into a site, and mechanical validators judge every change that tries to come back: [933 pages live](https://cybersader.github.io/cyberbase/), five packages, 165 tests green, the contribution loop rehearsed end to end twice. What it has not built is one surface of its own, so every human step in that loop happens inside GitHub's UI or Quartz's.
+
+This page exists to answer one question in under two minutes: **is this still your project?** Read the scorecard, then the forks. Everything below those two is depth you can skip.
+
+:::note[How this page is maintained]
+This is the alignment instrument, so it gets **updated, never replaced**.
+
+1. **Every claim cites something**: an R-number from the decision log, a measured number, or a file. No adjectives standing in for evidence.
+2. **A divergence leaves this page only when a decision closes it**, never because it got uncomfortable. That rule is [R20](/cyberbaser/getting-started/roadmap/#reopened-research-deleted-in-error-2026-07-25-restored-2026-07-26), written after four open questions were deleted in a tidy-up commit.
+3. **When a fork is decided**, it moves from "Yours to decide" into the decision story with its R-number, and the rejected option stays visible so the trade is still readable a year later.
+4. **Update in the same session as the decision**, alongside `.claude/41-QUESTIONS-RESOLVED.md` and `FOCUS.md`. A stale alignment page is worse than none.
+:::
+
+## The alignment check
+
+Ten things the vision asks for, and where each actually stands. Two on track, two partial, six not.
+
+<div class="cbd-score">
+
+<div class="cbd-row">
+  <div class="cbd-row-hd"><span class="cbd-chip cbd-on">On track</span><span class="cbd-topic">Your files stay yours</span></div>
+  <div class="cbd-cols">
+    <div class="cbd-cell"><span class="cbd-lab">What you asked for</span>The vault is primary. If cyberbaser disappears, the vault still works, unchanged.</div>
+    <div class="cbd-cell"><span class="cbd-lab">Where we are</span>Publishing is a copy, not a transform. Verbatim paths, no renames, no lowercasing (R16). Obsidian never sees cyberbaser at all.</div>
+  </div>
+</div>
+
+<div class="cbd-row">
+  <div class="cbd-row-hd"><span class="cbd-chip cbd-on">On track</span><span class="cbd-topic">Nothing corrupts your markdown</span></div>
+  <div class="cbd-cols">
+    <div class="cbd-cell"><span class="cbd-lab">What you asked for</span>A web edit must not break wikilinks, callouts or embeds, and an Obsidian edit must not break the web.</div>
+    <div class="cbd-cell"><span class="cbd-lab">Where we are</span>Stronger than promised, because it was measured. 4.6% byte-identity over 1,430 real files killed the re-serializing writer outright (R12); the write path is raw-text splice only, and <code>ofm-check</code> classifies every markdown PR clean, suspect or damage.</div>
+  </div>
+</div>
+
+<div class="cbd-row">
+  <div class="cbd-row-hd"><span class="cbd-chip cbd-part">Partial</span><span class="cbd-topic">The renderer is swappable</span></div>
+  <div class="cbd-cols">
+    <div class="cbd-cell"><span class="cbd-lab">What you asked for</span>Never couple the hub to one site generator. The renderer is a commodity spoke.</div>
+    <div class="cbd-cell"><span class="cbd-lab">Where we are</span>Real evidence: Quartz was evaluated, adopted and wired in a day (R14). But each pipeline runs exactly one renderer, so nothing in CI would fail if "renderer-agnostic" quietly stopped being true.</div>
+  </div>
+</div>
+
+<div class="cbd-row">
+  <div class="cbd-row-hd"><span class="cbd-chip cbd-off">Diverged</span><span class="cbd-topic">Contributors don't need git</span></div>
+  <div class="cbd-cols">
+    <div class="cbd-cell"><span class="cbd-lab">What you asked for</span><a href="/cyberbaser/getting-started/principles/">Principle 3</a>. The domain expert who spots an error fixes it, no git, no wall.</div>
+    <div class="cbd-cell"><span class="cbd-lab">Where we are</span>They don't need to <em>learn</em> git. They need a GitHub account. The <a href="/cyberbaser/research/assumptions-and-risks/">risk register</a> still rates this <strong>critical</strong>, in the words "has no path", and it has been open for 22 weeks.</div>
+  </div>
+</div>
+
+<div class="cbd-row">
+  <div class="cbd-row-hd"><span class="cbd-chip cbd-off">Diverged</span><span class="cbd-topic">You don't need GitHub either</span></div>
+  <div class="cbd-cols">
+    <div class="cbd-cell"><span class="cbd-lab">What you asked for</span>Said on 2026-07-26: people who make wikis are not going to have GitHub, and that has to "go pretty far".</div>
+    <div class="cbd-cell"><span class="cbd-lab">Where we are</span>Everything built assumes the maintainer has an account, a repo, three Actions workflows, PRs as the moderation queue, and Actions logs as the only observability. That is not "knows git", it is "is a DevOps-literate developer". Recorded as R22 the day you said it. Direction undecided: <a href="#1-who-runs-the-plumbing-for-a-maintainer-with-no-github">Fork 1</a>.</div>
+  </div>
+</div>
+
+<div class="cbd-row">
+  <div class="cbd-row-hd"><span class="cbd-chip cbd-off">Diverged</span><span class="cbd-topic">Three independent ways to contribute</span></div>
+  <div class="cbd-cols">
+    <div class="cbd-cell"><span class="cbd-lab">What you asked for</span><a href="/cyberbaser/getting-started/principles/">Principle 4</a>. Web, Obsidian plus git, and direct GitHub, each working on its own if the others are down.</div>
+    <div class="cbd-cell"><span class="cbd-lab">Where we are</span>Two, and the zero-git one <em>is</em> the GitHub one. R12 removed the CMS from the write path, and the in-page editor is gated behind a trigger ("a real non-git contributor is blocked") that nothing instruments and no anonymous surface exists to detect.</div>
+  </div>
+</div>
+
+<div class="cbd-row">
+  <div class="cbd-row-hd"><span class="cbd-chip cbd-part">Partial</span><span class="cbd-topic">Moderation, not accounts, is the safety mechanism</span></div>
+  <div class="cbd-cols">
+    <div class="cbd-cell"><span class="cbd-lab">What you asked for</span>A maintainer-set trust curve plus a moderation queue. Accounts are a signal, never a wall.</div>
+    <div class="cbd-cell"><span class="cbd-lab">Where we are</span><code>@cyberbaser/trust</code> exists, fails closed on unknown authors, and reads policy from the PR base branch so a PR cannot promote its own author. It is decision-only: it labels a route, it does not merge, and <code>trust-gate.yml</code> <strong>has never executed</strong>.</div>
+  </div>
+</div>
+
+<div class="cbd-row">
+  <div class="cbd-row-hd"><span class="cbd-chip cbd-none">Never started</span><span class="cbd-topic">Review the rendered page, not the diff</span></div>
+  <div class="cbd-cols">
+    <div class="cbd-cell"><span class="cbd-lab">What you asked for</span>A preview of the changed page before approving, on your phone if you like. It is also what the written moderation policy commits you to.</div>
+    <div class="cbd-cell"><span class="cbd-lab">Where we are</span>No preview exists anywhere in the pipeline, and per-PR previews are structurally impossible on the current host: GitHub Pages deploys exactly one environment per repo. Designed at 3 days in the <a href="/cyberbaser/research/proposal-hub-bom/">hub bill of materials</a>, then dropped from every plan.</div>
+  </div>
+</div>
+
+<div class="cbd-row">
+  <div class="cbd-row-hd"><span class="cbd-chip cbd-none">Never started</span><span class="cbd-topic">Credit visible on the page</span></div>
+  <div class="cbd-cols">
+    <div class="cbd-cell"><span class="cbd-lab">What you asked for</span>From the original vault dream: each page shows its contributors, plus a contributors page.</div>
+    <div class="cbd-cell"><span class="cbd-lab">Where we are</span>Git history. Nobody ever argued against the feature; it shrank one deferral at a time until "git blame exists" was the whole answer. <a href="/cyberbaser/getting-started/roadmap/#reopened-research-deleted-in-error-2026-07-25-restored-2026-07-26">Restored to the roadmap</a> on 2026-07-26, reframed: it is the trust curve's missing input, because the curve promises trust earned by contribution history and nothing computes contribution history.</div>
+  </div>
+</div>
+
+<div class="cbd-row">
+  <div class="cbd-row-hd"><span class="cbd-chip cbd-none">Never started</span><span class="cbd-topic">A web of webs: federated, linked knowledge bases</span></div>
+  <div class="cbd-cols">
+    <div class="cbd-cell"><span class="cbd-lab">What you asked for</span>Nostr-shaped. Linked knowledge bases, discovery between them, and you control your web.</div>
+    <div class="cbd-cell"><span class="cbd-lab">Where we are</span>Researched properly and then ignored. <a href="/cyberbaser/agent-context/zz-challenges/09-source-of-truth-alternatives/">Challenge 09</a> surveyed Nostr, ActivityPub, AT Protocol, IPNS, Ward Cunningham's Federated Wiki, Matrix and DIDs, and produced a usable finding: a federation layer (<code>did:web</code>, a <code>/.well-known/</code> KB manifest, harvest keyed on commit hashes) has to be built regardless of which source of truth we pick. It appears in eight files and shapes zero decisions. No task, no owner, no R-number.</div>
+  </div>
+</div>
+
+</div>
+
+Five of the six gaps are the same gap wearing different clothes: cyberbaser has built **judgement** (boundaries, validators, a trust classifier) and has never built a **surface**. The sixth, federation, is not a surface at all. It is a shape decision that gets more expensive every week the URL contract stays unfrozen.
+
+## The divergence to look at first
+
+What a logged-out reader gets today when they act on the promise the whole project is named for.
+
+<div class="cbd-mocks">
+
+<div class="cbd-win">
+  <div class="cbd-bar">
+    <span class="cbd-dot cbd-dot-r"></span><span class="cbd-dot cbd-dot-y"></span><span class="cbd-dot cbd-dot-g"></span>
+    <span class="cbd-url">cybersader.github.io/cyberbase/…/threat-modeling</span>
+  </div>
+  <div class="cbd-body">
+    <div class="cbd-mh">Threat modeling</div>
+    <div class="cbd-lines">
+      <div class="cbd-line" style="width:96%"></div>
+      <div class="cbd-line" style="width:88%"></div>
+      <div class="cbd-line" style="width:72%"></div>
+    </div>
+    <div class="cbd-panel">
+      <div class="cbd-panel-lab">Suggest an edit</div>
+      <div class="cbd-lines">
+        <div class="cbd-line" style="width:100%"></div>
+        <div class="cbd-line" style="width:64%"></div>
+      </div>
+      <div class="cbd-panel-actions"><span class="cbd-btn">Send suggestion</span></div>
+    </div>
+    <div class="cbd-cap"><strong>The vision.</strong> Type the fix, send it, done. No account, no fork, no git. It lands in a queue you moderate.</div>
+  </div>
+</div>
+
+<div class="cbd-win">
+  <div class="cbd-bar">
+    <span class="cbd-dot cbd-dot-r"></span><span class="cbd-dot cbd-dot-y"></span><span class="cbd-dot cbd-dot-g"></span>
+    <span class="cbd-url">github.com/login?return_to=/cybersader/cyberbase/edit/main/…</span>
+  </div>
+  <div class="cbd-body">
+    <div class="cbd-mh">Sign in to GitHub</div>
+    <div class="cbd-panel cbd-panel-warn">
+      <div class="cbd-field">Username or email address</div>
+      <div class="cbd-field">Password</div>
+      <div class="cbd-panel-actions"><span class="cbd-btn cbd-btn-mute">Sign in</span></div>
+    </div>
+    <div class="cbd-cap"><strong>Today.</strong> "Edit this page" is a link to github.com. No account means no edit, and the raw editor shows <code>[[wikilinks]]</code> and <code>&gt; [!note]</code> with no preview.</div>
+  </div>
+</div>
+
+</div>
+
+The left window is not scheduled. It was priced twice: the anonymous write endpoint at 4 days in the [hub bill of materials](/cyberbaser/research/proposal-hub-bom/), and at 2 to 3 days by the [adversarial pass](/cyberbaser/research/dissent/), which gave it the only outright WINS verdict it issued, on the grounds that deferring it "does not defer a feature, it defers the architecture." It was deferred again anyway.
+
+## How we got here
+
+Twenty-two decisions, as a story rather than a log. One line each: what we decided, and why.
+
+### Act 1: what is this thing?
+
+- **R02** Cyberbaser is *an interoperability layer for contributable, version-controlled knowledge bases*, because "publishing tool" is a category Quartz already wins and "CMS" throws away the interoperability half.
+- **R06** The hub is the product and stays renderer-agnostic, because forward publishing is commoditised and the reverse direction is structurally impossible inside any SSG, so it is genuinely unclaimed.
+- **R07** The docs site is the canonical knowledge base and `.claude/` is a pointer layer, because the two had drifted into disagreeing brains and agents read the stale one first.
+- **R08** No external demand gate before building, because you are user #1 and will use it either way.
+
+<details>
+<summary>The reasoning, and what each one cost</summary>
+
+**R02** came out of a 12-agent essence panel plus your own choices. The consequence that still binds: every page leads with the essence, and "Obsidian Publish successor" stays a private framing. Your "Wikipedia replacement / modern wiki / web of webs" language is sharper than the locked one-liner and is not yet reconciled with it. That is a proposal on the [vision page](/cyberbaser/getting-started/vision/), not a unilateral rewrite.
+
+**R06** was decided by auditing Quartz: it beat our own prototype on Obsidian-syntax fidelity for free, and its maintainer had publicly closed CMS and web-editor requests as out of scope. That is the cleanest possible signal about which half of the problem is worth owning.
+
+**R07** converted twelve numbered files into stubs. The rule it created (propagate a locked decision to the orientation layer in the same session) is the reason this page has a maintenance contract at the top.
+
+**R08** removed a gate, which was correct for a dogfood-first tool, but it also removed the one mechanism that would have surfaced "does anyone else want this". The [operational-model question](/cyberbaser/agent-context/zz-challenges/01-identity-operational-model/) is where that comes back.
+
+</details>
+
+### Act 2: what can it stand on?
+
+- **R01** Git stays the source of truth, scoped as the current manifestation with an off-ramp, because 83+ alternatives were surveyed and none fixes git's two structural zeros without breaking the plain-`.md` constraint.
+- **R05** The round-trip is achievable, because a one-afternoon spike round-tripped 20 of 21 fixtures.
+- **R12** No whole-file re-serialization in any write path, ever, because the same pipeline over all 1,430 real vault files returned **4.6% byte-identical**. The serializer is not unbuilt, it is unbuildable, so `@cyberbaser/ofm` became a validator instead of a writer.
+- **R13** The Notion sync is frozen and absorbed, because the audit found it last ran on 2024-08-20. The "live third writer" that three analyses worried about did not exist.
+
+<details>
+<summary>The reasoning, and what each one cost</summary>
+
+**R01's** two structural zeros are sub-repo access control and federation. Both are v2 pillars. R10 later assigned access control to a sibling project and left federation with nobody, which is exactly why federation shows up as a gap on the scorecard above.
+
+**R05 was over-claimed and R12 corrected it.** The spike proved that masking protects Obsidian constructs *through a parse*, which is true and still stands. It did not prove that real files round-trip, and 20 of 21 turned out to be a property of fixtures written in the serializer's own output style. This is the healthiest thing in the log: a favourite result was falsified by its own follow-up measurement rather than defended.
+
+**R12 is the load-bearing decision of the whole project.** It killed a planned workstream, re-scoped the flagship package, and is the reason the codebase is roughly 2,200 lines instead of 20,000. It also means the moat is byte-preservation plus mechanical validation plus governance, not translation.
+
+**R13** left one loose end worth remembering: the repo description still advertises a sync that has been dead for two years.
+
+</details>
+
+### Act 3: who is it for, and who else does the work?
+
+- **R03** Contribution is a maintainer-set trust curve plus a moderation queue, never a forced account, because identity gates are mostly theatre (email aliases are free) and moderation is the mechanism that actually carries the weight.
+- **R10** Mixed privacy, RBAC and real-time collaboration belong to a private sibling project, because it already ships them and rebuilding a running system is not a good use of a solo maintainer.
+- **R11** No secrets scan and no history purge, because the public vault content is deliberate. Selective publishing survives as a feature, not an emergency.
+- **R19** The 669 remaining broken links and the 43 emoji folders stay, because they are inherited content debt and your daily Obsidian navigation.
+
+<details>
+<summary>The reasoning, and what each one cost</summary>
+
+**R03's** real content is the question it replaces. Not "who are you" but "can this hurt anything before a human approves it". Denial of service is a separate, edge-layer problem, which is why an account wall is not the answer to it.
+
+**R10** is a good decision recorded with a broken reason. The [vision page](/cyberbaser/getting-started/vision/) still gates real-time collaboration on "the round-trip keystone", and R12 dissolved that keystone, so the stated re-entry condition can never be met. The decision should be re-stated as "owned elsewhere", not "waiting".
+
+**R11** removed a triage step and reworded the Phase 3 gate from safety blocker to feature prerequisite. The publish boundary that shipped later is the feature that requirement asked for.
+
+**R19** turned the link check into a **ratchet**: the baseline is frozen at the measured number, pre-existing debt stays silent, and any regression cyberbaser introduces fails. That is the pattern to copy for every future quality gate.
+
+</details>
+
+### Act 4: ship it
+
+- **R09** Decide the v1 shape by measurement with the rule fixed in advance, because a four-critic consensus had already been overturned once by a dissent pass, and locking on argument would have repeated the documented mistake.
+- **R14** Quartz renders the vault and Starlight keeps these docs, because the real vault built in 1:55 and scored 20 of 20 on the Obsidian-syntax checklist, and the path census found 0 slug collisions, which killed the mass-rename plan.
+- **R15** Publish grants are read only from the `cb-publish:` key, because the first dry run found **587 stale `publish: true` flags**, including on daily notes and personal finance files.
+- **R16** The vault is live, 933 pages, because the boundary, projection and leak test all held on the first real run: 160 s build, 16 s deploy, 25% of the Pages size cap.
+- **R17** The contribution loop is closed and proven, because two rehearsal PRs ran the full circuit, and rehearsal #1 caught a crash that report-only mode had been hiding behind a green check.
+- **R18** Site quality and the trust curve shipped on measurement: 1,145 broken links down to 779, the attachment class 248 down to 7, and a trust classifier that fails closed.
+
+<details>
+<summary>The reasoning, and what each one cost</summary>
+
+**R09 is a process decision worth keeping.** State the decision rule before the measurement, then let the number decide. Both branches of the rule turned out to rest on a false premise, and finding that out was more valuable than either branch.
+
+**R14** also settled the filename question that had been open for months: 4,183 paths, 0 collisions, 2 lint violations. The mass rename that several plans assumed is dead.
+
+**R15** carries a second, quieter lock: configs live in YAML but you never hand-author them. Agents draft, you approve effects (dry-run tables, not syntax). That makes the config *experience* a product surface, which is one of the few places a cyberbaser UI is already justified.
+
+**R16** shipped two known defects on purpose and wrote them down: a 28-page relative-link class, and Quartz's silent 5.7% unresolved-link rate. R18 then fixed the first with a 47-line renderer plugin.
+
+**R17's** lesson generalises past this project: report-only mode hides crashes as well as verdicts, so an observation window has to include reading the logs, not just the checkmarks.
+
+**R18** left the honest reading in the record: 1,145 broken links is 1.36% site-wide but 51.5% of the links inside note bodies, because roughly 98% of the denominator is navigation chrome that never breaks.
+
+</details>
+
+### Act 5: tell the truth about it
+
+- **R20** An open question may be re-pointed, re-worded or re-filed, but never deleted, because four research tasks were removed in a housekeeping commit with no decision, including one you added yourself by name.
+- **R21** The knowledge base was audited against the code and repaired, and the answer to "is this just a public tech stack workflow?" is: two things are genuinely ours (the OFM change classifier and the publish boundary), and the rest is careful assembly. No hosted console for the dogfood case.
+- **R22** You must not need GitHub either. Recorded the day you said it, and it re-opens R21's console answer, because "the forge is the UI" only holds for a maintainer who has a forge.
+
+<details>
+<summary>The reasoning, and what each one cost</summary>
+
+**R20** is the uncomfortable one. The deleted task was titled *"operational model and sustainability"*, added in your own commit, and its text ("which layer creates enough value that someone would pay… 'what is cyberbaser' and 'what's the business' answer together") is a paraphrase of the question you asked eleven weeks later that triggered this whole alignment pass. The question came back because nothing answered it. All four tasks are restored on the [roadmap](/cyberbaser/getting-started/roadmap/#reopened-research-deleted-in-error-2026-07-25-restored-2026-07-26).
+
+**R21 priced the console honestly.** A hosted console costs about 13.5 maintainer-days plus roughly 1 day a month forever, against a *measured* capacity of about 4.7 maintainer-days a month (96 commits across 11 distinct calendar days in 219 days). That is 21% of everything you have, permanently. The alternative it identified: every non-realtime promise is satisfiable by static generation plus CI annotation for 4.5 to 6.75 days with no runtime at all, because the data already exists as JSON that no human has ever seen rendered.
+
+R21 also corrected its own earlier claim. "151 tests green" was partly hollow, since about 40% of one package's suite covered code nothing called. Wiring that code revealed something worse: the projection's collision guard was a no-op under verbatim paths, so the pipeline had no collision detection at all. Now wired, 165 tests, and the workflow's path-lint claim became true instead of needing a walk-back.
+
+**R22** is a scope-defining decision, and it belongs to you rather than to another research pass. It connects straight back to R20: the deleted task listed candidate value centres including, verbatim, *hosted service ("bring your vault, get a contributable wiki")*, which is one of the three answers on the table in Fork 1.
+
+</details>
+
+## True versus claimed
+
+Both columns are load-bearing. The left is what the project has actually earned. The right is what the docs still promise and the code does not do.
+
+<div class="cbd-truth">
+
+<div class="cbd-truth-col">
+  <div class="cbd-truth-hd">Verified true</div>
+  <div class="cbd-item"><span class="cbd-mark cbd-mark-y">✓</span><span class="cbd-item-tx"><strong>165 tests green</strong> across five packages, after the dead-code discovery was wired rather than papered over (R21).</span></div>
+  <div class="cbd-item"><span class="cbd-mark cbd-mark-y">✓</span><span class="cbd-item-tx"><strong>933 pages live.</strong> Build 3m07s to 4m52s across five runs, deploy 16 s, artifact at 25.1% of the 1 GB Pages cap (R16).</span></div>
+  <div class="cbd-item"><span class="cbd-mark cbd-mark-y">✓</span><span class="cbd-item-tx"><strong>The boundary caught 587 stale publish flags</strong> before they could publish journals and personal finance notes (R15).</span></div>
+  <div class="cbd-item"><span class="cbd-mark cbd-mark-y">✓</span><span class="cbd-item-tx"><strong>4.6% byte-identity over 1,430 real files</strong>, zero mask leaks, zero parse errors. The number that killed the serializer (R12).</span></div>
+  <div class="cbd-item"><span class="cbd-mark cbd-mark-y">✓</span><span class="cbd-item-tx"><strong>Broken links 1,145 → 779</strong>, attachment class 248 → 7, from a 47-line fix to a real upstream bug (R18).</span></div>
+  <div class="cbd-item"><span class="cbd-mark cbd-mark-y">✓</span><span class="cbd-item-tx"><strong>931 of 931 pages carry a working Edit link</strong>, each verified to decode to a real vault path (R17).</span></div>
+  <div class="cbd-item"><span class="cbd-mark cbd-mark-y">✓</span><span class="cbd-item-tx"><strong>The loop has run twice on the real vault</strong>, including the first real classification: <code>clean</code>, churn 0.005, escapes 0 to 0 (R17).</span></div>
+</div>
+
+<div class="cbd-truth-col">
+  <div class="cbd-truth-hd">Claimed in the docs, not true in the code</div>
+  <div class="cbd-item"><span class="cbd-mark cbd-mark-n">✗</span><span class="cbd-item-tx"><strong>"Every PR gets a preview deployment… if the preview fails to build, the PR can't merge."</strong> No preview exists. The publish workflow deliberately refuses <code>pull_request_target</code>. <code>main</code> has no branch protection and no rulesets, and <code>ofm-check</code> is <code>continue-on-error</code>. <strong>Nothing in CI can block any merge.</strong></span></div>
+  <div class="cbd-item"><span class="cbd-mark cbd-mark-n">✗</span><span class="cbd-item-tx"><strong>"Trusted contributor typo → auto-merge."</strong> The classifier does compute that route, but the auto-merge step is commented out behind six named preconditions and <code>trust-gate.yml</code> has never executed. Nine workflow runs total on the vault: seven publish, two ofm-check.</span></div>
+  <div class="cbd-item"><span class="cbd-mark cbd-mark-n">✗</span><span class="cbd-item-tx"><strong>"The maintainer reviews the rendered preview, not just the diff."</strong> That is the written moderation policy, and it has no implementation and no implementation path on the current host.</span></div>
+  <div class="cbd-item"><span class="cbd-mark cbd-mark-n">✗</span><span class="cbd-item-tx"><strong>"The hub keeps every surface in sync"</strong> and <strong>"the hub turns the edit into a clean diff and queues it."</strong> GitHub turns the edit into a PR. Cyberbaser attaches a label to it.</span></div>
+  <div class="cbd-item"><span class="cbd-mark cbd-mark-n">✗</span><span class="cbd-item-tx"><strong>"Three independent contribution paths."</strong> Two, and one of them is the other.</span></div>
+  <div class="cbd-item"><span class="cbd-mark cbd-mark-n">✗</span><span class="cbd-item-tx"><strong>"It composes existing tools rather than building trust from scratch."</strong> The trust classifier is 310 lines written from scratch. Here the built thing is better than the claim, and the claim should change.</span></div>
+</div>
+
+</div>
+
+### Whose interface is it?
+
+Every point where a human touches this system today, coloured by whose UI they are actually looking at.
+
+<div class="cbd-surfaces">
+  <div class="cbd-chips">
+    <span class="cbd-s cbd-s-qz">Read a page</span>
+    <span class="cbd-s cbd-s-qz">Search, graph, backlinks</span>
+    <span class="cbd-s cbd-s-ours">"Edit this page" link</span>
+    <span class="cbd-s cbd-s-gh">Write the edit</span>
+    <span class="cbd-s cbd-s-gh">Sign in</span>
+    <span class="cbd-s cbd-s-gh">Submit the change</span>
+    <span class="cbd-s cbd-s-gh">See the OFM verdict</span>
+    <span class="cbd-s cbd-s-gh">See the trust route</span>
+    <span class="cbd-s cbd-s-gh">See why that route</span>
+    <span class="cbd-s cbd-s-gh">Approve or reject</span>
+    <span class="cbd-s cbd-s-gh">See what published</span>
+    <span class="cbd-s cbd-s-gh">See build health</span>
+    <span class="cbd-s cbd-s-ours">Run the link check (CLI)</span>
+    <span class="cbd-s cbd-s-ours">Run ofm-check (CLI)</span>
+    <span class="cbd-s cbd-s-ours">Read the research (this site)</span>
+    <span class="cbd-s cbd-s-txt">Configure what publishes</span>
+    <span class="cbd-s cbd-s-txt">Configure trust</span>
+  </div>
+  <div class="cbd-legend">
+    <span class="cbd-legend-item"><span class="cbd-k cbd-k-gh">GitHub 9</span></span>
+    <span class="cbd-legend-item"><span class="cbd-k cbd-k-qz">Quartz 2</span></span>
+    <span class="cbd-legend-item"><span class="cbd-k cbd-k-txt">A text editor 2</span></span>
+    <span class="cbd-legend-item"><span class="cbd-k cbd-k-ours">Ours 4</span>: one hyperlink, two terminal commands, and this docs site</span>
+  </div>
+</div>
+
+**13 of 17 are not cyberbaser surfaces.** The sharpest version of the problem: the system already computes rich judgements about your content, and renders none of them. `projection-report.json` records every denied file with the rule that denied it, every link stripped at the boundary with its line number, every cross-boundary embed, and the full reference chain for each asset. It ships as a 30-day CI artifact you would have to download and open in a text editor. **A human has never seen any of it rendered.** The data layer for observability is finished. The view is the missing 5%.
+
+## Yours to decide
+
+Five forks. None of these is blocked on research. Each is blocked on you saying which way.
+
+<div class="cbd-forks">
+
+<div class="cbd-fork" id="1-who-runs-the-plumbing-for-a-maintainer-with-no-github">
+  <div class="cbd-fork-q">1. Who runs the plumbing for a maintainer who has no GitHub?</div>
+  <div class="cbd-fork-why">R22, undecided. Principle 1 constrains all three answers: they still need storage they control. The answer decides what "v1" even means, because today v1 means "a repo with three workflows in it".</div>
+  <div class="cbd-opts">
+    <div class="cbd-opt">
+      <div class="cbd-opt-hd"><span class="cbd-opt-n">a. Hosted service</span><span class="cbd-price">≫ 13.5 d</span></div>
+      Bring your vault, get a contributable wiki. We operate the forge. Largest reach, and it is a second product with an on-call rota. The console alone was priced at 13.5 d plus 1 d a month, and it is the smallest piece of this.
+    </div>
+    <div class="cbd-opt">
+      <div class="cbd-opt-hd"><span class="cbd-opt-n">b. One-click self-host</span><span class="cbd-price">~6–9 d</span></div>
+      Forgejo plus the pipeline in a container. Fits "no hyperscalers" and the existing Forgejo preference. Needs the forge adapter extracted from where it currently lives, which is a 60-line script inside a YAML heredoc.
+    </div>
+    <div class="cbd-opt">
+      <div class="cbd-opt-hd"><span class="cbd-opt-n">c. Local-first app</span><span class="cbd-price">unpriced</span></div>
+      Runs on their machine, syncs to storage they already have. Biggest departure from everything built, and the only one that needs no server anywhere.
+    </div>
+  </div>
+  <div class="cbd-rec"><strong>Recommendation: pick (b) as the target, and buy the option today for 1 day.</strong> All three need the same first step, which is the one-page hub contract: name the five operations (accept edit, classify trust, route decision, write back, publish manifest) and make the forge adapter #1 rather than the assumption. That single day is also the honest answer to "is this just a tech stack", because a layer is defined by its interface and we have never written ours down.</div>
+</div>
+
+<div class="cbd-fork">
+  <div class="cbd-fork-q">2. Does a maintainer ever look at a cyberbaser surface, or only at GitHub?</div>
+  <div class="cbd-fork-why">R21 answered "only at GitHub" and the reasoning was sound, for a maintainer who has and can operate a forge. R22 removed that premise, so the question is open again. This is the single question that decides whether the widget, the intake endpoint and the preview (13 priced days between them) ever get built.</div>
+  <div class="cbd-opts">
+    <div class="cbd-opt">
+      <div class="cbd-opt-hd"><span class="cbd-opt-n">a. Static status pages</span><span class="cbd-price">4.5–6.75 d</span></div>
+      Render the JSON that already exists (denials with reasons, stripped links, trust verdicts, link budget, artifact size) as pages built by the same pipeline. No runtime, no server, no on-call.
+    </div>
+    <div class="cbd-opt">
+      <div class="cbd-opt-hd"><span class="cbd-opt-n">b. Hosted console</span><span class="cbd-price">13.5 d + 1 d/mo</span></div>
+      A real application with a moderation queue. 21% of measured capacity forever. Only justified if it is the product for Fork 1a.
+    </div>
+    <div class="cbd-opt">
+      <div class="cbd-opt-hd"><span class="cbd-opt-n">c. Nothing</span><span class="cbd-price">0 d</span></div>
+      Keep the forge as the whole UI. Costs nothing and forecloses every non-GitHub maintainer.
+    </div>
+  </div>
+  <div class="cbd-rec"><strong>Recommendation: (a).</strong> It is the only option that pays off under every branch of Fork 1, it needs no runtime, and it converts work already done into something visible. It is also the cheapest way to stop the project feeling like a wired-together tech stack, because right now the most original things in it are invisible.</div>
+</div>
+
+<div class="cbd-fork">
+  <div class="cbd-fork-q">3. Is "a web of webs" a v1 shape constraint or a v2 feature?</div>
+  <div class="cbd-fork-why">Right now it is neither, which is the worst of the three. It is on the vision page as a hub pillar with no task and no owner. There is a live deadline: the URL contract freeze is an open v1 exit criterion, and stable addressing is the one thing federation cannot be retrofitted around.</div>
+  <div class="cbd-opts">
+    <div class="cbd-opt">
+      <div class="cbd-opt-hd"><span class="cbd-opt-n">a. v1 constraint, minimal</span><span class="cbd-price">0.5–1 d</span></div>
+      Publish a manifest, not a protocol. A <code>/.well-known/</code> descriptor plus stable page identity, decided together with the URL freeze that is already scheduled. Cheap now, expensive later.
+    </div>
+    <div class="cbd-opt">
+      <div class="cbd-opt-hd"><span class="cbd-opt-n">b. v2, with a written trigger</span><span class="cbd-price">0.25 d</span></div>
+      Say so explicitly, name the condition that reopens it (a second real KB wanting to link in), and accept a migration later. Honest, and it stops the vision page promising something nobody owns.
+    </div>
+    <div class="cbd-opt">
+      <div class="cbd-opt-hd"><span class="cbd-opt-n">c. Drop it</span><span class="cbd-price">0.1 d</span></div>
+      Remove federation from the vision. Only correct if "web of webs" was aspiration rather than direction, and everything you have said suggests it was not.
+    </div>
+  </div>
+  <div class="cbd-rec"><strong>Recommendation: (a), sequenced with the URL freeze.</strong> A manifest is hours; a protocol is a project. Doing the manifest while the URL contract is still soft costs under a day, and doing it after the freeze means breaking every published address. This is the one fork with a real clock on it.</div>
+</div>
+
+<div class="cbd-fork">
+  <div class="cbd-fork-q">4. Do we turn enforcement on, knowing a naive version breaks your daily Obsidian workflow?</div>
+  <div class="cbd-fork-why">Designed on 2026-07-26, not applied. Today <code>main</code> has zero branch protection and zero rulesets, <code>ofm-check</code> is advisory, and <code>trust-gate.yml</code> has never run. Your own Obsidian Git path is a direct push to <code>main</code>, which no check is triggered by, so the maintainer path has <em>fewer</em> checks than the contributor path.</div>
+  <div class="cbd-opts">
+    <div class="cbd-opt">
+      <div class="cbd-opt-hd"><span class="cbd-opt-n">a. Protect main properly</span><span class="cbd-price">0.25 d + friction</span></div>
+      Required checks, no direct pushes. Breaks push-to-main from Obsidian and puts your own edits through a PR every time.
+    </div>
+    <div class="cbd-opt">
+      <div class="cbd-opt-hd"><span class="cbd-opt-n">b. Protect with a bypass for you</span><span class="cbd-price">0.25 d</span></div>
+      Real enforcement for contributors, your daily loop untouched. Honest cost: enforcement is then advisory for the only writer who currently exists.
+    </div>
+    <div class="cbd-opt">
+      <div class="cbd-opt-hd"><span class="cbd-opt-n">c. Validate pushes too</span><span class="cbd-price">~0.5 d</span></div>
+      Run the same checks on direct pushes to <code>main</code>, loud on failure, non-blocking. Closes the gap where your own typo that eats a callout is the one change nothing checks.
+    </div>
+  </div>
+  <div class="cbd-rec"><strong>Recommendation: (b) and (c) together, about 0.75 d.</strong> Enforcement becomes real for everyone who is not you, your Obsidian workflow survives untouched, and the one genuinely unchecked path in the system gets checked. This also makes the exit criterion "the CI gate is required" true instead of aspirational.</div>
+</div>
+
+<div class="cbd-fork">
+  <div class="cbd-fork-q">5. Is the zero-account contributor a v1 requirement, or is Principle 3 narrower than it reads?</div>
+  <div class="cbd-fork-why">The risk register has rated this <strong>critical</strong> with the words "has no path" for 22 weeks, and nothing has retired it. An unretired critical risk that old is a decision made by default, which is the worst way to make one.</div>
+  <div class="cbd-opts">
+    <div class="cbd-opt">
+      <div class="cbd-opt-hd"><span class="cbd-opt-n">a. Build the path</span><span class="cbd-price">2–4 d</span></div>
+      The anonymous write endpoint: submit without an account, land in the moderation queue. Priced at 4 d in the hub BOM, 2–3 d by the dissent pass, which called it the architecture rather than a feature.
+    </div>
+    <div class="cbd-opt">
+      <div class="cbd-opt-hd"><span class="cbd-opt-n">b. Narrow the principle</span><span class="cbd-price">0.25 d</span></div>
+      Rewrite Principle 3 as "no git knowledge required, an account is". Truthful, cheap, and it makes the wiki-replacement framing much harder to defend.
+    </div>
+    <div class="cbd-opt">
+      <div class="cbd-opt-hd"><span class="cbd-opt-n">c. Leave it open</span><span class="cbd-price">0 d</span></div>
+      Keep the principle and the critical risk both standing. That is the current state, and it is the option that quietly costs the most.
+    </div>
+  </div>
+  <div class="cbd-rec"><strong>Recommendation: (a), and note it is the same endpoint as Fork 1.</strong> A maintainer with no forge and a contributor with no account both need something that accepts a change without a GitHub identity. Building it once answers both, and it is the only place in this list where two of the five forks collapse into one piece of work.</div>
+</div>
+
+</div>
+
+## Deliberately not doing
+
+Each of these is a decision with evidence behind it, listed so you can argue with the evidence rather than discover the absence.
+
+<div class="cbd-nots">
+  <div class="cbd-not"><span class="cbd-not-t">Whole-file re-serialization, anywhere</span>4.6% byte-identity over 1,430 real files. Not "hard", architecturally incapable (R12).</div>
+  <div class="cbd-not"><span class="cbd-not-t">A CMS in the write path</span>Every candidate re-serializes the whole file, so every candidate fails the test above (R12).</div>
+  <div class="cbd-not"><span class="cbd-not-t">Running Obsidian plugins (Dataview and friends)</span>13 of 1,445 vault files need it, and it couples the product to Obsidian against the general-not-Obsidian lock. Kill stands, reasons corrected in R21.</div>
+  <div class="cbd-not"><span class="cbd-not-t">Mixed privacy, RBAC, real-time collaboration</span>Owned by a private sibling project that already ships them (R10).</div>
+  <div class="cbd-not"><span class="cbd-not-t">Cleaning 669 broken links or renaming 43 emoji folders</span>Inherited content debt, and those folders are your daily navigation. 73 path-qualified wikilinks would break (R19).</div>
+  <div class="cbd-not"><span class="cbd-not-t">Secrets scanning and history purge</span>The public vault content is intentional. Selective publishing stays a feature, not an emergency (R11).</div>
+  <div class="cbd-not"><span class="cbd-not-t">AWS or GCP, ever</span>GitHub Pages is the current deploy target, Cloudflare is edge-only, self-hosted Forgejo is preferred for identity (R04).</div>
+  <div class="cbd-not"><span class="cbd-not-t">External demand validation as a build gate</span>You are user #1 and will use it either way. Demand is a growth question, not a build gate (R08).</div>
+  <div class="cbd-not"><span class="cbd-not-t">A bespoke renderer, and the mass file rename</span>Quartz builds the real vault in 1:55 at 20/20 fidelity; the census found 0 slug collisions (R14).</div>
+  <div class="cbd-not"><span class="cbd-not-t">A hosted moderation console for the dogfood case</span>13.5 d plus 1 d a month against 4.7 measured maintainer-days a month (R21). Partially reopened by R22, see Fork 2.</div>
+</div>
+
+## If you only do one thing
+
+Read the scorecard once more and say which of the six gaps is not a gap. Any row you accept as-is stops being a divergence and becomes a decision, and this page gets shorter. Any row you reject becomes work with a price already attached. Both outcomes are better than the current state, which is that all six are quietly true and none of them is anyone's job.
+
+**Related:** [Vision](/cyberbaser/getting-started/vision/) is what this is measured against. [Roadmap](/cyberbaser/getting-started/roadmap/) is the sequence and the exit criteria. [Principles](/cyberbaser/getting-started/principles/) are the constraints the forks have to respect. [Open questions](/cyberbaser/reference/open-questions/) tracks the ones still genuinely unresolved, and [assumptions and risks](/cyberbaser/research/assumptions-and-risks/) holds the register these divergences map onto.

@@ -80,6 +80,26 @@
 
   /* Glow gradient — soft emerald radial, used for hero background wash */
   --cb-gradient-glow: radial-gradient(ellipse at top, rgba(16, 185, 129, 0.08) 0%, transparent 60%);
+
+  /* ── Illustration-system tokens (see "CB ILLUSTRATION SYSTEM" at the end
+   * of this file). Every value here has a light-mode counterpart in the
+   * :root[data-theme='light'] block below, so a component built from these
+   * tokens is theme-correct in both directions without extra selectors. */
+  --cb-frame-shadow: 0 10px 34px rgba(0, 0, 0, 0.28);
+  --cb-frame-shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.22);
+  --cb-code-bg: #0d1117;          /* editor / diff surface */
+  --cb-on-accent: #04130d;        /* text on an accent-filled button */
+  --cb-add-text: #7ee2b8;         /* diff: added line */
+  --cb-add-bg: rgba(16, 185, 129, 0.10);
+  --cb-rm-text: #ff9b95;          /* diff: removed line */
+  --cb-rm-bg: rgba(255, 95, 87, 0.08);
+  --cb-danger: #ff8a82;
+  --cb-danger-soft: rgba(255, 95, 87, 0.09);
+  --cb-danger-line: rgba(255, 95, 87, 0.45);
+  --cb-warn: #febc2e;
+  --cb-warn-soft: rgba(254, 188, 46, 0.10);
+  --cb-info: #7cc0ff;             /* "commodity" / third-party */
+  --cb-info-soft: rgba(124, 192, 255, 0.10);
 }
 
 /* ────────────────────────────────────────────────────────────────────────
@@ -108,6 +128,27 @@
   --cb-gradient-primary-soft: linear-gradient(135deg, #64748b 0%, #059669 100%);
   --cb-gradient-silver: linear-gradient(135deg, #0a0e14 0%, #5c6574 100%);
   --cb-gradient-glow: radial-gradient(ellipse at top, rgba(5, 150, 105, 0.06) 0%, transparent 60%);
+
+  /* Illustration-system tokens — light counterparts. The dark values are
+   * saturated for a near-black canvas and wash out on paper-white, so each
+   * one is re-picked here rather than reused. */
+  --cb-frame-shadow: 0 8px 24px rgba(16, 24, 40, 0.10);
+  --cb-frame-shadow-sm: 0 3px 12px rgba(16, 24, 40, 0.08);
+  --cb-code-bg: #f4f6f9;
+  /* Dark ink on the light-mode emerald (#059669) measures 5.07:1; white
+   * would be 3.76:1, so the same near-black is correct in both themes. */
+  --cb-on-accent: #04130d;
+  --cb-add-text: #04684a;
+  --cb-add-bg: rgba(5, 150, 105, 0.12);
+  --cb-rm-text: #a4231a;
+  --cb-rm-bg: rgba(180, 35, 24, 0.09);
+  --cb-danger: #a4231a;
+  --cb-danger-soft: rgba(180, 35, 24, 0.08);
+  --cb-danger-line: rgba(180, 35, 24, 0.35);
+  --cb-warn: #9a5b06;
+  --cb-warn-soft: rgba(154, 91, 6, 0.10);
+  --cb-info: #1d4ed8;
+  --cb-info-soft: rgba(29, 78, 216, 0.08);
 }
 
 /* ────────────────────────────────────────────────────────────────────────
@@ -117,6 +158,35 @@
  * ──────────────────────────────────────────────────────────────────────── */
 .sl-markdown-content div { box-sizing: border-box; }
 .sl-markdown-content svg { max-width: 100%; height: auto; }
+
+/* ────────────────────────────────────────────────────────────────────────
+ * Wide tables scroll inside their own box instead of being clipped.
+ *
+ * MEASURED at 390px, 2026-07-26, with this rule disabled: the widest table
+ * on /design/architecture/ laid out 984px wide and ran 626px past the
+ * viewport; /reference/open-questions/ ran 79px past. The page did not
+ * scroll sideways only because Nova's `.main-pane` has `overflow-x: hidden`
+ * — so the overflow was silently CLIPPED and those columns were simply
+ * unreachable on a phone. With the rule: the same table is 327px wide with
+ * a 984px scrollWidth, i.e. the content is back, inside its own scroller.
+ *
+ * Why these four declarations and not `overflow-x: auto` alone: a <table>
+ * is not a scroll container, so overflow on it is ignored. `display: block`
+ * makes it one (rows still lay out through an anonymous table box).
+ * `width: max-content` lets it grow to its natural width, `max-width: 100%`
+ * clamps that to the column so the overflow lands in the table's own
+ * scroller, and `min-width: 100%` preserves the full-bleed look tables
+ * have today when their content is narrower than the column.
+ * Net effect on desktop: none (verified at 1440 and 900).
+ * ──────────────────────────────────────────────────────────────────────── */
+.sl-markdown-content table {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
 
 /* CRITICAL FIX: Starlight's markdown.css adds margin-top: var(--sl-content-gap-y)
  * between adjacent children. Inside grid/flex containers (our .cb-* classes)
@@ -899,189 +969,6 @@ main .content-panel:has(+ .content-panel .cb-hero) {
   font-family: system-ui, sans-serif;
 }
 
-/* ────────────────────────────────────────────────────────────────────────
- * Architecture diagram styling (cb-arch-*) — used on design/architecture
- * ──────────────────────────────────────────────────────────────────────── */
-.cb-arch-wrapper {
-  margin: 2.5rem auto 3rem;
-  max-width: 920px;
-  padding: 1.25rem 1rem 0.5rem;
-  background: var(--sl-color-gray-6);
-  border: 1px solid var(--sl-color-gray-4);
-  border-radius: 12px;
-}
-
-.cb-arch-svg {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
-.cb-arch-caption {
-  text-align: center;
-  font-size: 0.82rem;
-  color: var(--sl-color-gray-2);
-  line-height: 1.55;
-  margin: 1rem auto 0;
-  max-width: 44rem;
-  padding: 0 0.5rem;
-}
-
-/* Architecture diagram — text styles (inside <svg>) */
-.sl-markdown-content .cb-arch-layer {
-  fill: var(--sl-color-gray-3);
-  font-size: 9.5px;
-  font-family: system-ui, sans-serif;
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-}
-
-.sl-markdown-content .cb-arch-box rect {
-  fill: var(--sl-color-gray-5);
-  stroke: var(--sl-color-gray-4);
-  stroke-width: 1.2;
-}
-.sl-markdown-content .cb-arch-box text {
-  fill: var(--sl-color-white);
-  font-size: 12px;
-  font-family: system-ui, sans-serif;
-  font-weight: 600;
-}
-
-.sl-markdown-content .cb-arch-box-group rect {
-  fill: rgba(20, 25, 33, 0.4);
-  stroke: var(--sl-color-gray-3);
-  stroke-dasharray: 3 3;
-  stroke-width: 1;
-}
-
-.sl-markdown-content .cb-arch-group-title {
-  fill: var(--sl-color-accent-high) !important;
-  font-size: 10px !important;
-  font-family: 'Space Grotesk', system-ui, sans-serif !important;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  font-weight: 700 !important;
-}
-
-.sl-markdown-content .cb-arch-inner rect {
-  fill: var(--sl-color-gray-6);
-  stroke: var(--sl-color-gray-4);
-  stroke-width: 1;
-}
-.sl-markdown-content .cb-arch-inner text {
-  fill: var(--sl-color-gray-1);
-  font-size: 11px;
-  font-family: system-ui, sans-serif;
-  font-weight: 500;
-}
-
-.sl-markdown-content .cb-arch-inner-hot rect {
-  fill: rgba(16, 185, 129, 0.08);
-  stroke: var(--sl-color-accent);
-  stroke-width: 1.3;
-}
-.sl-markdown-content .cb-arch-inner-hot text {
-  fill: var(--sl-color-white);
-  font-weight: 600;
-}
-
-.sl-markdown-content .cb-arch-box-aux rect {
-  fill: var(--sl-color-gray-6);
-  stroke: var(--sl-color-gray-4);
-  stroke-width: 1;
-  stroke-dasharray: 2 3;
-}
-.sl-markdown-content .cb-arch-box-aux text {
-  fill: var(--sl-color-gray-2);
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.sl-markdown-content .cb-arch-hub {
-  fill: var(--sl-color-white);
-  font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.sl-markdown-content .cb-arch-sub {
-  fill: var(--sl-color-gray-2);
-  font-size: 9.5px;
-  font-family: system-ui, sans-serif;
-  font-style: italic;
-}
-
-.sl-markdown-content .cb-arch-sub-mini {
-  fill: var(--sl-color-gray-3);
-  font-size: 8.5px;
-  font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
-}
-
-/* ── Architecture loop diagram (redesigned: hub-and-spoke round-trip) ── */
-.sl-markdown-content .cb-arch-r {
-  fill: var(--sl-color-gray-5);
-  stroke: var(--sl-color-gray-4);
-  stroke-width: 1.2;
-}
-.sl-markdown-content .cb-arch-t {
-  fill: var(--sl-color-white);
-  font-size: 15px;
-  font-weight: 600;
-  font-family: system-ui, sans-serif;
-}
-.sl-markdown-content .cb-arch-st {
-  fill: var(--sl-color-gray-2);
-  font-size: 11.5px;
-  font-family: system-ui, sans-serif;
-}
-.sl-markdown-content .cb-arch-hubbox {
-  fill: rgba(16, 185, 129, 0.1);
-  stroke: var(--sl-color-accent);
-  stroke-width: 2;
-}
-.sl-markdown-content .cb-arch-h {
-  fill: var(--sl-color-accent-high);
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  font-family: 'Space Grotesk', system-ui, sans-serif;
-}
-.sl-markdown-content .cb-arch-hs {
-  fill: var(--sl-color-gray-1);
-  font-size: 12px;
-  font-family: system-ui, sans-serif;
-}
-.sl-markdown-content .cb-arch-pillbox {
-  fill: var(--sl-color-gray-6);
-  stroke: var(--sl-color-gray-4);
-  stroke-width: 1;
-}
-.sl-markdown-content .cb-arch-pillbox-g {
-  fill: var(--sl-color-gray-6);
-  stroke: var(--sl-color-accent);
-  stroke-width: 1;
-}
-.sl-markdown-content .cb-arch-pill {
-  fill: var(--sl-color-gray-2);
-  font-size: 11px;
-  font-family: system-ui, sans-serif;
-}
-.sl-markdown-content .cb-arch-pill-g {
-  fill: var(--sl-color-accent-high);
-}
-.sl-markdown-content .cb-arch-cap {
-  fill: var(--sl-color-gray-3);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  font-family: system-ui, sans-serif;
-}
-.sl-markdown-content .cb-arch-cap-g {
-  fill: var(--sl-color-accent);
-}
-
 /* ── Tools-in-play logo map ── */
 .sl-markdown-content .cb-stack {
   display: flex;
@@ -1143,7 +1030,7 @@ main .content-panel:has(+ .content-panel .cb-hero) {
   border-radius: 12px;
   overflow: hidden;
   background: var(--sl-color-gray-6);
-  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.28);
+  box-shadow: var(--cb-frame-shadow);
 }
 .sl-markdown-content .cb-mock-bar {
   display: flex;
@@ -1334,7 +1221,7 @@ main .content-panel:has(+ .content-panel .cb-hero) {
   background: var(--sl-color-gray-6);
   padding: 0.5rem 0;
   font-family: ui-monospace, monospace;
-  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.28);
+  box-shadow: var(--cb-frame-shadow);
 }
 .sl-markdown-content .cb-tree-hd {
   display: flex;
@@ -1514,7 +1401,14 @@ main .content-panel:has(+ .content-panel .cb-hero) {
   .cb-rt-arrows, .cb-rt-pair, .cb-versus, .cb-versus-col, .cb-term-body,
   .cb-paths, .cb-path, .cb-path-hd, .cb-path-arrow, .cb-paths-sink,
   .cb-shed, .cb-shed-col, .cb-shed-rm, .cb-shed-arrow,
-  .cb-gate, .cb-gate-cellwrap, .cb-gate-card, .cb-gate-check, .cb-gate-check-tx
+  .cb-gate, .cb-gate-cellwrap, .cb-gate-card, .cb-gate-check, .cb-gate-check-tx,
+  /* illustration system (bottom of this file) */
+  .cb-journey, .cb-jstep, .cb-jstep-hd, .cb-jstep-frame, .cb-jarr,
+  .cb-phone, .cb-phone-screen, .cb-phone-status, .cb-phone-body,
+  .cb-ed, .cb-ed-bar, .cb-ed-code, .cb-ed-line, .cb-ed-foot,
+  .cb-diffcard, .cb-diffcard-hd, .cb-diffcard-body, .cb-dl,
+  .cb-checks, .cb-check, .cb-queue, .cb-queue-row,
+  .cb-fed, .cb-fed-site, .cb-fed-link, .cb-fed-hop
 ) > * {
   margin-top: 0;
 }
@@ -1551,7 +1445,7 @@ main .content-panel:has(+ .content-panel .cb-hero) {
   border-radius: 10px;
   overflow: hidden;
   background: var(--sl-color-gray-6);
-  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.28);
+  box-shadow: var(--cb-frame-shadow);
 }
 .sl-markdown-content .cb-review-hd {
   display: flex;
@@ -1576,11 +1470,11 @@ main .content-panel:has(+ .content-panel .cb-hero) {
 }
 .sl-markdown-content .cb-review-who { font-size: 0.82rem; color: var(--sl-color-white); display: flex; align-items: center; gap: 0.4rem; }
 .sl-markdown-content .cb-review-trust { font-size: 0.62rem; color: var(--sl-color-gray-2); border: 1px solid var(--sl-color-gray-4); border-radius: 999px; padding: 0.04rem 0.4rem; }
-.sl-markdown-content .cb-review-status { margin-left: auto; font-size: 0.7rem; color: #febc2e; }
+.sl-markdown-content .cb-review-status { margin-left: auto; font-size: 0.7rem; color: var(--cb-warn); }
 .sl-markdown-content .cb-review-diff { padding: 0.55rem 0.8rem; font-family: ui-monospace, monospace; font-size: 0.74rem; }
 .sl-markdown-content .cb-diff { padding: 0.1rem 0.4rem; border-radius: 4px; }
-.sl-markdown-content .cb-diff-rm { color: #ff9b95; background: rgba(255, 95, 87, 0.08); }
-.sl-markdown-content .cb-diff-add { color: #7ee2b8; background: rgba(16, 185, 129, 0.1); margin-top: 0.2rem; }
+.sl-markdown-content .cb-diff-rm { color: var(--cb-rm-text); background: var(--cb-rm-bg); }
+.sl-markdown-content .cb-diff-add { color: var(--cb-add-text); background: var(--cb-add-bg); margin-top: 0.2rem; }
 .sl-markdown-content .cb-review-actions { display: flex; gap: 0.5rem; padding: 0.55rem 0.8rem 0.7rem; }
 .sl-markdown-content .cb-review-btn { font-size: 0.76rem; padding: 0.3rem 0.7rem; border-radius: 6px; font-weight: 600; }
 .sl-markdown-content .cb-review-approve { background: var(--sl-color-accent); color: #04130d; }
@@ -1949,7 +1843,7 @@ main .content-panel:has(+ .content-panel .cb-hero) {
 .sl-markdown-content .cb-vs-tag-yes { color: var(--sl-color-accent-high); }
 .sl-markdown-content .cb-term-body { padding: 0.7rem 0.85rem; display: flex; flex-direction: column; gap: 0.28rem; font-family: ui-monospace, monospace; font-size: 0.72rem; }
 .sl-markdown-content .cb-term-line { color: var(--sl-color-gray-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sl-markdown-content .cb-term-err { color: #ff9b95; background: rgba(255, 95, 87, 0.08); border-radius: 4px; padding: 0.05rem 0.25rem; }
+.sl-markdown-content .cb-term-err { color: var(--cb-rm-text); background: var(--cb-rm-bg); border-radius: 4px; padding: 0.05rem 0.25rem; }
 .sl-markdown-content .cb-term-dim { color: var(--sl-color-gray-3); }
 .sl-markdown-content .cb-vs-foot { font-size: 0.76rem; color: var(--sl-color-gray-2); }
 @media (max-width: 640px) { .sl-markdown-content .cb-versus { grid-template-columns: 1fr; } }
@@ -2010,3 +1904,806 @@ main .content-panel:has(+ .content-panel .cb-hero) {
 .sl-markdown-content .cb-gate-btn { display: inline-block; margin-top: 0.7rem; background: var(--sl-color-accent); color: #04130d; font-weight: 700; padding: 0.34rem 0.8rem; border-radius: 6px; font-size: 0.8rem; }
 .sl-markdown-content .cb-gate-btn-off { display: inline-block; margin-top: 0.7rem; background: var(--sl-color-gray-5); color: var(--sl-color-gray-3); border: 1px solid var(--sl-color-gray-4); padding: 0.34rem 0.8rem; border-radius: 6px; font-size: 0.8rem; }
 @media (max-width: 640px) { .sl-markdown-content .cb-gate { grid-template-columns: 1fr; } }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * CB ILLUSTRATION SYSTEM — show the experience, not the topology
+ *
+ * FOCUS.md locks the visual language: real-UI mockups (browser windows, file
+ * trees, diffs, review cards), no abstract box-and-arrow or layer diagrams.
+ * A layer diagram tells a reader where code lives; it never tells them what
+ * using the thing feels like. Everything below is a piece of interface a
+ * person could plausibly be looking at.
+ *
+ * Rules every component here follows (CLAUDE.md "Starlight component layout"):
+ *   1. Starlight injects margin-top between consecutive flow elements. Every
+ *      container added here is listed in the `:is(...) > * { margin-top: 0 }`
+ *      block further up this file. Components space themselves with gap and
+ *      padding only.
+ *   2. Every flex/grid child gets `min-width: 0` so long paths and URLs cannot
+ *      push a column wider than its track; unbreakable text also gets
+ *      `overflow: hidden; text-overflow: ellipsis; white-space: nowrap`.
+ *   3. Equal columns are `grid-template-columns: repeat(N, minmax(0, 1fr))`,
+ *      never a capped column beside an uncapped one.
+ *   4. Colour comes from the --cb-* tokens at the top of this file, which have
+ *      light-mode counterparts, so a component is correct in both themes
+ *      without a second selector. Never hardcode a hex here.
+ *   5. No external assets. Icons are inline SVG in the page; frames are CSS.
+ *
+ * THE VOCABULARY
+ *   cb-mock ........ browser window  (pre-existing, documented below)
+ *   cb-phone ....... phone frame     — the approve-from-anywhere story
+ *   cb-ed .......... editor pane     — line numbers, a highlighted edit
+ *   cb-diffcard .... standalone diff — added/removed lines with a file header
+ *   cb-review ...... review card     (pre-existing) + cb-chip / cb-checks
+ *   cb-queue ....... moderation queue rows (fits inside cb-phone)
+ *   cb-tree ........ file tree       (pre-existing, documented below)
+ *   cb-fed ......... two sites linked — the federation motif
+ *   cb-journey ..... the composition layer: frames in sequence, left to right
+ *                    on desktop, stacked on a phone
+ *   cb-who ......... "whose surface is this" chip (ours / borrowed / …)
+ *   cb-chip ........ generic status chip (ok / warn / stop / info / mute)
+ *
+ * All of it composes: a cb-review inside a cb-phone inside a cb-journey step
+ * is valid and lays out correctly, because the frames carry no fixed heights.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Chips: whose surface, and what state ─────────────────────────────────
+ * The old architecture diagram used a colour key over 57 boxes to say who
+ * owned each part. The same information rides along on the frames instead.
+ *
+ *   <span class="cb-who cb-who-ours">ours</span>
+ *   <span class="cb-who cb-who-borrowed">GitHub</span>
+ *   <span class="cb-who cb-who-commodity">Quartz</span>
+ *   <span class="cb-who cb-who-yours">your vault</span>
+ *   <span class="cb-chip cb-chip-warn">trust: full-review</span>
+ * ──────────────────────────────────────────────────────────────────────── */
+.sl-markdown-content .cb-who,
+.sl-markdown-content .cb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 0.06rem 0.45rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  line-height: 1.5;
+}
+.sl-markdown-content .cb-who::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 0.36rem;
+  height: 0.36rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+.sl-markdown-content .cb-who-ours { color: var(--sl-color-accent-high); background: var(--cb-add-bg); }
+.sl-markdown-content .cb-who-borrowed { color: var(--cb-warn); background: var(--cb-warn-soft); }
+.sl-markdown-content .cb-who-commodity { color: var(--cb-info); background: var(--cb-info-soft); }
+.sl-markdown-content .cb-who-yours { color: var(--sl-color-gray-2); background: transparent; }
+
+.sl-markdown-content .cb-chip-ok { color: var(--sl-color-accent-high); background: var(--cb-add-bg); }
+.sl-markdown-content .cb-chip-warn { color: var(--cb-warn); background: var(--cb-warn-soft); }
+.sl-markdown-content .cb-chip-stop { color: var(--cb-danger); background: var(--cb-danger-soft); }
+.sl-markdown-content .cb-chip-info { color: var(--cb-info); background: var(--cb-info-soft); }
+.sl-markdown-content .cb-chip-mute { color: var(--sl-color-gray-3); background: transparent; }
+
+/* ── Browser window (cb-mock) ─────────────────────────────────────────────
+ * Pre-existing; the additions below are the fill/stretch helpers and a
+ * highlight span for "this sentence is the one that changed".
+ *
+ *   <div class="cb-mock cb-mock-sm">
+ *     <div class="cb-mock-bar">
+ *       <span class="cb-mock-dot cb-mock-dot-r"></span>
+ *       <span class="cb-mock-dot cb-mock-dot-y"></span>
+ *       <span class="cb-mock-dot cb-mock-dot-g"></span>
+ *       <span class="cb-mock-url">example.org/notes/zero-trust</span>
+ *       <span class="cb-mock-live">live</span>
+ *     </div>
+ *     <div class="cb-mock-body">
+ *       <div class="cb-mock-h">Zero trust</div>
+ *       <p class="cb-mock-txt">A sentence with <span class="cb-mock-hl">one fixed word</span>.</p>
+ *     </div>
+ *   </div>
+ * ──────────────────────────────────────────────────────────────────────── */
+.sl-markdown-content .cb-mock-fill { max-width: none; margin: 0; }
+/* A chip in the chrome bar shrinks with the bar instead of eating the URL:
+ * at 275px a fixed-width chip squeezed the URL down to "z:". */
+.sl-markdown-content .cb-mock-bar :is(.cb-who, .cb-chip, .cb-mock-live) {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* …and the URL keeps a floor, so the bar degrades to "…/cyberbase" rather
+ * than to a single character. */
+.sl-markdown-content .cb-mock-bar > .cb-mock-url { min-width: 4.5rem; }
+.sl-markdown-content .cb-mock-txt {
+  min-width: 0;
+  margin: 0.35rem 0 0;
+  color: var(--sl-color-gray-1);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.sl-markdown-content .cb-mock-hl {
+  border-radius: 4px;
+  padding: 0 0.22rem;
+  background: var(--cb-add-bg);
+  box-shadow: inset 0 -1px 0 var(--sl-color-accent);
+  color: var(--sl-color-white);
+}
+.sl-markdown-content .cb-mock-hl-bad {
+  background: var(--cb-rm-bg);
+  box-shadow: inset 0 -1px 0 var(--cb-danger-line);
+  color: var(--cb-rm-text);
+}
+.sl-markdown-content .cb-mock-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.6rem;
+  min-width: 0;
+}
+
+/* ── Phone frame (cb-phone) ───────────────────────────────────────────────
+ * For the "approve it from your phone" story. Deliberately narrow: it reads
+ * as a phone because it is phone-shaped, not because of a bezel image.
+ *
+ *   <div class="cb-phone">
+ *     <div class="cb-phone-notch" aria-hidden="true"></div>
+ *     <div class="cb-phone-screen">
+ *       <div class="cb-phone-status"><span>9:41</span><span>cyberbase</span></div>
+ *       <div class="cb-phone-body">
+ *         <div class="cb-phone-title">2 waiting</div>
+ *         … cb-queue rows, or a cb-review card …
+ *       </div>
+ *     </div>
+ *   </div>
+ * ──────────────────────────────────────────────────────────────────────── */
+.sl-markdown-content .cb-phone {
+  max-width: 260px;
+  margin: 1.4rem auto 0.5rem;
+  padding: 0.5rem 0.42rem;
+  border: 1px solid var(--sl-color-gray-4);
+  border-radius: 28px;
+  background: var(--sl-color-gray-5);
+  box-shadow: var(--cb-frame-shadow);
+}
+.sl-markdown-content .cb-phone-fill { margin: 0; }
+.sl-markdown-content .cb-phone-notch {
+  width: 34%;
+  height: 4px;
+  margin: 0 auto 0.4rem;
+  border-radius: 999px;
+  background: var(--sl-color-gray-4);
+}
+.sl-markdown-content .cb-phone-screen {
+  border: 1px solid var(--sl-color-gray-4);
+  border-radius: 20px;
+  overflow: hidden;
+  background: var(--sl-color-gray-6);
+}
+.sl-markdown-content .cb-phone-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  min-width: 0;
+  padding: 0.3rem 0.7rem 0.25rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.58rem;
+  color: var(--sl-color-gray-3);
+}
+.sl-markdown-content .cb-phone-status > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sl-markdown-content .cb-phone-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.55rem 0.6rem 0.7rem;
+}
+.sl-markdown-content .cb-phone-title {
+  min-width: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--sl-color-white);
+}
+.sl-markdown-content .cb-phone-body .cb-review { margin: 0; box-shadow: none; }
+
+/* ── Moderation queue rows (cb-queue) ─────────────────────────────────────
+ * Compact enough to sit inside cb-phone, wide enough to stand alone.
+ *
+ *   <div class="cb-queue">
+ *     <div class="cb-queue-row">
+ *       <span class="cb-review-av">ak</span>
+ *       <span class="cb-queue-t">fixes a broken bus time</span>
+ *       <span class="cb-chip cb-chip-warn">quick</span>
+ *     </div>
+ *   </div>
+ * ──────────────────────────────────────────────────────────────────────── */
+.sl-markdown-content .cb-queue { display: flex; flex-direction: column; gap: 0.4rem; }
+.sl-markdown-content .cb-queue-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 0.42rem 0.5rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 9px;
+  background: var(--sl-color-gray-5);
+}
+/* Wraps rather than truncates: inside a 260px phone an ellipsis eats the
+ * whole label ("fixes a ty…"), and two short lines read fine. */
+.sl-markdown-content .cb-queue-t {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: var(--sl-color-gray-1);
+  overflow-wrap: anywhere;
+}
+
+/* ── Editor pane (cb-ed) ──────────────────────────────────────────────────
+ * A text editor with a gutter. Use it for "what the author is typing":
+ * raw wikilinks, callout syntax, frontmatter. cb-ed-hot marks the line
+ * being edited. Escape [[ and ]] in MDX as &#91;&#91; / &#93;&#93; or
+ * remark-wiki-link will turn the example into a real link.
+ *
+ *   <div class="cb-ed">
+ *     <div class="cb-ed-bar">
+ *       <span class="cb-ed-tab">zero-trust.md<span class="cb-ed-dirty"></span></span>
+ *       <span class="cb-who cb-who-borrowed">GitHub</span>
+ *     </div>
+ *     <div class="cb-ed-code">
+ *       <div class="cb-ed-line"><span class="cb-ed-n">11</span><span class="cb-ed-t">Plain line of prose.</span></div>
+ *       <div class="cb-ed-line cb-ed-hot"><span class="cb-ed-n">12</span><span class="cb-ed-t">the line being edited<span class="cb-mock-caret"></span></span></div>
+ *     </div>
+ *     <div class="cb-ed-foot">no preview · no rendering</div>
+ *   </div>
+ * ──────────────────────────────────────────────────────────────────────── */
+.sl-markdown-content .cb-ed {
+  max-width: 600px;
+  margin: 1.4rem auto 0.6rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--cb-code-bg);
+  box-shadow: var(--cb-frame-shadow);
+}
+.sl-markdown-content .cb-ed-fill { max-width: none; margin: 0; }
+.sl-markdown-content .cb-ed-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 0.4rem 0.7rem;
+  border-bottom: 1px solid var(--sl-color-gray-4);
+  background: var(--sl-color-gray-5);
+}
+.sl-markdown-content .cb-ed-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 0.14rem 0.5rem;
+  border-radius: 6px;
+  background: var(--cb-code-bg);
+  color: var(--sl-color-white);
+  font-family: ui-monospace, monospace;
+  font-size: 0.7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sl-markdown-content .cb-ed-dirty {
+  flex: 0 0 auto;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--sl-color-accent);
+}
+.sl-markdown-content .cb-ed-code {
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 0 0.6rem;
+}
+.sl-markdown-content .cb-ed-line {
+  display: grid;
+  grid-template-columns: 1.9rem minmax(0, 1fr);
+  gap: 0.5rem;
+  padding: 0.04rem 0.7rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.72rem;
+  line-height: 1.6;
+}
+.sl-markdown-content .cb-ed-n {
+  text-align: right;
+  color: var(--sl-color-gray-3);
+  font-size: 0.66rem;
+  user-select: none;
+}
+.sl-markdown-content .cb-ed-t {
+  min-width: 0;
+  color: var(--sl-color-gray-1);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.sl-markdown-content .cb-ed-hot {
+  background: var(--cb-add-bg);
+  border-left: 2px solid var(--sl-color-accent);
+  padding-left: calc(0.7rem - 2px);
+}
+.sl-markdown-content .cb-ed-hot .cb-ed-t { color: var(--sl-color-white); }
+.sl-markdown-content .cb-ed-tok { color: var(--sl-color-accent-high); }
+.sl-markdown-content .cb-ed-dim { color: var(--sl-color-gray-3); }
+.sl-markdown-content .cb-ed-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  padding: 0.4rem 0.7rem;
+  border-top: 1px solid var(--sl-color-gray-5);
+  background: var(--sl-color-gray-6);
+  font-size: 0.68rem;
+  color: var(--sl-color-gray-3);
+}
+
+/* ── Diff card (cb-diffcard) ──────────────────────────────────────────────
+ * A standalone unified diff with a file header and a +/- count. The smaller
+ * cb-diff spans inside cb-review still exist for one-line diffs.
+ *
+ *   <div class="cb-diffcard">
+ *     <div class="cb-diffcard-hd">
+ *       <span class="cb-diffcard-path">notes/zero-trust.md</span>
+ *       <span class="cb-diffcard-stat"><span class="cb-diffcard-plus">+1</span> <span class="cb-diffcard-minus">-1</span></span>
+ *     </div>
+ *     <div class="cb-diffcard-body">
+ *       <div class="cb-dl cb-dl-rm"><span class="cb-dl-g">-</span><span class="cb-dl-t">once you are insied.</span></div>
+ *       <div class="cb-dl cb-dl-add"><span class="cb-dl-g">+</span><span class="cb-dl-t">once you are inside.</span></div>
+ *     </div>
+ *   </div>
+ * ──────────────────────────────────────────────────────────────────────── */
+.sl-markdown-content .cb-diffcard {
+  max-width: 560px;
+  margin: 1.4rem auto 0.6rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--sl-color-gray-6);
+  box-shadow: var(--cb-frame-shadow-sm);
+}
+.sl-markdown-content .cb-diffcard-fill { max-width: none; margin: 0; }
+.sl-markdown-content .cb-diffcard-hd {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.4rem 0.7rem;
+  border-bottom: 1px solid var(--sl-color-gray-4);
+  background: var(--sl-color-gray-5);
+  font-family: ui-monospace, monospace;
+  font-size: 0.7rem;
+  color: var(--sl-color-gray-1);
+}
+.sl-markdown-content .cb-diffcard-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+.sl-markdown-content .cb-diffcard-stat { flex: 0 0 auto; margin-left: auto; font-size: 0.66rem; }
+.sl-markdown-content .cb-diffcard-plus { color: var(--cb-add-text); font-weight: 700; }
+.sl-markdown-content .cb-diffcard-minus { color: var(--cb-rm-text); font-weight: 700; }
+.sl-markdown-content .cb-diffcard-body {
+  display: flex;
+  flex-direction: column;
+  padding: 0.35rem 0;
+  font-family: ui-monospace, monospace;
+  font-size: 0.71rem;
+  line-height: 1.55;
+}
+.sl-markdown-content .cb-dl {
+  display: grid;
+  grid-template-columns: 0.9rem minmax(0, 1fr);
+  gap: 0.4rem;
+  padding: 0.03rem 0.7rem;
+}
+.sl-markdown-content .cb-dl-g { text-align: center; color: var(--sl-color-gray-3); user-select: none; }
+.sl-markdown-content .cb-dl-t { min-width: 0; color: var(--sl-color-gray-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.sl-markdown-content .cb-dl-add { background: var(--cb-add-bg); }
+.sl-markdown-content .cb-dl-add .cb-dl-g,
+.sl-markdown-content .cb-dl-add .cb-dl-t { color: var(--cb-add-text); }
+.sl-markdown-content .cb-dl-rm { background: var(--cb-rm-bg); }
+.sl-markdown-content .cb-dl-rm .cb-dl-g,
+.sl-markdown-content .cb-dl-rm .cb-dl-t { color: var(--cb-rm-text); }
+
+/* ── Review card additions (cb-checks) ────────────────────────────────────
+ * cb-review / cb-review-hd / cb-review-av / cb-review-diff / cb-review-actions
+ * already exist further up. cb-checks adds the machine verdicts that sit
+ * between the diff and the buttons — the part that is real today.
+ *
+ *   <div class="cb-review">
+ *     <div class="cb-review-hd">
+ *       <span class="cb-review-av">ak</span>
+ *       <span class="cb-review-who">a.kern <span class="cb-review-trust">first edit</span></span>
+ *       <span class="cb-chip cb-chip-warn">full-review</span>
+ *     </div>
+ *     <div class="cb-review-diff">
+ *       <div class="cb-diff cb-diff-rm">- once you are insied.</div>
+ *       <div class="cb-diff cb-diff-add">+ once you are inside.</div>
+ *     </div>
+ *     <div class="cb-checks">
+ *       <div class="cb-check cb-check-ok"><span class="cb-check-ic">✓</span><span class="cb-check-t">ofm-check: clean</span><span class="cb-check-meta">advisory</span></div>
+ *     </div>
+ *     <div class="cb-review-actions">
+ *       <span class="cb-review-btn cb-review-approve">Approve</span>
+ *       <span class="cb-review-btn cb-review-reject">Request changes</span>
+ *     </div>
+ *   </div>
+ * ──────────────────────────────────────────────────────────────────────── */
+.sl-markdown-content .cb-review-fill { max-width: none; margin: 0; }
+.sl-markdown-content .cb-review-hd .cb-chip { margin-left: auto; }
+/* The name gives way before the verdict chip does: in a narrow card the
+ * handle truncates, the route stays whole. */
+.sl-markdown-content .cb-review-hd .cb-review-who { flex: 0 1 auto; min-width: 0; overflow: hidden; }
+.sl-markdown-content .cb-review-hd .cb-review-trust { flex: 0 0 auto; }
+.sl-markdown-content .cb-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.5rem 0.8rem;
+  border-top: 1px solid var(--sl-color-gray-5);
+}
+.sl-markdown-content .cb-check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  font-size: 0.71rem;
+  color: var(--sl-color-gray-2);
+}
+.sl-markdown-content .cb-check-ic {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.95rem;
+  height: 0.95rem;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 0.58rem;
+  font-weight: 700;
+}
+.sl-markdown-content .cb-check-t { min-width: 0; overflow-wrap: anywhere; }
+.sl-markdown-content .cb-check-meta {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-size: 0.62rem;
+  color: var(--sl-color-gray-3);
+  white-space: nowrap;
+}
+.sl-markdown-content .cb-check-ok { color: var(--sl-color-accent-high); }
+.sl-markdown-content .cb-check-warn { color: var(--cb-warn); }
+.sl-markdown-content .cb-check-off { color: var(--sl-color-gray-3); }
+
+/* ── File tree (cb-tree) ──────────────────────────────────────────────────
+ * Pre-existing. Documented here so the vocabulary is in one place.
+ *
+ *   <div class="cb-tree">
+ *     <div class="cb-tree-hd"><span class="cb-tree-fold">▾</span> cyberbase · main<span class="cb-tree-tag">yours</span></div>
+ *     <div class="cb-tree-row"><svg class="cb-tree-ic" …/>zero-trust.md</div>
+ *     <div class="cb-tree-row cb-tree-hot"><svg class="cb-tree-ic" …/>publish.yml<span class="cb-tree-tag">policy</span></div>
+ *   </div>
+ *
+ * cb-tree-hot marks the row under discussion; cb-tree-fig caps the width for
+ * a standalone figure; cb-tree-foot is the caption line inside the frame.
+ * ──────────────────────────────────────────────────────────────────────── */
+.sl-markdown-content .cb-tree-fill { max-width: none; margin: 0; }
+
+/* The pre-existing step walkthrough (cb-steps / cb-step) only knew how to
+ * host a cb-mock. Any frame in this vocabulary can sit in its viz column. */
+.sl-markdown-content .cb-step-viz > :is(.cb-ed, .cb-review, .cb-diffcard, .cb-phone, .cb-tree) {
+  max-width: none;
+  margin: 0;
+}
+
+/* ── Two sites linked (cb-fed) ────────────────────────────────────────────
+ * The federation motif: two independent knowledge bases, each with its own
+ * vault and its own URL, discovering each other. Two real windows and one
+ * labelled hop, not a cloud with arrows.
+ *
+ *   <div class="cb-fed" role="img" aria-label="…">
+ *     <div class="cb-fed-site">
+ *       <div class="cb-mock cb-mock-sm cb-mock-fill"> … </div>
+ *       <span class="cb-fed-cap">your wiki · <span class="cb-fed-did">did:web:you.example</span></span>
+ *     </div>
+ *     <div class="cb-fed-link" aria-hidden="true">
+ *       <span class="cb-fed-lab">/.well-known/</span>
+ *       <svg class="cb-fed-hop" …>two-headed arrow</svg>
+ *       <span class="cb-fed-lab cb-fed-lab-g">harvest by commit</span>
+ *     </div>
+ *     <div class="cb-fed-site"> … </div>
+ *   </div>
+ * ──────────────────────────────────────────────────────────────────────── */
+.sl-markdown-content .cb-fed {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.9rem;
+  margin: 1.5rem 0 0.4rem;
+}
+.sl-markdown-content .cb-fed-site {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.sl-markdown-content .cb-fed-site .cb-mock { max-width: none; margin: 0; }
+.sl-markdown-content .cb-fed-cap {
+  min-width: 0;
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--sl-color-gray-2);
+  overflow-wrap: anywhere;
+}
+.sl-markdown-content .cb-fed-did {
+  font-family: ui-monospace, monospace;
+  font-size: 0.68rem;
+  color: var(--sl-color-accent-high);
+}
+.sl-markdown-content .cb-fed-link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.sl-markdown-content .cb-fed-hop {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: var(--sl-color-accent);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.sl-markdown-content .cb-fed-lab {
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+  text-align: center;
+  white-space: nowrap;
+}
+.sl-markdown-content .cb-fed-lab-g { color: var(--sl-color-accent-high); }
+@media (max-width: 720px) {
+  .sl-markdown-content .cb-fed { grid-template-columns: 1fr; }
+  .sl-markdown-content .cb-fed-link { flex-direction: row; flex-wrap: wrap; }
+  .sl-markdown-content .cb-fed-hop { transform: rotate(90deg); }
+}
+
+/* ── Journey (cb-journey) ─────────────────────────────────────────────────
+ * The composition layer. Frames in sequence with a numbered header, an
+ * ownership chip and a caption: a filmstrip of what happens, readable in
+ * one glance on a laptop and as a stack on a phone.
+ *
+ *   <div class="cb-journey cb-journey-4" role="img" aria-label="…">
+ *     <div class="cb-jstep">
+ *       <div class="cb-jstep-hd">
+ *         <span class="cb-jstep-n">1</span>
+ *         <span class="cb-jstep-t">Reading</span>
+ *         <span class="cb-who cb-who-commodity">Quartz</span>
+ *       </div>
+ *       <div class="cb-jstep-frame"><div class="cb-mock cb-mock-sm"> … </div></div>
+ *       <p class="cb-jstep-cap">One sentence about what just happened.</p>
+ *     </div>
+ *     <div class="cb-jarr" aria-hidden="true"><svg …>→</svg></div>
+ *     … steps 2..N, arrows between …
+ *   </div>
+ *
+ * Equal heights: on desktop the steps are subgrid rows, so every header,
+ * every frame and every caption lines up across the strip even when the
+ * captions run to different line counts. Browsers without subgrid fall back
+ * to the flex column, which keeps the strip usable but lets frame bottoms
+ * differ. Below 900px the whole thing stacks and the arrows rotate.
+ * ──────────────────────────────────────────────────────────────────────── */
+.sl-markdown-content .cb-journey {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: stretch;
+  gap: 0.9rem 0.8rem;
+  margin: 1.5rem 0 0.5rem;
+}
+.sl-markdown-content .cb-jstep {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+}
+.sl-markdown-content .cb-jstep-hd {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.sl-markdown-content .cb-jstep-n {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border: 1px solid var(--sl-color-accent);
+  border-radius: 50%;
+  background: var(--cb-add-bg);
+  color: var(--sl-color-accent-high);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.sl-markdown-content .cb-jstep-t {
+  min-width: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--sl-color-white);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sl-markdown-content .cb-jstep-frame {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+}
+.sl-markdown-content .cb-jstep-frame > :is(.cb-mock, .cb-ed, .cb-review, .cb-diffcard, .cb-tree) {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+}
+.sl-markdown-content .cb-jstep-frame :is(.cb-mock-body, .cb-ed-code, .cb-diffcard-body) { flex: 1 1 auto; }
+.sl-markdown-content .cb-jstep-cap {
+  min-width: 0;
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  color: var(--sl-color-gray-2);
+  overflow-wrap: anywhere;
+}
+.sl-markdown-content .cb-jstep-cap strong { color: var(--sl-color-gray-1); }
+.sl-markdown-content .cb-jarr {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+.sl-markdown-content .cb-jarr svg {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: var(--sl-color-gray-3);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transform: rotate(90deg);
+}
+/* Column counts are set by MEASUREMENT, not by taste: Starlight's content
+ * column is 849px wide at a 1440px viewport, so a four-across strip gives
+ * each frame 180px — a URL bar truncates to "cybers…" and every caption
+ * wraps to two words a line. Three across is 275px, which matches the
+ * shipped cb-trip density and reads fine. Four steps therefore go 2x2. */
+@media (min-width: 900px) {
+  .sl-markdown-content .cb-journey-3 { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr); }
+  .sl-markdown-content .cb-journey-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem 1.4rem; }
+  .sl-markdown-content .cb-jarr svg { transform: none; }
+
+  /* Rows shared across the strip: header / frame / caption, so headers,
+   * frames and captions line up across the row even when the captions run
+   * to different line counts. In the 3-up strip every child carries an
+   * explicit row and auto-placement only assigns columns; the 2x2 places
+   * its four steps by hand (nth-child works because that layout carries no
+   * arrow elements between them). Without subgrid the flex fallback keeps
+   * the strip usable, only frame bottoms can differ. */
+  @supports (grid-template-rows: subgrid) {
+    .sl-markdown-content .cb-journey { grid-template-rows: auto 1fr auto; }
+    .sl-markdown-content .cb-jstep {
+      display: grid;
+      grid-template-rows: subgrid;
+      grid-row: 1 / span 3;
+      row-gap: 0.45rem;
+    }
+    .sl-markdown-content .cb-jarr { grid-row: 2; }
+
+    .sl-markdown-content .cb-journey-4 { grid-template-rows: repeat(2, auto 1fr auto); }
+    .sl-markdown-content .cb-journey-4 > .cb-jstep:nth-child(1) { grid-area: 1 / 1 / 4 / 2; }
+    .sl-markdown-content .cb-journey-4 > .cb-jstep:nth-child(2) { grid-area: 1 / 2 / 4 / 3; }
+    .sl-markdown-content .cb-journey-4 > .cb-jstep:nth-child(3) { grid-area: 4 / 1 / 7 / 2; }
+    .sl-markdown-content .cb-journey-4 > .cb-jstep:nth-child(4) { grid-area: 4 / 2 / 7 / 3; }
+  }
+}
+
+/* ── Figure furniture ─────────────────────────────────────────────────────
+ * cb-fig-cap (defined earlier) is the caption under any illustration.
+ * cb-fig-note is the honest footnote: what part of the picture is real.
+ *
+ *   <p class="cb-fig-note"><span class="cb-chip cb-chip-mute">today</span>
+ *      The route and the verdict are computed; no screen renders them.</p>
+ * ──────────────────────────────────────────────────────────────────────── */
+.sl-markdown-content .cb-fig-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.45rem;
+  max-width: 46rem;
+  margin: 0.5rem auto 0.2rem;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--sl-color-gray-2);
+}
+.sl-markdown-content .cb-fig-note > span:first-child { position: relative; top: 0.05rem; }
+
+/* ── Depth in dropdowns ───────────────────────────────────────────────────
+ * Long evidence tables and enumerations collapse behind a one-line summary
+ * so a page opens with its point rather than its appendix. Plain <details>,
+ * no component import:
+ *
+ *   <details>
+ *   <summary>Every package, with tests and ownership (14 rows)</summary>
+ *
+ *   | … a normal markdown table … |
+ *
+ *   </details>
+ *
+ * The blank lines matter: MDX only parses the children as markdown when the
+ * block is separated from the tags.
+ * ──────────────────────────────────────────────────────────────────────── */
+.sl-markdown-content details {
+  margin-top: 1rem;
+  padding: 0.1rem 0.9rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 10px;
+  background: var(--sl-color-gray-6);
+}
+.sl-markdown-content details[open] { padding-bottom: 0.9rem; }
+.sl-markdown-content details > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.6rem 0;
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.87rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--sl-color-white);
+}
+.sl-markdown-content details > summary::-webkit-details-marker { display: none; }
+.sl-markdown-content details > summary::before {
+  content: '▸';
+  flex: 0 0 auto;
+  color: var(--sl-color-accent);
+  font-size: 0.8em;
+}
+.sl-markdown-content details[open] > summary::before { content: '▾'; }
+.sl-markdown-content details > summary:hover { color: var(--sl-color-accent-high); }
+.sl-markdown-content details > summary + * { margin-top: 0.3rem; }

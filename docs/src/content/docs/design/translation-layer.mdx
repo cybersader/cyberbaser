@@ -1,249 +1,178 @@
 ---
 title: Translation Layer
-description: The hardest problem in cyberbaser — round-tripping markdown between authoring tools and the web without losing fidelity. Obsidian-flavored markdown is the first-class case, but the layer is surface-agnostic. Tier 1 / 2 / 3 feature list.
+description: What survives the trip from vault to web and back. Three tiers of fidelity, enforced by never rewriting a whole file — writes are raw-text splices and @cyberbaser/ofm validates the result.
 sidebar:
   order: 22
 status: research
 tags: [design, translation-layer, architecture]
 ---
 
-> [!warning]+ This is where the project lives or dies
-> Every other component in cyberbaser is solvable with off-the-shelf parts. The translation layer is the hot spot. If we can't guarantee round-trip fidelity for the Tier 1 features below, the "three contribution paths" vision collapses to "one path plus some lossy alternatives."
+Obsidian-flavored markdown contains constructs a generic markdown tool destroys on contact: wikilinks, callouts, embeds, block refs, `$math$`. The translation layer is the contract for **which of them survive the trip to the web and back**, sorted into three tiers. Since [R12](/cyberbaser/research/v1-build-plan/) that contract is enforced by *not rewriting files at all* — an edit is a raw-text splice into the original bytes, and `@cyberbaser/ofm` validates the result instead of producing it.
 
-## What it does
+> [!warning]+ The one thing that would sink the project
+> If a contribution path cannot change a page without damaging the rest of it, the "many independent paths" vision collapses into "one path plus some lossy alternatives." Everything below exists to make that failure detectable and then impossible.
 
-A pipeline of remark/rehype plugins (markdown AST → HTML AST). In the current prototype these run on top of Astro's content loading, but the translation logic is renderer-agnostic and could sit under any SSG. Takes an Obsidian-flavored markdown file as input, produces (a) rendered HTML for the web wiki and (b) enough preserved structure that a Web CMS edit round-trips cleanly back to the source file.
+## What actually happens to a file
 
-```
-┌──────────────────────┐
-│  Vault markdown      │   > [!note]+ Example
-│  (Obsidian-flavored) │   > This is [[A Page|the target]].
-└──────────┬───────────┘   > ![[diagram.png]]
-           │
-           ▼
-┌──────────────────────┐
-│  remark plugins      │   Parse → AST
-│  - obsidian-callout  │   Transform:
-│  - wiki-link         │     callouts → Aside nodes
-│  - embed handler     │     wikilinks → resolved hrefs
-│  - frontmatter       │     embeds → image nodes
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│  rehype plugins      │   AST → HTML
-│  - mermaid           │     fenced mermaid → inline SVG
-│  - external-links    │     external <a> → target=_blank
-└──────────┬───────────┘
-           │
-           ▼
-    Rendered page
-```
+A web edit does not round-trip through a parser. It finds the bytes it is allowed to change, replaces them, and leaves every other byte alone.
 
-## The tiered feature list
+<div class="cb-tl-splice">
+  <figure class="cb-glance-panel">
+    <div class="cb-mock cb-mock-sm">
+      <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">vault/garden/tomatoes.md</span></div>
+      <div class="cb-mock-body">
+        <div class="cb-mock-textline"># Tomatoes</div>
+        <div class="cb-mock-textline">&gt; [!note]+ Spacing</div>
+        <div class="cb-mock-textline">&gt; Plant them 30cm apart.</div>
+        <div class="cb-mock-textline">See <span class="cb-srctoken">&#91;&#91;Companion planting|companions&#93;&#93;</span>.</div>
+        <div class="cb-mock-textline">!<span class="cb-srctoken">&#91;&#91;bed-layout.png&#93;&#93;</span></div>
+      </div>
+    </div>
+    <figcaption class="cb-glance-cap">the file as the maintainer wrote it</figcaption>
+  </figure>
 
-This is the contract. A feature's tier determines its level of support and the amount of engineering it justifies.
+  <figure class="cb-glance-panel">
+    <div class="cb-mock cb-mock-sm">
+      <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">wiki.example.org/garden/tomatoes</span><span class="cb-mock-live">● Published</span></div>
+      <div class="cb-mock-body">
+        <div class="cb-mock-h">Tomatoes</div>
+        <div class="cb-mock-callout"><span class="cb-mock-callout-i">i</span> <strong>Spacing</strong> — Plant them 30cm apart.</div>
+        <div class="cb-mock-edit"><span class="cb-mock-edit-txt">Plant them 45cm apart.<span class="cb-mock-caret"></span></span><span class="cb-mock-save">Save</span></div>
+      </div>
+    </div>
+    <figcaption class="cb-glance-cap">a reader corrects one number in place</figcaption>
+  </figure>
 
-### Tier 1 — Full Support (round-trip required)
-
-<div class="cb-tier cb-tier-1">
-  <div class="cb-tier-header">
-    <span class="cb-tier-num">Tier 1</span>
-    <span class="cb-tier-label">Full support · round-trip required</span>
-  </div>
-  <p class="cb-tier-intro">These features must survive edits from any contribution path. If the Web CMS edits a page and the roundtripped file doesn't equal the original (modulo intentional changes), the tier fails.</p>
-
-  <table class="cb-tier-table">
-    <thead>
-      <tr>
-        <th>Feature</th>
-        <th>Source syntax</th>
-        <th>Plugin</th>
-        <th>Status</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>Wikilinks</td>
-        <td><code>[[Page]]</code>, <code>[[Page|alias]]</code></td>
-        <td><code>remark-wiki-link</code></td>
-        <td><span class="cb-pill cb-pill-research">Scoped</span></td>
-      </tr>
-      <tr>
-        <td>Callouts</td>
-        <td><code>&gt; [!note]</code>, <code>&gt; [!warning]</code>, <code>&gt; [!tip]+</code></td>
-        <td><code>remark-obsidian-callout</code></td>
-        <td><span class="cb-pill cb-pill-research">Scoped</span></td>
-      </tr>
-      <tr>
-        <td>Image embeds</td>
-        <td><code>![[image.png]]</code></td>
-        <td>Custom remark plugin</td>
-        <td><span class="cb-pill cb-pill-planning">Pending</span></td>
-      </tr>
-      <tr>
-        <td>Note embeds</td>
-        <td><code>![[Other Note]]</code>, <code>![[Other#Section]]</code></td>
-        <td>Custom remark plugin</td>
-        <td><span class="cb-pill cb-pill-planning">Pending</span></td>
-      </tr>
-      <tr>
-        <td>Code blocks</td>
-        <td>Fenced, language-tagged</td>
-        <td>Renderer built-in (Starlight in the current prototype)</td>
-        <td><span class="cb-pill cb-pill-stable">OK</span></td>
-      </tr>
-      <tr>
-        <td>Math</td>
-        <td><code>$inline$</code> and <code>$$block$$</code></td>
-        <td><code>remark-math</code> + <code>rehype-katex</code></td>
-        <td><span class="cb-pill cb-pill-planning">Pending</span></td>
-      </tr>
-      <tr>
-        <td>Mermaid diagrams</td>
-        <td>Fenced <code>mermaid</code> blocks</td>
-        <td><code>rehype-mermaid</code></td>
-        <td><span class="cb-pill cb-pill-stable">OK</span></td>
-      </tr>
-      <tr>
-        <td>Tables</td>
-        <td>Standard markdown tables</td>
-        <td>Built-in</td>
-        <td><span class="cb-pill cb-pill-stable">OK</span></td>
-      </tr>
-    </tbody>
-  </table>
+  <figure class="cb-glance-panel">
+    <div class="cb-review">
+      <div class="cb-review-hd"><span class="cb-review-av">o</span><span class="cb-review-who">ofm-check <span class="cb-review-trust">verdict: clean</span></span><span class="cb-review-status">1 file changed</span></div>
+      <div class="cb-review-diff">
+        <div class="cb-diff cb-diff-rm">- &gt; Plant them 30cm apart.</div>
+        <div class="cb-diff cb-diff-add">+ &gt; Plant them 45cm apart.</div>
+      </div>
+      <p class="cb-tl-note">Callout marker, wikilink, alias, and embed untouched — not "re-emitted identically", <em>never read</em>. churn 0.004 · constructs 3 → 3 · escapes 0 → 0.</p>
+    </div>
+    <figcaption class="cb-glance-cap">what lands in the repo</figcaption>
+  </figure>
 </div>
 
-### Tier 2 — Partial Support (best-effort, never lossy)
+This is the whole design in one picture. The old plan was to parse the file into an AST and write it back out; measured against 1430 real vault files, that produced a byte-identical result **4.6% of the time** (36.9% even with stringify options tuned to this vault). The failures were formatting normalization, not construct damage, but a diff full of normalization noise is unreviewable and unmergeable. So whole-file re-serialization is out of the write path permanently.
 
-<div class="cb-tier cb-tier-2">
-  <div class="cb-tier-header">
-    <span class="cb-tier-num">Tier 2</span>
-    <span class="cb-tier-label">Partial · best-effort</span>
-  </div>
-  <p class="cb-tier-intro">These features render <em>something</em> but may lose fidelity. Important constraint: a Tier 2 feature should never silently corrupt a round-trip. If we can't preserve it fully, we render a best-effort fallback and leave the source markdown alone.</p>
+## The tier contract
 
-  <ul class="cb-tier-list">
-    <li><strong>Simple Dataview queries</strong> — <code>LIST FROM #tag</code>, basic <code>TABLE</code>. Rendered as a resolved list at build time; the query text is preserved as a comment for round-trip.</li>
-    <li><strong>Block references</strong> — <code>[[Note#^blockid]]</code>. Resolved to the target block's content with an anchor; block ID preserved.</li>
-    <li><strong>Aliases</strong> (frontmatter <code>aliases:</code>) — rendered as redirect pages; original frontmatter untouched.</li>
-    <li><strong>Frontmatter metadata</strong> — exposed as page properties / status badges; original keys preserved.</li>
-  </ul>
-</div>
+A feature's tier says how much support it gets and how much engineering it justifies.
 
-### Tier 3 — Not Supported (workaround documented)
+- **Tier 1 — full, must survive an edit.** Wikilinks, callouts, image and note embeds, code blocks, math, Mermaid, tables.
+- **Tier 2 — partial, never lossy.** Simple Dataview, block references, aliases, frontmatter metadata. Rendered best-effort; the source text is left alone.
+- **Tier 3 — not translated, workaround documented.** DataviewJS, Canvas, Templater output, graph view.
 
-<div class="cb-tier cb-tier-3">
-  <div class="cb-tier-header">
-    <span class="cb-tier-num">Tier 3</span>
-    <span class="cb-tier-label">Not supported · document the workaround</span>
-  </div>
-  <p class="cb-tier-intro">These features cyberbaser will not translate. For each, we need a documented contributor-facing workaround — otherwise contributors will hit a silent failure mode.</p>
+<details>
+<summary>Per-feature table: syntax, the plugin that handles it, and current status</summary>
 
-  <ul class="cb-tier-list">
-    <li><strong>Complex Dataview JS</strong> — use Tier 2 simple queries or pre-compute a static table.</li>
-    <li><strong>Canvas files</strong> (<code>.canvas</code>) — export to SVG/PNG and embed via standard markdown image.</li>
-    <li><strong>Templater / DataviewJS plugins</strong> — render output to static markdown before commit.</li>
-    <li><strong>Graph view</strong> — inherently interactive; replaced by a web graph view (the Starlight prototype uses <code>starlight-site-graph</code>; the equivalent plugin in another renderer would do the same).</li>
-  </ul>
-</div>
+### Tier 1 — full support
 
-## Round-trip correctness — the test corpus
+These must survive an edit from any contribution path. Rendering is the renderer's job (Quartz for the vault, Starlight for these docs); the tier is a claim about the **source file** afterwards, not about pixels.
 
-> [!important] The single most important artifact
-> A test corpus where each Tier 1 / 2 feature has:
-> 1. **A fixture vault page** written by hand
-> 2. **Expected web output** (HTML snapshot)
-> 3. **A "Web CMS edit → vault diff"** round-trip snapshot proving A → B → A === A
->
-> Until this exists, "round-trip editability" is an aspiration instead of a tested property. Building this corpus is on the critical path for Phase 1.
+| Feature | Source syntax | Handled by | Status |
+|---|---|---|---|
+| Wikilinks | `[[Page]]`, `[[Page\|alias]]` | Quartz `CrawlLinks` (vault) / `remark-wiki-link` (docs) | Shipping |
+| Callouts | `> [!note]`, `> [!warning]`, `> [!tip]+` | Quartz `ObsidianFlavoredMarkdown` | Shipping |
+| Image embeds | `![[image.png]]` | Quartz OFM + the spoke's `RelativeFolderLinks` transformer | Shipping, one known bug class |
+| Note embeds | `![[Other Note]]`, `![[Other#Section]]` | Quartz OFM transclusion | Shipping |
+| Code blocks | Fenced, language-tagged | Renderer built-in | Shipping |
+| Math | `$inline$`, `$$block$$` | `remark-math` + `rehype-katex` | Shipping |
+| Mermaid | Fenced `mermaid` blocks | Renderer built-in | Shipping |
+| Tables | Standard markdown tables | Built-in | Shipping |
 
-## Open research questions
+The known bug class: Quartz's `transformLink` compares a whole link target against a slug's last segment, so any target containing `/` falls back to vault-root-absolute while Obsidian means page-relative. Fixed in the spoke with a pre-`CrawlLinks` transformer (`RelativeFolderLinks`) rather than in the hub, because it is a renderer quirk. Measured effect: the attachment-link break class went 248 → 7.
 
-These live in [Open Questions](/cyberbaser/reference/open-questions/) but collecting them here because they all touch the translation layer:
+### Tier 2 — partial support, never lossy
 
-1. **Is `astro-loader-obsidian` sufficient for Tier 1?** Does it handle wikilinks, callouts, and embeds, or does it need augmentation? Unknown.
-2. **How does the Web CMS render Tier 2/3 features it can't preview?** Raw markdown? Rich editor with degraded modes? Hide behind a "view raw" toggle?
-3. **How do we enforce round-trip correctness at CI time?** Property-based tests? Snapshot diffing? Is there a testing framework that models markdown round-trips well?
-4. **Where should backlinks data be computed?** Inside the content loader as part of the AST, or as a post-build rehype pass over the full page set?
-5. **What's the incremental build story?** A 1000-page vault with a one-page edit shouldn't trigger a full rebuild. Astro 5+ has improved incremental support but this needs benchmarking on a realistic vault.
+Renders *something* and may lose presentation fidelity, but must never silently corrupt the source.
+
+- **Simple Dataview queries** — `LIST FROM #tag`, basic `TABLE`. Resolved at build time; the query text stays in the file.
+- **Block references** — `[[Note#^blockid]]`. Resolved to the target block with an anchor; the block ID is preserved.
+- **Aliases** (frontmatter `aliases:`) — rendered as redirect pages; frontmatter untouched.
+- **Frontmatter metadata** — surfaced as page properties and badges; original keys preserved.
+
+### Tier 3 — not translated
+
+For each, a contributor-facing workaround, otherwise people hit a silent failure.
+
+- **DataviewJS / complex Dataview** — use a Tier 2 query or pre-compute a static table.
+- **Canvas files** (`.canvas`) — export to SVG/PNG and embed as a normal image.
+- **Templater output** — render to static markdown before committing.
+- **Graph view** — inherently interactive; the renderer supplies its own web graph.
+
+Plugin execution is a closed question, not a pending one: Obsidian's CLI is real and community plugins do run through it, but it is IPC control of a running Electron app rather than a runtime, and R12 forecloses every write-path use of it anyway.
+
+</details>
+
+## How the contract is enforced
+
+Three mechanical checks, all of them shipping code rather than intent:
+
+1. **[`@cyberbaser/ofm`](https://github.com/cybersader/cyberbaser/tree/main/packages/ofm)** classifies a change between two versions of a file: `clean`, `suspect` (re-serialization fingerprints — mass churn, list-marker normalization, injected escapes), or `damage` (constructs removed or degraded, exit 1). It also carries the collision-safe masking core, which is lossless by construction over 21 fixtures and 1430 real files with zero leaks.
+2. **`ofm-check.yml`** runs that classifier on every pull request against the vault.
+3. **The corpus runner** re-measures byte identity over the whole vault on demand, so the 4.6% number stays a measurement rather than a memory.
+
+The suite is 10 tests in `ofm`, part of 165 across the five packages. The classifier's first real verdict on a live contribution (PR #6, 2026-07-25) was `clean · churn 0.005 · escapes 0→0`.
+
+<details>
+<summary>The failure this design is aimed at, and the one caveat</summary>
+
+The target is not the maintainer's own edits — those are already fine. It is any **third-party writer that re-serializes**: a git-backed CMS, a structured editor, a sync leg from another tool. The dormant Notion sync in the vault's history is the worked example: it wrote plain CommonMark with zero wikilinks (nothing OFM to corrupt), but it mirrored by delete-and-recreate, 1570 deletions in paired commits. A validator that only checked syntax would have called every one of those commits clean.
+
+The caveat: `roundtrip()` exists in the library as a **diagnostic** and is expected to diverge on most real files. It must never be called from a write path. The README says so; this page says so; treat any future code that does it as a defect.
+
+</details>
+
+## Still open
+
+<details>
+<summary>Four unresolved questions, and two that closed</summary>
+
+Open, tracked in [Open Questions](/cyberbaser/reference/open-questions/):
+
+1. **How does a rich editor present Tier 2 and Tier 3 constructs it cannot preview?** Raw text, a locked block, a "view source" toggle? Unanswered, and it gates the in-page editing surface.
+2. **What defines the splice boundary?** A reader edits a rendered paragraph; something has to map that back to a byte range in the source, including inside a callout or a list. This is the real remaining engineering.
+3. **Where are backlinks computed** when the renderer is swappable — in the hub's projection, or left to each spoke?
+4. **What enforces the policy?** The gates exist and classify correctly; nothing yet blocks a merge on their verdict, and naive branch protection would break the maintainer's own Obsidian Git pushes.
+
+Closed by measurement, recorded here so nobody reopens them:
+
+- *Is `astro-loader-obsidian` sufficient for Tier 1?* Not applicable — the vault renders through Quartz ([R14](/cyberbaser/research/quartz-spike-results/)), which scored 20/20 on the OFM checklist.
+- *What is the incremental build story?* Not a problem at this scale: 933 pages build in about 160 seconds in CI, and a full OFM corpus pass over 1430 files takes 7.3 seconds on ext4. (Benchmark on ext4 — the same reads are roughly 780x slower across a 9p mount.)
+
+</details>
+
+## Related
+
+- [Primitives: translation layer](/cyberbaser/concepts/primitives/#translation-layer) and [round-trip editability](/cyberbaser/concepts/primitives/#round-trip-editability)
+- [The Problem](/cyberbaser/concepts/problem/) — why this layer is the hard part
+- [Architecture](/cyberbaser/design/architecture/) — where the validator sits in the pipeline
+- [v1 build plan](/cyberbaser/research/v1-build-plan/) — the gate measurement in full
+- [Obsidian Flavored Markdown spec](https://help.obsidian.md/Editing+and+formatting/Obsidian+Flavored+Markdown) (upstream)
 
 <style>{`
-  .cb-tier {
-    margin: 1.5rem 0 2.5rem;
-    padding: 1.4rem 1.5rem;
-    background: var(--sl-color-gray-6);
-    border: 1px solid var(--sl-color-gray-4);
-    border-radius: 10px;
-    border-left: 3px solid;
+  .cb-tl-splice {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0 0.5rem;
+    align-items: stretch;
   }
-  .cb-tier-1 { border-left-color: #10b981; }
-  .cb-tier-2 { border-left-color: #c7ced9; }
-  .cb-tier-3 { border-left-color: #5c6574; }
-
-  .cb-tier-header {
-    display: flex;
-    align-items: baseline;
-    gap: 0.8rem;
-    margin-bottom: 0.8rem;
-  }
-  .cb-tier-num {
-    font-family: 'Space Grotesk', system-ui, sans-serif;
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: var(--sl-color-white);
-  }
-  .cb-tier-label {
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--sl-color-gray-2);
-  }
-  .cb-tier-intro {
-    margin: 0 0 1rem;
-    color: var(--sl-color-gray-1);
-    font-size: 0.9rem;
-    line-height: 1.6;
-  }
-
-  .cb-tier-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 0.5rem;
-    font-size: 0.85rem;
-  }
-  .cb-tier-table th {
-    text-align: left;
+  .sl-markdown-content .cb-tl-splice > * { margin-top: 0; }
+  .cb-tl-splice > figure { min-width: 0; margin: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+  .cb-tl-splice .cb-mock,
+  .cb-tl-splice .cb-review { flex: 1; min-width: 0; }
+  .cb-tl-note {
+    margin: 0.6rem 0 0;
     font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
+    line-height: 1.5;
     color: var(--sl-color-gray-3);
-    padding: 0.5rem 0.6rem;
-    border-bottom: 1px solid var(--sl-color-gray-4);
   }
-  .cb-tier-table td {
-    padding: 0.55rem 0.6rem;
-    border-bottom: 1px solid var(--sl-color-gray-5);
-    color: var(--sl-color-gray-1);
-    vertical-align: top;
-  }
-  .cb-tier-table td code {
-    font-size: 0.8rem;
-  }
-
-  .cb-tier-list {
-    padding-left: 1.2rem;
-    margin: 0;
-  }
-  .cb-tier-list li {
-    margin-bottom: 0.5rem;
-    color: var(--sl-color-gray-1);
-    line-height: 1.55;
-  }
-  .cb-tier-list li strong {
-    color: var(--sl-color-white);
+  @media (max-width: 700px) {
+    .cb-tl-splice { grid-template-columns: minmax(0, 1fr); }
   }
 `}</style>

@@ -8,175 +8,210 @@ tags: [design, architecture]
 ---
 
 {/*
-  VISUAL CHOICE (2026-07-26): the layered diagram below is a CSS grid/flex
-  component, not inline SVG and not a ```mermaid fence.
+  VISUAL CHOICE (2026-07-26, second pass): the layered box diagram that stood
+  here for one day is gone. `.claude/FOCUS.md` line 17 locks the visual
+  language — real-UI mockups, no abstract box diagrams — and 57 nodes in three
+  colour-coded lanes told a reader where code lives without ever showing them
+  what using this feels like.
 
-  - Not Mermaid: `rehype-mermaid` is configured in astro.config.mjs but no page
-    in this repo uses a fence, and its default `inline-svg` strategy shells out
-    to a Playwright Chromium that `.github/workflows/deploy.yml` never installs.
-    A fence here would risk the deploy. Mermaid also cannot express the
-    ours/commodity/borrowed colour key plus two side lanes legibly.
-  - Not SVG: an SVG wide enough to hold three columns scales down to ~5px text
-    on a phone (`.sl-markdown-content svg { max-width: 100% }` forces shrink).
-    A flex component reflows to one column instead and keeps real font sizes.
-  - The styles are page-local because this component is used exactly once.
-    If a second page ever needs it, move the block into src/styles/brand.css.
-  - CLAUDE.md Starlight rules applied: margin-top neutralised on every
-    container's children, `min-width: 0` on all flex children, no capped column
-    beside an uncapped sibling.
+  What replaced it: two journeys built from the shared illustration system in
+  src/styles/brand.css (cb-journey, cb-mock, cb-ed, cb-review, cb-tree,
+  cb-phone, cb-fed). The ownership information the old key carried now rides
+  on the frames as cb-who chips, so nothing was lost except the boxes.
+
+  No page-local <style> block: every class used here is in brand.css, where a
+  second page can reuse it. Not Mermaid (rehype-mermaid shells out to a
+  Playwright Chromium the deploy workflow never installs) and not one wide
+  SVG (it scales down to ~5px text on a phone).
 */}
 
-<style>{`
-.sl-markdown-content .cba-diag {
-  --cba-ours: var(--sl-color-accent);
-  --cba-com: #60a5fa;
-  --cba-bor: #d8a13a;
-  margin: 1.6rem 0 1.2rem;
-  padding: 1.1rem 1.1rem 1.2rem;
-  background: var(--sl-color-gray-6);
-  border: 1px solid var(--sl-color-gray-4);
-  border-radius: 12px;
-}
-:root[data-theme='light'] .sl-markdown-content .cba-diag {
-  --cba-com: #2563eb;
-  --cba-bor: #b45309;
-}
+Cyberbaser, as built, is **five small libraries and three CI jobs that judge a markdown vault**: what may be published, whether an edit damaged the content, and who has to look at a change before it merges. It operates no server and runs entirely on someone else's runner. Every screen a human actually touches still belongs to GitHub or to Quartz.
 
-/* Starlight injects margin-top between consecutive flow elements. Inside a
-   flex/grid container that shoves every child but the first downward and
-   breaks equal heights. Neutralise it at class specificity. */
-.sl-markdown-content :is(.cba-diag, .cba-key, .cba-cols, .cba-lane, .cba-spine, .cba-node) > * {
-  margin-top: 0;
-}
+## What a contribution looks like
 
-.sl-markdown-content .cba-key {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem 1.1rem;
-  align-items: center;
-  margin-bottom: 1rem;
-}
-.sl-markdown-content .cba-k {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.sl-markdown-content .cba-k::before {
-  content: '';
-  width: 0.7rem;
-  height: 0.7rem;
-  border-radius: 3px;
-  background: currentColor;
-  flex: 0 0 auto;
-}
-.sl-markdown-content .cba-k-you { color: var(--sl-color-gray-2); }
-.sl-markdown-content .cba-k-ours { color: var(--cba-ours); }
-.sl-markdown-content .cba-k-com { color: var(--cba-com); }
-.sl-markdown-content .cba-k-bor { color: var(--cba-bor); }
+<div class="cb-journey cb-journey-4" role="img" aria-label="Four screens in sequence. First, a published page with a typo and an edit-this-page pencil. Second, GitHub's plain-text editor with the line being fixed. Third, a review card showing the trust route, the diff and the machine checks. Fourth, the corrected page live again.">
 
-.sl-markdown-content .cba-cols {
-  display: flex;
-  gap: 0.8rem;
-  align-items: stretch;
-}
-.sl-markdown-content .cba-lane,
-.sl-markdown-content .cba-spine {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-.sl-markdown-content .cba-lane { flex: 1 1 0; }
-.sl-markdown-content .cba-spine { flex: 1.55 1 0; order: 0; }
-.sl-markdown-content .cba-lane-v { order: -1; }
-.sl-markdown-content .cba-lane-g { order: 1; }
+  <div class="cb-jstep">
+    <div class="cb-jstep-hd"><span class="cb-jstep-n">1</span><span class="cb-jstep-t">A reader sees a typo</span></div>
+    <div class="cb-jstep-frame">
+      <div class="cb-mock cb-mock-sm">
+        <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">cybersader.github.io/cyberbase/…/zero-trust</span></div>
+        <div class="cb-mock-body">
+          <div class="cb-mock-h">Zero trust</div>
+          <p class="cb-mock-txt">The perimeter model assumes everything is safe <span class="cb-mock-hl cb-mock-hl-bad">onece</span> you are inside the network.</p>
+          <div class="cb-mock-edit"><span class="cb-mock-edit-txt">✎ Edit this page</span><span class="cb-who cb-who-ours">ours</span></div>
+        </div>
+      </div>
+    </div>
+    <p class="cb-jstep-cap">Everything on this screen is Quartz except the pencil. That anchor is <code>EditThisPage.tsx</code>: 87 lines of TSX that render one <code>&lt;a&gt;</code> at build time.</p>
+  </div>
 
-.sl-markdown-content .cba-hd {
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--sl-color-gray-3);
-}
+  <div class="cb-jstep">
+    <div class="cb-jstep-hd"><span class="cb-jstep-n">2</span><span class="cb-jstep-t">They fix it</span></div>
+    <div class="cb-jstep-frame">
+      <div class="cb-ed">
+        <div class="cb-ed-bar"><span class="cb-ed-tab">zero-trust.md<span class="cb-ed-dirty"></span></span><span class="cb-who cb-who-borrowed">GitHub</span></div>
+        <div class="cb-ed-code">
+          <div class="cb-ed-line"><span class="cb-ed-n">9</span><span class="cb-ed-t"><span class="cb-ed-tok">&gt; [!note]</span> Perimeter model</span></div>
+          <div class="cb-ed-line"><span class="cb-ed-n">10</span><span class="cb-ed-t">See <span class="cb-ed-tok">&#91;&#91;Segmentation&#93;&#93;</span> next.</span></div>
+          <div class="cb-ed-line cb-ed-hot"><span class="cb-ed-n">11</span><span class="cb-ed-t">…safe once you are inside<span class="cb-mock-caret"></span></span></div>
+          <div class="cb-ed-line"><span class="cb-ed-n">12</span><span class="cb-ed-t cb-ed-dim">%%draft note, not published%%</span></div>
+        </div>
+        <div class="cb-ed-foot"><span class="cb-chip cb-chip-stop">account required</span>raw text · no preview</div>
+      </div>
+    </div>
+    <p class="cb-jstep-cap">Today this is GitHub's plain-text box: wikilinks and callouts stay raw, nothing renders, and <strong>no account means no edit</strong> — which contradicts "accounts optional, never a wall".</p>
+  </div>
 
-.sl-markdown-content .cba-node {
-  display: flex;
-  flex-direction: column;
-  gap: 0.28rem;
-  min-width: 0;
-  padding: 0.6rem 0.7rem;
-  background: var(--sl-color-gray-5);
-  border: 1px solid var(--sl-color-gray-4);
-  border-left: 3px solid var(--sl-color-gray-3);
-  border-radius: 8px;
-}
-.sl-markdown-content .cba-node-ours { border-left-color: var(--cba-ours); }
-.sl-markdown-content .cba-node-com { border-left-color: var(--cba-com); }
-.sl-markdown-content .cba-node-bor { border-left-color: var(--cba-bor); }
+  <div class="cb-jstep">
+    <div class="cb-jstep-hd"><span class="cb-jstep-n">3</span><span class="cb-jstep-t">Someone decides</span></div>
+    <div class="cb-jstep-frame">
+      <div class="cb-review">
+        <div class="cb-review-hd"><span class="cb-review-av">ak</span><span class="cb-review-who">a.kern <span class="cb-review-trust">first edit</span></span><span class="cb-chip cb-chip-warn">full-review</span></div>
+        <div class="cb-review-diff"><div class="cb-diff cb-diff-rm">- safe onece you are</div><div class="cb-diff cb-diff-add">+ safe once you are</div></div>
+        <div class="cb-checks">
+          <div class="cb-check cb-check-ok"><span class="cb-check-ic">✓</span><span class="cb-check-t">ofm-check: clean</span><span class="cb-check-meta">advisory</span></div>
+          <div class="cb-check cb-check-warn"><span class="cb-check-ic">!</span><span class="cb-check-t">anonymous author</span><span class="cb-check-meta">9 checks</span></div>
+          <div class="cb-check cb-check-off"><span class="cb-check-ic">–</span><span class="cb-check-t">linkcheck: not run</span><span class="cb-check-meta">no workflow</span></div>
+        </div>
+        <div class="cb-review-actions"><span class="cb-review-btn cb-review-approve">Approve</span><span class="cb-review-btn cb-review-reject">Ask for changes</span></div>
+      </div>
+    </div>
+    <p class="cb-jstep-cap">Every field here is already computed — the route, the fidelity verdict, the diff. <strong>Nothing renders it.</strong> The maintainer opens github.com, reads a raw diff and clicks Merge.</p>
+  </div>
 
-.sl-markdown-content .cba-node-t {
-  display: flex;
-  align-items: baseline;
-  gap: 0.4rem;
-  min-width: 0;
-  font-size: 0.9rem;
-  font-weight: 600;
-  line-height: 1.25;
-  color: var(--sl-color-white);
-}
-.sl-markdown-content .cba-num {
-  flex: 0 0 auto;
-  font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
-  font-size: 0.68rem;
-  font-weight: 700;
-  color: var(--sl-color-accent);
-}
-.sl-markdown-content .cba-node-c {
-  font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
-  font-size: 0.67rem;
-  line-height: 1.45;
-  color: var(--sl-color-gray-2);
-  overflow-wrap: anywhere;
-}
-.sl-markdown-content .cba-node-d {
-  font-size: 0.755rem;
-  line-height: 1.45;
-  color: var(--sl-color-gray-2);
-}
-.sl-markdown-content .cba-warn { color: var(--cba-bor); font-weight: 600; }
+  <div class="cb-jstep">
+    <div class="cb-jstep-hd"><span class="cb-jstep-n">4</span><span class="cb-jstep-t">The page is fixed</span></div>
+    <div class="cb-jstep-frame">
+      <div class="cb-mock cb-mock-sm">
+        <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">cybersader.github.io/cyberbase/…/zero-trust</span><span class="cb-mock-live">● live</span></div>
+        <div class="cb-mock-body">
+          <div class="cb-mock-h">Zero trust</div>
+          <p class="cb-mock-txt">The perimeter model assumes everything is safe <span class="cb-mock-hl">once</span> you are inside the network.</p>
+          <div class="cb-mock-meta"><span class="cb-who cb-who-ours">publish + projection</span><span class="cb-who cb-who-commodity">Quartz</span><span class="cb-who cb-who-borrowed">Pages</span></div>
+        </div>
+      </div>
+    </div>
+    <p class="cb-jstep-cap">The merge fires one rebuild of all 933 pages: publish boundary, projection with its post-hoc leak test, Quartz, two gates, deploy. <strong>3m07s to 4m52s</strong>, measured over five runs.</p>
+  </div>
 
-.sl-markdown-content .cba-arr {
-  text-align: center;
-  font-size: 0.9rem;
-  line-height: 1;
-  color: var(--sl-color-accent);
-}
-.sl-markdown-content .cba-foot {
-  margin-top: 0.9rem;
-  font-size: 0.74rem;
-  line-height: 1.5;
-  color: var(--sl-color-gray-2);
-}
+</div>
 
-@media (max-width: 900px) {
-  .sl-markdown-content .cba-cols { flex-direction: column; }
-  .sl-markdown-content .cba-lane-v,
-  .sl-markdown-content .cba-lane-g { order: 0; }
-}
+<p class="cb-fig-note"><span class="cb-chip cb-chip-mute">honest</span>Two of these four screens are ours in name only. Screen 2 is GitHub's editor and screen 3 does not exist: its contents are printed into a CI step summary that is one click deep in the Actions tab.</p>
 
-/* Wide reference tables scroll inside their own box. Without this the 6-column
-   component table pushes the page body to a 2x horizontal scroll on a phone. */
-.sl-markdown-content .cba-scroll {
-  overflow-x: auto;
-  max-width: 100%;
-  overscroll-behavior-x: contain;
-}
-.sl-markdown-content .cba-scroll > table { margin-top: 0; min-width: 30rem; }
-`}</style>
+The step-3 card is the interesting one, because none of it is speculative work. `.cyberbaser/trust.yml` already sets the tiers, `@cyberbaser/trust` already runs nine mechanical checks and emits `auto-merge`, `quick-review`, `full-review` or `reject`, and `@cyberbaser/ofm` already classifies the change as `clean`, `suspect` or `damage`. The pipeline computes the whole card and then throws it at a log file. **The console's data layer is finished; the console is the missing 5%, not the missing 95%.**
+
+<div class="cb-phone">
+  <div class="cb-phone-notch" aria-hidden="true"></div>
+  <div class="cb-phone-screen">
+    <div class="cb-phone-status"><span>9:41</span><span>cyberbase</span></div>
+    <div class="cb-phone-body">
+      <div class="cb-phone-title">2 waiting on you</div>
+      <div class="cb-queue">
+        <div class="cb-queue-row"><span class="cb-review-av">ak</span><span class="cb-queue-t">fixes a typo in zero-trust</span><span class="cb-chip cb-chip-warn">full</span></div>
+        <div class="cb-queue-row"><span class="cb-review-av">jd</span><span class="cb-queue-t">adds a link to segmentation</span><span class="cb-chip cb-chip-ok">quick</span></div>
+      </div>
+      <div class="cb-review-actions"><span class="cb-review-btn cb-review-approve">Approve</span><span class="cb-review-btn cb-review-reject">Later</span></div>
+    </div>
+  </div>
+</div>
+
+<p class="cb-fig-cap">The same two decisions, on a phone. This is what the computed data would look like if anything rendered it.</p>
+
+<p class="cb-fig-note"><span class="cb-chip cb-chip-stop">not built</span>No queue, no auth, no server. Whether this should ever be a hosted screen or a static page generated in CI is the <a href="#open-the-console-fork">console fork</a>, still open and costed below.</p>
+
+## What authoring looks like
+
+<div class="cb-journey cb-journey-3" role="img" aria-label="Three screens. First, Obsidian editing a note with wikilinks and a callout. Second, a terminal pushing straight to main. Third, the rebuilt site live.">
+
+  <div class="cb-jstep">
+    <div class="cb-jstep-hd"><span class="cb-jstep-n">1</span><span class="cb-jstep-t">Write in Obsidian</span></div>
+    <div class="cb-jstep-frame">
+      <div class="cb-ed">
+        <div class="cb-ed-bar"><span class="cb-ed-tab">zero-trust.md<span class="cb-ed-dirty"></span></span><span class="cb-who cb-who-commodity">Obsidian</span></div>
+        <div class="cb-ed-code">
+          <div class="cb-ed-line"><span class="cb-ed-n">1</span><span class="cb-ed-t cb-ed-dim">---</span></div>
+          <div class="cb-ed-line"><span class="cb-ed-n">2</span><span class="cb-ed-t"><span class="cb-ed-tok">publish:</span> true</span></div>
+          <div class="cb-ed-line"><span class="cb-ed-n">3</span><span class="cb-ed-t cb-ed-dim">---</span></div>
+          <div class="cb-ed-line"><span class="cb-ed-n cb-ed-dim">⋯</span><span class="cb-ed-t cb-ed-dim"> </span></div>
+          <div class="cb-ed-line cb-ed-hot"><span class="cb-ed-n">9</span><span class="cb-ed-t"><span class="cb-ed-tok">&gt; [!warning]</span> Trust nothing<span class="cb-mock-caret"></span></span></div>
+          <div class="cb-ed-line"><span class="cb-ed-n">10</span><span class="cb-ed-t">See <span class="cb-ed-tok">&#91;&#91;Segmentation#Rules&#93;&#93;</span></span></div>
+        </div>
+        <div class="cb-ed-foot"><span class="cb-chip cb-chip-ok">graph · backlinks</span></div>
+      </div>
+    </div>
+    <p class="cb-jstep-cap">Full Obsidian: wikilinks, callouts, block refs, the local graph. Cyberbaser is absent from this screen on purpose (<a href="/cyberbaser/getting-started/principles/">Principle 5</a>) and no plugin of ours is needed to open the vault.</p>
+  </div>
+
+  <div class="cb-jarr" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h14M13 6l6 6-6 6"/></svg></div>
+
+  <div class="cb-jstep">
+    <div class="cb-jstep-hd"><span class="cb-jstep-n">2</span><span class="cb-jstep-t">Push</span></div>
+    <div class="cb-jstep-frame">
+      <div class="cb-mock cb-mock-sm">
+        <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">zsh — cyberbase</span><span class="cb-who cb-who-yours">yours</span></div>
+        <div class="cb-term-body">
+          <span class="cb-term-line">$ git commit -am "clarify perimeter"</span>
+          <span class="cb-term-line">$ git push origin main</span>
+          <span class="cb-term-line cb-term-dim">  To github.com:cybersader/cyberbase.git</span>
+          <span class="cb-term-line cb-term-dim">  8f2c1ae..b41d9c0  main</span>
+          <span class="cb-term-err">! no check ran on this push</span>
+        </div>
+      </div>
+    </div>
+    <p class="cb-jstep-cap">A direct push to <code>main</code>, usually through obsidian-git. <strong>Nothing validates it.</strong> Both validators are wired to <code>pull_request</code>, and the vault's <code>main</code> has no branch protection and no rulesets.</p>
+  </div>
+
+  <div class="cb-jarr" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h14M13 6l6 6-6 6"/></svg></div>
+
+  <div class="cb-jstep">
+    <div class="cb-jstep-hd"><span class="cb-jstep-n">3</span><span class="cb-jstep-t">The site catches up</span></div>
+    <div class="cb-jstep-frame">
+      <div class="cb-mock cb-mock-sm">
+        <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">…/cyberbase</span><span class="cb-mock-live">● live</span></div>
+        <div class="cb-mock-body">
+          <div class="cb-mock-h">Zero trust</div>
+          <div class="cb-mock-callout"><span class="cb-mock-callout-i">!</span>Trust nothing</div>
+          <p class="cb-mock-txt">See <span class="cb-linkchip">Segmentation</span> for the rules.</p>
+        </div>
+      </div>
+    </div>
+    <p class="cb-jstep-cap">All 933 pages rebuild through the same pipeline a contributor's merge fires, minus the two checks that never ran. Callout and wikilink survive the trip because the projection copies bytes and never re-serializes a file (<a href="/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25">R12</a>).</p>
+  </div>
+
+</div>
+
+<div class="cb-glance" role="img" aria-label="On the left, the vault as a folder of markdown files with two config files. On the right, the same note published as a page. The connector is labelled verbatim paths.">
+  <figure class="cb-glance-panel">
+    <div class="cb-tree cb-tree-mini">
+      <div class="cb-tree-hd"><span class="cb-tree-fold">▾</span> cyberbase · main<span class="cb-tree-tag">yours</span></div>
+      <div class="cb-tree-row cb-tree-hot"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>zero-trust.md</div>
+      <div class="cb-tree-row"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>segmentation.md</div>
+      <div class="cb-tree-row"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>publish.yml<span class="cb-tree-tag">15 globs</span></div>
+      <div class="cb-tree-row"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>.cyberbaser/trust.yml<span class="cb-tree-tag">policy</span></div>
+      <div class="cb-tree-hd cb-tree-sub"><span class="cb-tree-fold">▸</span> .obsidian/</div>
+    </div>
+    <figcaption class="cb-glance-cap">the source of truth · survives us</figcaption>
+  </figure>
+  <div class="cb-glance-link" aria-hidden="true">
+    <span class="cb-glance-lab">projected</span>
+    <span class="cb-flowline cb-flowline-r"></span>
+    <span class="cb-glance-lab cb-glance-lab-g">verbatim paths</span>
+  </div>
+  <figure class="cb-glance-panel">
+    <div class="cb-mock cb-mock-sm">
+      <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">…/cyberbase/notes/zero-trust</span></div>
+      <div class="cb-mock-body"><div class="cb-mock-h">Zero trust</div><div class="cb-mock-line"></div><div class="cb-mock-line cb-mock-line-85"></div></div>
+    </div>
+    <figcaption class="cb-glance-cap">rebuilt from scratch every push · disposable</figcaption>
+  </figure>
+</div>
+
+<p class="cb-fig-cap">One file, two surfaces. Delete the right-hand side and nothing is lost; delete the left and everything is.</p>
+
+:::danger[The maintainer's own path has fewer checks than a stranger's]
+An honest typo that deletes a callout is caught in the contribution journey and missed in the authoring one. Both validators are wired to `pull_request` only, and direct pushes to `main` are not merely allowed, they are the maintainer's daily authoring path. That constraint is real (requiring PRs for everything would break Obsidian Git authoring), so the fix is not "turn on branch protection", it is **a `push`-triggered validation job that reports rather than blocks**. It has not been built.
+:::
 
 ## The verdict
 
@@ -188,8 +223,6 @@ The gap is narrower than it looks. The pipeline already computes everything a ma
 There is no CMS, no auth component, no moderation UI, no preview deployment, and no server. `main` on the vault repo has **no branch protection and no rulesets** (verified 2026-07-26: `branches/main/protection` returns 404, `rulesets` returns `[]`), `ofm-check.yml` is `continue-on-error: true`, and the auto-merge step in `trust-gate.yml` is commented out behind six named preconditions. **Nothing in this system can currently block a merge.** Everything below is written from the code, not from the plan.
 :::
 
-<div class="cba-scroll">
-
 | As built, verified 2026-07-26 | |
 |---|---|
 | Packages | 5 (`ofm`, `publish`, `projection`, `linkcheck`, `trust`) |
@@ -200,106 +233,7 @@ There is no CMS, no auth component, no moderation UI, no preview deployment, and
 | Servers cyberbaser operates | 0 |
 | Human interfaces that are ours | 4 of 17 interaction points: one anchor tag, two CLIs, and this docs site |
 
-</div>
-
-## The layered architecture
-
-Five stages on the spine, two lanes alongside. The lanes are deliberately decoupled: `ofm-check` asks "is this change safe for Obsidian syntax", `trust-gate` asks "who has to look at it", and neither knows about the other. That decoupling is correct engineering and it is also why there is no single place a maintainer can look.
-
-<div class="cba-diag" role="img" aria-label="Layered architecture. Authoring surfaces feed the vault. The spine runs vault, publish boundary, projection, renderer spoke, published site. A validation lane runs the OFM validator and the link checker alongside; a governance lane runs the trust policy, the trust classifier, and GitHub's pull request surface.">
-
-  <div class="cba-key">
-    <span class="cba-k cba-k-you">yours</span>
-    <span class="cba-k cba-k-ours">ours</span>
-    <span class="cba-k cba-k-com">commodity</span>
-    <span class="cba-k cba-k-bor">borrowed interface</span>
-  </div>
-
-  <div class="cba-cols">
-
-    <div class="cba-lane cba-lane-v">
-      <div class="cba-hd">Validation lane</div>
-      <div class="cba-node cba-node-ours">
-        <div class="cba-node-t">OFM validator</div>
-        <div class="cba-node-c">@cyberbaser/ofm · ofm-check.yml</div>
-        <div class="cba-node-d">Masks 9 Obsidian construct classes with private-use sentinels, then classifies a before/after pair as <code>clean</code>, <code>suspect</code> or <code>damage</code>. Fires on every markdown PR.</div>
-        <div class="cba-node-d cba-warn">Advisory only: continue-on-error.</div>
-      </div>
-      <div class="cba-node cba-node-ours">
-        <div class="cba-node-t">Link checker</div>
-        <div class="cba-node-c">@cyberbaser/linkcheck</div>
-        <div class="cba-node-d">Resolves every internal href in emitted HTML against what is actually on disk, in four break classes with per-class budgets. Renderer-agnostic by construction: it cannot tell what produced the HTML.</div>
-        <div class="cba-node-d cba-warn">In no workflow. Runs only when a human types it.</div>
-      </div>
-    </div>
-
-    <div class="cba-spine">
-      <div class="cba-hd">The spine</div>
-      <div class="cba-node cba-node-bor">
-        <div class="cba-node-t">Authoring surfaces</div>
-        <div class="cba-node-d">Obsidian (commodity) · GitHub's web editor (borrowed) · any markdown editor. Cyberbaser is absent from all three, by <a href="/cyberbaser/getting-started/principles/">Principle 5</a>.</div>
-      </div>
-      <div class="cba-arr" aria-hidden="true">↓</div>
-      <div class="cba-node">
-        <div class="cba-node-t"><span class="cba-num">1</span>Vault</div>
-        <div class="cba-node-c">cybersader/cyberbase · publish.yml · .cyberbaser/trust.yml</div>
-        <div class="cba-node-d">Plain markdown under git, plus two config files. Nothing here needs a cyberbaser plugin to open in Obsidian. This is the source of truth; everything below is derived and disposable.</div>
-      </div>
-      <div class="cba-arr" aria-hidden="true">↓</div>
-      <div class="cba-node cba-node-ours">
-        <div class="cba-node-t"><span class="cba-num">2</span>Publish boundary</div>
-        <div class="cba-node-c">@cyberbaser/publish</div>
-        <div class="cba-node-d">Default-deny with deny-wins precedence, fail-closed on a missing or unparseable config. Assets ship only if a published page reaches them. A published page that embeds a private note fails the build.</div>
-      </div>
-      <div class="cba-arr" aria-hidden="true">↓</div>
-      <div class="cba-node cba-node-ours">
-        <div class="cba-node-t"><span class="cba-num">3</span>Projection</div>
-        <div class="cba-node-c">@cyberbaser/projection · cb-project</div>
-        <div class="cba-node-d">Frontmatter pre-flight on every published page, case-collision guard, path safety lint, verbatim path copy (R16), then a post-hoc leak test against what actually landed on disk. Writes <code>projection-report.json</code>.</div>
-      </div>
-      <div class="cba-arr" aria-hidden="true">↓</div>
-      <div class="cba-node cba-node-com">
-        <div class="cba-node-t"><span class="cba-num">4</span>Renderer spoke</div>
-        <div class="cba-node-c">renderers/quartz-cyberbase → Quartz v4.5.2</div>
-        <div class="cba-node-d">Quartz is pinned by tag and never forked. Our overlay is a config, a layout, a theme, and two source files: <code>EditThisPage.tsx</code> and <code>RelativeFolderLinks.ts</code>.</div>
-      </div>
-      <div class="cba-arr" aria-hidden="true">↓</div>
-      <div class="cba-node cba-node-bor">
-        <div class="cba-node-t"><span class="cba-num">5</span>Published site</div>
-        <div class="cba-node-c">GitHub Pages · 933 pages</div>
-        <div class="cba-node-d">Two gates of ours run before upload: no <code>:</code> in any emitted path, and artifact size against the 1 GB Pages cap. Readers then use Quartz's search, graph, explorer and backlinks.</div>
-      </div>
-    </div>
-
-    <div class="cba-lane cba-lane-g">
-      <div class="cba-hd">Governance lane</div>
-      <div class="cba-node">
-        <div class="cba-node-t">Trust policy</div>
-        <div class="cba-node-c">.cyberbaser/trust.yml</div>
-        <div class="cba-node-d">Trusted handles, an empty agents list, five caps, allowed new folders, and a frontmatter key allowlist. Read from the PR's base ref so a change cannot promote its own author.</div>
-      </div>
-      <div class="cba-node cba-node-ours">
-        <div class="cba-node-t">Trust classifier</div>
-        <div class="cba-node-c">@cyberbaser/trust · trust-gate.yml</div>
-        <div class="cba-node-d">Nine mechanical checks compose into one monotone route: <code>auto-merge</code>, <code>quick-review</code>, <code>full-review</code> or <code>reject</code>. Fails closed on an unknown author type.</div>
-        <div class="cba-node-d cba-warn">Decision-only: it never merges.</div>
-      </div>
-      <div class="cba-node cba-node-bor">
-        <div class="cba-node-t">The decision surface</div>
-        <div class="cba-node-c">github.com pull request page</div>
-        <div class="cba-node-d">A <code>trust:&lt;route&gt;</code> label, a step summary one click into the Actions tab, and inline check annotations. The maintainer reads a raw diff and clicks Merge.</div>
-      </div>
-    </div>
-
-  </div>
-
-  <p class="cba-foot"><strong>Read the colours as ownership, not quality.</strong> <em>Yours</em> is content and policy that survives cyberbaser disappearing. <em>Ours</em> is code in this repo. <em>Commodity</em> is pinned third-party software chosen to be swappable. <em>Borrowed interface</em> is someone else's product that a human actually touches, which is where every interaction in this system currently lands.</p>
-
-</div>
-
 **Where each part executes.** Four sites, and the fourth is empty.
-
-<div class="cba-scroll">
 
 | Execution site | What runs there |
 |---|---|
@@ -308,13 +242,16 @@ Five stages on the spine, two lanes alongside. The lanes are deliberately decoup
 | Developer machine | `linkcheck`, the four CLIs, this docs site |
 | A cyberbaser-operated server | Nothing. There is no server |
 
-</div>
+The two lanes that run alongside the build are deliberately decoupled: `ofm-check` asks "is this change safe for Obsidian syntax", `trust-gate` asks "who has to look at it", and neither knows about the other. That decoupling is correct engineering and it is also why there is no single place a maintainer can look.
 
 ## Component reference
 
-Every package, deployable and config artifact, with what it holds and who owns it. Test counts are `bun test` runs on 2026-07-26.
+Two things worth knowing before the table. The renderer spoke has **zero tests** while the packages have 165, and `encodeRepoPath` in `EditThisPage.tsx` is exported specifically to be testable and has no test. And `agents: []` means the entire agent branch of the trust classifier, the most elaborate logic in that package, is unreachable in production today: every real PR takes the trusted-human branch or the terminal fallback.
 
-<div class="cba-scroll">
+<details>
+<summary>Every package, deployable and config artifact — what it holds, where it runs, who owns it (14 rows)</summary>
+
+Test counts are `bun test` runs on 2026-07-26.
 
 | Component | What it does | Executes | State it holds | Tests | Ownership |
 |---|---|---|---|---|---|
@@ -333,19 +270,18 @@ Every package, deployable and config artifact, with what it holds and who owns i
 | This docs site (`docs/`) | Astro 6 plus Starlight 0.38 and 9 plugins, 56 content pages | CI (`deploy.yml`) + dev | Its own Pages deployment | 21 Playwright | **Commodity** stack; the content and `brand.css` are ours. Shares no code with the vault pipeline |
 | GitHub | Identity, the editor, forks, PRs, review, merge, Actions, Pages, the audit trail | GitHub | Everything a human touches | n/a | **Borrowed interface** |
 
-</div>
-
-Two things this table makes visible. First, the renderer spoke has **zero tests** while the packages have 165, and `encodeRepoPath` in `EditThisPage.tsx` is exported specifically to be testable and has no test. Second, `agents: []` means the entire agent branch of the trust classifier, the most elaborate logic in that package, is unreachable in production today. Every real PR takes the trusted-human branch or the terminal fallback.
+</details>
 
 :::note[A gate that was documented before it ran]
 `publish-site.yml` has always stated that `cb-project` runs "the path safety lint". Until the 2026-07-26 alignment pass that was false: `lintVault` / `lintPath` / `sluggify` / `slugKey` lived in `@cyberbaser/publish`, were exported from its index, and were called by nothing except their own tests, while the projection ran a narrower lint over frontmatter-derived paths only. The same pass wired the real lint in (`lintPathSafety`, `project.js`), so the comment is now true. Worth recording because it is the failure mode this page exists to prevent: a workflow comment described intent, the code did something narrower, and nobody noticed for a month.
 :::
 
-## Two traces
+## The same two journeys, step by step
 
-### Trace A: a contributor edits a live page
+The illustrations above are the shape. These are the hand-offs, and the point of listing them is the ownership column: **steps 6, 7, 12, 13 and 14 are ours; steps 2, 3, 4, 5, 9, 10, 11 and 15 are GitHub's.** `linkcheck` appears nowhere, so the site can ship newly broken links and nothing notices.
 
-<div class="cba-scroll">
+<details>
+<summary>Trace A: a contributor edits a live page (15 steps, measured 3m07s to 4m52s)</summary>
 
 | # | Step | Component | Hand-off |
 |---|---|---|---|
@@ -365,13 +301,10 @@ Two things this table makes visible. First, the renderer spoke has **zero tests*
 | 14 | Two custom gates: no `:` in an emitted path, artifact under the 1 GB cap | inline in the workflow | **Automated (ours)** |
 | 15 | `upload-pages-artifact` then `deploy-pages`. Bytes live | GitHub | Borrowed |
 
-</div>
+</details>
 
-**Measured wall time for build plus deploy: 3m07s to 4m52s across five successful runs.** Steps 6, 7, 12, 13 and 14 are ours. Steps 2, 3, 4, 5, 9, 10, 11 and 15 are GitHub's. `linkcheck` appears nowhere: the site can ship newly broken links and nothing notices.
-
-### Trace B: the maintainer pushes from Obsidian
-
-<div class="cba-scroll">
+<details>
+<summary>Trace B: the maintainer pushes from Obsidian (5 steps, validated by nothing)</summary>
 
 | # | Step | Component | Hand-off |
 |---|---|---|---|
@@ -381,17 +314,11 @@ Two things this table makes visible. First, the renderer spoke has **zero tests*
 | 4 | `publish-site.yml` fires on push. Steps 11 to 15 of Trace A, identical | ours + GitHub | Automated |
 | 5 | Site live in roughly 3 to 5 minutes | — | — |
 
-</div>
-
-:::danger[The maintainer's own path has fewer checks than a stranger's]
-An honest typo that deletes a callout is caught in Trace A and missed in Trace B. Both validators are wired to `pull_request` only, and direct pushes to `main` are not merely allowed, they are the maintainer's daily authoring path. That constraint is real (requiring PRs for everything would break Obsidian Git authoring), so the fix is not "turn on branch protection", it is **a `push`-triggered validation job that reports rather than blocks**. It has not been built.
-:::
+</details>
 
 ## Boundaries: what each part must not do
 
 The separations that keep the system honest, with how each one is currently held. "By code" means something fails if you violate it; "by convention" means nothing stops you.
-
-<div class="cba-scroll">
 
 | Part | Must **not** | Held by |
 |---|---|---|
@@ -401,8 +328,6 @@ The separations that keep the system honest, with how each one is currently held
 | **Spoke renderer** | be treated as permanent or unique · hold contribution or auth state · be forked | **Convention, with one crack.** Quartz is pinned and unforked, but the folder-link fix landed as a Quartz plugin rather than in the projection. Worth watching |
 | **Edit surfaces** | require Obsidian to be running · keep content outside the vault · make the maintainer do anything special per edit | **Borrowed.** GitHub satisfies all three today, at the cost of requiring an account |
 | **Governance** | let a change promote its own author · decide from a policy the change itself supplied | **Code.** The policy is read from the base ref, and the classifier fails closed on unknown author types |
-
-</div>
 
 ## Open architectural questions
 
@@ -418,16 +343,12 @@ This replaces the question that stood on this page from 2026-06-21 to 2026-07-26
 
 ### Open: the console fork
 
-The system computes decisions no human sees. Two designs were priced against a measured budget of roughly **4.7 maintainer-days per month** (96 commits across 11 calendar days in 219 days, tripled to allow for uncommitted effort).
-
-<div class="cba-scroll">
+The system computes decisions no human sees — the step-3 card at the top of this page. Two designs were priced against a measured budget of roughly **4.7 maintainer-days per month** (96 commits across 11 calendar days in 219 days, tripled to allow for uncommitted effort).
 
 | Option | Build | Ongoing | What it buys |
 |---|---:|---:|---|
 | **Hosted console** (auth, queue view, preview service, write-back, deploy, abuse handling) | **13.5 d** | **~1 d/month, forever** | One screen where the route, the fidelity verdict, the link delta and a render are the same object. Replayable policy: the trust classifier is pure, so any proposed setting can be re-run against real history |
 | **Static generation plus CI annotation** (decision ledger, sticky PR comment, static status page, contributors page from git history, linkcheck on a second renderer) | **4.5 to 6.75 d** | ~0 | Satisfies every non-real-time promise in the vision without a runtime. Loses full-fidelity previews unless the 3-day artifact-preview pattern is also built |
-
-</div>
 
 The hosted option costs about three months of everything and then takes a permanent 21% of annual capacity. The static option is 2 to 3 times cheaper to build and has no maintenance tail. **Neither pass recommended a hosted application**, and the anti-console argument is strongest on the narrow claim: never ship a thing that holds moderation, identity or session state, because that is content state outside the commit it produces, which the boundaries table forbids.
 
@@ -443,8 +364,6 @@ The constraint that shapes the fix: **the maintainer pushes to `main` directly f
 
 Every place a human touches this system today, and whose product they are actually using.
 
-<div class="cba-scroll">
-
 | Whose UI | Count | Which interactions |
 |---|---:|---|
 | GitHub | 9 | Editing, authenticating, submitting, the OFM annotation, the trust label, the trust rationale, moderating and merging, downloading `projection-report.json`, build health |
@@ -452,24 +371,49 @@ Every place a human touches this system today, and whose product they are actual
 | A plain text editor | 2 | Hand-editing `publish.yml`; hand-editing `.cyberbaser/trust.yml`. R15 records that the maintainer does not hand-author YAML, so in practice this is an agent session |
 | **Ours** | **4** | The "Edit this page" anchor (87 lines of TSX that render one `<a>`) · `cb-linkcheck` · `ofm-check` · this docs site |
 
-</div>
-
-Thirteen of the seventeen are not a cyberbaser surface, and the four that are consist of one hyperlink, two terminal commands, and a website about the project. Meanwhile `report.denied` (every file with the rule that denied it), `report.strippedLinks` (every boundary-crossing link with line numbers), `report.crossBoundaryEmbeds` and the full asset reachability chain all exist as JSON in a CI artifact nobody downloads. **The console's data layer is finished. The console is the missing 5%, not the missing 95%.**
+Thirteen of the seventeen are not a cyberbaser surface, and the four that are consist of one hyperlink, two terminal commands, and a website about the project. Meanwhile `report.denied` (every file with the rule that denied it), `report.strippedLinks` (every boundary-crossing link with line numbers), `report.crossBoundaryEmbeds` and the full asset reachability chain all exist as JSON in a CI artifact nobody downloads.
 
 ### Open: assets and block IDs in a web edit
 
 Reframed rather than answered. [R12](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25) removed the whole-file round-trip, so the question is no longer "how does the AST survive re-serialization" but "what does a raw-text splice do when the spliced region contains an embed or a block reference". Still the one genuinely unsolved Tier-1 item in the [translation layer](/cyberbaser/design/translation-layer/).
 
-### Open: incremental builds
+### Open: incremental builds, and what a second vault does to them
 
-Partly measured, not solved. 933 pages rebuild fully in 3m07s to 4m52s in CI, and the artifact sits at roughly a quarter of the 1 GB Pages cap. Nothing incremental exists: every push rebuilds everything. A federation of vaults would change the shape of this question rather than the answer.
+Partly measured, not solved. 933 pages rebuild fully in 3m07s to 4m52s in CI, and the artifact sits at roughly a quarter of the 1 GB Pages cap. Nothing incremental exists: every push rebuilds everything.
+
+The question changes shape rather than answer once a second knowledge base is in the picture. Two vaults that link to each other are two independent sites, each with its own source of truth, discovering each other over a public manifest rather than sharing a database.
+
+<div class="cb-fed" role="img" aria-label="Two browser windows side by side, each a separate wiki with its own vault. Between them, a two-way arrow labelled well-known manifest and harvest by commit hash.">
+  <div class="cb-fed-site">
+    <div class="cb-mock cb-mock-sm">
+      <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">cybersader.github.io/cyberbase</span></div>
+      <div class="cb-mock-body"><div class="cb-mock-h">Zero trust</div><p class="cb-mock-txt">See <span class="cb-linkchip">Segmentation</span> and <span class="cb-linkchip">Mesh policy ↗</span>.</p></div>
+    </div>
+    <span class="cb-fed-cap">your wiki · <span class="cb-fed-did">did:web:cybersader.github.io</span></span>
+  </div>
+  <div class="cb-fed-link" aria-hidden="true">
+    <span class="cb-fed-lab">/.well-known/</span>
+    <svg class="cb-fed-hop" viewBox="0 0 24 24"><path d="M4 9h16M4 9l3-3M4 9l3 3M20 15H4M20 15l-3-3M20 15l-3 3"/></svg>
+    <span class="cb-fed-lab cb-fed-lab-g">harvest by commit</span>
+  </div>
+  <div class="cb-fed-site">
+    <div class="cb-mock cb-mock-sm">
+      <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">notes.someone-else.org</span></div>
+      <div class="cb-mock-body"><div class="cb-mock-h">Mesh policy</div><p class="cb-mock-txt">Their vault, their host, their moderation rules.</p></div>
+    </div>
+    <span class="cb-fed-cap">someone else's wiki · <span class="cb-fed-did">did:web:someone-else.org</span></span>
+  </div>
+</div>
+
+<p class="cb-fig-note"><span class="cb-chip cb-chip-mute">researched, not built</span>Nothing in the pipeline knows about a second vault yet. The manifest-plus-harvest shape is written up in <a href="/cyberbaser/research/federation/">federation</a>; the cost that lands here is that a cross-vault link cannot be resolved by a build that only sees one repo.</p>
 
 ## Related
 
-- [Contribution workflows](/cyberbaser/design/contribution-workflows/) — the same two traces from the contributor's side, and the moderation policy
+- [Contribution workflows](/cyberbaser/design/contribution-workflows/) — the same two journeys from the contributor's side, and the moderation policy
 - [Principles](/cyberbaser/getting-started/principles/) — the six constraints every choice above is checked against
 - [Translation layer](/cyberbaser/design/translation-layer/) — the tier system and what the OFM validator is protecting
 - [Contribution on your terms](/cyberbaser/concepts/problem/#contribution-on-your-terms) — the trust dial that `.cyberbaser/trust.yml` implements
+- [Federation](/cyberbaser/research/federation/) — what a second linked knowledge base costs this architecture
 - [Quartz spike results](/cyberbaser/research/quartz-spike-results/) — why the renderer is Quartz and why it is pinned
 - [v1 build plan](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25) — the 4.6% measurement that made every package a validator
 - [Self-hosted Forgejo auth (RA-01)](/cyberbaser/design/reference-architectures/self-hosted-forgejo-auth/) — the PKCE path that removes the OAuth proxy if the forge ever moves

@@ -1,15 +1,15 @@
 ---
 title: First-Principles Primitives
-description: The map of core ideas the rest of the project reasons about. Eight primitives, each with a picture and a link into the page that goes deeper. Understand these and every design decision downstream makes sense.
+description: Everything in cyberbaser reduces to eight ideas. Two of them carry the weight; the other six are the vocabulary the rest of the docs assume. Each with a picture and a link into the page that goes deeper.
 sidebar:
   order: 3
 status: research
 tags: [concepts, primitives]
 ---
 
-This page is the map. Every design decision in cyberbaser, and every harder document in [Design](/cyberbaser/design/) and [Research](/cyberbaser/research/), reduces to the eight primitives below. Read them once and the rest of the project stops looking like a pile of features and starts looking like a few ideas applied over and over.
+Everything in cyberbaser reduces to the eight ideas below, and two of them carry the weight: **translation layer** and **round-trip editability**. Get those right and the contribution paths, stable URLs, and single source of truth compose on top for free; get them wrong and the rest is aspiration. The other six are the vocabulary the rest of these docs assume you have.
 
-Two of them carry more weight than the rest. **Translation Layer** and **Round-Trip Editability** are the load-bearing walls: get them right and the contribution paths, stable URLs, and single source of truth all compose cleanly; get them wrong and the rest is aspiration. Each entry is the same shape (what it is, why it matters, how cyberbaser uses it) followed by a small picture built from real interface, plus a link into the page that goes deeper.
+Each entry is a one-line definition, a picture of the real thing, and a dropdown with why it matters and how cyberbaser uses it.
 
 <nav class="cb-grid-nav" aria-label="Primitives map">
   <a class="cb-navchip" href="#vault"><span class="cb-navchip-n">01</span><span class="cb-navchip-t">Vault</span></a>
@@ -28,20 +28,7 @@ Two of them carry more weight than the rest. **Translation Layer** and **Round-T
 
 ## Vault
 
-<div class="cb-def">
-  <div class="cb-def-what">
-    <span class="cb-def-label">What</span>
-    <p>In Obsidian parlance, a folder of markdown files + a `.obsidian/` config directory that behaves as a self-contained knowledge base. (Obsidian is the first-class example; any folder of markdown qualifies.)</p>
-  </div>
-  <div class="cb-def-why">
-    <span class="cb-def-label">Why it matters</span>
-    <p>The vault is the <em>unit of content</em> cyberbaser operates on. It's the durable artifact; cyberbaser is the delivery mechanism. If cyberbaser disappears, the vault still opens and works.</p>
-  </div>
-  <div class="cb-def-how">
-    <span class="cb-def-label">How cyberbaser uses it</span>
-    <p>The cyberbase vault lives in its own repo (<code>cybersader/cyberbase</code>). Cyberbaser reads from it (a submodule or a build-time clone) and publishes it. The vault must stay a fully functional Obsidian vault, independent of cyberbaser.</p>
-  </div>
-</div>
+**A folder of markdown files, plus whatever config sits beside it, that works as a knowledge base on its own.** Obsidian's word for it, but any markdown folder qualifies.
 
 <div class="cb-tree cb-tree-fig" role="img" aria-label="A self-contained markdown vault: a folder of .md files plus an .obsidian config directory, which opens in Obsidian with no cyberbaser-specific files.">
   <div class="cb-tree-hd"><span class="cb-tree-fold">▾</span> <svg class="cb-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.355 18.538a68.967 68.959 0 0 0 1.858-2.954.81.81 0 0 0-.062-.9c-.516-.685-1.504-2.075-2.042-3.362-.553-1.321-.636-3.375-.64-4.377a1.707 1.707 0 0 0-.358-1.05l-3.198-4.064a3.744 3.744 0 0 1-.076.543c-.106.503-.307 1.004-.536 1.5-.134.29-.29.6-.446.914l-.31.626c-.516 1.068-.997 2.227-1.132 3.59-.124 1.26.046 2.73.815 4.481.128.011.257.025.386.044a6.363 6.363 0 0 1 3.326 1.505c.916.79 1.744 1.922 2.415 3.5zM8.199 22.569c.073.012.146.02.22.02.78.024 2.095.092 3.16.29.87.16 2.593.64 4.01 1.055 1.083.316 2.198-.548 2.355-1.664.114-.814.33-1.735.725-2.58l-.01.005c-.67-1.87-1.522-3.078-2.416-3.849a5.295 5.295 0 0 0-2.778-1.257c-1.54-.216-2.952.19-3.84.45.532 2.218.368 4.829-1.425 7.531zM5.533 9.938c-.023.1-.056.197-.098.29L2.82 16.059a1.602 1.602 0 0 0 .313 1.772l4.116 4.24c2.103-3.101 1.796-6.02.836-8.3-.728-1.73-1.832-3.081-2.55-3.831zM9.32 14.01c.615-.183 1.606-.465 2.745-.534-.683-1.725-.848-3.233-.716-4.577.154-1.552.7-2.847 1.235-3.95.113-.235.223-.454.328-.664.149-.297.288-.577.419-.86.217-.47.379-.885.46-1.27.08-.38.08-.72-.014-1.043-.095-.325-.297-.675-.68-1.06a1.6 1.6 0 0 0-1.475.36l-4.95 4.452a1.602 1.602 0 0 0-.513.952l-.427 2.83c.672.59 2.328 2.316 3.335 4.711.09.21.175.43.253.653z"/></svg>trails/<span class="cb-tree-tag">Obsidian vault</span></div>
@@ -56,26 +43,22 @@ Two of them carry more weight than the rest. **Translation Layer** and **Round-T
   <p class="cb-tree-foot">Opens in Obsidian with zero cyberbaser. The folder <em>is</em> the knowledge base.</p>
 </div>
 
+<details>
+<summary>Why it matters, and how cyberbaser uses it</summary>
+
+The vault is the *unit of content* cyberbaser operates on, and it is the durable half of the arrangement. Cyberbaser is delivery; the vault is the thing. If cyberbaser disappears the vault still opens and still works, which is Principle 5.
+
+Concretely: the dogfood vault lives in its own repo, [`cybersader/cyberbase`](https://github.com/cybersader/cyberbase). Cyberbaser never edits it in place or restructures it. A publish boundary (`publish.yml`, default-deny) selects which folders are public, `@cyberbaser/projection` copies the selected files verbatim into a build tree, and a renderer turns that tree into a site. 933 of the vault's pages are published this way today. Nothing in the vault is cyberbaser-shaped: no required frontmatter, no rename, no lockfile.
+
+</details>
+
 <a class="cb-deeper" href="/cyberbaser/getting-started/">Go deeper: how a vault becomes a site →</a>
 
 ---
 
 ## Single Source of Truth (SSOT)
 
-<div class="cb-def">
-  <div class="cb-def-what">
-    <span class="cb-def-label">What</span>
-    <p>The principle that exactly one authoritative place exists for any given piece of content. Every other representation is derived.</p>
-  </div>
-  <div class="cb-def-why">
-    <span class="cb-def-label">Why it matters</span>
-    <p>Prevents drift between representations, makes conflict resolution tractable (one side always wins), and keeps the mental model of the system simple.</p>
-  </div>
-  <div class="cb-def-how">
-    <span class="cb-def-label">How cyberbaser uses it</span>
-    <p><code>cybersader/cyberbase</code> is the SSOT. The web wiki is derived at build time. The Obsidian vault (local files on the maintainer's machine) is a read-view of the repo's current <code>main</code>. The Web CMS produces edits against the repo; it holds no state of its own.</p>
-  </div>
-</div>
+**Exactly one authoritative place for any piece of content; every other copy is derived from it and can be thrown away.**
 
 <div class="cb-ssot" role="img" aria-label="One git repo is the source. The website, your Obsidian vault, and the web CMS are all derived from it.">
   <div class="cb-ssot-core">
@@ -96,26 +79,24 @@ Two of them carry more weight than the rest. **Translation Layer** and **Round-T
 
 <p class="cb-fig-cap">One authoritative source. The wiki, the Obsidian view, and the Web CMS are all built from it. Change the repo and every view follows.</p>
 
+<details>
+<summary>Why it matters, and how cyberbaser uses it</summary>
+
+One source prevents drift between representations, makes conflict resolution tractable (one side always wins), and keeps the mental model small enough to hold.
+
+Today that source is the vault's git repo on its default branch. The published site is rebuilt from it. The maintainer's local Obsidian folder is a working copy. A web edit is a commit against it, spliced into the existing bytes rather than re-serialized, so the repo never has to reconcile two dialects of the same file.
+
+Git is the current *manifestation* of this primitive, not its essence. Principle 1 says "a source of truth you own", not "a git repo" — and the [source-of-truth research](/cyberbaser/research/source-of-truth/) keeps an off-ramp open, because a maintainer who does not want a forge still needs storage they control.
+
+</details>
+
 <a class="cb-deeper" href="/cyberbaser/research/source-of-truth/">Go deeper: why git is the source of truth (and the alternatives) →</a>
 
 ---
 
 ## Wikilink
 
-<div class="cb-def">
-  <div class="cb-def-what">
-    <span class="cb-def-label">What</span>
-    <p>`[[Page Name]]` syntax that resolves to a link based on <em>page title</em>, not file path. Optional alias: `[[Page Name|display text]]`. Invented by wiki systems, canonicalized by Obsidian.</p>
-  </div>
-  <div class="cb-def-why">
-    <span class="cb-def-label">Why it matters</span>
-    <p>Standard markdown links (`[text](path/to/file.md)`) break whenever a file moves. Wikilinks survive reorganization because they reference identity, not location. For a growing knowledge base this is the difference between a living wiki and a graveyard of broken links.</p>
-  </div>
-  <div class="cb-def-how">
-    <span class="cb-def-label">How cyberbaser uses it</span>
-    <p>Wikilinks must round-trip cleanly. A Web CMS edit that produces `[[X]]` must be identical to an Obsidian edit that produces `[[X]]`. If the translation layer ever flattens to `[X](x.md)` the principle of round-trip fidelity is broken.</p>
-  </div>
-</div>
+**`[[Page Name]]` — a link that resolves by page *title* rather than file path**, optionally aliased as `[[Page Name|display text]]`. Invented by wikis, canonicalized by Obsidian.
 
 <div class="cb-glance" role="img" aria-label="On the left, a markdown source with a wikilink token. On the right, the same paragraph published, with the wikilink rendered as a real link. The connector resolves by title, not file path.">
   <figure class="cb-glance-panel">
@@ -141,26 +122,22 @@ Two of them carry more weight than the rest. **Translation Layer** and **Round-T
 
 <p class="cb-fig-cap">Move the file? The link still works, because it never pointed at a path.</p>
 
+<details>
+<summary>Why it matters, and how cyberbaser uses it</summary>
+
+A standard markdown link (`[text](path/to/file.md)`) breaks the moment the file moves. Wikilinks reference identity, not location, so a growing knowledge base can be reorganized without turning into a graveyard of dead links.
+
+For cyberbaser this is the canary. `[[X]]` written from any surface must stay `[[X]]` in the file. The moment a write path flattens it to `[X](x.md)`, round-trip fidelity is gone and so is the reason the project exists — which is exactly what `@cyberbaser/ofm` calls `damage` and exits non-zero on. It is also why writes are byte splices: nothing that never reads the link can degrade it.
+
+</details>
+
 <a class="cb-deeper" href="/cyberbaser/design/translation-layer/">Go deeper: wikilinks in the translation layer (Tier 1 fidelity) →</a>
 
 ---
 
 ## Backlink
 
-<div class="cb-def">
-  <div class="cb-def-what">
-    <span class="cb-def-label">What</span>
-    <p>An automatically generated "pages that link to this one" list, built by looking at every wikilink across the whole vault.</p>
-  </div>
-  <div class="cb-def-why">
-    <span class="cb-def-label">Why it matters</span>
-    <p>Backlinks turn a pile of separate pages into a connected web. Readers find related pages without searching; authors see what points at what. This is the feature that makes a wiki feel like a wiki, not a flat docs site.</p>
-  </div>
-  <div class="cb-def-how">
-    <span class="cb-def-label">How cyberbaser uses it</span>
-    <p>Backlinks are generated automatically: scan every page for its links, then show, on each page, the list of pages that point to it (at the foot of the content or in a side panel). Some site generators do part of this already; making it work the same no matter which one you publish with is the translation layer's job, not any single renderer's.</p>
-  </div>
-</div>
+**An automatic "pages that link to this one" list**, built by scanning every wikilink in the vault.
 
 <div class="cb-mock cb-backlinks-fig" role="img" aria-label="A published recipe page with a panel listing the three pages that link to it, found automatically.">
   <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">wiki.example.org/recipes/sourdough</span><span class="cb-mock-live">● Published</span></div>
@@ -181,26 +158,22 @@ Two of them carry more weight than the rest. **Translation Layer** and **Round-T
   </div>
 </div>
 
+<details>
+<summary>Why it matters, and how cyberbaser uses it</summary>
+
+Backlinks turn a pile of pages into a connected web. Readers find related material without searching; authors see what points at what. It is the feature that makes a wiki feel like a wiki rather than a flat docs site.
+
+Most renderers already compute them, which is the catch: they each compute them differently, and a link Obsidian resolves is not always a link the renderer resolves. Measured on the live vault, the renderer reported zero broken links while `@cyberbaser/linkcheck` found 779 — so "backlinks work" is a claim that needs a checker, not a feature box. Keeping the graph consistent across swappable renderers is the hub's job, not any one spoke's.
+
+</details>
+
 <a class="cb-deeper" href="/cyberbaser/design/translation-layer/">Go deeper: how backlinks are built →</a>
 
 ---
 
 ## Translation Layer
 
-<div class="cb-def cb-def-hard">
-  <div class="cb-def-what">
-    <span class="cb-def-label">What</span>
-    <p>The step that turns Obsidian-flavored markdown into a web page, while keeping enough of its meaning intact that an edit made on the web can be saved back to the source without garbling it.</p>
-  </div>
-  <div class="cb-def-why">
-    <span class="cb-def-label">Why it matters</span>
-    <p>This is the single hardest and most load-bearing concept in the project. Get this right and the contribution paths compose cleanly; get it wrong and "round-trip editability" is an aspiration instead of a property.</p>
-  </div>
-  <div class="cb-def-how">
-    <span class="cb-def-label">How cyberbaser uses it</span>
-    <p>A tiered feature list: Tier 1 (full support, must round-trip), Tier 2 (partial, best-effort), Tier 3 (not supported, documented workaround). Each Tier 1 feature gets a fixture page + expected output + a round-trip correctness snapshot.</p>
-  </div>
-</div>
+**The step that turns Obsidian-flavored markdown into a web page while keeping enough intact that an edit made on the web can be saved back without garbling the file.** The hardest idea in the project, and the one everything else leans on.
 
 <div class="cb-xlate" role="img" aria-label="Vault markdown flows through a remark and rehype pipeline to a published page; edits return clean to the source. Below, a three-tier scale of what survives the round-trip.">
   <div class="cb-xlate-row">
@@ -217,14 +190,6 @@ Two of them carry more weight than the rest. **Translation Layer** and **Round-T
       </div>
     </div>
   </div>
-  <div class="cb-xlate-flow">
-    <span class="cb-xlate-lab cb-xlate-flow-lab"><svg class="cb-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.204 18.089V12.66q0-2.477 1.156-3.947 1.156-1.47 3.108-1.47.494 0 1.03.092.54.088.953.245V5.976q-.279-.122-.754-.195-.478-.073-1.007-.073-1.76 0-2.902.88-1.144.881-1.458 2.497h-.157V6.01H0v1.186h2.737V18.09Zm-3.959 0H8.04v-1.187H.245ZM19.1 7.109q1.604 0 2.507 1.095.904 1.091.904 3.02H15.6q0-1.94.93-3.027.93-1.088 2.569-1.088zm4.846 7.998h-1.458q-.28.884-1.133 1.378-.854.494-2.087.494-1.68 0-2.676-1.114-.991-1.118-.991-3.013v-.414H24v-.953q0-1.807-.578-3.074-.574-1.267-1.67-1.933-1.094-.67-2.652-.67-1.493 0-2.615.658-1.118.655-1.738 1.838-.617 1.183-.617 2.775v1.761q0 2.58 1.352 4.016 1.351 1.436 3.786 1.436 1.221 0 2.205-.394.98-.39 1.627-1.11.643-.717.846-1.681z"/></svg>remark → rehype</span>
-    <span class="cb-xlate-plug">mask tokens</span>
-    <span class="cb-xlate-plug">remark-wiki-link</span>
-    <span class="cb-xlate-plug">remark-obsidian-callout</span>
-    <span class="cb-xlate-plug">rehype-mermaid</span>
-    <span class="cb-xlate-plug cb-xlate-plug-g">restore tokens</span>
-  </div>
   <div class="cb-xlate-tierhd">what survives the round-trip</div>
   <div class="cb-xlate-tiers">
     <div class="cb-xlate-tier cb-dial-open"><div class="cb-xlate-tier-t">Tier 1 · full</div><div class="cb-xlate-tier-d">wikilinks, callouts, embeds, code, math, mermaid, tables. Round-trips ✓</div></div>
@@ -235,26 +200,22 @@ Two of them carry more weight than the rest. **Translation Layer** and **Round-T
 
 <p class="cb-fig-cap">The same content on the left as you write it, and on the right as the web shows it. Tier 1 features have to come back from a web edit exactly as they went in.</p>
 
+<details>
+<summary>Why it matters, and how cyberbaser uses it</summary>
+
+Get this right and every contribution path composes cleanly. Get it wrong and "round-trip editability" is a slogan rather than a property, because a contributor's edit quietly damages four things they never touched.
+
+The mechanism is the tiered feature list: Tier 1 must survive an edit, Tier 2 renders best-effort but never corrupts the source, Tier 3 is not translated and gets a documented workaround. What changed in July 2026 is *how* that is guaranteed. The original plan re-serialized the file from a parsed tree; over 1430 real vault files that reproduced the original bytes 4.6% of the time, so it was abandoned. Writes are now byte splices into the original file, and `@cyberbaser/ofm` is a validator aimed at any other tool that does re-serialize.
+
+</details>
+
 <a class="cb-deeper" href="/cyberbaser/design/translation-layer/">Go deeper: the full tier list + per-feature rules →</a>
 
 ---
 
 ## Round-Trip Editability
 
-<div class="cb-def cb-def-hard">
-  <div class="cb-def-what">
-    <span class="cb-def-label">What</span>
-    <p>The property that a contributor can edit the same page in Obsidian, in the Web CMS, or on GitHub, and the other surfaces see the change without corruption.</p>
-  </div>
-  <div class="cb-def-why">
-    <span class="cb-def-label">Why it matters</span>
-    <p>Without this, contributors get locked into whichever surface they started with, and the whole "three independent paths" vision collapses. It's also the only way the maintainer can keep using Obsidian as their primary tool without dreading web contributions.</p>
-  </div>
-  <div class="cb-def-how">
-    <span class="cb-def-label">How cyberbaser uses it</span>
-    <p>Constrains every translation-layer decision. No lossy transforms. No "CMS-specific" schema that differs from the vault schema. Every Tier 1 feature gets a round-trip test fixture.</p>
-  </div>
-</div>
+**Edit the same page from Obsidian, from the web, or from the forge, and every other surface sees the change without corruption.**
 
 <p class="cb-fig-cap">Edit in any one of these. The other two read back the exact same file.</p>
 
@@ -276,26 +237,24 @@ Two of them carry more weight than the rest. **Translation Layer** and **Round-T
 
 <div class="cb-trip-rail"><span class="cb-trip-eqx">edit anywhere → the source comes back <span class="cb-trip-eq">unchanged</span></span><span class="cb-trip-note">one plain file, the same every time</span></div>
 
-<a class="cb-deeper" href="/cyberbaser/research/v1-architecture/#blockmarkdown-fidelity--the-keystone-rd">Go deeper: the round-trip keystone spike →</a>
+<details>
+<summary>Why it matters, and how cyberbaser uses it</summary>
+
+Without this, a contributor is locked into whichever surface they started on and the independent-paths idea collapses. It is also the only way the maintainer keeps Obsidian as their daily tool without dreading what a web contribution will do to a file.
+
+It constrains every other decision: no lossy transform, no CMS-specific schema that differs from the vault's, no write path that re-emits a file it did not need to change. It is enforced mechanically rather than by review — `ofm-check` runs on every pull request and classifies the change as `clean`, `suspect`, or `damage`.
+
+Honest status: proven for the paths that exist. Two live contributions have gone edit → queue → merge → redeploy → verified live. The in-page WYSIWYG surface, which is the hardest case, is not built.
+
+</details>
+
+<a class="cb-deeper" href="/cyberbaser/design/translation-layer/">Go deeper: how the byte-splice write path works →</a>
 
 ---
 
 ## Open Authoring
 
-<div class="cb-def">
-  <div class="cb-def-what">
-    <span class="cb-def-label">What</span>
-    <p>A CMS pattern (popularized by Decap/Netlify CMS, continued by Sveltia) where an unauthenticated or lightly-authenticated user can propose changes via a forked-PR workflow, without needing direct commit access to the source repo.</p>
-  </div>
-  <div class="cb-def-why">
-    <span class="cb-def-label">Why it matters</span>
-    <p>Removes the biggest contribution barrier. Without Open Authoring, "contributors shouldn't need git" is impossible: you'd either need direct write access (a security problem) or contributors would have to fork manually (exactly the friction we're eliminating).</p>
-  </div>
-  <div class="cb-def-how">
-    <span class="cb-def-label">How cyberbaser uses it</span>
-    <p>Primary contribution path for the Web CMS entry point. Decap (or Sveltia) handles the fork-and-PR dance; a small OAuth proxy handles the auth handshake. The contributor never sees git.</p>
-  </div>
-</div>
+**A reader proposes a change without commit access and without touching git**: the fork, branch, commit, and pull request all happen for them. The pattern comes from Decap/Netlify CMS and continues in Sveltia.
 
 <div class="cb-openauth" role="img" aria-label="A reader edits a page with no account and no git. Behind the scenes that becomes a fork, branch, commit, and pull request. The maintainer reviews the resulting diff.">
   <div class="cb-oa-cell">
@@ -329,26 +288,24 @@ Two of them carry more weight than the rest. **Translation Layer** and **Round-T
   </div>
 </div>
 
+<details>
+<summary>Why it matters, how cyberbaser uses it, and the gap that is still open</summary>
+
+This removes the biggest contribution barrier. The alternatives are giving strangers write access (a security problem) or making them fork by hand (exactly the friction being eliminated).
+
+Cyberbaser takes the *pattern* but not the products. The CMS category that popularized it re-serializes whole files, which is what R12 measured and removed from the write path, so today the fork-and-PR dance is done by the forge's own web editor and the review happens in the pull request. `@cyberbaser/trust` classifies each one against mechanical gates before a human looks.
+
+The gap, stated plainly: **the fully anonymous path does not exist yet.** Every current entry point still needs a GitHub account, which means the persona Principle 3 was written for has no working route. That is tracked as an open question, not a shipped feature.
+
+</details>
+
 <a class="cb-deeper" href="/cyberbaser/design/contribution-workflows/">Go deeper: the contribution workflows →</a>
 
 ---
 
 ## Stable URLs
 
-<div class="cb-def">
-  <div class="cb-def-what">
-    <span class="cb-def-label">What</span>
-    <p>The property that a page's URL doesn't change when the vault is reorganized.</p>
-  </div>
-  <div class="cb-def-why">
-    <span class="cb-def-label">Why it matters</span>
-    <p>Breakage of external links (from blog posts, from other wikis, from Google's index) is a cardinal sin of any long-lived knowledge site. The whole point of publishing is that links stick.</p>
-  </div>
-  <div class="cb-def-how">
-    <span class="cb-def-label">How cyberbaser uses it</span>
-    <p>Open question for now: frontmatter slug? permanent hash? simple title-slug with redirects on rename? See <a href="/cyberbaser/reference/open-questions/">Open Questions</a>.</p>
-  </div>
-</div>
+**A page's URL does not change when the vault is reorganized.** The one primitive on this page that is still unsolved.
 
 <div class="cb-url-lock" role="img" aria-label="A browser URL bar that stays identical while the underlying file moves to a different folder in the vault.">
   <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">wiki.example.org/basics/exposure-triangle</span><span class="cb-mock-live">URL unchanged</span></div>
@@ -379,4 +336,25 @@ Two of them carry more weight than the rest. **Translation Layer** and **Round-T
 
 <p class="cb-fig-cap">The file moved folders. The link did not break.</p>
 
+<details>
+<summary>Why it matters, and where this actually stands</summary>
+
+Breaking external links — from blog posts, other wikis, search indexes — is the cardinal sin of a long-lived knowledge site. The whole point of publishing is that the link keeps working.
+
+Where it stands: the site ships **verbatim paths** today. The URL is the vault path as written, folder case and all, because lowercasing pages while assets keep their natural case breaks relative references. That is a deliberate v0 choice, safe only because a census of 4,183 paths found zero slug collisions.
+
+What is undecided is the durable scheme: a frontmatter slug, a permanent hash, or a title-slug with redirects generated on rename. Until that is chosen there is no **URL freeze**, so a reorganization today still moves URLs. A slug-diff gate that fails the build on an unintended URL change is the next step. Tracked in [Open Questions](/cyberbaser/reference/open-questions/) and [the renderer/URL proposal](/cyberbaser/research/proposal-renderer-urls/).
+
+</details>
+
 <a class="cb-deeper" href="/cyberbaser/reference/open-questions/">Go deeper: the open question of how URLs stay stable →</a>
+
+---
+
+## Related
+
+- [The Problem](/cyberbaser/concepts/problem/) — the gap these primitives are aimed at
+- [Principles](/cyberbaser/getting-started/principles/) — the constraints they turn into
+- [Translation layer](/cyberbaser/design/translation-layer/) — primitives 05 and 06 in full
+- [Architecture](/cyberbaser/design/architecture/) — where each one is implemented
+- [Open Questions](/cyberbaser/reference/open-questions/) — what is still undecided

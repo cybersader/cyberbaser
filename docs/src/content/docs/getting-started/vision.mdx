@@ -1,93 +1,716 @@
 ---
 title: Vision
-description: What cyberbaser feels like from each stakeholder's perspective once it's working. Not features — user journeys.
+description: "The whole original vision in one place, with an honest status on every piece: built, designed, deferred, reassigned, killed, or quietly dropped. Plus the three things it was missing: a maintainer who never needs git, the modern wiki, and a web of linked knowledge bases."
 sidebar:
   order: 10
 status: research
-tags: [vision]
+tags: [vision, identity, federation]
 ---
 
-:::caution[Scaffolded — research-phase content]
-This page is an early draft. The scenarios below are reasoned forward from the principles, not from lived experience. Each one will get sharper as the translation layer and contribution workflows get implemented.
+**Anyone can fix a page they are reading, and the person who owns that page keeps the file.** Cyberbaser is the layer that makes both true at once: a stranger edits on the web, the change comes back as clean markdown in a vault its owner controls, and the owner approves it without having to be a developer. The long arc is that those vaults link to each other, so a wiki is one web among many rather than one site standing alone.
+
+<div class="cbv-story">
+  <div class="cbv-beat">
+    <span class="cbv-beat-n">1 · A reader fixes it</span>
+    <div class="cb-mock cb-mock-sm">
+      <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">fungiwiki.org/chanterelle</span></div>
+      <div class="cb-mock-body">
+        <div class="cb-mock-h">Chanterelle</div>
+        <div class="cb-mock-line"></div>
+        <div class="cb-mock-line cb-mock-line-85"></div>
+        <div class="cb-mock-edit"><span class="cb-mock-edit-txt">Look-alike: jack-o'-lantern. True gills, not ridges.<span class="cb-mock-caret"></span></span><span class="cb-mock-save">Propose</span></div>
+        <div class="cb-mock-line"></div>
+        <div class="cb-mock-line cb-mock-line-85"></div>
+      </div>
+    </div>
+    <span class="cbv-beat-st"><span class="cbv-tag cbv-tag-defer">Deferred</span> Today this link opens GitHub's editor instead.</span>
+  </div>
+  <div class="cbv-beat">
+    <span class="cbv-beat-n">2 · The owner approves</span>
+    <div class="cbv-phone">
+      <div class="cbv-phone-st"><span>9:14</span><span>fungiwiki</span></div>
+      <div class="cb-review">
+        <div class="cb-review-hd"><span class="cb-review-av">a</span><span class="cb-review-who">anonymous <span class="cb-review-trust">first edit</span></span><span class="cb-review-status">queued</span></div>
+        <div class="cbv-prev">
+          <div class="cbv-prev-lab">Rendered preview</div>
+          <div class="cbv-prev-h">Chanterelle</div>
+          <div class="cb-mock-line"></div>
+          <div class="cb-mock-line cb-mock-line-85"></div>
+        </div>
+        <div class="cb-review-diff"><div class="cb-diff cb-diff-add">+ Look-alike: jack-o'-lantern.</div></div>
+        <div class="cb-review-actions"><span class="cb-review-btn cb-review-approve">Approve</span><span class="cb-review-btn cb-review-reject">Ask for a source</span></div>
+      </div>
+    </div>
+    <span class="cbv-beat-st"><span class="cbv-tag cbv-tag-design">Designed</span> Priced at three days. The preview needs a second deploy target.</span>
+  </div>
+  <div class="cbv-beat">
+    <span class="cbv-beat-n">3 · Live, with credit</span>
+    <div class="cb-mock cb-mock-sm">
+      <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">fungiwiki.org/chanterelle</span><span class="cb-mock-live">● Live</span></div>
+      <div class="cb-mock-body">
+        <div class="cb-mock-h">Chanterelle</div>
+        <div class="cb-mock-callout"><span class="cb-mock-callout-i">!</span> Look-alike: jack-o'-lantern. True gills, not ridges.</div>
+        <div class="cbv-cred"><span class="cbv-av cbv-av-new">a</span><span class="cbv-av">m</span><span class="cbv-av">k</span><span class="cbv-cred-tx">12 contributors · newest first edit</span></div>
+      </div>
+    </div>
+    <span class="cbv-beat-st"><span class="cbv-tag cbv-tag-built">Built</span> Merge to live is measured. The credit row is not built.</span>
+  </div>
+</div>
+<p class="cb-fig-cap">The whole product is this loop. Fix it where you read it, approve it where you happen to be, and the file in the owner's vault stays clean markdown the entire time.</p>
+
+:::note[How to read this page]
+This is the vision in full, **including the parts that do not exist**. Every capability carries a status chip, so nothing here is quietly promised. For what is actually running this week, see [Direction](/cyberbaser/getting-started/direction/). For why the pieces are shaped this way, see [Principles](/cyberbaser/getting-started/principles/).
 :::
 
-## In one paragraph
+## The original dream, restored
 
-Cyberbaser is an interoperability layer for contributable, version-controlled knowledge bases. It turns *any* markdown knowledge base (Obsidian is the first-class surface we dogfood) into a living, contributable public wiki, one that anyone can read on the web, edit in place, or extend from their own Obsidian vault, without any of those paths corrupting the others. Today the vault lives in git, which acts as the single source of truth; the layer doesn't force git on contributors. Obsidian semantics round-trip, so an edit made on the website serializes back to clean markdown. And contribution isn't a wall — it's a **trust curve the maintainer controls**, from fully-anonymous-but-moderated to KYC-gated, whatever fits the community. The shared safety net is *moderation, not identity*.
+It was written down in a vault note in April 2024, before any of this existed, and [mined back out in 2026](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/):
 
-> The journeys below mix general examples (a course page, a company handbook, an open standard) with security ones, since security is the first vault we dogfood. Cyberbaser is domain-agnostic: swap in a research group's vault, a company handbook, a course, an open standard, and the story is the same.
+> Go to someone's Obsidian website, click "edit page", and immediately edit the content right there. Click submit, and it generates a PR and runs GitHub Actions. You can also edit by cloning the repo into Obsidian or from GitHub directly, so 3+ ways to edit. You can "edit with someone" for live anonymous collaborative editing. Each page shows contributors with photos and a contributors page. Obsidian community plugins can run in multiple environments, not just in Obsidian locally, but also in GitHub Actions, serverless functions, and client-side CMS apps.
 
-## The shape: one hub, many spokes
+Some of that shipped. Some was decided against for a written reason. Some simply stopped being mentioned, which is the failure mode this ledger exists to end.
 
-Architecturally, cyberbaser is a **hub-and-spoke** system — and being clear about which half is which is what keeps the product honest.
+<p class="cbv-legend">
+  <span class="cbv-tag cbv-tag-built">Built</span><span class="cbv-legend-t">runs today</span>
+  <span class="cbv-tag cbv-tag-defer">Partial</span><span class="cbv-legend-t">some of it works</span>
+  <span class="cbv-tag cbv-tag-design">Designed</span><span class="cbv-legend-t">specified and priced, not built</span>
+  <span class="cbv-tag cbv-tag-defer">Deferred</span><span class="cbv-legend-t">has a written trigger to reopen</span>
+  <span class="cbv-tag cbv-tag-reassign">Reassigned</span><span class="cbv-legend-t">owned by another project</span>
+  <span class="cbv-tag cbv-tag-killed">Killed</span><span class="cbv-legend-t">decided against, reason recorded</span>
+  <span class="cbv-tag cbv-tag-lost">Dropped</span><span class="cbv-legend-t">stopped being mentioned, no decision</span>
+</p>
 
-**The spokes are commodities.** Each published wiki is a *spoke*: a vault rendered to a static site by some forward renderer (Quartz, Starlight, Obsidian Publish, all interchangeable), plus the surfaces people touch it through (the rendered page, a web editor, Obsidian, GitHub). The forward "vault → web" render is a solved, free problem — [Quartz already does it better than a bespoke stack](/cyberbaser/research/assumptions-and-risks/#tested-quartz-prior-art-audit-2026-06-19). So the renderer is a **swappable commodity**, not the product, and cyberbaser must never couple itself to one SSG.
+<div class="cbv-led">
+  <div class="cbv-led-row">
+    <span class="cbv-tag cbv-tag-defer">Deferred</span>
+    <span class="cbv-led-tx"><strong>Click "edit page" and edit right there</strong><span class="cbv-led-sub">A raw text-editing widget ships when a real non-git contributor is blocked, or when mobile friction recurs. Today "Edit this page" is on every published page and it opens GitHub's editor. <em>Honest caveat: the trigger cannot currently fire, because there is no anonymous surface for such a contributor to arrive on and nothing instrumented to notice one.</em></span></span>
+  </div>
+  <div class="cbv-led-row">
+    <span class="cbv-tag cbv-tag-built">Built</span>
+    <span class="cbv-led-tx"><strong>Submit, and it opens a change request and runs checks</strong><span class="cbv-led-sub">Rehearsed twice on the real vault: edit, queue, syntax check, merge, redeploy, verified live. This is the one piece that landed exactly as dreamed, and it is GitHub's interface doing the editing rather than ours.</span></span>
+  </div>
+  <div class="cbv-led-row">
+    <span class="cbv-tag cbv-tag-defer">Partial</span>
+    <span class="cbv-led-tx"><strong>Three or more ways to edit</strong><span class="cbv-led-sub">Two of three work: the vault in Obsidian with git, and the forge's web editor. The zero-git lane and the forge lane have <em>collapsed into the same lane</em>, and that lane needs a GitHub account. <a href="/cyberbaser/getting-started/principles/#3-contributors-shouldnt-need-to-learn-git">Principle 3</a> currently has no implementation, and the risk register still rates that critical.</span></span>
+  </div>
+  <div class="cbv-led-row">
+    <span class="cbv-tag cbv-tag-reassign">Reassigned</span>
+    <span class="cbv-led-tx"><strong>"Edit with someone": live anonymous collaborative editing</strong><span class="cbv-led-sub">Owned by a private sibling project, which already ships real-time editing along with mixed privacy and role-based access. A solo maintainer should not be building conflict-free replication infrastructure. <em>Correction on the record: earlier drafts said this was gated behind the round-trip keystone. That keystone was dissolved by measurement, so the stated re-entry condition was void. The real reason is ownership, not sequencing.</em></span></span>
+  </div>
+  <div class="cbv-led-row">
+    <span class="cbv-tag cbv-tag-lost">Dropped</span>
+    <span class="cbv-led-tx"><strong>Contributors with photos on each page, and a contributors page</strong><span class="cbv-led-sub">Never argued against. It got a research brief, was never answered, and shrank to one line saying git history records names automatically. Reframed and put back on the roadmap: this is not vanity, it is the <strong>trust curve's missing input</strong>. The curve promises trust earned from contribution history, and nothing in the system computes contribution history.</span></span>
+  </div>
+  <div class="cbv-led-row">
+    <span class="cbv-tag cbv-tag-killed">Killed</span>
+    <span class="cbv-led-tx"><strong>Obsidian plugins running in CI, serverless, and the browser</strong><span class="cbv-led-sub">The dream called this "the hardest layer". Killed for v1: 13 of 1445 vault files (0.9%) use Dataview, and the splice-only write path forecloses every write-path use of a plugin runtime. <em>Caveat worth keeping: 0.9% is a fact about <strong>this</strong> vault and does not transfer to anyone else's, so for a general product the coupling argument has to carry the kill on its own.</em></span></span>
+  </div>
+  <div class="cbv-led-row">
+    <span class="cbv-tag cbv-tag-killed">Killed</span>
+    <span class="cbv-led-tx"><strong>A git-backed CMS as the zero-git path</strong><span class="cbv-led-sub">Every candidate re-serializes whole files, and re-serialization was measured at 4.6% byte-identity across 1430 real files. No CMS in the write path, ever. The design pages still describe one; that is documentation debt, not a live plan.</span></span>
+  </div>
+  <div class="cbv-led-row">
+    <span class="cbv-tag cbv-tag-killed">Killed</span>
+    <span class="cbv-led-tx"><strong>Obsidian Publish as the publishing base</strong><span class="cbv-led-sub">Superseded. The renderer is a swappable commodity spoke, chosen by measurement, and it is never allowed to become the product.</span></span>
+  </div>
+</div>
 
-**The hub is the product.** Everything that's actually hard and actually *ours* lives in the renderer-agnostic **hub**:
+<details class="cbv-more">
+<summary>The full archaeology: how each piece moved, and the two commits where things went missing</summary>
 
-- **Round-trip**: turning a browser edit back into a clean, Obsidian-valid vault file. The one thing no static-site generator can do.
-- **Trust + moderation**: the [maintainer-controlled trust curve](/cyberbaser/concepts/problem/#contribution-on-your-terms) and moderation queue that make open contribution safe.
-- **Federation**: *one central hub orchestrating many vaults/wikis*, with DNS-style discovery so they can reference each other.
+Two moments account for nearly every gap above, and neither of them was a decision.
 
-v1 is one hub governing one (or a few) vaults; the [v2+ vision](/cyberbaser/research/source-of-truth/#federation-mixed-privacy-and-role-based-access) is that same hub orchestrating a federation of them. Either way: **the spokes stay swappable; the hub is the hard part and the part that's ours.**
+**April 2026, the numbering collapse.** The research plan's ten numbered tasks were flattened into unnumbered bullets on a "this is over-structured" note. Reasonable on its own, but the numbers were also the handles, and six tasks lost theirs. Cross-links in the mining logs still point at anchors that no longer exist.
 
-## From a reader's perspective
+**July 2026, the tidy-up.** A commit whose message was about aligning the knowledge base to recent decisions deleted four open research tasks with no decision record: the publish-site survey, the data-sync and media-at-scale strategy, the SEO baseline, and **operational model and sustainability**. The last of those was added by the maintainer deliberately, in its own commit, and its text is a paraphrase of the question that triggered this whole alignment pass eleven weeks later. All four are [restored to the roadmap](/cyberbaser/getting-started/roadmap/#reopened-research-deleted-in-error-2026-07-25-restored-2026-07-26) with provenance.
 
-A student lands on `coursebase.wiki/linear-algebra/eigenvectors/` from a Google search. The page loads fast (static HTML, GitHub Pages). It reads like a well-maintained wiki: clean typography, code blocks with syntax highlighting, callouts for gotchas, cross-links to related pages. At the bottom: an "Edit this page" link. Next to each heading: a tiny anchor to copy a direct link. A "last updated" date that matches the git commit. They bookmark it, copy a paragraph into their notes, move on.
+The rule that came out of it: a knowledge-ops pass may re-point, re-word, or re-file an open question. It may not delete one. Deleting an open question requires a decision entry that states the answer.
 
-They don't know or care that it came from an Obsidian vault.
+**On plugin execution, one thing the kill never engaged.** Obsidian shipped an official CLI and a headless client in 2025 and 2026, and the mining log noted at the time that this "potentially dissolves the hardest problem". A later audit confirmed community plugins do execute through the CLI, but established that it is inter-process control of a running desktop app rather than a runtime, and that the headless client excludes plugins. So the kill stands, but for the coupling reason rather than the difficulty reason. The record should say that the hardest problem partly solved itself and we still declined it.
 
-## From an Obsidian-native contributor's perspective
+</details>
 
-Cybersader notices a gap in the DNS tunneling page: a detection technique isn't mentioned. Opens Obsidian, finds the file in the vault, adds a `> [!tip]` callout with the technique, wikilinks it to the detection overview page. Commits via the obsidian-git plugin. Push happens automatically. Within a minute, the GitHub Pages build completes and the change is live on `cyberbase.wiki`.
+<details class="cbv-more">
+<summary>Things that arrived that were never in the dream, including one product decision a dependency quietly reversed</summary>
 
-Friction points that should NOT happen: losing the Obsidian link graph; the new callout rendering as plain text on the web; the translation layer dropping the wikilink.
+Built, and not asked for in 2024:
 
-## From a zero-git contributor's perspective
+- A **default-deny publish boundary**. Nothing leaves the vault without an explicit grant, with leak tests. It caught 587 stale publish flags before they published personal journals.
+- A **projection** step with case-collision guards and frontmatter pre-flight.
+- An **Obsidian-syntax validator** that classifies a change as clean, suspect, or damaging, so a tool that corrupts markdown is detectable rather than merely regrettable.
+- A **link validator** the renderer refuses to be, run as a ratchet against a frozen baseline: broken internal links went from 1145 to 779, and the worst class from 248 to 7.
+- A **trust classifier** that reads its policy from the base branch, so a proposed change cannot promote its own author.
 
-An HR lead at a company reads the employee-handbook onboarding page and spots an outdated reference. They click **edit right on the page** and fix it inline. What they see is what they get, because the [translation layer](/cyberbaser/design/translation-layer/) round-trips their change back to clean Obsidian markdown (no corrupted wikilinks, no flattened callouts).
+Bought for free by adopting a commodity renderer: sitemap, RSS, per-page social images, alias redirects, backlinks, hover previews, and search. That is the hub-and-spoke architecture working exactly as intended, and nobody ever wrote it down as a win, which is why it reads as drift instead.
 
-What happens next is the *maintainer's* choice, set by the [trust curve](/cyberbaser/concepts/problem/#contribution-on-your-terms) they configured. On an open wiki, the edit submits anonymously; on a tighter one, the contributor verifies an email or signs in first. Either way the edit does **not** go straight live — it lands in a **moderation queue**. The maintainer (or a trusted reviewer) approves it, it merges to the vault, and it deploys.
+One thing to correct rather than celebrate: **graph view was deliberately deferred** on the only usability evidence available, which said it is a writer's tool that confuses readers. The renderer's default layout ships it anyway. A reasoned product decision was reversed by a dependency's defaults, and nobody noticed either the reversal or the free wins that came with it.
 
-They never clone anything, never learn git, and (if the maintainer allows it) never make an account. The moderation queue is what keeps the wiki safe, so identity can be as light as the maintainer wants.
+</details>
 
-## From a direct-GitHub contributor's perspective
+## Three things the vision was missing
 
-A developer who knows git but has never used Obsidian reads a page and wants to fix a typo. Clicks "Edit this page" → lands in GitHub's web editor with the raw markdown. They see `[[DNS filtering]]` syntax and wonder what it is, but GitHub renders it as plain text and they ignore it. They fix the typo, commit via the web UI, open a PR. It merges. Their edit is live.
+### The maintainer must not need git either
 
-The wikilink they ignored still resolves correctly on the wiki because the translation layer handles it at build time. The direct-GitHub path is lossy but additive-safe — you can't break anything by being a git-native editor.
+[Principle 3](/cyberbaser/getting-started/principles/#3-contributors-shouldnt-need-to-learn-git) says contributors should not have to learn git. Nothing ever said the same about the **person standing up the wiki**, and everything built so far assumes that person has a GitHub account, a repository, three CI workflows, branch protection, and CI logs as their only way to see what happened. That is not "knows git", it is "is a developer who runs infrastructure", and it is a higher bar than the one Principle 3 exists to remove.
 
-## From Cybersader's perspective (the maintainer)
+<details class="cbv-more">
+<summary>The three honest ways to answer it, and what constrains all three</summary>
 
-Most changes arrive in the **moderation queue**, each with a preview so Cybersader sees it rendered before approving. The maintainer set the **trust curve** when they stood up the wiki: anonymous edits are heavily queued, verified contributors get faster review, long-trusted contributors edit directly. Trivial diffs from trusted contributors can auto-approve. Non-trivial changes get a quick look in Obsidian locally: the branch checks out, the file looks right, approve. The loop takes 60–90 seconds.
+The gap is recorded; the direction is open and belongs to the maintainer rather than to a research pass. Three candidate answers:
 
-Critically: the maintainer never has to leave Obsidian as their primary authoring surface, and they never had to *build* the trust/moderation machinery. It's composed from existing tools and wired to the queue. Web contributions flow into the same file the maintainer edits by hand. No parallel systems to keep in sync.
+1. **A hosted service.** Bring your vault, get a contributable wiki. Someone else operates the forge and the pipeline. This was already named as a candidate value centre on the roadmap before that task was deleted.
+2. **A one-click self-host bundle.** A forge plus the pipeline in a single container, on a box or a small VPS the maintainer controls.
+3. **A local-first application** that syncs to storage the maintainer already has, with no forge in the picture at all.
 
-## A day in the life
+[Principle 1](/cyberbaser/getting-started/principles/#1-a-single-source-of-truth-you-own) constrains all three the same way: they still need storage they own. The source-of-truth research already scoped git as "the current manifestation, not the essence, with a documented off-ramp", so this is anticipated rather than contradictory.
 
-On a Tuesday, three things happen without anyone coordinating:
+An earlier internal conclusion, that no hosted console is needed because the forge is the interface, is **sound only for a maintainer who has a forge and can operate one**. It holds for the dogfood case and does not generalise. Reopened.
 
-1. **09:14**: A reader in Berlin finds a typo in an open standard's spec page and fixes it in place on the page, anonymously. It lands in the moderation queue with a preview attached. Cybersader approves it on their phone during coffee.
-2. **11:47**: A consultant in Austin pushes a commit directly to main from their Obsidian vault: three new pages about Kerberoasting detection, fully wikilinked to existing content. The build deploys. The new pages are immediately discoverable via search on the wiki.
-3. **16:22**: A grad student opens a PR via GitHub web with one-line code block fixes across four pages. They've never used Obsidian. Their PR passes preview. Merged.
+**Proposed as a peer of Principle 3, not a footnote:** *neither side needs git*. That is a change to the principles page and is not made unilaterally here.
 
-None of these contributors know the others exist. None of them had to pick a "correct" entry point. All three paths produced identical-quality edits to the same vault.
+</details>
 
-## Anti-features (what this deliberately does NOT do)
+### The thing being rebuilt is the wiki
 
-- **Does not host the Obsidian vault.** Cyberbaser reads from a vault repo you own (e.g. `cybersader/cyberbase`); it doesn't store or own your content.
-- **Does not support realtime collaborative editing (v1).** Conflicts resolve via git, not CRDT, fine for an async contribution rate. (Real-time is gated on the [round-trip keystone](/cyberbaser/research/v1-architecture/#blockmarkdown-fidelity--the-keystone-rd); deferred to v2+.)
-- **Does not replace Obsidian as a primary authoring tool.** Maintainers still use Obsidian locally; the web surfaces are for contributors who don't.
-- **It IS general-purpose**: any Obsidian vault, any domain. The cyber vault is just the first content we dogfood it on, not the scope. (Earlier drafts said the opposite; that was backwards: contributability is the product.)
-- **Does not build the trust/identity/moderation stack from scratch.** It composes existing tools (Discourse-style trust, moderation queues, contribution bots, edge rate-limiting) into one pipeline.
-- **Does not solve search in the vault itself.** Wiki search is whatever the renderer provides (Pagefind, in the current Starlight prototype). In-vault search stays in Obsidian.
+The comparison that matters is not "another static site generator". It is **the wiki**: a page anyone can improve. [Wikipedia](https://en.wikipedia.org/wiki/Wikipedia:Introduction_to_editing) demonstrated at planetary scale that reading and fixing can be the same surface, that no account need be required to fix something, and that **moderation rather than identity** is what keeps it safe. None of that requires a developer platform, and the people who will make wikis do not have GitHub accounts.
 
-## Non-goals for v1
+<details class="cbv-more">
+<summary>What the modern wiki keeps from Wikipedia and what it changes</summary>
 
-These might happen later but are explicitly not v1:
+**Keep**, because it is proven: open editing as the default, review rather than gatekeeping as the safety mechanism, trust earned through contribution history, and a stable citable URL for every page.
 
-- Comments/discussion on pages (out of scope; GitHub Issues is the fallback)
-- Deep KYC / identity integrations (the trust curve ships, but heavy identity verification is post-v1)
-- Versioning / diffing UI on the reader surface (git history is the fallback)
-- Multi-vault publishing / federation from the same pipeline
-- Paid hosting or SaaS offering
+**Change**, because the incumbent stack shows its age. [MediaWiki](https://www.mediawiki.org/wiki/MediaWiki) is over twenty years old and self-hosting it means running a database and a PHP application; the content lives in database rows in a bespoke markup, so leaving is an export project. Cyberbaser's answer is the inverse: the content is plain markdown files in a folder you own, the software is a set of small pieces rather than one monolith, and the renderer is deliberately replaceable. If the whole layer disappears, the wiki is still a folder of files that opens in any editor.
+
+This is also the honest scope line. "Wikipedia replacement" means **the mechanism**, the thing that makes a wiki contributable, and not the encyclopedia. The dogfood content happens to be a security vault; the target is anyone who would otherwise have stood up a wiki.
+
+Related reading: [The problem](/cyberbaser/concepts/problem/) · [Contribution on your terms](/cyberbaser/concepts/problem/#contribution-on-your-terms)
+
+</details>
+
+### A web of webs where you control your web
+
+One wiki is a dead end. The value shows up when knowledge bases can **reference each other** without a central directory in the middle: your wiki cites a page in mine, mine shows that yours cites it, and neither of us signs up for anything. Each side keeps its own files, its own host, and its own rules about who may contribute.
+
+<div class="cbv-fed">
+  <div class="cbv-fed-col">
+    <div class="cb-mock cb-mock-sm">
+      <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">fungiwiki.org/chanterelle</span></div>
+      <div class="cb-mock-body">
+        <div class="cb-mock-h">Chanterelle</div>
+        <div class="cb-mock-line cb-mock-line-85"></div>
+        <div class="cbv-chip">&#91;&#91;foragebase.eu · Muscarine&#93;&#93;</div>
+        <div class="cbv-pop"><div class="cbv-pop-src">from foragebase.eu</div><div class="cbv-pop-h">Muscarine</div><div class="cb-mock-line"></div></div>
+      </div>
+    </div>
+    <span class="cbv-fed-foot">Files: <code>~/vaults/fungi</code> · yours</span>
+  </div>
+  <div class="cbv-fed-link"><span class="cbv-fed-glyph">⇄</span><span>cites, and knows it is cited</span><span class="cbv-fed-sub">no directory in the middle</span></div>
+  <div class="cbv-fed-col">
+    <div class="cb-mock cb-mock-sm">
+      <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">foragebase.eu/toxins/muscarine</span><span class="cb-mock-live">no forge account</span></div>
+      <div class="cb-mock-body">
+        <div class="cb-mock-h">Muscarine</div>
+        <div class="cb-mock-line"></div>
+        <div class="cbv-chip cbv-chip-in">Referenced by fungiwiki.org · Chanterelle</div>
+      </div>
+    </div>
+    <span class="cbv-fed-foot">Files: their laptop · theirs</span>
+  </div>
+</div>
+<p class="cb-fig-cap">Two wikis, two owners, two hosts, nobody's account in the middle. This is the part with the most written research behind it and the least work done on it.</p>
+
+<details class="cbv-more">
+<summary>What was already researched, what it would take, and the honest status</summary>
+
+An 83-system survey looked at [Nostr](https://nostr.com/), [ActivityPub](https://www.w3.org/TR/activitypub/), the [AT Protocol](https://atproto.com/), IPNS, [Ward Cunningham's Federated Wiki](http://fed.wiki.org/), Matrix, and [decentralised identifiers](https://www.w3.org/TR/did-core/). Two findings matter here.
+
+**Git has a structural zero on federation.** It scored 21 out of 26 against requirements derived from this project's own constraints, and two of its three zeros are sub-repository access control and federation or discovery. Git has no namespace, no announce, no crawl.
+
+**No alternative fixes that zero without breaking something git satisfies by definition.** The systems with native federation are the wrong primitive for versioned documents, and the ones with the best permission models do not store markdown. So the recorded conclusion is that **a federation layer has to be built regardless of the source-of-truth choice**, which means federation is not a reason to leave git and is not blocked by anything.
+
+The sketched shape, retrofitted in front of git rather than replacing it: a `/.well-known/` manifest describing the knowledge base, `did:web` identity anchored on domain ownership, and harvest keyed on content hashes so a subscriber can tell exactly what changed. Nostr's lesson is the one to steal: identity is a keypair rather than an account, and the relay you use is replaceable without losing your identity or your audience.
+
+**Status, stated plainly: federation is named as a pillar in eight files and has shaped zero decisions and produced zero tasks.** It needs a verdict of its own, the same as everything else on this page: own it, defer it with a trigger, or kill it. Right now it is the one item with no owner.
+
+Full survey: [Is git the right source of truth?](/cyberbaser/research/source-of-truth/) · design sketch: [Federation](/cyberbaser/research/federation/) · original brief: [Challenge 09](/cyberbaser/agent-context/zz-challenges/09-source-of-truth-alternatives/)
+
+</details>
+
+## What this page promises that does not exist yet
+
+Earlier versions of this page said cyberbaser "does not build the trust and moderation stack from scratch, it composes existing tools" while also promising a rendered preview before approval and approval from a phone. Both cannot be true. Nothing on the shelf provides those two things, so either they get built or they stop being promised.
+
+The reconciliation, stated once so it stops drifting: **compose where a commodity exists, build where none does.**
+
+<div class="cb-ledger">
+  <div class="cb-ledger-col cb-ledger-is">
+    <span class="cb-ledger-hd">Composed, not built</span>
+    <div class="cb-ledger-row"><span class="cb-ledger-ic cb-ledger-yes">✓</span><span class="cb-ledger-tx"><strong>The moderation queue</strong><span class="cb-ledger-sub">The forge's list of proposed changes, with its own notifications and history</span></span></div>
+    <div class="cb-ledger-row"><span class="cb-ledger-ic cb-ledger-yes">✓</span><span class="cb-ledger-tx"><strong>Version history and rollback</strong><span class="cb-ledger-sub">Git, which is very good at this and cost nothing</span></span></div>
+    <div class="cb-ledger-row"><span class="cb-ledger-ic cb-ledger-yes">✓</span><span class="cb-ledger-tx"><strong>The published site</strong><span class="cb-ledger-sub">A commodity renderer, pinned and swappable, plus sitemap, RSS and social images for free</span></span></div>
+  </div>
+  <div class="cb-ledger-col cb-ledger-not">
+    <span class="cb-ledger-hd">Nothing to compose, so it is ours</span>
+    <div class="cb-ledger-row"><span class="cb-ledger-ic cb-ledger-no">!</span><span class="cb-ledger-tx"><strong>A rendered preview per proposal</strong><span class="cb-ledger-sub">The current host deploys exactly one environment per repository. Designed at three days; not built. This is what the phone approval depends on.</span></span></div>
+    <div class="cb-ledger-row"><span class="cb-ledger-ic cb-ledger-no">!</span><span class="cb-ledger-tx"><strong>An anonymous write endpoint</strong><span class="cb-ledger-sub">The only always-on piece in the design, and the reason Principle 3 has no implementation today</span></span></div>
+    <div class="cb-ledger-row"><span class="cb-ledger-ic cb-ledger-yes">✓</span><span class="cb-ledger-tx"><strong>Knowing a clean edit from a damaging one</strong><span class="cb-ledger-sub">Built, and the clearest example of the rule. No renderer or forge can tell you that a tool just flattened your wikilinks.</span></span></div>
+  </div>
+</div>
+
+<details class="cbv-more">
+<summary>Every promise on this page that is not yet real, and what each one is waiting on</summary>
+
+| Promise | Status | Waiting on |
+| --- | --- | --- |
+| A rendered preview before approving | Designed, priced at three days, not built | A second deploy target with origin isolation; the current host allows one environment per repository |
+| Approving from a phone | Not built | The preview above; it is the whole point of the phone case |
+| Auto-approval for trusted contributors on trivial changes | Classifier built, decision-only | The classifier labels a route; it does not merge. The gate workflow has never executed. |
+| Submitting a change with no account | Not built | The anonymous write endpoint, which was the single strongest recommendation of the adversarial review and was deferred anyway |
+| Contributor attribution on the page | Not built | A decision, first. See the ledger above. |
+| The maintainer never leaves their own editor | True today | Nothing. This one works. |
+
+The written moderation policy says the maintainer reviews the **rendered preview**, not just the diff. That policy is the reason anonymous contribution is supposed to be safe. Until the preview exists, either the policy or the promise has to change, and saying so out loud is cheaper than discovering it later.
+
+</details>
+
+## Where the identity might sharpen
+
+:::caution[A proposal, not a change. The locked one-liner is unchanged until the maintainer says otherwise.]
+The locked identity is **"an interoperability layer for contributable, version-controlled knowledge bases."** Three things on this page press on it:
+
+1. **"Contributable" currently means the reader.** It does not say the maintainer is also spared git, and that turned out to be the higher bar.
+2. **"Version-controlled" reads as "git",** which the research explicitly scoped as the current manifestation rather than the essence. The word may be describing an implementation.
+3. **Nothing in it says the knowledge bases connect to each other,** which is the long arc.
+
+Three options, in ascending order of how much they disturb what is locked:
+
+- **A. Keep the line, add a second sentence.** *"Neither the reader nor the maintainer needs git."* Cheapest, relitigates nothing, and fixes the gap that actually bit.
+- **B. Keep the line as the internal definition, add a public one.** Something like *"the modern wiki: anyone can improve it, you own the files, and it can link to other people's."* The technical line stays for design work; the positioning line goes on the homepage, which still leads with older wording.
+- **C. Amend the line.** *"An interoperability layer for contributable knowledge bases you own, and a protocol for linking them."* Swaps a manifestation for the essence and adds federation, at the cost of reopening a locked decision.
+
+**Recommendation: A plus B.** Option C is a real argument and should not be settled by an agent.
+:::
+
+## The same wiki from four sides
+
+<details class="cbv-more">
+<summary>Reader, vault-native contributor, zero-git contributor, maintainer: what each one actually experiences</summary>
+
+These are journeys, not features, and the examples deliberately vary. Swap in a research group's notes, a company handbook, a course, or an open standard, and the story is the same. The security vault is the first content dogfooded, not the scope.
+
+**The reader.** A student lands on a linear algebra page from a search result. It loads fast, reads like a well-kept wiki, has cross-links and a last-updated date that matches reality, and carries an "Edit this page" link at the bottom. They copy a paragraph and move on. They neither know nor care that it came from someone's Obsidian vault.
+
+**The vault-native contributor.** A specialist notices a detection technique missing from a page, opens the vault in Obsidian, adds a callout, wikilinks it to the overview page, commits, and pushes. The site rebuilds and the change is live. What must never happen: the link graph breaking, the callout rendering as plain text on the web, or the wikilink getting rewritten on the way through.
+
+**The zero-git contributor.** An HR lead reads the onboarding page in their company handbook and spots an outdated reference. They fix it in place. What happens next is the maintainer's setting: on an open wiki it submits anonymously, on a tighter one they verify an email first. Either way it lands in a queue rather than going straight live. They never clone anything and never learn git. **Today this person's only route is the forge's web editor, which needs an account, so this journey is the vision rather than the present.**
+
+**The maintainer.** Changes arrive in a queue. The trust curve they set when they stood the wiki up decides how much scrutiny each one gets: anonymous edits queue heavily, verified contributors get faster review, long-trusted contributors edit directly. The maintainer never leaves their own editor as the primary authoring surface, and web contributions flow into the same file they edit by hand, with no parallel system to keep in sync. **Measured, honestly: the loop currently takes three to five minutes, not the sixty to ninety seconds an earlier draft of this page claimed.**
+
+</details>
+
+<details class="cbv-more">
+<summary>A day in the life, when it is working. This is the target, not a description of today.</summary>
+
+On an ordinary Tuesday, three things happen without anyone coordinating.
+
+**09:14.** A reader in Berlin finds a typo in an open standard's spec page and fixes it in place, anonymously. It lands in the queue with a preview attached. The maintainer approves it on their phone during coffee.
+
+**11:47.** A consultant in Austin pushes three new pages from their own vault, fully cross-linked to existing content. The build deploys and the pages are searchable on the wiki.
+
+**16:22.** A graduate student opens a change request through the forge with one-line fixes across four pages. They have never used Obsidian. It passes the checks and merges.
+
+None of these people know the others exist. None of them had to work out which entry point was the "correct" one. All three produced equally good edits to the same files.
+
+Of those three, the middle one works today end to end. The first needs the anonymous endpoint and the preview. The third works but requires an account.
+
+</details>
+
+## What this deliberately does not do
+
+<details class="cbv-more">
+<summary>Anti-features and v1 non-goals, with the reason attached to each</summary>
+
+- **It does not host your vault.** It reads from a repository you own. If cyberbaser disappears, the vault still opens.
+- **It does not replace the maintainer's editor.** Local authoring stays wherever the maintainer already works. The web surfaces exist for people who do not have that setup.
+- **It is not a security tool.** It is general purpose. The security vault is the first content dogfooded, and earlier drafts had this backwards.
+- **It does not do real-time collaborative editing.** Reassigned to a private sibling project rather than deferred to an unspecified later.
+- **It does not solve in-vault search.** Site search is whatever the renderer provides. Searching your own notes stays in your own editor.
+- **Comments and discussion threads are out of scope for v1.** The forge's issue tracker is the fallback.
+- **Heavy identity verification is post-v1.** The trust curve ships; know-your-customer style verification does not.
+- **A diffing interface on the reader-facing site is out of scope for v1.** Git history is the fallback.
+
+One former non-goal has been promoted to an open question rather than a "no": **paid hosting or a hosted service**. It is the most plausible answer to "who operates this for a maintainer with no forge", and the research task that would have decided it was deleted by accident and has been [restored](/cyberbaser/getting-started/roadmap/#reopened-research-deleted-in-error-2026-07-25-restored-2026-07-26).
+
+</details>
+
+## Related
+
+- [Direction](/cyberbaser/getting-started/direction/) — what is actually being built this week, and whether it matches the above
+- [Principles](/cyberbaser/getting-started/principles/) — the six constraints every decision here is checked against
+- [The problem](/cyberbaser/concepts/problem/) — who this is for and what breaks without it
+- [Architecture](/cyberbaser/design/architecture/) — the hub, the swappable spokes, and what exists as code
+- [Translation layer](/cyberbaser/design/translation-layer/) — why a web edit can come back as clean markdown at all
+- [Is git the right source of truth?](/cyberbaser/research/source-of-truth/) — the survey behind the federation position
+- [Roadmap](/cyberbaser/getting-started/roadmap/) — the decision record and the reopened research
+- [Vault vision mining](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/) — the original 2024 note this page restores
+
+<style>{`
+/* ── Page-local components for the vision page. Prefix cbv- to avoid
+   colliding with brand.css while shared components are in flight.
+   Promotion candidates are noted in the report. ── */
+
+/* Starlight injects margin-top onto consecutive flow elements; it lands on
+   the children of every flex/grid container and breaks equal heights. */
+.sl-markdown-content :is(.cbv-story, .cbv-beat, .cbv-fed, .cbv-fed-col, .cbv-fed-link, .cbv-led, .cbv-led-row, .cbv-led-tx, .cbv-legend, .cbv-phone, .cbv-prev, .cbv-cred) > * {
+  margin-top: 0;
+}
+
+/* ── Status chips ── */
+.sl-markdown-content .cbv-tag {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  font-size: 0.6rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  font-weight: 700;
+  line-height: 1.5;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--sl-color-gray-4);
+  color: var(--sl-color-gray-2);
+  white-space: nowrap;
+}
+.sl-markdown-content .cbv-tag-built { color: var(--sl-color-accent-high); border-color: var(--cb-emerald-border); background: var(--cb-emerald-glow); }
+.sl-markdown-content .cbv-tag-design { color: var(--sl-color-gray-1); border-color: var(--sl-color-gray-4); }
+.sl-markdown-content .cbv-tag-defer { color: #d8a02a; border-color: rgba(216, 160, 42, 0.45); }
+.sl-markdown-content .cbv-tag-reassign { color: var(--sl-color-gray-2); border-style: dotted; }
+.sl-markdown-content .cbv-tag-killed { color: #e0736a; border-color: rgba(224, 115, 106, 0.4); }
+.sl-markdown-content .cbv-tag-lost { color: #d8a02a; border-color: rgba(216, 160, 42, 0.5); border-style: dashed; }
+:root[data-theme='light'] .sl-markdown-content .cbv-tag-defer,
+:root[data-theme='light'] .sl-markdown-content .cbv-tag-lost { color: #8a5a00; }
+:root[data-theme='light'] .sl-markdown-content .cbv-tag-killed { color: #a32b20; }
+
+/* ── Three-beat storyboard ── */
+.sl-markdown-content .cbv-story {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.15rem;
+  align-items: stretch;
+  margin: 1.7rem 0 0.4rem;
+}
+.sl-markdown-content .cbv-beat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.sl-markdown-content .cbv-beat-n {
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--sl-color-gray-3);
+  min-width: 0;
+}
+.sl-markdown-content .cbv-beat .cb-mock {
+  max-width: none;
+  margin: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.sl-markdown-content .cbv-beat .cb-mock-body { flex: 1; }
+.sl-markdown-content .cbv-beat-st {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  font-size: 0.76rem;
+  line-height: 1.4;
+  color: var(--sl-color-gray-2);
+  min-width: 0;
+}
+
+/* ── Phone frame ── */
+.sl-markdown-content .cbv-phone {
+  position: relative;
+  flex: 1;
+  align-self: center;
+  width: 100%;
+  max-width: 250px;
+  min-width: 0;
+  border: 7px solid var(--sl-color-gray-4);
+  border-radius: 26px;
+  background: var(--sl-color-gray-5);
+  padding: 0.45rem 0.4rem 0.6rem;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.28);
+}
+.sl-markdown-content .cbv-phone::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 34%;
+  height: 8px;
+  border-radius: 0 0 8px 8px;
+  background: var(--sl-color-gray-4);
+}
+.sl-markdown-content .cbv-phone-st {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.1rem 0.45rem 0.4rem;
+  font-size: 0.58rem;
+  color: var(--sl-color-gray-3);
+}
+.sl-markdown-content .cbv-phone .cb-review {
+  max-width: none;
+  margin: 0;
+  box-shadow: none;
+}
+.sl-markdown-content .cbv-prev {
+  margin: 0.55rem 0.8rem 0.1rem;
+  padding: 0.5rem 0.55rem 0.6rem;
+  border: 1px solid var(--sl-color-gray-4);
+  border-radius: 7px;
+  background: var(--sl-color-black);
+  min-width: 0;
+}
+.sl-markdown-content .cbv-prev-lab {
+  font-size: 0.56rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--sl-color-accent-high);
+  margin-bottom: 0.3rem;
+}
+.sl-markdown-content .cbv-prev-h {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--sl-color-white);
+}
+.sl-markdown-content .cbv-prev .cb-mock-line { height: 6px; margin: 0.35rem 0; }
+
+/* ── Contributor credit row ── */
+.sl-markdown-content .cbv-cred {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.9rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--sl-color-gray-4);
+  min-width: 0;
+}
+.sl-markdown-content .cbv-av {
+  flex: 0 0 auto;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: var(--sl-color-gray-4);
+  color: var(--sl-color-white);
+}
+.sl-markdown-content .cbv-av-new { background: var(--sl-color-accent); color: #04130d; }
+.sl-markdown-content .cbv-cred-tx {
+  min-width: 0;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  color: var(--sl-color-gray-2);
+  overflow-wrap: anywhere;
+}
+
+/* ── Legend ── */
+.sl-markdown-content .cbv-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.55rem;
+  margin: 1.2rem 0 0.2rem;
+}
+.sl-markdown-content .cbv-legend-t {
+  font-size: 0.74rem;
+  color: var(--sl-color-gray-3);
+  margin-right: 0.5rem;
+}
+
+/* ── Capability ledger ── */
+.sl-markdown-content .cbv-led {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin: 1.1rem 0 1.4rem;
+}
+.sl-markdown-content .cbv-led-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 9px;
+  background: var(--sl-color-gray-6);
+}
+.sl-markdown-content .cbv-led-tx {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.sl-markdown-content .cbv-led-tx strong {
+  color: var(--sl-color-white);
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.sl-markdown-content .cbv-led-sub {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--sl-color-gray-2);
+}
+.sl-markdown-content .cbv-led-sub strong { color: var(--sl-color-gray-1); }
+
+/* ── Federation pair ── */
+.sl-markdown-content .cbv-fed {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 1rem;
+  align-items: center;
+  margin: 1.7rem 0 0.4rem;
+}
+.sl-markdown-content .cbv-fed-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.sl-markdown-content .cbv-fed-col .cb-mock { max-width: none; margin: 0; min-width: 0; }
+.sl-markdown-content .cbv-fed-foot {
+  font-size: 0.7rem;
+  color: var(--sl-color-gray-3);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sl-markdown-content .cbv-fed-foot code { font-size: 0.68rem; }
+.sl-markdown-content .cbv-fed-link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  max-width: 8.5rem;
+  min-width: 0;
+  text-align: center;
+  font-size: 0.68rem;
+  color: var(--sl-color-gray-2);
+}
+.sl-markdown-content .cbv-fed-glyph {
+  font-size: 1.2rem;
+  line-height: 1;
+  color: var(--sl-color-accent);
+}
+.sl-markdown-content .cbv-fed-sub { font-size: 0.62rem; color: var(--sl-color-gray-3); }
+.sl-markdown-content .cbv-chip {
+  display: inline-block;
+  max-width: 100%;
+  margin-top: 0.6rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--cb-emerald-border);
+  border-radius: 6px;
+  background: var(--cb-emerald-glow);
+  color: var(--sl-color-accent-high);
+  font-family: ui-monospace, monospace;
+  font-size: 0.68rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sl-markdown-content .cbv-chip-in {
+  border-style: dashed;
+  background: none;
+  color: var(--sl-color-gray-2);
+  border-color: var(--sl-color-gray-4);
+}
+.sl-markdown-content .cbv-pop {
+  margin-top: 0.45rem;
+  padding: 0.5rem 0.6rem 0.6rem;
+  border: 1px solid var(--sl-color-gray-4);
+  border-radius: 8px;
+  background: var(--sl-color-black);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+  min-width: 0;
+}
+.sl-markdown-content .cbv-pop-src {
+  font-size: 0.56rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--sl-color-accent-high);
+}
+.sl-markdown-content .cbv-pop-h {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--sl-color-white);
+  margin-top: 0.2rem;
+}
+.sl-markdown-content .cbv-pop .cb-mock-line { height: 6px; margin: 0.35rem 0 0; }
+
+/* ── Collapsed depth ── */
+.sl-markdown-content details.cbv-more {
+  margin: 1rem 0;
+  padding: 0 1rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 10px;
+  background: var(--sl-color-gray-6);
+}
+.sl-markdown-content details.cbv-more > summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.8rem 0;
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--sl-color-white);
+}
+.sl-markdown-content details.cbv-more > summary::-webkit-details-marker { display: none; }
+.sl-markdown-content details.cbv-more > summary::before {
+  content: '▸';
+  flex: 0 0 auto;
+  color: var(--sl-color-accent);
+  transition: transform 0.15s ease;
+}
+.sl-markdown-content details.cbv-more[open] > summary::before { transform: rotate(90deg); }
+.sl-markdown-content details.cbv-more[open] { padding-bottom: 1rem; }
+.sl-markdown-content details.cbv-more > summary + * { margin-top: 0; }
+.sl-markdown-content details.cbv-more > :not(summary) { font-size: 0.94rem; }
+.sl-markdown-content details.cbv-more table { font-size: 0.85rem; }
+
+/* ── Responsive ── */
+/* In the 3-up layout, pin the label and status blocks to a fixed number of
+   lines so the three browser frames align top and bottom even when the
+   captions wrap differently. Measured headless at 1280/900/760/480. */
+@media (min-width: 901px) {
+  .sl-markdown-content .cbv-beat-n { min-height: 2.3em; }
+  .sl-markdown-content .cbv-beat-st { min-height: 4.2em; align-content: start; }
+}
+@media (max-width: 900px) {
+  .sl-markdown-content .cbv-story { grid-template-columns: 1fr; gap: 1.4rem; }
+  .sl-markdown-content .cbv-phone { max-width: 260px; align-self: flex-start; }
+}
+@media (max-width: 760px) {
+  .sl-markdown-content .cbv-fed { grid-template-columns: 1fr; gap: 1.1rem; }
+  .sl-markdown-content .cbv-fed-link { flex-direction: row; max-width: none; gap: 0.5rem; flex-wrap: wrap; justify-content: center; }
+}
+@media (max-width: 520px) {
+  .sl-markdown-content .cbv-led-row { flex-direction: column; gap: 0.5rem; }
+}
+`}</style>
