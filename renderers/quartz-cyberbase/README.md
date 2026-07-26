@@ -1,7 +1,7 @@
 # quartz-cyberbase
 
 The Quartz renderer spoke for the `cybersader/cyberbase` site. It is a pinned,
-reproducible wrapper around an upstream Quartz checkout: five files here, zero
+reproducible wrapper around an upstream Quartz checkout: six files here, zero
 forked Quartz source.
 
 ## What this is (and is not)
@@ -33,6 +33,7 @@ Consequences that are load-bearing, not stylistic:
 | `quartz.config.ts` | Site config: `baseUrl`, plugin/emitter chain, theme. |
 | `quartz.layout.ts` | Component layout. Quartz imports this from the repo root, so it must be shipped even if it barely differs from upstream. Also holds `VAULT_REPO_URL`, the single declaration of the source repo. |
 | `components/*.tsx` | Cyberbaser-local Quartz components, copied into `<quartz>/quartz/components/` by `setup.sh`. Imports are written relative to that destination, and `quartz.layout.ts` imports them by path so upstream's `components/index.ts` stays untouched. Currently: `EditThisPage.tsx`, the contribution Path C entry point (GitHub web editor link, built from `fileData.relativePath` — the VERBATIM projection makes that the vault repo path). |
+| `styles/custom.scss` | The theme stylesheet, copied to `<quartz>/quartz/styles/custom.scss` by `setup.sh`. See "Theme" below. |
 
 ## The pin
 
@@ -63,6 +64,73 @@ Known behavior of this version, all confirmed by measurement:
 **Open sub-decision: Quartz v5.** Not evaluated. Bumping the pin means re-running
 the OFM conformance suite and the vault build, and re-checking every item above.
 Do not bump it as a routine dependency update.
+
+## Theme
+
+"Slate + emerald": a calm, technical dark-first palette with a family
+resemblance to the cyberbaser docs site (silver + emerald) and no shared code
+with it. Two files own it.
+
+**`quartz.config.ts` → `theme`** — the nine Quartz colour tokens per mode, plus
+the three font families.
+
+- Fonts: header **IBM Plex Sans**, body **Source Sans 3**, code **JetBrains
+  Mono**. All three are core Google Fonts families, fetched by name at build
+  time (`fontOrigin: "googleFonts"`). Source Sans 3 is the maintained successor
+  to Source Sans Pro and is built for long-form screen reading, which is what
+  this vault mostly is; JetBrains Mono keeps `0`/`O` and `1`/`l`/`I` apart in a
+  vault full of commands and hashes.
+- Contrast, measured (WCAG 2.1, against each token's own background — not
+  eyeballed; recompute if you change a value):
+
+  | token | light on `#f7f8f7` | dark on `#121614` |
+  | --- | --- | --- |
+  | `darkgray` (body text) | 9.46:1 AAA | 11.13:1 AAA |
+  | `dark` (headings) | 16.22:1 AAA | 16.16:1 AAA |
+  | `gray` (meta, "Edit this page") | 4.87:1 AA | 5.99:1 AA |
+  | `secondary` (links) | 5.85:1 AA | 9.51:1 AAA |
+  | `tertiary` (hover, active) | 7.69:1 AAA | 12.10:1 AAA |
+
+  `lightgray` is a border/surface token and is never used for text. Inline code
+  (`dark` on `lightgray`) is 13.47:1 / 11.78:1; internal links on their
+  `highlight` background are 5.22:1 / 7.90:1; `==highlight==` text is 7.97:1 /
+  5.84:1.
+
+**`styles/custom.scss`** — the readability pass, in seven commented sections:
+the explorer scroll fix, reading measure (`min(80ch, 100%)` on the centre
+column), nested-list spacing and indent guides, tables, callouts,
+"Edit this page", and small global items. It is appended after every upstream
+component stylesheet, so an equal-specificity rule in it wins.
+
+Callout hues are the one palette that is not read from `theme.colors`: Quartz
+hardcodes them in `callouts.scss`. They are redefined here as `--cb-<name>`
+custom properties with a separate value per mode, because the title text sits
+on an 8% tint of its own hue and no single mid-tone clears 4.5:1 against both
+`#f7f8f7` and `#121614`. Every pair was computed; all are ≥ 4.5:1.
+
+### Changing it
+
+- **A colour** — edit `quartz.config.ts`, recompute the contrast ratio against
+  that token's background before committing, and update the table above.
+- **A font** — edit `theme.typography`. The family must exist on Google Fonts
+  under that exact name; the build fetches
+  `https://fonts.googleapis.com/css2?family=<header>&family=<body>&family=<code>`
+  and a build with a typo'd family silently falls back to `system-ui`. Check
+  the emitted `public/index.css` for the family name after changing it.
+- **Spacing, tables, callouts, the explorer** — `styles/custom.scss`. Re-run
+  `setup.sh` (it re-copies the file) then `build.sh`.
+
+### Known upstream defect fixed here
+
+Quartz v4.5.2's `explorer.scss` applies `overscroll-behavior: contain` to every
+`<ul>` under `.explorer-content`, and each folder's `<ul>` is `overflow: hidden`
+for the collapse animation. `overflow: hidden` makes an element a scroll
+container, so a wheel event over an expanded folder lands on a *non-scrollable*
+scroll container whose `contain` refuses to pass the scroll up the chain —
+hovering the file explorer and scrolling did nothing at all. Section 1 of
+`custom.scss` keeps `contain` on the actual scroller (`.explorer-content >
+ul.overflow`) and releases the nested lists. Verified on desktop, tablet and the
+mobile menu; the sidebar's `position: sticky` is untouched.
 
 ## Local use
 

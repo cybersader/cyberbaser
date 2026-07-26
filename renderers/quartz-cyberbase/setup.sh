@@ -45,6 +45,22 @@ echo "==> copying renderer config over Quartz defaults"
 cp "$HERE/quartz.config.ts" "$QUARTZ_DIR/quartz.config.ts"
 cp "$HERE/quartz.layout.ts" "$QUARTZ_DIR/quartz.layout.ts"
 
+# Theme stylesheet. Quartz's componentResources emitter imports
+# quartz/styles/custom.scss and appends it after every component stylesheet,
+# which is what lets equal-specificity rules in it override upstream.
+if [ -f "$HERE/styles/custom.scss" ]; then
+  echo "==> copying custom.scss into quartz/styles/"
+  cp "$HERE/styles/custom.scss" "$QUARTZ_DIR/quartz/styles/custom.scss"
+fi
+
+# Cyberbaser-local transformer plugins. Placed under quartz/cyberbase/ so their
+# relative imports (../../plugins/types) resolve against the real Quartz tree.
+if [ -d "$HERE/plugins" ]; then
+  echo "==> copying transformer plugins into quartz/cyberbase/"
+  mkdir -p "$QUARTZ_DIR/quartz/cyberbase"
+  cp "$HERE"/plugins/*.ts "$QUARTZ_DIR/quartz/cyberbase/"
+fi
+
 # Cyberbaser-local components. They import Quartz internals by relative path
 # (./types, ../util/lang), so they must land in quartz/components/. Plain
 # overwrite-copy every run: idempotent, and it re-lays the current version over

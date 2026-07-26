@@ -1,0 +1,340 @@
+@use "./base.scss";
+
+/* ===========================================================================
+ * cyberbase — readability pass over Quartz v4.5.2.
+ *
+ * Copied to <quartz>/quartz/styles/custom.scss by setup.sh. Quartz's
+ * componentResources emitter joins the per-component stylesheets first and
+ * this file last, so an equal-specificity rule here beats upstream. Where a
+ * selector below looks over-qualified it is matching an upstream one on
+ * purpose: upstream nests under `.page > #quartz-body`, which carries an id.
+ *
+ * Colour comes from quartz.config.ts. Nothing here hardcodes a palette value
+ * except the callout hues, which Quartz does not expose as theme tokens.
+ * ======================================================================== */
+
+/* ---------------------------------------------------------------------------
+ * 1. File explorer: make the mouse wheel scroll it.
+ *
+ * Upstream bug, not a config problem. explorer.scss applies
+ * `overscroll-behavior: contain` to EVERY <ul> under .explorer-content, and
+ * each folder's <ul> is `overflow: hidden` (needed for the 0fr -> 1fr grid
+ * collapse animation). `overflow: hidden` makes an element a scroll container,
+ * so a wheel event over an expanded folder lands on a non-scrollable scroll
+ * container whose `contain` refuses to hand the scroll up the chain. Neither
+ * the explorer nor the page moves.
+ *
+ * Fix: keep `contain` on the one element that is actually the scroller (the
+ * top-level .explorer-ul) and let nested folder lists chain normally. Same
+ * markup drives the mobile menu, so this covers both layouts.
+ * ------------------------------------------------------------------------ */
+.explorer-content {
+  & ul {
+    overscroll-behavior: auto;
+  }
+
+  /* the real scroll container: still trap the scroll so it does not leak into
+     the page when the list bottoms out */
+  & > ul.overflow {
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--gray) transparent;
+    padding-right: 0.35rem;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * 2. Reading measure. The centre column is ~850px at 1920px wide, which runs
+ * past 100 characters a line. Cap the prose; tables, code blocks and images
+ * keep their own horizontal scroll inside it.
+ * ------------------------------------------------------------------------ */
+.page > #quartz-body {
+  & .center,
+  & footer {
+    min-width: 0;
+    max-width: min(80ch, 100%);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * 3. Dense nested lists. This vault is mostly outline notes, five levels deep
+ * in places, so the indent guide is doing real work.
+ *
+ * `--lightgray` sits at 1.2:1 against the page, which is right for a panel
+ * border and too faint for a rule you are meant to follow down a long outline,
+ * so the guide gets its own token.
+ * ------------------------------------------------------------------------ */
+:root {
+  --cb-rule: #d3dad8;
+}
+
+:root[saved-theme="dark"] {
+  --cb-rule: #343d3a;
+}
+
+.page article {
+  & ul,
+  & ol {
+    padding-left: 1.5rem;
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  & li {
+    margin: 0.2rem 0;
+  }
+
+  & li::marker {
+    color: var(--gray);
+  }
+
+  & li > ul,
+  & li > ol {
+    margin-top: 0.2rem;
+    margin-bottom: 0.2rem;
+    margin-left: 0.15rem;
+    padding-left: 1.1rem;
+    border-left: 1px solid var(--cb-rule);
+  }
+
+  /* task lists already pull a negative indent; a guide there just doubles up */
+  & li:has(> input[type="checkbox"]) > ul,
+  & li:has(> input[type="checkbox"]) > ol {
+    border-left: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * 4. Tables. Upstream leaves them unstriped, unbounded, with a heavy 2px
+ * header rule.
+ * ------------------------------------------------------------------------ */
+.page article {
+  & .table-container {
+    margin: 1.25rem 0;
+    border: 1px solid var(--lightgray);
+    border-radius: 6px;
+
+    /* min-width, not width: a narrow table fills the column, a wide one keeps
+       its natural width and uses the container's horizontal scroll instead of
+       being crushed into six 75px columns */
+    & > table {
+      margin: 0;
+      padding: 0;
+      min-width: 100%;
+      font-size: 0.94rem;
+
+      & > * {
+        line-height: 1.6rem;
+      }
+    }
+  }
+
+  & th {
+    border-bottom: 1px solid var(--gray);
+    color: var(--dark);
+    font-family: var(--headerFont);
+    font-weight: 600;
+    padding: 0.5rem 0.75rem;
+    background-color: var(--highlight);
+  }
+
+  & td {
+    padding: 0.4rem 0.75rem;
+    vertical-align: top;
+  }
+
+  & tbody tr:nth-child(even) {
+    background-color: var(--highlight);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * 5. Callouts: geometry polish plus a palette that is not stock Quartz.
+ *
+ * `--color` is the title text and sits on `--bg` (the same hue at 8% over the
+ * page background), which is why light and dark need separate hues rather than
+ * one mid-tone: no single colour clears 4.5:1 against both #f7f8f7 and
+ * #121614. Every pair below was computed, not picked by eye — see README.
+ * Hex-with-alpha and rgba() only; `color-mix()` would not survive the Safari
+ * 15.6 target lightningcss compiles for.
+ * ------------------------------------------------------------------------ */
+$cb-callout-light: (
+  note: #3d6b8f,
+  abstract: #356878,
+  info: #2c6f8a,
+  tip: #0a6e55,
+  success: #166b45,
+  question: #7d5f16,
+  warning: #8f5a10,
+  danger: #a83a32,
+  bug: #96406b,
+  example: #5f52a0,
+  quote: #5a6664,
+);
+
+$cb-callout-dark: (
+  note: #8fbedd,
+  abstract: #84c6d6,
+  info: #7ac3dd,
+  tip: #5ecfa4,
+  success: #66cf95,
+  question: #d7b45c,
+  warning: #e0a95c,
+  danger: #ef9089,
+  bug: #e491bd,
+  example: #b0a4ee,
+  quote: #9aa8a5,
+);
+
+@mixin cb-callout-vars($palette) {
+  @each $name, $hue in $palette {
+    --cb-#{$name}: #{$hue};
+    --cb-#{$name}-border: #{rgba($hue, 0.32)};
+    --cb-#{$name}-bg: #{rgba($hue, 0.08)};
+  }
+}
+
+:root {
+  @include cb-callout-vars($cb-callout-light);
+}
+
+:root[saved-theme="dark"] {
+  @include cb-callout-vars($cb-callout-dark);
+}
+
+@mixin cb-hue($name) {
+  --color: var(--cb-#{$name});
+  --border: var(--cb-#{$name}-border);
+  --bg: var(--cb-#{$name}-bg);
+}
+
+.callout {
+  margin: 1.25rem 0;
+  padding: 0 1rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--color);
+
+  & > .callout-content > :last-child {
+    margin-bottom: 0.9rem;
+  }
+
+  &[data-callout] {
+    @include cb-hue(note);
+  }
+  &[data-callout="abstract"],
+  &[data-callout="summary"],
+  &[data-callout="tldr"] {
+    @include cb-hue(abstract);
+  }
+  &[data-callout="info"],
+  &[data-callout="todo"] {
+    @include cb-hue(info);
+  }
+  &[data-callout="tip"],
+  &[data-callout="hint"],
+  &[data-callout="important"] {
+    @include cb-hue(tip);
+  }
+  &[data-callout="success"],
+  &[data-callout="check"],
+  &[data-callout="done"] {
+    @include cb-hue(success);
+  }
+  &[data-callout="question"],
+  &[data-callout="help"],
+  &[data-callout="faq"] {
+    @include cb-hue(question);
+  }
+  &[data-callout="warning"],
+  &[data-callout="caution"],
+  &[data-callout="attention"] {
+    @include cb-hue(warning);
+  }
+  &[data-callout="failure"],
+  &[data-callout="missing"],
+  &[data-callout="fail"],
+  &[data-callout="danger"],
+  &[data-callout="error"] {
+    @include cb-hue(danger);
+  }
+  &[data-callout="bug"] {
+    @include cb-hue(bug);
+  }
+  &[data-callout="example"] {
+    @include cb-hue(example);
+  }
+  &[data-callout="quote"],
+  &[data-callout="cite"] {
+    @include cb-hue(quote);
+  }
+}
+
+.callout-title {
+  padding: 0.7rem 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * 6. Contribution entry point. EditThisPage ships its own colours off the
+ * theme tokens; this only makes it read as a deliberate control instead of
+ * stray grey text under the new palette.
+ * ------------------------------------------------------------------------ */
+.edit-this-page {
+  margin: 0.4rem 0 0 0;
+
+  & a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.1rem 0.45rem;
+    border: 1px solid var(--lightgray);
+    border-radius: 5px;
+    font-family: var(--headerFont);
+    transition:
+      color 0.2s ease,
+      border-color 0.2s ease;
+  }
+
+  & a:hover {
+    color: var(--secondary);
+    border-color: var(--secondary);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * 7. Small global readability items.
+ * ------------------------------------------------------------------------ */
+.page article {
+  & p,
+  & li {
+    line-height: 1.65;
+  }
+
+  & h1,
+  & h2 {
+    letter-spacing: -0.01em;
+  }
+
+  /* upstream draws no rule under h2, so long pages read as one undivided slab */
+  & h2 {
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--lightgray);
+  }
+
+  & blockquote {
+    color: var(--gray);
+    font-style: italic;
+  }
+
+  /* the vault is full of inline commands and paths; keep them from crowding.
+     No word-break here on purpose: inside a table cell it shreds tokens like
+     `#__archived` mid-word, and paragraphs already inherit overflow-wrap. */
+  & :not(pre) > code {
+    padding: 0.1rem 0.3rem;
+    font-size: 0.85em;
+  }
+}
+
+.graph > .graph-outer {
+  border-radius: 6px;
+}
