@@ -1,0 +1,12 @@
+{
+  "name": "@cyberbaser/correction",
+  "version": "0.1.0",
+  "description": "Exact, fail-closed UTF-8 quote anchoring and single-splice correction preparation/application for existing markdown files.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {}
+}

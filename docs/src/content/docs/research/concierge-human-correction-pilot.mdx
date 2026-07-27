@@ -1,0 +1,338 @@
+---
+title: "Concierge human-correction pilot"
+description: "A precommitted falsification protocol for testing whether ordinary readers can propose useful corrections without accounts and whether a Markdown-KB owner can review and apply exact-byte changes locally without GitHub."
+sidebar:
+  label: "Human correction pilot"
+  order: 20
+status: research
+tags: [research, contribution, testing, governance]
+---
+
+This page precommits the first human test of Cyberbaser's central contribution claim. It is a protocol and eventual results record. **No pilot attempts or results have been recorded yet.**
+
+:::caution[Concierge experiment, not shipped product]
+The pilot uses a human concierge to carry a submission through existing local libraries. It is **not** a shipped zero-account contribution path, editor, intake endpoint, hosted review console, automatic writer, or forge integration. It also proves no cross-system interoperability: one independently operated knowledge base participating in a manually assisted study is not an independent implementation of a Cyberbaser protocol.
+:::
+
+The experiment asks a deliberately narrow question before any product surface is built: can an ordinary reader describe one useful correction without an account or git, and can the owner judge and apply the resulting exact-byte patch locally, outside GitHub, without changing unrelated source bytes?
+
+## Claim under test
+
+> **A reader can propose a useful correction to a published Markdown knowledge base without an account, and the base owner can safely review and apply it locally without GitHub or unrelated byte changes.**
+
+This claim has two inseparable halves:
+
+1. **Reader completion:** the participant can express the intended correction through a small account-free study form without learning git, Markdown internals, source paths, or the owner's publishing stack.
+2. **Owner control:** the owner receives enough local evidence to accept or reject the exact change, and acceptance changes only the approved bytes in the owner-controlled Markdown source.
+
+A pleasant form with an unsafe write fails. A perfect byte splice that readers cannot complete also fails. The protocol therefore measures usability, correction quality, conversion work, review burden, rendering, source integrity, privacy, and owner preference together.
+
+## Scope and participants
+
+The counted pilot consists of:
+
+- **One independently operated Markdown-KB maintainer.** They control a real public knowledge base, its source mapping, source files, renderer, publication process, and final editorial decisions. They must not be the Cyberbaser maintainer or someone operating the base under the Cyberbaser maintainer's instructions.
+- **Five ordinary readers.** They are not Cyberbaser contributors, did not help design this protocol, do not administer the target base, and are not selected for git or Markdown expertise. Familiarity with the subject matter is allowed and useful.
+- **One concierge.** The concierge recruits participants, preserves the raw study record, converts submissions into exact local correction objects, runs the checks, and presents the review card. The concierge does not decide what the base should say and cannot approve or write a source change.
+
+An internal dry run against Cyberbase may test the instructions and tooling, but **it does not count** toward the five participant attempts, the accepted-correction threshold, the timing thresholds, or the owner-preference result.
+
+The independently operated base may use Cyberbaser's publication packages, but it does not have to. Independence here is about the human owner and their source of truth, not about claiming an independently implemented protocol.
+
+## What counts as an attempt
+
+Each participant receives a public target page or a small owner-approved set of pages relevant to them. No error is planted and no correction is suggested. The participant first identifies something they genuinely believe should change. The timed attempt begins when they open the blank study form and ends when they submit it or stop.
+
+A submission is **unaided** only if, after timing begins, the concierge provides no field-by-field help, rewrites no answer, identifies no source, and gives no hints about what correction to make. The concierge may resolve a study-access problem, such as a broken form link, but that invalidates the timing result unless the timer restarts with a fresh blank form.
+
+A correction is **substantive** for the acceptance threshold when it repairs a factual statement, instruction, citation, broken or misleading link, or materially misleading wording. Pure spelling, punctuation, formatting, or house-style changes may still be useful and should be recorded, but they do not count toward the two substantive accepted-and-live corrections.
+
+The owner, not the concierge, decides whether a correction is useful and acceptable. The precommitted mechanical checks decide whether it is safe enough to present and apply.
+
+## The exact participant form
+
+The study instrument contains only the following fields, in this order. The transport may be a paper form, a blank shared document, or an account-free survey selected for the run. It is a study instrument operated by the concierge, not a Cyberbaser endpoint or editor.
+
+| Field | Required | Exact instruction shown to the participant | Handling rule |
+|---|---:|---|---|
+| **Page URL** | Yes | “Paste the URL of the page you want to correct.” | Must be a public page the owner agrees is in scope. The participant never supplies a source path. |
+| **Exact quote** | Yes | “Copy the exact text that should change. Include enough surrounding words to identify it once.” | Preserved exactly as submitted. No trimming, case folding, newline conversion, Unicode normalization, or fuzzy repair. |
+| **Replacement** | Yes | “Write the text that should replace the quote. Leave this empty only if the quoted text should be deleted.” | Preserved exactly as submitted. An empty replacement is an explicit deletion, not a missing answer. |
+| **Rationale** | Yes | “In one or two sentences, explain why this change improves the page.” | Shown to the owner unchanged except for necessary redaction of identifying data. |
+| **Factual source** | When applicable | “If this changes a fact, paste the best source you used. Otherwise write ‘not applicable’.” | A URL is evidence for review, not automatic proof. The owner judges source quality. |
+| **Public credit name** | No | “If the correction is accepted, what name may be shown publicly? Leave blank for no public credit.” | Never used as authentication or a trust signal. Blank means no public name. |
+| **Credit consent** | Yes | “May the public results page use the credit name above if the correction is accepted? Choose yes or no.” | “Yes” is valid only when a public credit name is also present. “No” or blank name means the attempt remains anonymous publicly. |
+
+The form does **not** request an email address, account, username, IP address, source-file path, git identity, demographic profile, or credentials. Recruitment contact details, if any already exist outside the study, are not copied into the submission record.
+
+The participant supplies only the exact quote. If that quote appears more than once, the concierge may derive immediately adjacent `prefix` and `suffix` context from the owner-confirmed current source after submission. The participant is never asked to understand byte offsets. Added context may only disambiguate the submitted quote; it may not change, normalize, or silently rebase it. This follows the useful shape of the [Web Annotation Text Quote Selector](https://www.w3.org/TR/annotation-model/#text-quote-selector), while Cyberbaser's correction core deliberately applies stricter byte-exact UTF-8 matching.
+
+## Owner-confirmed page-to-source mapping
+
+The owner is the authority for mapping the public page URL to the Markdown source file. Cyberbaser and the concierge must never guess from a slug, title, repository search, renderer output, or apparent filename.
+
+Before any correction is prepared, the concierge records an owner confirmation containing:
+
+1. the submitted public page URL;
+2. the exact source path as understood by the owner;
+3. the source revision or local snapshot identifier the owner says currently backs the page;
+4. whether the page is inside a Cyberbaser `select()`/`project()` publication boundary;
+5. the renderer and exact local build command used for the isolated comparison; and
+6. confirmation that the source file is public or otherwise safe for the concierge to process locally.
+
+A mapping disagreement, unknown source path, private source the owner did not authorize, or page backed by several generated sources ends the attempt as **mapping unresolved**. Rendered-passage-to-source mapping beyond exact quote plus adjacent context remains an observed research question, not a source-map project hidden inside this pilot.
+
+## Concierge conversion and safety procedure
+
+Every attempt follows the same order. Steps may not be skipped for a correction that looks trivial.
+
+### 1. Freeze the base representation
+
+The concierge works from the owner-confirmed source revision and reads the target as raw bytes. Record the byte length and an RFC-9530-style SHA-256 representation digest (`sha-256=:<base64>:`). [RFC 9530](https://www.rfc-editor.org/rfc/rfc9530.html) supplies the digest field shape; the digest binds the correction to bytes, not to page identity or editorial truth.
+
+If the current source is not valid UTF-8, stop. The correction core does not normalize encodings or line endings.
+
+### 2. Resolve the submitted quote exactly
+
+Call `resolveQuoteAnchor(baseBytes, selector)` from `@cyberbaser/correction`, where `selector.quote` is the participant's exact quote and optional `selector.prefix`/`selector.suffix` are immediately adjacent source context.
+
+- One match produces half-open UTF-8 byte offsets.
+- Zero matches fails closed as stale, mistyped, or mapped to the wrong source.
+- More than one match fails closed as ambiguous.
+- Whitespace, CRLF/LF, case, NFC/NFD, emoji, and combining characters remain byte-exact.
+
+The concierge may ask the participant for clarification in a later, separately timed exchange, but the original attempt is not retroactively counted as unaided completion. No fuzzy matching, trimming, normalization, or silent rebasing is permitted.
+
+### 3. Prepare and apply one candidate splice
+
+Call:
+
+```js
+const correction = prepareCorrection(baseBytes, {
+  selector: { quote, prefix, suffix },
+  replacement,
+});
+
+const candidateBytes = applyCorrection(baseBytes, correction);
+```
+
+`prepareCorrection()` binds one single-file, single-splice proposal to the base byte length and digest, byte range, expected old bytes, replacement bytes, selector context, and candidate length and digest. `applyCorrection()` rechecks all of those preconditions and returns a new candidate `Buffer`. It does not mutate the base and does not write a file.
+
+The correction is ineligible if the base became stale, the expected bytes changed, the selector context no longer matches, the range is invalid, the candidate is invalid UTF-8, or any digest/length check fails. Re-prepare only from a newly owner-confirmed base; never treat the old proposal as current.
+
+### 4. Prove the splice boundary
+
+Record that:
+
+- bytes before `start` are identical between base and candidate;
+- bytes after `end` are identical after accounting for replacement length;
+- the candidate digest equals the prepared candidate digest; and
+- exactly one source file and one byte range are proposed.
+
+This is the pilot's write-safety claim. Multi-file changes, multiple splices, file creation, file deletion, asset changes, frontmatter restructuring, and whole-file re-serialization are outside scope.
+
+### 5. Compose OFM and trust checks
+
+Decode the base and candidate as exact UTF-8 strings, then call `checkChange(before, after)` from `@cyberbaser/ofm`. Record its `clean | suspect | damage` verdict, findings, churn, and escape counts. `@cyberbaser/ofm` is a validator, never the writer; see the [translation-layer contract](/cyberbaser/design/translation-layer/) and the [R12 gate measurement](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25).
+
+Call `classify(change, config)` from `@cyberbaser/trust` with one modified file and the target base's owner-supplied trust policy. Because the study proves no account or verified identity, the default participant representation is `authorType: 'anonymous'`. A public credit name does not promote trust. Record the returned tier, route, reasons, and checks. The route informs the owner; it does not approve or reject the correction automatically.
+
+Any OFM `damage` verdict stops the attempt before review. A `suspect` verdict may be shown only as a blocked card requiring investigation; it is not eligible for acceptance in this pilot unless the finding is demonstrated to be entirely inside the intended splice and the owner explicitly records that reasoning. This exception must be published in the anonymized attempt notes and may not hide a removed construct or unrelated churn.
+
+### 6. Render baseline and candidate in isolation
+
+Create separate temporary local snapshots for the baseline and candidate, using the same renderer version, configuration, dependencies, and build command recorded by the owner. Only the candidate snapshot receives the prepared target-file bytes. Do not deploy either snapshot publicly.
+
+Build both snapshots. Capture the target page in comparable baseline and candidate views at the same viewport, and retain build logs locally. A build failure, unshown target page, or semantic change not visible in the review card blocks owner approval.
+
+The renderer is a swappable spoke. This step validates what the owner and readers will see; it does not authorize the renderer to rewrite source Markdown.
+
+### 7. Compare internal links
+
+Run `checkSite(siteDir, opts)` from `@cyberbaser/linkcheck` once on the isolated baseline output and once on the candidate output. Compute the candidate-only broken-link delta as a set difference over each finding's page, href, decoded target, and class.
+
+There is no invented “delta API.” The pilot composes two existing `checkSite()` results. Any new candidate-only broken link blocks acceptance. Inherited baseline link debt is recorded but is not assigned to the participant or repaired as part of this experiment.
+
+### 8. Verify publication boundaries when applicable
+
+If the target base uses Cyberbaser's publication boundary, run the same local process for both snapshots:
+
+1. `select(vaultDir, { audience: 'public' })`;
+2. `project(vaultDir, outDir, { selectResult, lowercase: false })` using the current verbatim-path contract; and
+3. `verifyProjection(vaultDir, outDir, selectResult, { lowercase: false })`.
+
+Record selection errors, published file-set changes, projection failures and warnings, denied-path findings, and projection verification. The candidate must not add an unrelated published file, move a path, expose a denied file, or introduce a new denied-title/canary match. Any private-content hit stops the entire pilot, not only the attempt.
+
+For a base without this boundary, mark these fields **not applicable**. Do not simulate them or imply the independent owner adopted Cyberbaser's projection system.
+
+### 9. Assemble the review card without writing source
+
+Only after the previous steps complete does the concierge produce the local review card. The card is a static local artifact or local browser view generated for the study. It is not a hosted console, GitHub view, or production UI.
+
+<div class="cb-review" role="img" aria-label="Schematic review card contract with placeholders for an attempt ID, exact old and new text, machine checks, and an explicit no-source-write status. No pilot result is shown.">
+  <div class="cb-review-hd"><span class="cb-review-av">HC</span><span class="cb-review-who">HC-__ <span class="cb-review-trust">participant identity unverified</span></span><span class="cb-chip cb-chip-warn">pending owner</span></div>
+  <div class="cb-review-diff"><div class="cb-diff cb-diff-rm">- exact old text</div><div class="cb-diff cb-diff-add">+ proposed replacement</div></div>
+  <div class="cb-checks">
+    <div class="cb-check cb-check-off"><span class="cb-check-ic">–</span><span class="cb-check-t">OFM verdict</span><span class="cb-check-meta">not run</span></div>
+    <div class="cb-check cb-check-off"><span class="cb-check-ic">–</span><span class="cb-check-t">trust route</span><span class="cb-check-meta">not run</span></div>
+    <div class="cb-check cb-check-off"><span class="cb-check-ic">–</span><span class="cb-check-t">candidate-only link delta</span><span class="cb-check-meta">not run</span></div>
+  </div>
+  <div class="cb-review-actions"><span class="cb-review-btn cb-review-approve">Accept locally</span><span class="cb-review-btn cb-review-reject">Reject / clarify</span></div>
+</div>
+
+<p class="cb-fig-cap">Contract sketch only. Every value remains unfilled until a real attempt runs, and the card must say that no source write has occurred.</p>
+
+## Review-card contract
+
+Every card must contain all of the following. Missing evidence means the owner cannot approve the correction through this pilot.
+
+| Section | Required contents |
+|---|---|
+| **Attempt** | An anonymized attempt ID, public page URL, attempt date, and whether the attempt counts as independent and unaided. |
+| **Exact change** | Exact old text, exact replacement, deletion clearly marked when replacement is empty, and a compact source diff with enough unchanged context to interpret it. |
+| **Rendered comparison** | Baseline and candidate views of the target passage, built in isolation with the recorded renderer version and command. |
+| **Source binding** | Owner-confirmed source path, source revision or snapshot identifier, base and candidate byte lengths, RFC-9530-style digests, half-open byte range, and expected-old-byte verification. Private source paths are shown only to the owner and are redacted from public evidence. |
+| **Anchor status** | Whether the quote was unique without context, what immediately adjacent prefix/suffix was added if needed, and confirmation that the final selector resolved exactly once. |
+| **Byte proof** | Explicit confirmation that every byte outside the declared splice is unchanged and that no source write has occurred. |
+| **OFM** | `checkChange()` verdict, findings, churn, and escape counts. |
+| **Trust** | `classify()` tier, route, reasons, and the policy revision used. Credit name is not identity evidence. |
+| **Links** | Baseline broken-link count, candidate broken-link count, and candidate-only delta from the two `checkSite()` reports. |
+| **Publication boundary** | `select()`/`project()`/`verifyProjection()` result when applicable, including file-set and leak findings; otherwise “not applicable.” |
+| **Participant context** | Rationale, factual source when applicable, requested public credit, and explicit credit consent. |
+| **Owner action** | Accept, reject, or request clarification; one-line reason; decision time; and a second explicit warning that no source write has occurred yet. |
+
+The card may link to local evidence, but it must not embed credentials, private content outside the approved passage, raw participant contact details, or an unredacted private path into anything intended for publication.
+
+## Owner decision and local application
+
+The owner reviews the complete card **outside GitHub**. Acceptable review surfaces include a local static page, a local-only browser view, or a printed/exported card under the owner's control. A GitHub pull request, issue, Actions summary, or merge screen does not satisfy this experiment.
+
+The owner chooses one of three outcomes:
+
+- **Accept:** the exact candidate is editorially correct and every required check is eligible.
+- **Reject:** the proposed content or evidence is not acceptable, even if the splice is mechanically safe.
+- **Clarify:** the intent may be useful, but the participant or mapping needs more information. This does not count as an accepted correction unless a new correction is prepared and reviewed from a current base.
+
+The concierge cannot approve on the owner's behalf. At the moment of decision, the source file is still unchanged.
+
+After acceptance, **the owner alone initiates application through the owner's normal local workflow**. That may use the already prepared candidate bytes, but `@cyberbaser/correction` itself remains a no-I/O library and the pilot adds no automatic writer. Before the write, `applyCorrection()` runs again against the current source bytes; any stale-base error returns the attempt to preparation and review.
+
+After the owner applies the candidate:
+
+1. hash the resulting source file and require the prepared candidate digest;
+2. confirm the source revision contains no other file or byte change attributable to the attempt;
+3. publish through the owner's normal process, without requiring GitHub;
+4. verify the public page shows the approved correction; and
+5. record the live URL, observation time, and source/candidate digest match in the private evidence record.
+
+A source digest mismatch, unrelated change, publication mismatch, or live page that does not show the approved correction triggers the stop conditions below.
+
+## Privacy and data boundaries
+
+Data minimization is part of the falsification test, not cleanup after it.
+
+- Raw forms, recruitment/contact details, exact timestamps tied to people, consent records, private owner mappings, local evidence, screenshots containing private material, and full review cards belong **only in ignored `.workspace/` storage** during an actual run.
+- No raw pilot data or identifying file is created by publishing this protocol. The workspace record must not be initialized until recruitment begins and the owner has agreed to the study.
+- The public page receives only anonymized attempt IDs, coarse or aggregate timing, mechanical outcomes, owner decisions, and redacted notes needed to interpret the result.
+- Never publish email addresses, IP addresses, account identifiers, private source paths, unpublished titles or content, credentials, tokens, or incidental personal data.
+- A participant's public credit name may be published only when the name is present **and** credit consent is “yes.” Consent to participate is not consent to public credit.
+- Credit is attribution only. It must not be treated as verified identity, reputation, or permission to bypass review.
+- If deletion of raw identifying data is requested, remove it from the ignored workspace while retaining only the anonymized aggregate needed to explain the experiment.
+
+Any accidental collection or exposure of private data stops the pilot until the data is contained, the affected owner/participant is informed, and the protocol is reassessed.
+
+## Precommitted thresholds
+
+The pilot succeeds only if **all** thresholds below are met. No threshold may be relaxed after seeing results.
+
+| Dimension | Passing threshold | Measurement rule |
+|---|---|---|
+| **Unaided completion** | At least **3 of 5** ordinary readers submit the exact form without help in **five minutes or less**. | Timer starts on blank-form open and ends on submit. Access interruptions invalidate or restart the timing attempt. |
+| **Useful outcome** | At least **two substantive corrections** are accepted by the independent owner and verified live. | Typo/punctuation/style-only changes do not count toward two, even if accepted. |
+| **Safe anchoring** | Every accepted correction resolves to exactly one quote/context match and applies as one valid splice against the reviewed base. | Zero-match, multiple-match, or stale proposals cannot be accepted. |
+| **Concierge effort** | Median submission-to-complete-review-card conversion is **under 10 minutes**. | Excludes waiting for participant/owner replies; includes mapping confirmation handling, correction preparation, checks, builds, link delta, and card assembly. |
+| **Owner effort** | Median complete-card-to-decision review time is **under 5 minutes**. | Pauses for clarification end that review interval and make the attempt ineligible for the median until a new complete card exists. |
+| **Integrity** | **Zero** unrelated byte changes, private leaks, OFM semantic damage, or candidate-only broken-link regressions across accepted attempts. | Any occurrence is both a threshold failure and a stop condition. |
+| **Owner preference** | After reviewing at least two eligible cards, the owner chooses this workflow over receiving the same correction by email and manually finding/editing the source. | Record one forced choice: “pilot review-card workflow,” “neutral,” or “email plus manual editing.” Only the first passes. |
+
+Useful corrections that cannot be anchored safely do not count. Mechanically safe corrections the owner rejects do not count. Accepted source changes that are not verified live do not count.
+
+## Stop conditions
+
+Stop the entire pilot immediately if any of the following occurs:
+
+1. a hidden quote ambiguity is discovered after a proposal was presented as unique;
+2. a stale proposal is treated as current, silently rebased, or applied without re-preparation;
+3. private content, a denied path, credentials, or identifying data leaks into a review artifact, render, projection, log intended for sharing, or public page;
+4. any byte outside the approved splice changes because of the pilot;
+5. rendering or OFM damage exists but is absent from the review card shown to the owner;
+6. a candidate introduces a new broken-link regression that the card does not show;
+7. the source bytes applied differ from the candidate bytes the owner approved;
+8. the live page differs materially from the approved rendered candidate; or
+9. the concierge, rather than the owner, causes an unapproved source write.
+
+Do not continue collecting attempts while a stop condition is unresolved. Preserve the minimum evidence needed to understand the failure, contain any private data, and publish only an anonymized account if it is safe and useful.
+
+## Attempt-results table
+
+This is the public, anonymized results record to fill after the pilot. `Not run` is a placeholder, not a result. Detailed raw evidence remains in ignored workspace storage.
+
+| Attempt | Independent reader/base | Unaided ≤5 min | Submission useful | Quote unique and safe | Substantive | Owner decision | Accepted bytes verified live | Concierge min | Owner-review min | New link regressions | Safety/notes |
+|---|---|---|---|---|---|---|---|---:|---:|---:|---|
+| HC-01 | Not run | Not run | Not run | Not run | Not run | Not run | Not run | — | — | — | Not run |
+| HC-02 | Not run | Not run | Not run | Not run | Not run | Not run | Not run | — | — | — | Not run |
+| HC-03 | Not run | Not run | Not run | Not run | Not run | Not run | Not run | — | — | — | Not run |
+| HC-04 | Not run | Not run | Not run | Not run | Not run | Not run | Not run | — | — | — | Not run |
+| HC-05 | Not run | Not run | Not run | Not run | Not run | Not run | Not run | — | — | — | Not run |
+
+### Aggregate decision fields
+
+| Measure | Precommitted pass | Result |
+|---|---:|---|
+| Unaided submissions in ≤5 minutes | ≥3/5 | Not run |
+| Substantive accepted corrections verified live | ≥2 | Not run |
+| Median concierge conversion | &lt;10 min | Not run |
+| Median owner review | &lt;5 min | Not run |
+| Unrelated byte changes | 0 | Not run |
+| Private leaks | 0 | Not run |
+| OFM semantic damage in accepted attempts | 0 | Not run |
+| Candidate-only link regressions in accepted attempts | 0 | Not run |
+| Owner preference | Pilot workflow | Not run |
+| Stop condition triggered | No | Not run |
+
+## Limitations
+
+Even a fully passing pilot supports only a bounded next step.
+
+- Five readers and one owner cannot establish market demand, population-level completion rates, moderation economics, accessibility across all needs, or abuse resistance at public-internet scale.
+- A concierge hides operational work. The timing threshold measures whether that work is small enough to automate next, not whether automation already exists.
+- The study form is not a product interface. Its transport may have its own privacy, accessibility, or reliability limits and must be recorded with the results.
+- Exact quote anchoring covers one existing UTF-8 file and one splice. It does not solve structural edits, multi-paragraph moves, tables requiring coordinated changes, frontmatter editing, asset uploads, new pages, deletions, or concurrent multi-author editing.
+- Owner-confirmed page-to-source mapping avoids guessing; it does not solve generalized renderer source maps.
+- Isolated rendering proves the configured baseline/candidate comparison for one base. It is not a renderer conformance suite.
+- Running OFM, trust, projection, render, and link checks together demonstrates local composition of existing libraries. It is not a shipped endpoint, workflow engine, or interoperability result.
+- The owner-preference result is one maintainer's judgment. A “prefer” result justifies another small experiment, not a universal UX claim.
+- A shortage of substantive corrections may reflect limited page defects, reader fit, or low motivation. Regardless of cause, it does not justify building a contribution platform without more evidence.
+
+## Decision rule
+
+Apply this rule after filling the tables without changing the thresholds:
+
+1. **All thresholds pass, no stop condition:** build only the smallest automation that removes measured concierge work from intake, exact source anchoring, and local review-card generation. Do not infer a need for a rich editor, hosted console, account system, automatic writer, or generalized adapter.
+2. **Usability threshold fails but safety holds:** revise the manual form or instructions and run another precommitted manual iteration. Do not build infrastructure to automate a flow people cannot complete.
+3. **Safety or privacy threshold fails, or any stop condition fires:** stop product-surface work on this path. Repair or narrow the correction contract and repeat local falsification before recruiting more participants.
+4. **Fewer than two substantive corrections are accepted and live:** the pilot has insufficient evidence of useful correction demand. Do not justify a platform from mechanically successful toy edits.
+5. **Owner does not prefer the workflow to email plus manual editing:** the proposed layer has not reduced the owner's burden. Reconsider the review artifact and source-mapping workflow before automating intake.
+
+Selecting or running this experiment does **not** assign an R-number and does **not** close [Q09, the no-account contribution-path question](/cyberbaser/reference/open-questions/#q09--what-is-the-contribution-path-for-someone-with-no-account). Q09 can close only after evidence supports an explicit maintained product decision.
+
+## Related
+
+- [Contribution Workflows](/cyberbaser/design/contribution-workflows/) — what contributors and maintainers can actually use today
+- [Translation Layer](/cyberbaser/design/translation-layer/) — the byte-preserving write-path constraint and OFM validator role
+- [Architecture](/cyberbaser/design/architecture/) — the existing package boundaries and the review surface that has not shipped
+- [The v1 build plan](/cyberbaser/research/v1-build-plan/) — the measurement that prohibited whole-file re-serialization
+- [Selective Publishing and Access](/cyberbaser/research/proposal-selective-publishing/) — the fail-closed publication boundary composed when applicable
+- [Assumptions & risks](/cyberbaser/research/assumptions-and-risks/) — the product-gating risks this experiment is intended to falsify
+- [Open Questions](/cyberbaser/reference/open-questions/) — Q09 remains open
+- External: [Web Annotation Data Model](https://www.w3.org/TR/annotation-model/) · [Digest Fields, RFC 9530](https://www.rfc-editor.org/rfc/rfc9530.html)

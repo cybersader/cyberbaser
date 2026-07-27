@@ -11,16 +11,17 @@ tags: [design, contribution]
 It specified a Decap-based web CMS path, per-PR preview deployments, and a CI gate that blocks merges. None of those exist. The CMS path was ruled out permanently by [R12](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25), and the preview and the gate are designed but unbuilt. Every claim below is now labelled **built** (ours), **borrowed** (GitHub's or Quartz's), or **designed, unbuilt**.
 :::
 
-Cyberbaser's design calls for contribution paths that work **independently** — no path may depend on another being running (see [Principle 4](/cyberbaser/getting-started/principles/#4-every-contribution-path-must-work-independently)). This page states each path as it stands, and separates the shipped mechanics from the commitments that are still on paper.
+Cyberbaser's design requires every contribution path it offers to work **independently**; it does not require three named paths or a Web CMS (see [Principle 4](/cyberbaser/getting-started/principles/#4-every-offered-contribution-path-must-work-independently)). This page states the mechanisms that exist, preserves the withdrawn CMS proposal as history, and separates shipped mechanics from the bounded experiment now testing the missing account-free path.
 
 ## Status at a glance
 
 | Piece | State | Where it lives |
 |---|---|---|
-| Path A · Web CMS (Decap, Sveltia, Tina, Pages CMS) | **Withdrawn.** R12 disqualifies the whole category | [Write-path proposal §1](/cyberbaser/research/proposal-write-path/) |
-| Path B · Obsidian + Git | **Built and in daily use** by the maintainer | `publish-site.yml` in the vault repo |
-| Path C · GitHub web editor | **Built.** The only path open to an outside contributor | `EditThisPage.tsx` → `github.com/.../edit/` |
-| Zero-account contribution | **Does not exist.** No design has shipped | [Risk register, rated critical](/cyberbaser/research/assumptions-and-risks/#the-real-gating-risks-ranked) |
+| Historical Web CMS proposal (Decap, Sveltia, Tina, Pages CMS) | **Withdrawn.** R12 disqualifies the whole-file-writing category | [Write-path proposal §1](/cyberbaser/research/proposal-write-path/) |
+| Maintainer local path · Obsidian + Git | **Built and in daily use** by the maintainer | `publish-site.yml` in the vault repo |
+| Contributor path · GitHub web editor | **Built.** The only shipped path open to an outside contributor | `EditThisPage.tsx` → `github.com/.../edit/` |
+| Account-free contribution product | **Unshipped.** Q09 remains open | [Open question Q09](/cyberbaser/reference/open-questions/#q09--what-is-the-contribution-path-for-someone-with-no-account) |
+| Concierge human-correction pilot | **Precommitted, not run.** A study, not a product path | [Pilot protocol](/cyberbaser/research/concierge-human-correction-pilot/) |
 | OFM damage check on a PR | **Built, report-only.** `continue-on-error: true`, blocks nothing | `@cyberbaser/ofm` via `ofm-check.yml` |
 | Trust classification on a PR | **Built, decision-only.** Emits a label and a summary table | `@cyberbaser/trust` via `trust-gate.yml` |
 | Auto-merge for the auto-merge route | **Designed, disabled.** The step is commented out in the workflow | `trust-gate.yml` |
@@ -30,20 +31,20 @@ Cyberbaser's design calls for contribution paths that work **independently** —
 
 The single most important line in that table: **nothing in the pipeline can block a merge today.** The checks report; a human decides.
 
-## Path A: Web CMS — withdrawn
+## Historical proposal: Web CMS — withdrawn
 
 **Status: withdrawn, not deferred.** This path specified a rich web editor (Decap with Open Authoring) that would render the page's markdown, offer wikilink and callout widgets, show a live preview, and open a fork-and-PR invisibly.
 
 It was ruled out on measurement, not taste. The [write-path proposal](/cyberbaser/research/proposal-write-path/) evaluated Decap, Sveltia, TinaCMS, EmDash and Pages CMS and disqualified every one for the same reason: each re-serializes the whole file on save. [R12](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25) then generalized that into a standing constraint after running the round-trip against all 1430 real vault files and getting **4.6% byte-identity**: no whole-file re-serialization in any write path, ever. That closes the category, not just the finalists.
 
-**What this means for the three-path framing.** Path A's users have not been given a different editor. They have been handed Path C. In practice there are **two** paths today, one of which (Path B) only the maintainer uses:
+**Why the old three-path framing ended.** The principle is path independence, not a mandatory count or a commitment to these three surfaces. The withdrawn CMS was not replaced by another shipped editor. In practice there are **two mechanisms** today:
 
-- Path B, Obsidian + Git, for someone who already has the vault cloned.
-- Path C, GitHub's web editor, for everyone else.
+- Obsidian + Git, for the maintainer who already has the vault cloned.
+- GitHub's web editor, for an outside contributor who has a GitHub account.
 
-**The persona Principle 3 exists for has no path at all.** A domain expert with no GitHub account and no wish to make one cannot contribute today: GitHub's editor requires an account, and the anonymous intake endpoint that would replace it is designed ([`cb-intake` in the hub BOM](/cyberbaser/research/proposal-hub-bom/)) and unbuilt. The risk register rates this **critical** and has since before the pipeline shipped. Nothing on this page should be read as claiming otherwise.
+**The persona Principle 3 exists for has no shipped path.** A domain expert with no GitHub account and no wish to make one cannot contribute today. The immediate [concierge human-correction pilot](/cyberbaser/research/concierge-human-correction-pilot/) tests whether five ordinary readers can express useful exact corrections and whether one independent owner can review and apply them locally without GitHub. The concierge carries the submission through existing libraries by hand; it is not an anonymous endpoint, editor, automatic writer, or forge integration, and it does not close Q09.
 
-## Path B: Obsidian + Git
+## Maintainer local path: Obsidian + Git
 
 **Status: built. This is the maintainer's daily path.**
 
@@ -70,7 +71,7 @@ It was ruled out on measurement, not taste. The [write-path proposal](/cyberbase
 
 The maintainer pushes to `main` directly, and `ofm-check` and `trust-gate` are both `pull_request`-triggered. **A direct push is validated by nothing.** The contributor path has more checks than the maintainer path, not fewer. That asymmetry is deliberate for now (requiring PRs for all changes would break daily authoring from Obsidian), but it is a gap, not a design.
 
-## Path C: Direct GitHub
+## Shipped contributor path: Direct GitHub
 
 **Status: built, and it is the only path an outside contributor can use.**
 
@@ -96,6 +97,14 @@ The maintainer pushes to `main` directly, and `ofm-check` and `trust-gate` are b
 - Do we surface a syntax hint for Obsidian-specific constructs in the raw view?
 - Should the PR template auto-fill with the page being edited?
 
+## Account-free correction: bounded concierge experiment
+
+**Status: immediate experiment, no product surface shipped.** The [pilot protocol](/cyberbaser/research/concierge-human-correction-pilot/) gives five ordinary readers a small account-free study form: page URL, exact quote, replacement, rationale, and a factual source when applicable. An independently operated Markdown-KB owner confirms the page-to-source mapping and remains the only person who may accept and apply a change.
+
+The concierge converts each submission into one exact UTF-8 byte splice, fails closed on a missing or ambiguous quote, proves every byte outside the splice is unchanged, runs OFM/trust/render/link checks, and assembles a local review card. The owner reviews and applies the accepted candidate outside GitHub through their normal local workflow. This tests reader completion, exact source anchoring, review burden, owner preference, privacy, and non-GitHub operation together.
+
+No attempt has run. Passing the precommitted thresholds would justify only the smallest automation around intake, anchoring, and local review-card generation. It would not establish a zero-account product, automatic write path, hosted moderation console, abuse resistance at Internet scale, or cross-system interoperability.
+
 ## Cross-path concerns
 
 ### Conflict resolution
@@ -113,9 +122,9 @@ The trust classifier computes a route for every PR. What happens next is entirel
 | PR type | Computed route | What actually happens |
 |---|---|---|
 | Typo fix from trusted contributor | `auto-merge` | Label applied. **Nothing merges.** The auto-merge step is commented out and no required check exists |
-| Typo fix from anonymous | `full-review` | Label applied, maintainer merges by hand |
+| Typo fix from unverified identity | `full-review` | Classifier behavior exists; no shipped account-free intake produces this route today |
 | Content change from trusted | `quick-review` | Label applied, maintainer merges by hand |
-| Content change from anonymous | `full-review` | Label applied, maintainer merges by hand |
+| Content change from unverified identity | `full-review` | Classifier behavior exists; no shipped account-free intake produces this route today |
 | Structural / navigation change | `full-review` | Label applied, maintainer merges by hand |
 
 Trusted contributors are designated in **`.cyberbaser/trust.yml`** in the vault repo (not `.github/trusted-contributors.yml`; the file moved out of the forge's namespace deliberately, per [dissent §1.4](/cyberbaser/research/dissent/)). Moving someone onto that list is a conscious act, and the policy is read from the base ref, so a PR cannot promote its own author.
@@ -126,7 +135,7 @@ Trusted contributors are designated in **`.cyberbaser/trust.yml`** in the vault 
 
 This is the actual moderation policy for the dogfood vault, written out to prove the trust-curve story survives contact with specifics. Any maintainer using cyberbaser would write their own version of these two paragraphs, and the trust dial is exactly which parts they tighten or loosen.
 
-> **Every edit lands in the moderation queue; nothing goes live unreviewed** except typo-level fixes from contributors already on the trusted list. The maintainer reviews **the diff on the PR page**, plus the `ofm-check` annotations and the `trust:<route>` label, and aims to act within a few days; "act" means merge, request changes, or reject with a one-line reason. Accepted edits are ones that make the content more true, more current, or more clear, and that cite a source for any factual claim that isn't self-evident. Anonymous edits are welcome on the same terms; identity is never required, it just speeds review as trust accrues.
+> **Every shipped-path edit lands in the moderation queue; nothing goes live unreviewed** except typo-level fixes from contributors already on the trusted list. The maintainer reviews **the diff on the PR page**, plus the `ofm-check` annotations and the `trust:<route>` label, and aims to act within a few days; "act" means merge, request changes, or reject with a one-line reason. Accepted edits are ones that make the content more true, more current, or more clear, and that cite a source for any factual claim that isn't self-evident. The policy intends to welcome account-free corrections on the same editorial terms, but that intake has not shipped; today an outside contributor needs GitHub.
 >
 > **Held or rejected without debate:** spam and promotion, edits to the personal folders (out of scope for contribution), factual changes with no source, drive-by rewrites of a page's voice or structure, and anything the maintainer judges to be generated bulk content. Contributors earn the trusted list after roughly three merged, unproblematic edits, and drop off it on the first spam or bad-faith submission; repeat abuse gets blocked at the repo (and, if volumetric, handled at the edge, which is [a separate problem](/cyberbaser/concepts/problem/#contribution-on-your-terms)). The maintainer's call is final; there is no appeals process at this scale, and that's a feature, not a gap.
 
@@ -180,4 +189,4 @@ Contribution only works legally if the vault has a content license with a contri
 
 Based on prior art ([awesome-* repos](/cyberbaser/research/prior-art/#awesome--repos)), the floor was set as **"as easy as editing an awesome-list repo on GitHub"** — 3 clicks: Edit → type → Propose change.
 
-That floor is met, and entirely by GitHub's editor rather than by anything cyberbaser built. It is worth being precise about what that does and does not prove: it clears the bar for a contributor who already has a GitHub account, and it does not touch [Principle 3](/cyberbaser/getting-started/principles/) at all for a contributor who does not. Principle 3's actual claim is that contributors shouldn't need to learn git *and* shouldn't be forced into an account. Half of it is currently unmet.
+That floor is met, and entirely by GitHub's editor rather than by anything cyberbaser built. It clears the bar for a contributor who already has a GitHub account, and it does not satisfy [Principle 3](/cyberbaser/getting-started/principles/) for someone who does not. The concierge pilot is the next falsification step: at least 3 of 5 readers must submit unaided in five minutes or less, at least two substantive corrections must be accepted and verified live, and the independent owner must prefer the review-card workflow to email plus manual source hunting. Until those results exist, the account-free product claim remains unearned.

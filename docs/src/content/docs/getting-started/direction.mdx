@@ -186,7 +186,7 @@ tags: [vision, planning, identity]
 .sl-markdown-content .cbd-not-t { font-weight: 700; color: var(--sl-color-white); display: block; margin-bottom: 0.15rem; }
 `}</style>
 
-**Cyberbaser today is a content-integrity pipeline with governance.** A default-deny boundary decides what leaves your vault, a commodity renderer turns that into a site, and mechanical validators judge every change that tries to come back: [933 pages live](https://cybersader.github.io/cyberbase/), five packages, 165 tests green, the contribution loop rehearsed end to end twice. What it has not built is one surface of its own, so every human step in that loop happens inside GitHub's UI or Quartz's.
+**Cyberbaser is in v1 Build: a content-integrity pipeline with governance, plus one immediate human-correction experiment.** A default-deny boundary decides what leaves your vault, a commodity renderer turns that into a site, and mechanical validators judge changes: [933 pages live](https://cybersader.github.io/cyberbase/), six packages, 187 tests green, the GitHub-backed contribution loop rehearsed end to end twice. The account-free product path has not shipped. A bounded [concierge pilot](/cyberbaser/research/concierge-human-correction-pilot/) now tests whether ordinary readers and one independent owner can complete a safe, local, non-GitHub correction workflow before any endpoint or editor is built.
 
 This page exists to answer one question in under two minutes: **is this still your project?** Read the scorecard, then the forks. Everything below those two is depth you can skip.
 
@@ -201,7 +201,7 @@ This is the alignment instrument, so it gets **updated, never replaced**.
 
 ## The alignment check
 
-Ten things the vision asks for, and where each actually stands. Two on track, three partial, five not.
+Ten things the vision asks for, and where each actually stands. The labels distinguish shipped evidence, partial work, controlled experiments, and missing product paths.
 
 <div class="cbd-score">
 
@@ -233,7 +233,7 @@ Ten things the vision asks for, and where each actually stands. Two on track, th
   <div class="cbd-row-hd"><span class="cbd-chip cbd-off">Diverged</span><span class="cbd-topic">Contributors don't need git</span></div>
   <div class="cbd-cols">
     <div class="cbd-cell"><span class="cbd-lab">What you asked for</span><a href="/cyberbaser/getting-started/principles/">Principle 3</a>. The domain expert who spots an error fixes it, no git, no wall.</div>
-    <div class="cbd-cell"><span class="cbd-lab">Where we are</span>They don't need to <em>learn</em> git. They need a GitHub account. The <a href="/cyberbaser/research/assumptions-and-risks/">risk register</a> still rates this <strong>critical</strong>, in the words "has no path", and it has been open for 22 weeks.</div>
+    <div class="cbd-cell"><span class="cbd-lab">Where we are</span>They don't need to <em>learn</em> git, but the only shipped outside-contributor path requires a GitHub account. Q09 remains open. The immediate <a href="/cyberbaser/research/concierge-human-correction-pilot/">concierge pilot</a> tests five readers and one independent owner; it is not a shipped endpoint or editor.</div>
   </div>
 </div>
 
@@ -246,10 +246,10 @@ Ten things the vision asks for, and where each actually stands. Two on track, th
 </div>
 
 <div class="cbd-row">
-  <div class="cbd-row-hd"><span class="cbd-chip cbd-off">Diverged</span><span class="cbd-topic">Three independent ways to contribute</span></div>
+  <div class="cbd-row-hd"><span class="cbd-chip cbd-part">Partial</span><span class="cbd-topic">Contribution paths fail independently</span></div>
   <div class="cbd-cols">
-    <div class="cbd-cell"><span class="cbd-lab">What you asked for</span><a href="/cyberbaser/getting-started/principles/">Principle 4</a>. Web, Obsidian plus git, and direct GitHub, each working on its own if the others are down.</div>
-    <div class="cbd-cell"><span class="cbd-lab">Where we are</span>Two, and the zero-git one <em>is</em> the GitHub one. R12 removed the CMS from the write path, and the in-page editor is gated behind a trigger ("a real non-git contributor is blocked") that nothing instruments and no anonymous surface exists to detect.</div>
+    <div class="cbd-cell"><span class="cbd-lab">What you asked for</span><a href="/cyberbaser/getting-started/principles/">Principle 4</a>. Every contribution path the product offers must reach the authoritative source without depending on another contribution surface. The principle does not mandate three paths or a Web CMS.</div>
+    <div class="cbd-cell"><span class="cbd-lab">Where we are</span>The maintainer's local path and GitHub's editor are operationally independent. The account-free path is unshipped and under a bounded concierge experiment, so there is not yet a third product path to evaluate.</div>
   </div>
 </div>
 
@@ -278,16 +278,16 @@ Ten things the vision asks for, and where each actually stands. Two on track, th
 </div>
 
 <div class="cbd-row">
-  <div class="cbd-row-hd"><span class="cbd-chip cbd-part">Fixture passed</span><span class="cbd-topic">A web of webs: federated, linked knowledge bases</span></div>
+  <div class="cbd-row-hd"><span class="cbd-chip cbd-part">Local evidence</span><span class="cbd-topic">A web of webs: federated, linked knowledge bases</span></div>
   <div class="cbd-cols">
     <div class="cbd-cell"><span class="cbd-lab">What you asked for</span>Independently owned bases and meta-wikis that can discover, curate, annotate and disagree without a central Cyberbaser database, while ordinary links survive every federation service failing.</div>
-    <div class="cbd-cell"><span class="cbd-lab">Where we are</span>The bounded <a href="/cyberbaser/research/federation/">five-origin fixture</a> passed on 2026-07-27: 31 logical URLs, 14 source-qualified records, two conflicting mappings, two visibly different search rankings, a byte-identical cache rebuild, 55 private canaries with zero hits, owner-qualified <code>410</code> deletion, and stale proposal rejection before apply/OFM/trust. Its 52 tests passed with 887 assertions. This is controlled local compatibility, not independent interoperability; no live network runtime or R-number exists.</div>
+    <div class="cbd-cell"><span class="cbd-lab">Where we are</span>The bounded <a href="/cyberbaser/research/federation/">five-origin fixture</a> passed inside one repository: 31 logical URLs, 14 source-qualified records, disagreement preserved, deterministic rebuild, and zero hits from 55 private canaries. This is controlled local compatibility only, not independent interoperability. Provisional profile work now waits behind a demonstrated need from an independently operated peer.</div>
   </div>
 </div>
 
 </div>
 
-Five implementation gaps are the same gap wearing different clothes: cyberbaser has built **judgement** (boundaries, validators, a trust classifier) and has never built a **surface**. Federation is different. Its authority model survived a bounded local fixture, but independent interoperability and the live URL contract remain unproven.
+The contribution gaps are the same gap wearing different clothes: Cyberbaser has built **judgement** (boundaries, validators, a trust classifier) and has not shipped the account-free **surface**. The concierge pilot tests whether that surface should exist and what work it must remove. Federation is separate: its authority model survived a bounded local fixture, while independent interoperability and the live URL contract remain unproven.
 
 ## The divergence to look at first
 
@@ -337,7 +337,7 @@ What a logged-out reader gets today when they act on the promise the whole proje
 
 </div>
 
-The left window is not scheduled. It was priced twice: the anonymous write endpoint at 4 days in the [hub bill of materials](/cyberbaser/research/proposal-hub-bom/), and at 2 to 3 days by the [adversarial pass](/cyberbaser/research/dissent/), which gave it the only outright WINS verdict it issued, on the grounds that deferring it "does not defer a feature, it defers the architecture." It was deferred again anyway.
+The left window is still not a shipped product. The immediate step is deliberately smaller: the [concierge human-correction pilot](/cyberbaser/research/concierge-human-correction-pilot/) uses a blank account-free study form, exact quote anchoring, one byte splice, and a local owner review card. No attempt has run. The endpoint was historically priced at 2 to 4 days, but automation now waits on the pilot's precommitted evidence rather than on another design estimate.
 
 ## How we got here
 
@@ -456,7 +456,7 @@ Both columns are load-bearing. The left is what the project has actually earned.
 
 <div class="cbd-truth-col">
   <div class="cbd-truth-hd">Verified true</div>
-  <div class="cbd-item"><span class="cbd-mark cbd-mark-y">✓</span><span class="cbd-item-tx"><strong>165 tests green</strong> across five packages, after the dead-code discovery was wired rather than papered over (R21).</span></div>
+  <div class="cbd-item"><span class="cbd-mark cbd-mark-y">✓</span><span class="cbd-item-tx"><strong>187 tests green</strong> across six packages; R21's first five reached 165 after the dead-code discovery was wired rather than papered over.</span></div>
   <div class="cbd-item"><span class="cbd-mark cbd-mark-y">✓</span><span class="cbd-item-tx"><strong>933 pages live.</strong> Build 3m07s to 4m52s across five runs, deploy 16 s, artifact at 25.1% of the 1 GB Pages cap (R16).</span></div>
   <div class="cbd-item"><span class="cbd-mark cbd-mark-y">✓</span><span class="cbd-item-tx"><strong>The boundary caught 587 stale publish flags</strong> before they could publish journals and personal finance notes (R15).</span></div>
   <div class="cbd-item"><span class="cbd-mark cbd-mark-y">✓</span><span class="cbd-item-tx"><strong>4.6% byte-identity over 1,430 real files</strong>, zero mask leaks, zero parse errors. The number that killed the serializer (R12).</span></div>
@@ -471,7 +471,7 @@ Both columns are load-bearing. The left is what the project has actually earned.
   <div class="cbd-item"><span class="cbd-mark cbd-mark-n">✗</span><span class="cbd-item-tx"><strong>"Trusted contributor typo → auto-merge."</strong> The classifier does compute that route, but the auto-merge step is commented out behind six named preconditions and <code>trust-gate.yml</code> has never executed. Nine workflow runs total on the vault: seven publish, two ofm-check.</span></div>
   <div class="cbd-item"><span class="cbd-mark cbd-mark-n">✗</span><span class="cbd-item-tx"><strong>"The maintainer reviews the rendered preview, not just the diff."</strong> That is the written moderation policy, and it has no implementation and no implementation path on the current host.</span></div>
   <div class="cbd-item"><span class="cbd-mark cbd-mark-n">✗</span><span class="cbd-item-tx"><strong>"The hub keeps every surface in sync"</strong> and <strong>"the hub turns the edit into a clean diff and queues it."</strong> GitHub turns the edit into a PR. Cyberbaser attaches a label to it.</span></div>
-  <div class="cbd-item"><span class="cbd-mark cbd-mark-n">✗</span><span class="cbd-item-tx"><strong>"Three independent contribution paths."</strong> Two, and one of them is the other.</span></div>
+  <div class="cbd-item"><span class="cbd-mark cbd-mark-n">✗</span><span class="cbd-item-tx"><strong>"Accounts are optional."</strong> The only shipped outside-contributor path opens GitHub login. The concierge pilot is a bounded experiment, not a product path.</span></div>
   <div class="cbd-item"><span class="cbd-mark cbd-mark-n">✗</span><span class="cbd-item-tx"><strong>"It composes existing tools rather than building trust from scratch."</strong> The trust classifier is 310 lines written from scratch. Here the built thing is better than the claim, and the claim should change.</span></div>
 </div>
 
@@ -513,7 +513,7 @@ Every point where a human touches this system today, coloured by whose UI they a
 
 ## Yours to decide
 
-Five forks. Four need a product choice. Federation passed its controlled fixture; its next gate is a provisional profile plus one independently operated implementation, while the production URL contract remains unlocked.
+Five forks. The account-free fork now has a bounded experiment but no product answer. Federation remains controlled local evidence; profile work waits for demonstrated need from an independently operated peer, and the production URL contract remains unlocked.
 
 <div class="cbd-forks">
 
@@ -559,22 +559,22 @@ Five forks. Four need a product choice. Federation passed its controlled fixture
 
 <div class="cbd-fork">
   <div class="cbd-fork-q">3. What does "a web of webs" require from v1?</div>
-  <div class="cbd-fork-why">The architecture is specific and its first falsification gate passed. The controlled fixture proved discovery, source-qualified disagreement, disposable-view rebuild, direct-link survival and fail-closed policy behavior inside one repository. The remaining gate is independent implementation, not more features in the fixture. See the measured <a href="/cyberbaser/research/federation/">federation result</a>.</div>
+  <div class="cbd-fork-why">The controlled fixture proved discovery, source-qualified disagreement, disposable-view rebuild, direct-link survival and fail-closed policy behavior inside one repository. It did not prove that another operator needs the contract or can implement it independently. See the measured <a href="/cyberbaser/research/federation/">federation result</a>.</div>
   <div class="cbd-opts">
     <div class="cbd-opt">
-      <div class="cbd-opt-hd"><span class="cbd-opt-n">a. Controlled fixture</span><span class="cbd-price">done · 52 tests</span></div>
-      Five logical HTTPS origins mapped through an injected transport to five stoppable loopback servers. The run produced 31 visited URLs, 14 records and zero hits from 55 private canaries under fixed crawl limits.
+      <div class="cbd-opt-hd"><span class="cbd-opt-n">a. Preserve the controlled fixture</span><span class="cbd-price">done · local evidence</span></div>
+      Keep the five-origin run as bounded architecture evidence: 31 visited URLs, 14 source-qualified records, deterministic rebuild, and zero hits from 55 private canaries.
     </div>
     <div class="cbd-opt">
-      <div class="cbd-opt-hd"><span class="cbd-opt-n">b. Publish the provisional profile</span><span class="cbd-price">next research item</span></div>
-      Extract only the descriptor, complete inventory, Linkset, record and conformance behavior the fixture exercised. Keep its URN and URL map test-only, then recruit one independently operated producer or consumer.
+      <div class="cbd-opt-hd"><span class="cbd-opt-n">b. Demonstrate peer need</span><span class="cbd-price">next gate</span></div>
+      Find one independently operated base, producer, consumer, or meta-wiki maintainer with a concrete cross-base problem and willingness to test a small contract.
     </div>
     <div class="cbd-opt">
-      <div class="cbd-opt-hd"><span class="cbd-opt-n">c. Stop at local compatibility</span><span class="cbd-price">0 d now</span></div>
-      Keep the fixture as internal architecture evidence and make no interoperability claim. This avoids premature protocol work, but leaves the project's identity claim unvalidated outside its own implementation.
+      <div class="cbd-opt-hd"><span class="cbd-opt-n">c. Extract a provisional profile</span><span class="cbd-price">only after b</span></div>
+      Publish only the descriptor, inventory, Linkset, record, and conformance behavior the peer actually needs. Keep fixture URLs and URNs test-only.
     </div>
   </div>
-  <div class="cbd-rec"><strong>Research recommendation: proceed with (b), without an R-number.</strong> Local fixture compatibility is not independent interoperability. Q06, real TLS and DNS, global identity and trust, a registry, shared runtime and remote writes all remain outside the result.</div>
+  <div class="cbd-rec"><strong>Current sequencing: (a), then (b); (c) is contingent.</strong> Do not turn a successful self-controlled fixture into a protocol workstream by momentum. Until a peer need is demonstrated, call the result controlled local compatibility, not interoperability.</div>
 </div>
 
 <div class="cbd-fork">
@@ -598,23 +598,23 @@ Five forks. Four need a product choice. Federation passed its controlled fixture
 </div>
 
 <div class="cbd-fork">
-  <div class="cbd-fork-q">5. Is the zero-account contributor a v1 requirement, or is Principle 3 narrower than it reads?</div>
-  <div class="cbd-fork-why">The risk register has rated this <strong>critical</strong> with the words "has no path" for 22 weeks, and nothing has retired it. An unretired critical risk that old is a decision made by default, which is the worst way to make one.</div>
+  <div class="cbd-fork-q">5. What evidence would justify a zero-account product path?</div>
+  <div class="cbd-fork-why">Q09 stays open. The live path still requires GitHub, while the immediate concierge pilot tests the narrower human workflow before any endpoint, editor, hosted console, or writer is built.</div>
   <div class="cbd-opts">
     <div class="cbd-opt">
-      <div class="cbd-opt-hd"><span class="cbd-opt-n">a. Build the path</span><span class="cbd-price">2–4 d</span></div>
-      The anonymous write endpoint: submit without an account, land in the moderation queue. Priced at 4 d in the hub BOM, 2–3 d by the dissent pass, which called it the architecture rather than a feature.
+      <div class="cbd-opt-hd"><span class="cbd-opt-n">a. Run the bounded pilot</span><span class="cbd-price">immediate</span></div>
+      Five readers, one independent owner, exact quote anchoring, one-splice candidates, local review and application, and thresholds fixed before the first attempt.
     </div>
     <div class="cbd-opt">
-      <div class="cbd-opt-hd"><span class="cbd-opt-n">b. Narrow the principle</span><span class="cbd-price">0.25 d</span></div>
-      Rewrite Principle 3 as "no git knowledge required, an account is". Truthful, cheap, and it makes the wiki-replacement framing much harder to defend.
+      <div class="cbd-opt-hd"><span class="cbd-opt-n">b. Automate measured work</span><span class="cbd-price">only if a passes</span></div>
+      Build only what removes demonstrated concierge burden from intake, source anchoring, and local review-card generation. Do not infer a rich editor or automatic writer.
     </div>
     <div class="cbd-opt">
-      <div class="cbd-opt-hd"><span class="cbd-opt-n">c. Leave it open</span><span class="cbd-price">0 d</span></div>
-      Keep the principle and the critical risk both standing. That is the current state, and it is the option that quietly costs the most.
+      <div class="cbd-opt-hd"><span class="cbd-opt-n">c. Narrow or stop</span><span class="cbd-price">if thresholds fail</span></div>
+      If readers cannot complete it, anchoring or privacy fails, review is too slow, or the owner prefers email plus manual editing, revise the claim before building infrastructure.
     </div>
   </div>
-  <div class="cbd-rec"><strong>Recommendation: (a), and note it is the same endpoint as Fork 1.</strong> A maintainer with no forge and a contributor with no account both need something that accepts a change without a GitHub identity. Building it once answers both, and it is the only place in this list where two of the five forks collapse into one piece of work.</div>
+  <div class="cbd-rec"><strong>Current action: (a), with no R-number and no product claim.</strong> Passing justifies the smallest next automation. It does not close Q09 by itself; an explicit maintained product decision still has to follow the evidence.</div>
 </div>
 
 </div>
@@ -638,6 +638,6 @@ Each of these is a decision with evidence behind it, listed so you can argue wit
 
 ## If you only do one thing
 
-Read the scorecard once more and say which of the six gaps is not a gap. Any row you accept as-is stops being a divergence and becomes a decision, and this page gets shorter. Any row you reject becomes work with a price already attached. Both outcomes are better than the current state, which is that all six are quietly true and none of them is anyone's job.
+Run the bounded human-correction pilot exactly as precommitted. It is the cheapest way to learn whether readers can complete the flow, exact source anchoring holds, the review burden stays small, the owner prefers it to email plus manual editing, privacy survives, and the owner can operate without GitHub. Keep the federation fixture as local evidence until a peer demonstrates need.
 
 **Related:** [Vision](/cyberbaser/getting-started/vision/) is what this is measured against. [Roadmap](/cyberbaser/getting-started/roadmap/) is the sequence and the exit criteria. [Principles](/cyberbaser/getting-started/principles/) are the constraints the forks have to respect. [Open questions](/cyberbaser/reference/open-questions/) tracks the ones still genuinely unresolved, and [assumptions and risks](/cyberbaser/research/assumptions-and-risks/) holds the register these divergences map onto.
