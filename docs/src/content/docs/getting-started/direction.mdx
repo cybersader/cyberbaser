@@ -201,7 +201,7 @@ This is the alignment instrument, so it gets **updated, never replaced**.
 
 ## The alignment check
 
-Ten things the vision asks for, and where each actually stands. Two on track, two partial, six not.
+Ten things the vision asks for, and where each actually stands. Two on track, three partial, five not.
 
 <div class="cbd-score">
 
@@ -278,16 +278,16 @@ Ten things the vision asks for, and where each actually stands. Two on track, tw
 </div>
 
 <div class="cbd-row">
-  <div class="cbd-row-hd"><span class="cbd-chip cbd-none">Never started</span><span class="cbd-topic">A web of webs: federated, linked knowledge bases</span></div>
+  <div class="cbd-row-hd"><span class="cbd-chip cbd-part">Fixture passed</span><span class="cbd-topic">A web of webs: federated, linked knowledge bases</span></div>
   <div class="cbd-cols">
-    <div class="cbd-cell"><span class="cbd-lab">What you asked for</span>Nostr-shaped. Linked knowledge bases, discovery between them, and you control your web.</div>
-    <div class="cbd-cell"><span class="cbd-lab">Where we are</span>Researched properly and then ignored. <a href="/cyberbaser/agent-context/zz-challenges/09-source-of-truth-alternatives/">Challenge 09</a> surveyed Nostr, ActivityPub, AT Protocol, IPNS, Ward Cunningham's Federated Wiki, Matrix and DIDs, and produced a usable finding: a federation layer (<code>did:web</code>, a <code>/.well-known/</code> KB manifest, harvest keyed on commit hashes) has to be built regardless of which source of truth we pick. It appears in eight files and shapes zero decisions. No task, no owner, no R-number.</div>
+    <div class="cbd-cell"><span class="cbd-lab">What you asked for</span>Independently owned bases and meta-wikis that can discover, curate, annotate and disagree without a central Cyberbaser database, while ordinary links survive every federation service failing.</div>
+    <div class="cbd-cell"><span class="cbd-lab">Where we are</span>The bounded <a href="/cyberbaser/research/federation/">five-origin fixture</a> passed on 2026-07-27: 31 logical URLs, 14 source-qualified records, two conflicting mappings, two visibly different search rankings, a byte-identical cache rebuild, 55 private canaries with zero hits, owner-qualified <code>410</code> deletion, and stale proposal rejection before apply/OFM/trust. Its 52 tests passed with 887 assertions. This is controlled local compatibility, not independent interoperability; no live network runtime or R-number exists.</div>
   </div>
 </div>
 
 </div>
 
-Five of the six gaps are the same gap wearing different clothes: cyberbaser has built **judgement** (boundaries, validators, a trust classifier) and has never built a **surface**. The sixth, federation, is not a surface at all. It is a shape decision that gets more expensive every week the URL contract stays unfrozen.
+Five implementation gaps are the same gap wearing different clothes: cyberbaser has built **judgement** (boundaries, validators, a trust classifier) and has never built a **surface**. Federation is different. Its authority model survived a bounded local fixture, but independent interoperability and the live URL contract remain unproven.
 
 ## The divergence to look at first
 
@@ -513,7 +513,7 @@ Every point where a human touches this system today, coloured by whose UI they a
 
 ## Yours to decide
 
-Five forks. None of these is blocked on research. Each is blocked on you saying which way.
+Five forks. Four need a product choice. Federation passed its controlled fixture; its next gate is a provisional profile plus one independently operated implementation, while the production URL contract remains unlocked.
 
 <div class="cbd-forks">
 
@@ -558,23 +558,23 @@ Five forks. None of these is blocked on research. Each is blocked on you saying 
 </div>
 
 <div class="cbd-fork">
-  <div class="cbd-fork-q">3. Is "a web of webs" a v1 shape constraint or a v2 feature?</div>
-  <div class="cbd-fork-why">Right now it is neither, which is the worst of the three. It is on the vision page as a hub pillar with no task and no owner. There is a live deadline: the URL contract freeze is an open v1 exit criterion, and stable addressing is the one thing federation cannot be retrofitted around.</div>
+  <div class="cbd-fork-q">3. What does "a web of webs" require from v1?</div>
+  <div class="cbd-fork-why">The architecture is specific and its first falsification gate passed. The controlled fixture proved discovery, source-qualified disagreement, disposable-view rebuild, direct-link survival and fail-closed policy behavior inside one repository. The remaining gate is independent implementation, not more features in the fixture. See the measured <a href="/cyberbaser/research/federation/">federation result</a>.</div>
   <div class="cbd-opts">
     <div class="cbd-opt">
-      <div class="cbd-opt-hd"><span class="cbd-opt-n">a. v1 constraint, minimal</span><span class="cbd-price">0.5–1 d</span></div>
-      Publish a manifest, not a protocol. A <code>/.well-known/</code> descriptor plus stable page identity, decided together with the URL freeze that is already scheduled. Cheap now, expensive later.
+      <div class="cbd-opt-hd"><span class="cbd-opt-n">a. Controlled fixture</span><span class="cbd-price">done · 52 tests</span></div>
+      Five logical HTTPS origins mapped through an injected transport to five stoppable loopback servers. The run produced 31 visited URLs, 14 records and zero hits from 55 private canaries under fixed crawl limits.
     </div>
     <div class="cbd-opt">
-      <div class="cbd-opt-hd"><span class="cbd-opt-n">b. v2, with a written trigger</span><span class="cbd-price">0.25 d</span></div>
-      Say so explicitly, name the condition that reopens it (a second real KB wanting to link in), and accept a migration later. Honest, and it stops the vision page promising something nobody owns.
+      <div class="cbd-opt-hd"><span class="cbd-opt-n">b. Publish the provisional profile</span><span class="cbd-price">next research item</span></div>
+      Extract only the descriptor, complete inventory, Linkset, record and conformance behavior the fixture exercised. Keep its URN and URL map test-only, then recruit one independently operated producer or consumer.
     </div>
     <div class="cbd-opt">
-      <div class="cbd-opt-hd"><span class="cbd-opt-n">c. Drop it</span><span class="cbd-price">0.1 d</span></div>
-      Remove federation from the vision. Only correct if "web of webs" was aspiration rather than direction, and everything you have said suggests it was not.
+      <div class="cbd-opt-hd"><span class="cbd-opt-n">c. Stop at local compatibility</span><span class="cbd-price">0 d now</span></div>
+      Keep the fixture as internal architecture evidence and make no interoperability claim. This avoids premature protocol work, but leaves the project's identity claim unvalidated outside its own implementation.
     </div>
   </div>
-  <div class="cbd-rec"><strong>Recommendation: (a), sequenced with the URL freeze.</strong> A manifest is hours; a protocol is a project. Doing the manifest while the URL contract is still soft costs under a day, and doing it after the freeze means breaking every published address. This is the one fork with a real clock on it.</div>
+  <div class="cbd-rec"><strong>Research recommendation: proceed with (b), without an R-number.</strong> Local fixture compatibility is not independent interoperability. Q06, real TLS and DNS, global identity and trust, a registry, shared runtime and remote writes all remain outside the result.</div>
 </div>
 
 <div class="cbd-fork">

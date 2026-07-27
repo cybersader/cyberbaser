@@ -1,0 +1,4 @@
+allow:
+  - index.md
+  - guides
+  - regions

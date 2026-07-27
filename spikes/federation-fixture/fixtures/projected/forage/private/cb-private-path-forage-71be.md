@@ -1,0 +1,17 @@
+---
+title: CB_PRIVATE_TITLE_FORAGE_71BE
+tags:
+  - CB_PRIVATE_TAG_FORAGE_71BE
+collection: CB_PRIVATE_COLLECTION_FORAGE_71BE
+slug: cb-private-slug-forage-71be
+cb-publish: false
+---
+
+CB_PRIVATE_BODY_FORAGE_71BE
+
+Backlink [[CB_PRIVATE_BACKLINK_FORAGE_71BE]].
+Encoded CB%5FPRIVATE%5FENCODED%5FFORAGE%5F71BE.
+Base64 Q0JfUFJJVkFURV9CQVNFNjRfRk9SQUdFXzIwMjYwNzI3.
+Digest sha-256=:Zb6IOWz3PVp1I4EyFJ4JHPy7N8OGIsfEgVKjiONTSJs=:.
+
+![private asset](./cb-private-asset-forage-71be.txt)

@@ -7,7 +7,7 @@
 **Cyberbaser is an interoperability layer for contributable, version-controlled knowledge bases.** It sits *between* the tools people author in (Obsidian first-class, but any markdown surface), the renderers that publish the result (Quartz, Starlight, anything), and — eventually — other knowledge bases, keeping one plain-text corpus faithful as changes round-trip through all of them.
 
 Three pillars, held in one phrase:
-- **Interoperability** — author from any tool, render with any generator, federate with any other base (v2+). The hub is the *between*.
+- **Interoperability** — author from any tool, render with any generator, and connect independently owned bases. Federation is **owner-controlled publication**: ordinary meta-wikis may curate, map, annotate, mirror, index, disagree, and fork, while every crawler, graph, and search index remains a disposable view. No central cyberbaser database or registry sits in the authority chain. The network runtime is later; the authority boundary and local fixture prototype are defined now.
 - **Contributable** — anyone can help maintain it, governed by a maintainer-set **trust curve + moderation queue**, never an account wall. "Contributable, not controllable."
 - **Version-controlled / resilient** — plain text with full history: durable, portable, owned. Git is how version control happens today; it is the current manifestation, **not the essence**, and the layer never forces git on contributors.
 
@@ -22,7 +22,7 @@ There are two repos to keep straight:
 
 ## The Architecture in One Line
 
-Write anywhere → the **hub** keeps every surface the same faithful markdown and reviews each change (trust curve + moderation) → that markdown, with history, is the single source of truth you own → the published wiki is a generated view of it. **The hub is the product; renderers are swappable commodity spokes** — never couple the hub to one SSG.
+Write anywhere → the **hub** keeps every surface the same faithful markdown and reviews each change (trust curve + moderation) → that markdown, with history, is the single source of truth you own → the published wiki is a generated view of it. **The hub is the product; renderers are swappable commodity spokes** — never couple the hub to one SSG. Federation follows the same rule: each base publishes its own authority, ordinary meta-wikis publish source-qualified claims, and every crawler, graph store, cache, and search provider is a swappable spoke rather than shared truth.
 
 ## Hard Constraints (violating these = going the wrong direction)
 

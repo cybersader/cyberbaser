@@ -7,7 +7,7 @@
 ### [R01] Is git the right single source of truth?
 - **Asked**: 2026-04-11 · **Resolved**: 2026-06-17
 - **Answer**: Yes, **scoped**. Git stays the SSOT as the *current manifestation*, not the essence, with an explicit off-ramp if a loss-free markdown↔block serializer ever ships.
-- **Rationale**: 14-agent challenge run (`research/source-of-truth.mdx`): git scored 21/26; its two structural zeros (sub-repo access control, federation) are exactly the v2+ pillars, but no alternative fixes them without breaking the plain-`.md` constraint.
+- **Rationale**: 14-agent challenge run (`research/source-of-truth.mdx`): git scored 21/26; its two structural zeros (sub-repo access control, federation) are long-arc pillars, but no alternative fixes them without breaking the plain-`.md` constraint. The 2026-07-27 federation follow-up corrected the mechanism without changing this decision: owner-controlled HTTPS publication, ordinary meta-wikis, and disposable indexes replace the earlier `did:web + custom well-known + commit-hash` sketch; no central database or registry is introduced.
 - **Consequence**: Principle 1 renamed to "A single source of truth you own"; the layer never forces git on contributors.
 
 ### [R02] What *is* cyberbaser, in one phrase?
@@ -36,7 +36,7 @@
 
 ### [R06] Is the hub or the renderer the product?
 - **Asked**: implicit since Phase 0 · **Resolved**: 2026-06-19/20
-- **Answer**: **The hub** (round-trip translation + trust/moderation + federation later), and it must stay **renderer-agnostic**. SSG renderers are swappable commodity spokes.
+- **Answer**: **The hub** (round-trip translation + trust/moderation + federation semantics), and it must stay **renderer-agnostic**. SSG renderers are swappable commodity spokes; so are federation crawlers, graph stores, caches, and search providers. Each base remains authoritative for its own publication, while network runtime features come later.
 - **Rationale**: tested Quartz audit — Quartz v5 beats our own prototype on OFM fidelity for free, and its maintainer publicly closed CMS/web-editor requests as out of scope. Forward publishing is commoditized; the reverse direction is structurally impossible in any SSG and genuinely unclaimed.
 - **Consequence**: never couple the hub to one SSG; Astro/Starlight demoted to "current prototype" everywhere.
 

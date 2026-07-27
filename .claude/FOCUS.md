@@ -2,23 +2,23 @@
 
 > Update when direction changes, milestones complete, or priorities shift.
 
-**Current:** Phase R exit, **shape locked (R12, 2026-07-25) — building.** The gate measurement ran: pipeline D over all 1430 real vault files = **4.6% byte-identical** (tuned: 36.9%), zero mask leaks, zero parse errors, failures = formatting normalization. Verdict: whole-file AST re-serialization can never reach byte fidelity, so the locked shape is **byte-preservation by construction (raw-text splice-only write path) + `@cyberbaser/ofm` as a validator (corpus runner, diff classifier, masking core) + governance**. Full results + reasoning: `/cyberbaser/research/v1-build-plan/` ("Gate result" section). First artifact in progress: the `@cyberbaser/ofm` package.
+**Current:** Phase R exit, **shape locked (R12, 2026-07-25) and the local federation fixture measured (2026-07-27, no R-number).** The write path remains byte-preservation by construction plus `@cyberbaser/ofm` validation and governance. The standalone five-origin fixture passed its bounded falsification run: five logical HTTPS origins mapped through an injected transport to five stoppable loopback servers, 31 visited URLs, 14 source-qualified records, two conflicting mappings, two visible search rankings, deterministic cache rebuild, 55 private canaries with zero hits, exact-owner `410` deletion, and stale proposal rejection before apply/OFM/trust. This is controlled local compatibility, **not independent interoperability**. Next research item: publish the smallest provisional profile, fixtures, and conformance tests, then recruit one independently operated producer or consumer. Full federation result: `/cyberbaser/research/federation/`.
 
-Last updated: 2026-07-25 (evening — R09 gate run, R12 locked)
+Last updated: 2026-07-27 (five-origin federation fixture measured; no decision lock added)
 
 ## Locked This Cycle (do not relitigate without new evidence)
 
 - **Identity / essence:** *an interoperability layer for contributable, version-controlled knowledge bases.* General, not cyber (cyberbase = dogfood). Category word: "layer." Never pitch as "publishing tool / CMS / Obsidian-to-web."
-- **Hub-and-spoke:** the hub (round-trip + trust/moderation + federation later) is the product and is renderer-agnostic; SSGs are swappable spokes. Quartz already wins forward publishing.
+- **Hub-and-spoke:** the hub (round-trip + trust/moderation + federation contract) is the product and is renderer-agnostic; SSGs are swappable spokes. Federation is owner-controlled publication between independent bases and ordinary meta-wikis, **never a central cyberbaser database or registry**; crawlers, graph stores, caches, and search providers are disposable spokes. The local fixture supports that boundary under controlled failure tests, but the network runtime is unbuilt, the exact profile is not R-locked, and no independent interoperability claim exists. Quartz already wins forward publishing.
 - **Contribution model:** maintainer-set **trust curve + moderation queue**; accounts never forced ("contributable, not controllable"); DoS handled at the edge, separate from content moderation.
 - **Hosting/identity:** GitHub Pages current deploy target; Cloudflare edge-only; **self-hosted Forgejo preferred** (RA-01: PKCE against Forgejo OIDC, no OAuth proxy). No hyperscalers.
 - **SSOT:** git, *scoped* — current manifestation, not essence, with an off-ramp (Principle 1 = "a single source of truth you own").
-- **Keystone:** OFM round-trip proven 20/21 (`spikes/ofm-roundtrip/`); markdown-first block schema is the path (mdast-util-to-markdown + CodeMirror 6 leading candidates).
+- **Write-path rule:** the 20/21 fixture spike proved masking through a parse, but the 1,430-file gate measured only 4.6% byte identity and disproved whole-file round-tripping. All writes are raw-text splice-only; `@cyberbaser/ofm` validates and classifies damage.
 - **Visual language for the docs:** real-UI mockups (browser windows, file trees, diffs, review cards) with tool logos; no abstract box diagrams; equal grids; topics varied and general.
 
 ## Project State
 
-- Phase-0 Astro + Starlight prototype: parked; publishes the research (~81 pages, 77 Playwright tests green).
+- Phase-0 Astro + Starlight prototype: parked; publishes the research (**98 pages** in the 2026-07-27 production build). The Playwright suite was not part of this result-document lane.
 - Docs site = **the canonical KB** (vision-swept 2026-06-21). `.claude/` numbered files are now pointer stubs; see `PROJECT_CONTEXT.md` → knowledge-ops map.
 - Problem, ecosystem, primitives, prior art, vision, principles, architecture, translation-layer, contribution-workflows: all substantive with visuals. Roadmap exit criteria re-anchored (see `20-ROADMAP.md`).
 
@@ -28,13 +28,14 @@ Last updated: 2026-07-25 (evening — R09 gate run, R12 locked)
 
 1. ~~The gate measurement~~ **RUN 2026-07-25** (results in `/cyberbaser/research/v1-build-plan/`): 4.6% byte-identical, 0 mask leaks, 0 parse errors, 83.1% of files OFM-free, 7.3 s full pass on ext4, ~780x 9p penalty measured, 0 files >100 MB. Q05 + the LFS check closed as side effects.
 2. ~~Lock the shape~~ **LOCKED 2026-07-25 (R12)**: byte-preservation by construction + validator + governance. No whole-file re-serialization in the write path, ever.
-3. **Build `@cyberbaser/ofm`** (~2 d, in progress): the validator package — corpus runner, two-version diff classifier, masking core, 21 fixtures + corpus-derived cases as tests, `ofm-check` CLI. The first artifact the maintainer can actually run.
+3. ~~Build `@cyberbaser/ofm`~~ **BUILT 2026-07-25**: validator package with corpus runner, two-version diff classifier, masking core, corpus-derived tests, and the `ofm-check` CLI. It is a validator, never a whole-file writer.
 4. ~~Wire the CI gate~~ **LIVE 2026-07-25** (cyberbase#4 merged, report-only): every markdown PR on the vault now gets `ofm-check` classification (clean/suspect/damage). Flip to required after the observation window by removing `continue-on-error` + branch protection. ~~Notion-leg audit~~ **DONE 2026-07-25 (R13)**: sync dormant since 2024-08, frozen and absorbed — `/cyberbaser/research/notion-writer-audit/`.
 5. ~~Publish boundary + Quartz spike~~ **DONE 2026-07-25 (R14, 3-agent wave)**: Quartz **adopted** — real vault, 1:55 build, 20/20 OFM checklist; census found **0 slug collisions, 2 lint violations** (mass rename dead). `@cyberbaser/publish` v0.1 built: selector (fail-closed, byte-identical, audience-ready) + slug contract + safety lint, 91 tests green. Results: `/cyberbaser/research/quartz-spike-results/`.
 6. ~~Pre-publish list + first deploy~~ **LIVE 2026-07-25 (R16): https://cybersader.github.io/cyberbase/** — 933 pages + 373 assets through projection → pinned Quartz v4.5.2 → Pages. publish.yml agent-authored/maintainer-approved (R15); v0 ships **verbatim paths** (D2 lowercase deferred to projection v2 pending an asset-alias story); CI build 160 s, deploy 16 s, 25% of cap.
 7. ~~The contribution loop~~ **CLOSED + PROVEN 2026-07-25/26 (R17)**: two rehearsal PRs ran the full circuit (edit → queue → `ofm-check` → merge → auto-redeploy → verified live); the gate's quotepath crash was caught by rehearsal #1 and fixed; **every page now carries "Edit this page"** (931/931 links verified). Formal criterion 3 closes when the maintainer personally clicks Edit and lands one.
-8. ~~Tracks 2 + 3~~ **SHIPPED 2026-07-26 (R18)**: `@cyberbaser/linkcheck` (first real number: 1145 broken → **779** after the `RelativeFolderLinks` fix; attachment class 248 → 7), theme + the reported explorer-scroll bug (root-caused to upstream `overscroll-behavior`, verified with headless wheel events), and `@cyberbaser/trust` landed in the vault as **decision-only** labeling. Five packages, **151 tests green**.
-9. **Next up:** (a) **the identity gap** — `agents:` is empty because there's no bot account yet; agent auto-merge is inert until one exists (this is the real blocker on the agent-contributor thesis); (b) flip `ofm-check` to required (read the logs, not just the checkmarks — R17); (c) wire linkcheck into the publish workflow at the frozen baseline budget (ratchet, per R19); (d) URL freeze + slug-diff gate; (e) Quartz v5 evaluation (pin stays v4.5.2 until re-measured).
+8. ~~Tracks 2 + 3~~ **SHIPPED 2026-07-26 (R18)**: `@cyberbaser/linkcheck` (first real number: 1145 broken → **779** after the `RelativeFolderLinks` fix; attachment class 248 → 7), theme + the reported explorer-scroll bug (root-caused to upstream `overscroll-behavior`, verified with headless wheel events), and `@cyberbaser/trust` landed in the vault as **decision-only** labeling. After the R21 wiring audit: five packages, **165 tests green**.
+9. ~~Bounded five-origin federation fixture~~ **PASSED 2026-07-27 (research result; no R-number)**: standalone `spikes/federation-fixture/`, not a production package or live URL contract. `bun test --cwd spikes/federation-fixture` passed **52 tests / 887 assertions**; 16 destructive/security tests repeated three times passed **48 executions / 648 assertions**; two `bun run --cwd spikes/federation-fixture verify` runs returned byte-identical `complete: true` JSON. Default crawl limits: depth 4, origins 5, URLs 64, redirects 8, 512 KiB/response, 4 MiB total, 1 MiB decompressed, 512 KiB parser input, 250 ms parser, 5 s wall time, concurrency 3. No actual TLS, hosts-file edit, external service, registry, global identity/trust, remote write, or interoperability claim.
+10. **Next research item:** publish the smallest provisional federation profile, fixtures, and conformance tests, then recruit one independently operated producer or consumer. Until that succeeds, say **local fixture compatibility**, not interoperability. Product work still queued: (a) the identity gap (`agents:` is empty, so agent auto-merge is inert); (b) flip `ofm-check` to required after reading the R17 logs; (c) wire linkcheck into publish at the frozen R19 baseline; (d) Q06 URL freeze + slug-diff gate; (e) Quartz v5 evaluation while v4.5.2 stays pinned.
 
 **Closed by R19 — do NOT reopen without new evidence:** the 669 remaining broken links are the maintainer's inherited content debt (old Notion exports), explicitly out of scope; the 43 emoji folder renames are declined (73 path-qualified wikilinks, and they are daily navigation). A future agent finding a pile of broken links or ugly encoded URLs should read R19 before "fixing" anything.
 
@@ -46,10 +47,10 @@ Last updated: 2026-07-25 (evening — R09 gate run, R12 locked)
 
 ## Deliberately NOT Doing Right Now
 
-- Locking any of the three v1 shapes before the gate measurement (R09)
-- Building the CMS, editor, auth, or collaboration features before the shape is locked
-- Publishing the real vault before selective publishing has a mechanism (Phase 3 gate)
-- Mixed-privacy, RBAC, real-time collaboration inside cyberbaser — assigned to the private sibling project (see `.workspace/sibling-boundary-analysis.md`)
+- Whole-file re-serialization or a CMS writer in any write path; R12 ruled it out by measurement
+- Promoting the federation fixture into a production package, live Q06 URL contract, registry, shared runtime, global identity/trust system, or remote write endpoint
+- Calling controlled local fixture compatibility “interoperability” before an independently operated implementation passes the published conformance material
+- Mixed-privacy, RBAC, real-time collaboration inside cyberbaser; assigned to the private sibling project (see `.workspace/sibling-boundary-analysis.md`)
 - Extending the Phase-0 prototype beyond what publishing the research requires
 - Relitigating locked decisions above without new evidence
 

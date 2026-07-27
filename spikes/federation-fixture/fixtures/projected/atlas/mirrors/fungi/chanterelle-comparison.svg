@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="120" viewBox="0 0 360 120" role="img" aria-labelledby="title desc">
+  <title id="title">Chanterelle comparison</title>
+  <desc id="desc">A fixture illustration contrasting blunt ridges with true gills.</desc>
+  <rect width="360" height="120" fill="#f4ead2"/>
+  <path d="M45 90 C55 55 95 45 110 72 C95 82 75 87 45 90Z" fill="#d89222"/>
+  <path d="M220 90 C230 50 280 42 305 72 C285 82 255 88 220 90Z" fill="#d56e2d"/>
+  <text x="38" y="108" font-family="sans-serif" font-size="14">blunt ridges</text>
+  <text x="238" y="108" font-family="sans-serif" font-size="14">true gills</text>
+</svg>

@@ -326,6 +326,7 @@ The separations that keep the system honest, with how each one is currently held
 | **Publish boundary** | publish by default · trust the plan instead of the result · let a published page inline a private one | **Code.** Fail-closed config, post-hoc leak test, cross-boundary embed check, all fail the build |
 | **Hub (the packages)** | apply lossy transforms · re-serialize a whole file in any write path · be coupled to one renderer · hold content state outside the commit it produces | **Code and decision.** [R12](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25) removed the re-serializing write path after measuring 4.6% byte-identity over 1,430 real files. Every package is a decider, not a writer |
 | **Spoke renderer** | be treated as permanent or unique · hold contribution or auth state · be forked | **Convention, with one crack.** Quartz is pinned and unforked, but the folder-link fix landed as a Quartz plugin rather than in the projection. Worth watching |
+| **Federation spokes** | become naming, merge, moderation or navigation authority · flatten conflicting issuers · hold the only copy of knowledge | **Research invariant, not built.** Every crawler, graph store, cache, search provider and ranking model is replaceable, exportable and rebuildable from peer publications and chosen seeds |
 | **Edit surfaces** | require Obsidian to be running · keep content outside the vault · make the maintainer do anything special per edit | **Borrowed.** GitHub satisfies all three today, at the cost of requiring an account |
 | **Governance** | let a change promote its own author · decide from a policy the change itself supplied | **Code.** The policy is read from the base ref, and the classifier fails closed on unknown author types |
 
@@ -377,35 +378,41 @@ Thirteen of the seventeen are not a cyberbaser surface, and the four that are co
 
 Reframed rather than answered. [R12](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25) removed the whole-file round-trip, so the question is no longer "how does the AST survive re-serialization" but "what does a raw-text splice do when the spliced region contains an embed or a block reference". Still the one genuinely unsolved Tier-1 item in the [translation layer](/cyberbaser/design/translation-layer/).
 
-### Open: incremental builds, and what a second vault does to them
+### Open: incremental builds, and what federation adds
 
 Partly measured, not solved. 933 pages rebuild fully in 3m07s to 4m52s in CI, and the artifact sits at roughly a quarter of the 1 GB Pages cap. Nothing incremental exists: every push rebuilds everything.
 
-The question changes shape rather than answer once a second knowledge base is in the picture. Two vaults that link to each other are two independent sites, each with its own source of truth, discovering each other over a public manifest rather than sharing a database.
+Federation does not turn that pipeline into one multi-vault build or shared database. Each base keeps its own source of truth and publishes its own public pages, descriptor, inventory, outbound relationships and change information. Other bases and meta-wikis discover those publications from user-chosen seeds and ordinary links.
 
-<div class="cb-fed" role="img" aria-label="Two browser windows side by side, each a separate wiki with its own vault. Between them, a two-way arrow labelled well-known manifest and harvest by commit hash.">
+<div class="cb-fed" role="img" aria-label="Two browser windows side by side, each a separate wiki with its own vault. One cites the other through an ordinary direct HTTPS link. Optional backlink notification is locally moderated, but the link does not depend on it.">
   <div class="cb-fed-site">
     <div class="cb-mock cb-mock-sm">
       <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">cybersader.github.io/cyberbase</span></div>
       <div class="cb-mock-body"><div class="cb-mock-h">Zero trust</div><p class="cb-mock-txt">See <span class="cb-linkchip">Segmentation</span> and <span class="cb-linkchip">Mesh policy ↗</span>.</p></div>
     </div>
-    <span class="cb-fed-cap">your wiki · <span class="cb-fed-did">did:web:cybersader.github.io</span></span>
+    <span class="cb-fed-cap">your wiki · <span class="cb-fed-did">stable HTTPS page</span></span>
   </div>
   <div class="cb-fed-link" aria-hidden="true">
-    <span class="cb-fed-lab">/.well-known/</span>
+    <span class="cb-fed-lab">ordinary link</span>
     <svg class="cb-fed-hop" viewBox="0 0 24 24"><path d="M4 9h16M4 9l3-3M4 9l3 3M20 15H4M20 15l-3-3M20 15l-3 3"/></svg>
-    <span class="cb-fed-lab cb-fed-lab-g">harvest by commit</span>
+    <span class="cb-fed-lab cb-fed-lab-g">moderated Webmention</span>
   </div>
   <div class="cb-fed-site">
     <div class="cb-mock cb-mock-sm">
       <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">notes.someone-else.org</span></div>
       <div class="cb-mock-body"><div class="cb-mock-h">Mesh policy</div><p class="cb-mock-txt">Their vault, their host, their moderation rules.</p></div>
     </div>
-    <span class="cb-fed-cap">someone else's wiki · <span class="cb-fed-did">did:web:someone-else.org</span></span>
+    <span class="cb-fed-cap">their wiki · <span class="cb-fed-did">local moderation</span></span>
   </div>
 </div>
 
-<p class="cb-fig-note"><span class="cb-chip cb-chip-mute">researched, not built</span>Nothing in the pipeline knows about a second vault yet. The manifest-plus-harvest shape is written up in <a href="/cyberbaser/research/federation/">federation</a>; the cost that lands here is that a cross-vault link cannot be resolved by a build that only sees one repo.</p>
+<p class="cb-fig-note"><span class="cb-chip cb-chip-mute">level zero</span>The direct owner link is the architecture's failure floor. Optional Webmention can notify the target, but neither navigation nor authority depends on it. The active <a href="/cyberbaser/research/federation/#active-local-prototype-prove-the-shape-with-fixtures">fixture prototype</a> expands this to three subject bases and two competing meta-wikis with peer-published descriptors, inventories and Linksets.</p>
+
+A meta-wiki is an ordinary base, not a central graph service. It publishes its own collections, mappings, annotations, mirrors and indexes as source-qualified claims. Many can disagree or fork. None can overwrite the owner records of another base.
+
+Every crawler, local graph cache, graph database, search engine, ranking model and public index is a **swappable spoke** around those publications. Each stores issuer and retrieval provenance, returns direct owner URLs, and can be deleted and rebuilt from chosen seeds. If losing one of those stores loses knowledge, naming, moderation state or basic navigation, it was not a spoke; it had quietly become the hub.
+
+The bounded test runs with controlled local origins instead of waiting for an outside operator. It makes no interoperability claim: an independently implemented producer or consumer remains the later proof that the published profile travels between implementations.
 
 ## Related
 
