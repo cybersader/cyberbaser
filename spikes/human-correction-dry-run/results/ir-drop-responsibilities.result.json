@@ -1,0 +1,242 @@
+{
+  "artifactType": "local-static-rendered-correction-review-evidence",
+  "byteProof": {
+    "exactlyOneFile": true,
+    "exactlyOneSplice": true,
+    "prefixBytesPreserved": 302,
+    "prefixIdentical": true,
+    "suffixBytesPreserved": 2284,
+    "suffixIdentical": true
+  },
+  "caseId": "DRY-4447FE60DEA5",
+  "exactChange": {
+    "deletion": false,
+    "kind": "typo",
+    "oldText": "This can call out responsibilites, processes, and help tell people where to go or what to do",
+    "rationale": "“responsibilites” is an unambiguous one-letter omission in ordinary English prose. Replacing it with “responsibilities” is purely orthographic, preserves the technical meaning and Markdown structure, does not change a heading identifier or link target, and can be applied as one exact contiguous byte splice.",
+    "replacement": "This can call out responsibilities, processes, and help tell people where to go or what to do",
+    "selectorPrefix": "",
+    "selectorSuffix": "",
+    "supportingEvidenceItems": 8
+  },
+  "ofm": {
+    "findingCount": 0,
+    "findingTypes": [],
+    "stats": {
+      "churn": 0.036,
+      "escapesAfter": 0,
+      "escapesBefore": 0
+    },
+    "verdict": "clean"
+  },
+  "projection": {
+    "baseline": {
+      "mode": "cyberbaser-select-project-verify",
+      "projection": {
+        "counts": {
+          "aliasesInjected": 0,
+          "aliasesSkipped": 0,
+          "assets": 373,
+          "caseChangedAssets": 0,
+          "caseChangedPages": 0,
+          "pages": 933,
+          "pathViolations": 2,
+          "slugCollisions": 0,
+          "warnings": 6
+        },
+        "failureCount": 0,
+        "ok": true,
+        "verification": {
+          "checked": {
+            "actual": 1306,
+            "deniedPaths": 1614,
+            "expected": 1306,
+            "sampledTitles": 20
+          },
+          "deniedPresent": 0,
+          "missing": 0,
+          "ok": true,
+          "titleMatchCount": 25,
+          "unexpected": 0
+        },
+        "warningCount": 6
+      },
+      "selection": {
+        "counts": {
+          "assets": 373,
+          "crossBoundaryEmbeds": 0,
+          "denied": 1614,
+          "errors": 4,
+          "pages": 933,
+          "strippedLinks": 127
+        },
+        "errorCount": 4,
+        "sourcePublished": true
+      }
+    },
+    "candidate": {
+      "mode": "cyberbaser-select-project-verify",
+      "projection": {
+        "counts": {
+          "aliasesInjected": 0,
+          "aliasesSkipped": 0,
+          "assets": 373,
+          "caseChangedAssets": 0,
+          "caseChangedPages": 0,
+          "pages": 933,
+          "pathViolations": 2,
+          "slugCollisions": 0,
+          "warnings": 6
+        },
+        "failureCount": 0,
+        "ok": true,
+        "verification": {
+          "checked": {
+            "actual": 1306,
+            "deniedPaths": 1614,
+            "expected": 1306,
+            "sampledTitles": 20
+          },
+          "deniedPresent": 0,
+          "missing": 0,
+          "ok": true,
+          "titleMatchCount": 25,
+          "unexpected": 0
+        },
+        "warningCount": 6
+      },
+      "selection": {
+        "counts": {
+          "assets": 373,
+          "crossBoundaryEmbeds": 0,
+          "denied": 1614,
+          "errors": 4,
+          "pages": 933,
+          "strippedLinks": 127
+        },
+        "errorCount": 4,
+        "sourcePublished": true
+      }
+    }
+  },
+  "rendering": {
+    "baselineSite": {
+      "broken": 779,
+      "byClass": {
+        "missing-asset": 101,
+        "missing-page": 669,
+        "other": 2,
+        "relative-attachment": 7
+      },
+      "occurrences": 145219,
+      "ok": 83562,
+      "pages": 3786,
+      "total": 84341
+    },
+    "candidateSite": {
+      "broken": 779,
+      "byClass": {
+        "missing-asset": 101,
+        "missing-page": 669,
+        "other": 2,
+        "relative-attachment": 7
+      },
+      "occurrences": 145176,
+      "ok": 83562,
+      "pages": 3786,
+      "total": 84341
+    },
+    "isolatedWorkspaces": true,
+    "linkDelta": {
+      "baselineOnly": [],
+      "candidateOnly": [],
+      "counts": {
+        "baseline": 779,
+        "baselineOnly": 0,
+        "candidate": 779,
+        "candidateOnly": 0,
+        "unchanged": 779
+      },
+      "tuple": [
+        "page",
+        "href",
+        "decoded",
+        "class"
+      ],
+      "unchanged": 779
+    },
+    "pin": "v4.5.2",
+    "publicDeploymentPerformed": false,
+    "renderer": "quartz-cyberbase",
+    "targetEvidence": {
+      "basePath": "cyberbase",
+      "baseline": {
+        "byteLength": 36298,
+        "page": "📁-05---Organizational-Cyber/Incident-Response/⬇️-IR-DROP/⬇️-IR-DROP.html",
+        "quoteOccurrences": 1,
+        "replacementOccurrences": 0,
+        "sha256": "4e4c9f0aef97026052bf92de79590b9985027f03fbaf9e412e00e3eb7f9524e0"
+      },
+      "candidate": {
+        "byteLength": 36303,
+        "page": "📁-05---Organizational-Cyber/Incident-Response/⬇️-IR-DROP/⬇️-IR-DROP.html",
+        "quoteOccurrences": 0,
+        "replacementOccurrences": 1,
+        "sha256": "a642ab474aac1511dbcaad87cfaa199c00f3b9c4f6cd5e7603677bb1172ba9d5"
+      },
+      "comparable": {
+        "baselineOldTextPresent": true,
+        "baselineReplacementTextAbsent": true,
+        "candidateOldTextAbsent": true,
+        "candidateReplacementSatisfied": true,
+        "sameRenderedPage": true
+      }
+    }
+  },
+  "schemaVersion": 1,
+  "scope": "internal agentic evidence only; not a human pilot result or product runtime",
+  "sourceBinding": {
+    "baseByteLength": 2678,
+    "baseDigest": "sha-256=:XGF2wGp1IfVlGZocJUE7vHXLLqRW62yNIwqLssfvt5Q=:",
+    "candidateByteLength": 2679,
+    "candidateDigest": "sha-256=:L4Asio4+Oix6P0yCtZqirOIXrm7E0xvDohJDne7vTVU=:",
+    "expectedOldBytesVerified": true,
+    "halfOpenByteRange": [
+      302,
+      394
+    ],
+    "quoteResolvedExactlyOnce": true
+  },
+  "sourceIsolation": {
+    "candidateAppliedOnlyToTemporaryCandidateCopy": true,
+    "cleanAfter": true,
+    "cleanBefore": true,
+    "cleanupCompleted": true,
+    "sourceBytesUnchangedAfter": true,
+    "suppliedCheckoutWritePerformed": false,
+    "temporaryWorkspacesRetained": false
+  },
+  "status": "pending-owner; no source write or public deployment has occurred",
+  "target": {
+    "baseCommit": "b320c5c2c92d646b9df7019c9e29034341ebff6b",
+    "publicUrl": "https://cybersader.github.io/cyberbase/%F0%9F%93%81-05---Organizational-Cyber/Incident-Response/%E2%AC%87%EF%B8%8F-IR-DROP/%E2%AC%87%EF%B8%8F-IR-DROP",
+    "repository": "https://github.com/cybersader/cyberbase",
+    "sourceMapping": "owner-supplied; path redacted"
+  },
+  "trust": {
+    "authorType": "agent",
+    "checks": {
+      "changedLines": 2,
+      "fileCount": 1,
+      "ofmVerdict": "clean",
+      "structuralChange": false,
+      "typoClass": true
+    },
+    "policyRevision": "internal-dry-run-policy-v1",
+    "reasons": [
+      "all-agent-gates-passed"
+    ],
+    "route": "auto-merge",
+    "tier": "agent"
+  }
+}

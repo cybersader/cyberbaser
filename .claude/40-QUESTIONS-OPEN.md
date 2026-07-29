@@ -1,19 +1,18 @@
 # 40 — Open Questions
 
-> **Status**: ✅ Superseded as a list — the canonical open-questions register is `docs/src/content/docs/reference/open-questions.mdx` (`/cyberbaser/reference/open-questions/`, Q01–Q07). This stub tracks the agent-side state. When a question resolves, log it in `41-QUESTIONS-RESOLVED.md` with rationale.
+> **Status**: ✅ Superseded as a list — the canonical open-questions register is `docs/src/content/docs/reference/open-questions.mdx` (`/cyberbaser/reference/open-questions/`, Q01–Q10). This stub tracks the agent-side state. When a question resolves, log it in `41-QUESTIONS-RESOLVED.md` with rationale.
 
 Keep the canonical list short (≤ ~15). Resolve before adding.
 
-## Current state (2026-07-25)
+## Current state (2026-07-29)
 
-Most of the register now has a **proposed answer awaiting the R09 gate** (the corpus round-trip measurement + census — see `/cyberbaser/research/v1-build-plan/` and `41-QUESTIONS-RESOLVED.md` R09). Status per question:
+Four questions are genuinely open:
 
-- **Q01** local research vault audit — proposed KILL (audits the wrong vault; the real-vault census in the gate answers it empirically)
-- **Q02** — **CLOSED 2026-07-25 (R14)**: Quartz adopted on measurement, 20/20 checklist (`/cyberbaser/research/quartz-spike-results/`)
-- **Q03** CMS preview rendered vs raw — proposed answer: **both, on opposite sides of a one-way boundary** (raw editing surface, read-only rendered preview; `/cyberbaser/research/proposal-write-path/`)
-- **Q04** round-trip enforcement — fully specified as the packaged serializer + required CI check + fidelity-break log (`/cyberbaser/research/proposal-write-path/`); becomes the first build item under most shapes
-- **Q05** incremental builds — answered by one measurement inside the gate run
-- **Q06** stable URLs — two competing conventions (path-slug + `aliases` vs `permalink`); `/cyberbaser/research/proposal-renderer-urls/` argues the former; the gate's path census (slug collisions) feeds the call
-- **Q07** OAuth-proxy hosting — unchanged (near-resolved by RA-01; disappears on Forgejo)
+- **Q06 — stable URLs:** the live corpus selects 933 Markdown sources and exposes 931 public page URLs, still using verbatim path-derived URLs. The five-origin federation fixture used test-only mappings and does not settle the production contract.
+- **Q08 — contributor attribution:** the GitHub fork flow's commit attribution has not been independently verified, yet the licensing and future credit story depend on it.
+- **Q09 — account-free contribution:** no endpoint, editor, hosted console, automatic writer, or forge integration has shipped. The immediate milestone is the precommitted five-reader, one-independent-owner concierge pilot. `@cyberbaser/correction` is a no-I/O exact-splice primitive used by that experiment, not the answer to Q09.
+- **Q10 — moderation enforcement:** OFM is report-only, trust is decision-only, `main` has no required checks, and the maintainer's direct-push path needs validation that does not break daily local authoring.
 
-The old FOCUS-tracked gates are superseded: external demand validation was waived (R08); the zero-account path and the CMS bake-off were retired by the plan critique (`/cyberbaser/research/plan-critique/`). The live gates now are **selective publishing** (blocks roadmap Phase 3) and **R09** (blocks the v1 shape).
+The earlier Q01–Q07 register was repaired on 2026-07-26. Q01, Q02, Q03, Q05, and Q07 are closed; Q04 is answered by the raw-text-splice rule but remains unenforced through Q10.
+
+Federation is not the immediate open gate. Its long-term seam remains owner-controlled publication with no central registry or database. The five-origin fixture is controlled local evidence only; extracting a provisional profile waits for a concrete need from an independently operated peer.

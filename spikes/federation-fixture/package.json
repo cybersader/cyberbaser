@@ -1,0 +1,19 @@
+{
+  "name": "federation-fixture-spike",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Controlled five-origin federation falsification fixture; not a production protocol or interoperability claim.",
+  "packageManager": "bun@1.3.11",
+  "scripts": {
+    "test": "bun test",
+    "verify": "bun run bin/verify.js"
+  },
+  "dependencies": {
+    "@cyberbaser/linkcheck": "file:../../packages/linkcheck",
+    "@cyberbaser/ofm": "file:../../packages/ofm",
+    "@cyberbaser/projection": "file:../../packages/projection",
+    "@cyberbaser/publish": "file:../../packages/publish",
+    "@cyberbaser/trust": "file:../../packages/trust"
+  }
+}

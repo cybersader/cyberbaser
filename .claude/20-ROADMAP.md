@@ -1,62 +1,57 @@
 # 20 — Roadmap
 
-> **Status**: 🌳 Current (re-anchored 2026-06-21). The canonical public roadmap is `docs/src/content/docs/getting-started/roadmap.mdx` (`/cyberbaser/getting-started/roadmap/`); this file is the agent-side operating view. Only Phase R is active; later phases stay sketches until research justifies them.
+> **Status**: 🌳 Current (aligned 2026-07-29). The canonical public roadmap is `docs/src/content/docs/getting-started/roadmap.mdx` (`/cyberbaser/getting-started/roadmap/`); this file is the agent-side operating view.
 
-## Current Phase: **R — Research & Foundations** 🔴 ACTIVE
+## Current Phase: **v1 Build**
 
-**Goal (updated):** the foundations are *written* — the canonical KB (the docs site) now has substantive, vision-swept content for problem, ecosystem, primitives, prior art, vision, principles, architecture, translation layer, and contribution workflows. What Phase R still owes is **external validation**: evidence that someone besides us wants this, and that the contribution model holds up outside our heads.
+The Research & Foundations phase closed on 2026-07-25. The v1 shape is locked by measurement: **byte-preservation by construction, validation, and owner-controlled governance**. The current product interpretation is an **owner-controlled change boundary** around a version-controlled knowledge base. It decides what may be published, what exact bytes may change, and which changes require owner review.
 
-**Exit criteria** (content criteria re-anchored to the canonical docs pages):
-- [x] Problem articulated (TL;DR, whose pain, scope) — `concepts/problem.mdx` 🌳
-- [x] Ecosystem surveyed, every tool substantive — `concepts/ecosystem.mdx` 🌳
-- [x] Primitives defined (what/why/how + visuals) — `concepts/primitives.mdx` 🌳
-- [x] Prior art with lessons — `research/prior-art/` 🌳 (incl. the tested Quartz audit)
-- [x] Existing work inventoried — `reference/existing-work.mdx` 🌳
-- [x] Vision written from the locked essence — `getting-started/vision.mdx` 🌳
-- [x] Principles justified (Rule/Why/Rules-out each) — `getting-started/principles.mdx` 🌳
-- [x] **Demand** — waived as a gate 2026-06-21: the maintainer is user #1; dogfooding is the v1 validation (R08). External demand = growth question, not a build gate.
-- [x] **Cheap falsification tests run** (2026-06-21): agent PR probe = cyberbase#2 · moderation policy = written into contribution-workflows · LICENSE = cyberbase#3. Pending maintainer merge of the two PRs; the fuller feed→draft→PR pipeline and LFS-size check stay open items in `FOCUS.md`.
-- [ ] Open questions ≤ 5 unresolved blockers — currently 7 on `reference/open-questions.mdx`; several are near-resolvable
+GitHub, GitHub Actions, Pages, and pinned Quartz are the current dogfood infrastructure. They prove one operating path; they are not the product essence and must not become mandatory for a general maintainer.
 
-**In scope during Phase R:** research into the canonical docs pages; the validation tests above; keeping this `.claude/` orientation layer aligned in the same session as any locked decision.
+### Built foundation
 
-**Explicitly out of scope during Phase R:** CMS/auth/editor/collaboration implementation; extending the Phase-0 prototype beyond publishing the research; alternative-SSG evaluation (the renderer is a commodity spoke by principle); any code not justified by a written principle or trade-off.
+- [x] No whole-file re-serialization in any Cyberbaser-mediated external proposal or source-application path; accepted external changes are exact, base-bound operations. The owner's local editor remains a separate direct-authoring lane.
+- [x] `@cyberbaser/ofm` validator, fail-closed publish boundary, projection and leak verification, link checker, and trust classifier.
+- [x] Real vault published through Quartz: 933 Markdown sources selected and projected into 931 public page URLs at [cybersader.github.io/cyberbase](https://cybersader.github.io/cyberbase/).
+- [x] GitHub-backed contribution loop rehearsed twice end to end.
+- [x] `@cyberbaser/correction` exact UTF-8 quote-anchor and single-splice core. This is a no-I/O primitive for preparing and validating a candidate change, **not** a shipped editor, endpoint, automatic writer, or contribution product.
+
+### Immediate milestone: the precommitted concierge pilot
+
+- [ ] Run the [concierge human-correction pilot](/cyberbaser/research/concierge-human-correction-pilot/) exactly as written: five ordinary readers and one independently operated Markdown-KB owner.
+- [ ] Test the whole human loop before automating it: account-free submission, owner-confirmed source mapping, exact quote anchoring, one-splice candidate preparation, local review card, owner-controlled local application, publication, and live verification.
+- [ ] Keep Q09 open. Passing the thresholds justifies only the smallest automation around measured work; failing narrows or stops the account-free product claim.
+
+No counted human attempt or threshold result exists yet. The completed internal dry run and private operator rehearsal count toward none of the pilot thresholds. The concierge, study form, local card, and correction primitive are experiment infrastructure, not a shipped contribution path.
+
+### Other v1 Build work
+
+- [ ] Make enforcement honest without breaking the maintainer's direct Obsidian+Git workflow (Q10).
+- [ ] Verify contributor attribution through the GitHub fork flow (Q08).
+- [ ] Freeze the live URL contract and add the slug-diff gate (Q06).
+- [ ] Decide the operating model for a maintainer who does not use GitHub: hosted, one-click self-hosted, or local-first. The pilot tests one local workflow but does not choose the general product model.
+
+**Exit criteria for v1 Build** are canonical on the public roadmap. The pilot result is one criterion; it does not by itself ship or settle an account-free product path.
 
 ---
 
-## Phase 0: Foundation (PARKED)
+## Long-term seam: linked knowledge bases
 
-**Status**: ⚪ Paused. The Astro + Starlight prototype in `docs/` publishes the research; it is not the product.
+Federation remains part of the long arc: independently owned bases and ordinary meta-wikis publish owner-controlled state, direct links are the failure floor, and crawlers, graph stores, caches, and search providers are disposable views. No central Cyberbaser registry or database sits in the authority chain.
 
-Built before/around the reinit: Astro + Starlight scaffold (Nova theme), Playwright layout + smoke suites, GitHub Pages deploy workflow (`actions/deploy-pages@v4`; the old Cloudflare Pages workflow is a dead artifact), Bun toolchain, the visual component library in `brand.css` (mockups, trees, diffs, dials), the OFM round-trip spike in `spikes/`.
-
-Intentionally *not* built (no principle justified it yet): translation-layer implementation, CMS integration, auth, backlinks rendering, Obsidian-aware nav.
-
-Phase 0 may resume after Phase R, possibly as a rewrite if principles say so — and renderer-agnostic by principle either way.
+The bounded five-origin fixture passed only as **controlled local compatibility**. It is preserved as architecture evidence, not promoted into a production package or immediate protocol workstream. A provisional profile is contingent on one independently operated peer demonstrating a concrete need; only then should the smallest necessary profile and conformance material be extracted.
 
 ---
 
-## Future Phases (Deferred — do not flesh out yet)
+## Publishing prototype <span class="cb-pill cb-pill-parked">Parked as product</span>
 
-Placeholders only; each gets a real outline when Phase R exits. **⚠ Phases 1-2 as written are under challenge (2026-07-25):** the plan critique and design pass argue Phase 1 presupposes a renderer chain the Quartz audit already beat, and Phase 2's "≥2 paths" is padding. Their replacements are gated on R09 (the corpus measurement) — see `/cyberbaser/research/v1-build-plan/`. Do not outline these phases until R09 resolves.
-
-### Phase 1 — Translation Layer Hands-On
-> Prove Tier 1 against real vault content (`astro-loader-obsidian` sufficiency vs custom remark/rehype); build on the 20/21 spike.
-
-### Phase 2 — Contribution Workflows
-> Implement ≥2 of the three paths (Web CMS + direct GitHub likely MVP pair); trust curve + moderation queue; the zero-account contribution-bot path; Forgejo/RA-01 substrate decision.
-
-### Phase 3 — Publish the Real Vault
-> Point at `cybersader/cyberbase`, deploy to a real domain (stable-URL scheme decided by then).
-> **Prerequisite (2026-07-25): the publish boundary.** Phase 3 needs the include/exclude mechanism (publish filter + leak tests) before pointing a renderer at the vault — as a *feature* (the maintainer's access-flexibility requirement), not a remediation: per R11 the vault's public content is intentional and the exposure-triage track is waived. Design: `/cyberbaser/research/proposal-selective-publishing/`.
-
-### Phase 4 — Community Onboarding
-> CONTRIBUTING.md, LICENSE follow-through, first external contributor.
+The Astro + Starlight site in `docs/` remains the canonical knowledge base and publishing pipeline for project research. It is not the v1 product surface. Quartz renders the live dogfood vault as a swappable commodity spoke.
 
 ---
 
 ## Roadmap Operating Rules
 
-1. **Roadmap is downstream of principles.** A step that no principle justifies means: write the principle first or drop the step. (Principles: `getting-started/principles.mdx`.)
-2. **Phase R exits only by the exit criteria above** — and the open gate is now *validation*, not writing. Resist "the docs look done, so we're done."
-3. **Update this file when a phase exits or scope changes.** `FOCUS.md` is the short-term snapshot; this file is the long-term plan; the docs roadmap page is the public canon.
+1. **Roadmap is downstream of principles and measured evidence.** A step that no principle or explicit trade-off justifies is dropped.
+2. **Do not infer a product from a primitive.** A validator, exact-correction library, local fixture, or concierge workflow earns only the narrow claim it tested.
+3. **Do not turn controlled federation evidence into a protocol workstream by momentum.** Peer need comes before profile extraction.
+4. **Update this file when phase, milestone, or product interpretation changes.** `FOCUS.md` is the short-term snapshot; this is the operating roadmap; the docs roadmap page is the public canon.

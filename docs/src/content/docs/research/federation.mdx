@@ -1,0 +1,368 @@
+---
+title: "Federation: a web of webs you control"
+description: "How independently owned bases, ordinary meta-wikis, direct links, peer publications, and disposable indexes can form a federation without a central cyberbaser database."
+sidebar:
+  label: "Federation architecture"
+  order: 19
+status: research
+tags: [research, federation, architecture, governance, attribution]
+---
+
+## Answer in plain language
+
+**Cyberbaser federation is not a central database with wiki clients. It is a recursively linked web of independently owned bases.** Each base publishes its own pages and its own authoritative description of those pages. A meta-wiki is simply another ordinary base whose subject is other bases: it can curate collections, compare pages, publish mappings, annotate revisions, keep licensed mirrors, or operate an index.
+
+Many meta-wikis may coexist. They may specialize, disagree, fork, disappear, or be replaced. Their crawlers, graph databases, search rankings, and caches are useful views, but they have no merge authority, namespace authority, moderation authority, or privileged status. If every federation-specific service fails, ordinary direct links between owner pages must still work.
+
+:::caution[Measured research result, not a locked decision]
+This page records the corrected architecture and the completed local falsification fixture measured on 2026-07-27. It does not create an R-number, claim maintainer approval, or settle [Q06 stable addressing](/cyberbaser/reference/open-questions/#q06--content-addressability-slugs-hashes-or-title-based-with-redirects). Existing constraints still govern: the vault is primary, write paths use raw-text splices, renderers are swappable, moderation remains local, and every public artifact comes from the [fail-closed public projection](/cyberbaser/research/proposal-selective-publishing/#the-derived-index-rule). **Compatibility inside one controlled local fixture is not independent interoperability.**
+:::
+
+## What it should feel like
+
+The protocol should disappear behind ordinary wiki actions:
+
+- **Open a cited page.** The link goes directly to the page its owner publishes, not through Cyberbaser, an index, a relay, or a resolver.
+- **Follow a base or collection.** Your own runner, app, or chosen provider checks the publisher's inventory and change information. Missing push notifications do not lose state.
+- **Compare curators.** If two meta-wikis disagree, the reader sees two source-labelled views rather than one silently merged answer.
+- **Search at the scope you choose.** Search this site, search the neighborhood cached from your chosen seeds, or ask several optional public providers.
+- **Suggest a correction.** The target base imports an exact-revision proposal into its own moderation queue. The sender never writes the remote page directly.
+- **Copy only when rights permit.** A fork or mirror becomes a new locally owned publication with provenance, attribution, and an exact source revision. Otherwise the action is link-only.
+- **Keep reading during failures.** Turn off the crawler, graph store, search providers, Webmention receiver, feed hub, and every meta-wiki. Direct links still open wherever the owner pages remain online.
+
+This is **federated by publication, runtime-light**. A useful local cache may be running, but participation does not require a shared Cyberbaser runtime.
+
+## Worked example: three wikis, two competing meta-wikis
+
+Five independently owned bases publish one connected subject area:
+
+| Base | What it owns and publishes |
+|---|---|
+| **FungiWiki** | Species pages, revisions, outbound citations, rights, and an inventory of its public pages |
+| **ForageBase** | Regional field guidance, including direct links to FungiWiki and ToxinNotes |
+| **ToxinNotes** | Toxicology pages and a correction policy; some pages are linkable but not licensed for copying |
+| **Atlas of Edible Fungi** | A meta-wiki that curates a “Beginner field set,” maps one FungiWiki species page to a ForageBase page as an exact match, and mirrors one licensed chart |
+| **Cautious Forager Index** | A competing meta-wiki that calls the same pair only a close match, annotates the regional differences, excludes one Atlas member, and links to Atlas while criticizing its criteria |
+
+A reader starts at a FungiWiki page and follows an ordinary link to ToxinNotes. FungiWiki's optional Linkset makes the same outbound relationship machine-readable, but the human link is the durable edge.
+
+Atlas and Cautious Forager each publish a collection. Atlas says two pages are equivalent; Cautious Forager says they are merely related and supplies a revision-bound annotation explaining why. A local graph cache stores both claims with their issuers and observation times. It does not collapse them into one edge or ask a global service which curator is correct.
+
+Atlas mirrors a chart whose license permits redistribution. The mirror records the source URL, exact source revision or digest, retrieval time, license, attribution, and local modifications. ToxinNotes has no compatible reuse grant, so both meta-wikis link to it without copying its body.
+
+Two search providers may rank the same material differently. One favors recent owner revisions; another favors the Cautious Forager collection. Both return the direct owner URLs and identify their corpus, crawl age, provider, and ranking policy. Neither result becomes canonical because it ranked first.
+
+The graph is recursive. Atlas links to Cautious Forager, Cautious Forager links back to Atlas, and both contain collections that include other collections. Clients terminate cycles with local budgets, not with a central acyclic graph.
+
+## Authority is local; observations stay source-qualified
+
+The most important distinction is not “trusted versus untrusted.” It is **who is entitled to say what**.
+
+| Record or statement | Authority |
+|---|---|
+| A base's own description, public pages, revisions, aliases, lifecycle, outbound links, inventory, rights claims, and capabilities | That base is authoritative for what it published about itself |
+| A meta-wiki collection, mapping, annotation, ranking, or mirror | That meta-wiki is authoritative only for the fact that it published that claim or copy |
+| A crawler's backlink, availability result, extracted title, or search rank | An observation by that crawler or provider, at a stated time |
+| A verified Webmention | Evidence that fetched source bytes linked to a target at that time |
+| A digest | Evidence that bytes match a stated representation |
+| A signature | Evidence that a delegated key signed the covered bytes |
+| A citation or provenance record | Evidence of where a claim or copy came from, not proof that it is true |
+
+No signature, backlink count, domain count, key count, relay count, citation count, or search rank becomes a global trust score. One actor can create many bases, domains, and keys. Authorization, moderation, endorsement, and ranking remain local decisions.
+
+A third party never overwrites owner metadata. Cross-owner `canonical`, equal titles, redirects, equal digests, `sameAs`, or `skos:exactMatch` do not silently merge independently governed resources.
+
+## What each base publishes
+
+The baseline is static publication over ordinary HTTPS. The exact Cyberbaser profile remains provisional, but the responsibilities are clear.
+
+### Normal pages and direct links
+
+Every reader-facing relationship has a normal absolute HTTPS link to the owner's page. Structured metadata can enrich that link, never replace it. Human-readable HTML may include [microformats2](https://microformats.org/wiki/microformats2) such as `h-entry`, but no parser is required to read the page.
+
+Public identities remain in owner-controlled HTTPS namespaces. Cyberbaser does not invent a global ID allocator, friendly-handle resolver, or registry. Paths, renderer slugs, git commits, content digests, forge accounts, and DIDs are not interchangeable identities. The controlled fixture freezes a small base-local URL map strictly as test scaffolding; enrolling the live corpus of 933 selected Markdown sources and 931 public page URLs still waits on Q06.
+
+### A peer-published descriptor
+
+A page or homepage advertises a base descriptor at any owner-chosen path with a registered relationship such as `rel="describedby"`. No custom `/.well-known/cyberbaser` or `kb-manifest` path is required.
+
+The descriptor points to the base homepage, public inventory, outbound Linksets, rights and history policy, feeds, and optional capabilities. It describes the publisher's public projection. A profile URI can identify the conventions, but clients ship the schema and test vectors; the profile host is not a live runtime dependency or naming authority.
+
+### Inventory and change information
+
+A complete current inventory lets a follower rebuild after losing every cache. [ResourceSync 1.1](https://www.openarchives.org/rs/1.1/resourcesync) is the strongest existing candidate because it defines source-owned resource lists, changes, deletions, dumps, and fixity.
+
+The measured fixture used only a complete current Resource List-equivalent snapshot. Change Lists are added only when the publisher has durable publication history. A transient failure, truncated feed, expired lease, or missing page in a recent-items feed never means deletion. Deletion requires owner-published lifecycle evidence, such as an inventory change plus an HTTP `410 Gone` response.
+
+Atom, JSON Feed, sitemaps, and archived feeds remain useful reader and crawler views. They are not complete reconciliation authority unless the publisher explicitly promises completeness and tombstone behavior.
+
+### Outbound linksets
+
+[RFC 9264 Linksets](https://www.rfc-editor.org/rfc/rfc9264.html) let a base publish typed outbound relationships separately from HTML. They also let a meta-wiki publish links whose contexts are on other origins, which is exactly what independent collections and mappings need.
+
+Every cached relationship retains the Linkset publisher, source URL, discovery chain, retrieval time, and observed revision or digest. A third-party context does not make the Linkset publisher authoritative for the remote resource.
+
+### Mentions and proposals
+
+[Webmention](https://www.w3.org/TR/webmention/) is optional backlink notification. The receiver fetches and verifies the source link, then applies local moderation. It proves a link existed in fetched bytes, not authorship, endorsement, safety, or permission to copy.
+
+A correction proposal is not a remote write. The receiving base owns the queue record and outcome. A proposal binds to the target page's exact revision or digest and byte length, carries ordered non-overlapping byte splices, and fails closed when stale. The receiver runs the same translation and trust checks as a local contribution. The sender cannot declare acceptance, bypass moderation, or trigger whole-file reserialization.
+
+### Collections, mappings, and annotations
+
+A collection is an authored resource with its own issuer, purpose, membership, order when meaningful, inclusion policy, revision, and provenance. It may contain bases, pages, revisions, assertions, annotations, other collections, or other meta-wikis.
+
+Mappings are source-qualified claims. SKOS relations such as exact, close, broader, narrower, and related are useful vocabulary, but even `exactMatch` does not collapse page identity. Each mapping keeps its issuer, rationale, evidence, target revision when observed, and lifecycle.
+
+[Web Annotation](https://www.w3.org/TR/annotation-model/) supplies the useful shape for commentary: body, target, motivation, selectors, and annotations on annotations. Prefer targets bound to an exact revision and passage so commentary does not silently drift when a page changes.
+
+### Provenance, rights, and capabilities
+
+Forks, imports, translations, quotations, annotations, and mirrors carry provenance: issuer, source URL, exact source revision or digest, retrieval or generation time, activity, agents, and transformations. [PROV-O](https://www.w3.org/TR/prov-o/) is a vocabulary source, not a requirement to use RDF.
+
+Rights apply separately to page text, assets, annotations, collection metadata, and mirrors. Unknown or incompatible rights mean link-only. A mirror receives its own owner URL and local revision. It is a licensed historical or republished copy, never a silent continuation of the source's authority.
+
+Capabilities advertise optional operations such as inventory retrieval, revision retrieval, Webmention, or proposal intake. Advertising an endpoint does not grant authorization, trust, or permission to write. A consumer can ignore every capability and still follow ordinary links.
+
+<details>
+<summary>Evidence: how existing standards compose without becoming a substrate</summary>
+
+| Standard | Reused for | What it does not decide |
+|---|---|---|
+| [Web Linking, RFC 8288](https://www.rfc-editor.org/rfc/rfc8288.html) | Typed links and descriptor discovery | KB identity, truth, moderation, or completeness |
+| [Linkset, RFC 9264](https://www.rfc-editor.org/rfc/rfc9264.html) | Standalone owner and third-party relationship sets | Provenance policy, inventory, deletion, or ranking |
+| [ResourceSync 1.1](https://www.openarchives.org/rs/1.1/resourcesync) | Complete inventories, changes, deletions, dumps, and rebuild | Authentication, rights, truth, or user experience |
+| [Atom, RFC 4287](https://www.rfc-editor.org/rfc/rfc4287.html), [archives, RFC 5005](https://www.rfc-editor.org/rfc/rfc5005.html), and [tombstones, RFC 6721](https://www.rfc-editor.org/rfc/rfc6721.html) | Reader-friendly updates and recoverable feed patterns | Completeness unless the publisher promises it |
+| [Web Annotation](https://www.w3.org/TR/annotation-model/) | Independent commentary, targets, selectors, and collections | Wiki write semantics or global truth |
+| [DCAT 3](https://www.w3.org/TR/vocab-dcat-3/) | Catalogs, nested catalogs, and catalog records | Authority over the described resources |
+| [SKOS](https://www.w3.org/TR/skos-reference/) | Source-qualified mapping relations | Identity collapse or global equivalence |
+| [Memento, RFC 7089](https://www.rfc-editor.org/rfc/rfc7089.html) | Separating continuing resources from historical representations | Retention guarantees or current owner authority |
+| [Digest Fields, RFC 9530](https://www.rfc-editor.org/rfc/rfc9530.html) | Representation integrity | Identity, truth, freshness, rights, or authorization |
+| [Profile relation, RFC 6906](https://www.rfc-editor.org/rfc/rfc6906.html) | Versioned profile semantics | A registry, conformance authority, or runtime dependency |
+
+</details>
+
+## Discovery is recursive, plural, and chosen locally
+
+Discovery begins with user-selected seeds, not a Cyberbaser registry. Seeds may be bookmarks, direct citations, followed bases, followed collections, imported lists, chosen meta-wikis, or configured search providers.
+
+From each seed, a client may inspect ordinary links, descriptor links, inventories, Linksets, feeds, and verified mentions. It records the discovery chain: “found through FungiWiki's page, then Atlas's collection,” not merely “in the graph.” Different seeds produce different neighborhoods, which is expected.
+
+Cycles are normal. Crawlers enforce local relation allowlists and strict depth, origin, redirect, URL, byte, decompression, parser, wall-time, and concurrency budgets. They identify themselves, respect [robots.txt](https://www.rfc-editor.org/rfc/rfc9309.html), fetch only public HTTP(S), send no cookies or credentials, re-check DNS and redirects, and block private-network destinations. Cyberbaser does not crawl private bases or infer that `robots.txt` grants authorization.
+
+A base that publishes only HTML and direct links still participates at level zero. Descriptors and inventories improve discovery and recovery; they are not admission tickets.
+
+## Graph stores and search indexes are disposable spokes
+
+A local cache stores fetched records unchanged alongside publisher, assertion ID, fetched URL, discovery chain, source revision or digest, HTTP validators, retrieval time, last verification time, availability, staleness, and evidence class. It preserves competing claims instead of flattening them by subject URL.
+
+SQLite, RDF, a graph database, a text index, a crawler, a ranking model, and a hosted search API are all **swappable spokes**. Deleting any of them must not delete source knowledge or break direct links. A view is valid only if it can be rebuilt from chosen seeds and peer publications.
+
+Search has three independent scopes:
+
+1. **Owner-local search** over one base's own published pages.
+2. **Neighborhood search** over a user's disposable cache built from chosen seeds.
+3. **Plural public providers** with different corpora, policies, funding, and rankings.
+
+Every public result returns the direct owner URL and identifies the provider, corpus policy, crawl age, assertion provenance, principal ranking signals, and manual or paid intervention. Clients support provider removal, replacement, and export. No hidden exclusive default, canonical-page score, global contributor reputation, or network-wide trust score is part of the protocol.
+
+## Disagreement, forks, retractions, and disappearance
+
+**Disagreement is data.** Two mappings, annotations, or rankings remain two issuer-qualified records. A local maintainer may endorse one for their readers without deleting the other.
+
+**Retractions do not rewrite history.** An issuer can withdraw or supersede its own assertion. Caches retain the earlier observation as historical evidence and show the later lifecycle state. A third party cannot retract someone else's record.
+
+**Forks get new local ownership.** A forked page, collection, or meta-wiki gets a new owner URL and records derivation from the exact source revision. It does not inherit the original's identity, followers, moderation history, or authority.
+
+**Temporary failure means stale, not deleted.** Failed fetches, expired WebSub leases, missing feed pages, relay omissions, and broken Linksets mark observations unavailable or stale. Only owner-published lifecycle evidence establishes a move, withdrawal, or deletion.
+
+**Domain loss leaves uncertainty.** While both origins are controlled, redirects and bilateral provenance can support migration. If the old domain disappears without prior continuity evidence, a successor, archive, mirror, or popular meta-wiki remains a competing claim. Cyberbaser does not elect a replacement by popularity. A later registrant of the old hostname does not silently inherit historical trust.
+
+**Archives preserve evidence, not current authority.** Memento archives and licensed mirrors may keep old representations available. They do not become the continuing owner of a vanished source.
+
+## Optional transports, never the substrate
+
+Pull from owner publications is the recovery path. Optional transports may reduce latency or improve availability:
+
+- WebSub can accelerate feed delivery, but leases expire and replay is not guaranteed.
+- Webmention can notify a target about a public link.
+- ActivityPub can carry an Offer, Accept, Reject, Update, or Delete notification.
+- Nostr, AT-style relays, gossip, DHTs, Secure Scuttlebutt, or Hypercore can carry source-qualified announcements.
+- IPFS or other content-addressed systems can distribute licensed immutable copies.
+- Signatures can authenticate covered bytes from a key delegated by the owner publication.
+
+None of these transports assigns wiki identity, proves truth, grants reuse rights, reconciles disagreement, or becomes necessary to open a link. Cyberbaser should provide adapters only after the static publication contract proves useful, rather than adopt any transport's storage, account, relay, or consensus model wholesale.
+
+## Hard anti-centralization invariants
+
+These are architecture tests, not preferences:
+
+1. No Cyberbaser registry, directory, resolver, database, relay, graph store, search provider, ranking service, moderation list, profile host, or hosted identity is required to publish or follow a normal link.
+2. A directory is one ordinary, forkable meta-wiki or disposable index. Demand and good governance can justify operating one, never making it authoritative.
+3. Published cross-base links point directly to owner URLs. Cyberbaser does not rewrite them through a redirector, preview service, gateway, or tracking URL.
+4. Each base publishes its own authoritative public state. Third-party descriptions remain third-party assertions.
+5. No graph or index may silently merge claims, mint canonical identities, confer trust, or decide succession.
+6. Every crawler, graph database, cache, search engine, and ranking model is a replaceable spoke with exportable records and configuration.
+7. Deleting every disposable view leaves source pages, owner publications, local moderation, and direct navigation intact.
+8. All federation output is generated only after the public projection. Private titles, paths, backlinks, tags, assets, feeds, and response differences must produce zero public hits.
+9. Remote proposals enter the receiver's local queue, bind to exact bytes, and fail stale. There are no direct remote writes or premature multi-master synchronization.
+10. Provider popularity, signatures, domain counts, and network reach never become a portable trust or truth score.
+
+## Network effects remain real
+
+A decentralized authority model can still recentralize attention. Full-network search, reliable hosting, abuse handling, ranking quality, and large crawls have economies of scale. Defaults influence user behavior, popular curators attract more links, and volunteer services disappear.
+
+Cyberbaser cannot guarantee equal influence, cheap global search, permanent domains, or a market without dominant providers. It can prevent attention concentration from acquiring naming, content, trust, moderation, or navigation authority.
+
+The mitigations are structural: direct owner links; local and neighborhood search; several visible providers; exportable provider configuration; source-qualified results; disclosed corpus, funding, ranking, freshness, exclusions, and paid boosts; downloadable records where rights permit; owner domains; and a shutdown or transfer plan for large public services. A dominant index may become important, but it must remain removable.
+
+<details>
+<summary>Evidence: concentration and governance pressures the protocol cannot wish away</summary>
+
+- The [AT Protocol architecture](https://atproto.com/guides/overview) separates source repositories from aggregation-heavy relays and App Views, while its [sync specification](https://atproto.com/specs/sync) documents omission and resynchronization limits.
+- The measured [Mastodon deployment study](https://arxiv.org/abs/1909.05801) found concentration in users, hosting providers, and availability despite open federation.
+- [United States v. Google](https://storage.courtlistener.com/recap/gov.uscourts.dcd.223205/gov.uscourts.dcd.223205.1033.0.pdf) documents how defaults, distribution, and query scale reinforce search concentration.
+- The [Principles of Open Scholarly Infrastructure](https://openscholarlyinfrastructure.org/) provide a useful governance baseline for optional public indexes: stakeholder governance, transparent decisions, reserves, service-based revenue, open code and data where practical, archiving, and a living will.
+- [OpenCitations](https://opencitations.net/) demonstrates that open datasets, dumps, and open-source software lower exit costs even when a hosted service is prominent.
+
+</details>
+
+## Security, privacy, moderation, and rights boundaries
+
+Recursive federation processes hostile input. The crawler and parser boundary is therefore part of the architecture, not an implementation footnote.
+
+- **No private crawling.** Federation artifacts come from the public projection. Fetchers use public HTTP(S) only, carry no ambient credentials, and never treat `robots.txt` as access control.
+- **Harden every discovered fetch.** Validate redirects and DNS/IP results, reject loopback and private ranges, limit bytes and decompression, use parser and wall-time budgets, and isolate network egress. See the [OWASP SSRF Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html).
+- **Treat remote metadata as data.** Use bundled, versioned schemas. Do not execute extensions or fetch attacker-selected JSON-LD contexts, schemas, keys, scripts, images, fonts, frames, or tracking pixels from reader pages.
+- **Moderate locally.** Mentions, proposals, annotations, previews, labels, and blocklists are remote inputs. Verification does not make them safe or endorsed.
+- **Preserve uncertainty.** Stale observations and domain takeovers remain visibly distinct from current owner-origin records.
+- **Gate mirrors by rights.** Check text and assets separately, sanitize remote material, record attribution and changes, and never imply endorsement.
+- **Control Sybil cost with budgets, not identity theater.** Crawl limits, rate limits, moderation queues, and local policy handle abuse. Counting domains, keys, or bases cannot establish independent actors; see [The Sybil Attack](https://www.microsoft.com/en-us/research/publication/the-sybil-attack/).
+
+Private federation, role-gated crawling, recipient-side erasure, and portable network-wide identity remain out of scope. Selective sharing to a named recipient is a separate security and governance problem, not a hidden extension of public crawling.
+
+## Measured local fixture: the narrow claim passed
+
+The bounded fixture now lives as a [standalone private Bun project](https://github.com/cybersader/cyberbaser/tree/main/spikes/federation-fixture). On 2026-07-27 its authoritative verifier returned `complete: true`, and two consecutive verifier runs produced byte-identical JSON.
+
+The result supports one narrow claim: **static publications produced through two controlled paths can be discovered from chosen seeds, preserve source-qualified disagreement, rebuild a disposable cache, and retain direct owner navigation without shared writable state or mandatory federation services.** It does not show that separately operated software agrees on the contract.
+
+### Exact fixture scope
+
+- Five logical HTTPS origins: `https://fungi.test`, `https://forage.test`, `https://toxins.test`, `https://atlas.test`, and `https://cautious.test`.
+- Three subject bases and two competing meta-wikis. Fungi, Forage, and Atlas use the publish/projection producer path; Toxins and Cautious use a separately authored producer path.
+- Five independently stoppable `Bun.serve()` instances, each reading only its own temporary static root on `http://127.0.0.1:<ephemeral-port>`.
+- No actual TLS and no hosts-file edit. An injected fixture-only transport maps the five exact logical HTTPS origins to loopback. The public transport remains separate, HTTPS-only, and has no private-network bypass.
+- An arbitrary descriptor path per base, a complete sorted inventory, RFC 9264-shaped Linksets, exact-byte SHA-256 digests, direct absolute owner URLs, one licensed mirror, one link-only rights case, conflicting Atlas/Cautious mappings, and an Atlas/Cautious crawl cycle.
+- One deletable deterministic JSON cache and two visible search providers over the same source-qualified records.
+- A fixed clock of `2026-07-27T12:00:00.000Z`; recursively sorted JSON object keys; preserved array order; two-space indentation; and one trailing line feed.
+
+The default crawl envelope was fixed before the run:
+
+| Limit | Value |
+|---|---:|
+| Depth / origins / URLs | 4 / 5 / 64 |
+| Redirects | 8 |
+| One response / total bytes | 512 KiB / 4 MiB |
+| Decompressed response / parser input | 1 MiB / 512 KiB |
+| Parser time / wall time | 250 ms / 5 s |
+| Concurrency | 3 |
+
+The successful representative crawl visited 31 logical URLs across all five origins, produced 14 source-qualified cache records, and stopped on no budget.
+
+### Measured results
+
+| Behavior under test | Measured result |
+|---|---|
+| Optional services removed | Direct owner navigation remained functional with descriptors, inventories, Linksets, the cache, both meta-wikis, and search views unavailable |
+| Cache deleted and rebuilt | The normalized 14-record export rebuilt byte-identically from the same seeds and fixed clock |
+| Atlas/Cautious disagreement | Two records survived: Atlas `exactMatch` and Cautious `closeMatch`, each retaining issuer, rationale, revision/digest evidence, and observation time |
+| Complete-inventory recovery | Missing incremental hints recovered from complete owner inventories |
+| Deletion versus failure | Inventory removal plus `410 Gone` from the exact owner URL marked three owner-qualified records `deleted`; changed bytes became `stale`, while redirects, non-410 failures, and transport outages became `unavailable` |
+| Mirror and rights authority | Atlas's licensed mirror retained provenance but did not gain Fungi's authority; Toxins stayed link-only and its body was not copied for republication |
+| Recursive crawl | The Atlas/Cautious cycle terminated through visited URLs and declared budgets, with the stopping budget reported when a limit was forced |
+| Search plurality | `recent-owner-revisions` ranked Fungi first; `cautious-evidence-first` ranked Forage first. Provider, policy, signals, provenance, and direct owner URLs remained visible |
+| Stale exact-byte proposal | Rejected at the digest precondition with `target-digest-mismatch`; apply, OFM, and trust were each called zero times, and no rebase occurred |
+| Private projection boundary | 55 title, path, body, asset, backlink, tag, collection, encoded, Base64, slugged, and digest canaries produced zero hits across publications, descriptors, inventories, Linksets, cache, mirror, search, responses, and verifier output |
+| Hostile fetch and serving policy | Injected-fake SSRF tests blocked private/reserved IPv4 and IPv6 and revalidated redirects without external calls; exact fixture-origin isolation and traversal-safe serving passed |
+
+### Commands and pass counts
+
+Run from the repository root unless a subshell says otherwise:
+
+```bash
+bun install --cwd spikes/federation-fixture --frozen-lockfile
+bun test --cwd spikes/federation-fixture
+(cd spikes/federation-fixture && bun test --rerun-each 3 test/destructive.test.js test/security.test.js)
+bun run --cwd spikes/federation-fixture verify
+
+bun test --cwd packages/publish
+bun test --cwd packages/projection
+bun test --cwd packages/linkcheck
+bun test --cwd packages/ofm
+bun test --cwd packages/trust
+
+bun run --cwd docs build
+git diff --check
+```
+
+- Frozen install: passed with Bun 1.3.11 and five local package dependencies.
+- Fixture suites: **52 tests, 887 assertions, all passed** across profile, topology, policy, destructive, and security coverage.
+- Adversarial repeat: **16 tests repeated three times, 48 executions and 648 assertions, all passed**.
+- Authoritative verifier: run twice, both exits zero, both `complete: true`, byte-identical JSON.
+- Reused package suites: **165 tests passed** (`publish` 100, `projection` 28, `linkcheck` 9, `ofm` 10, `trust` 18).
+- Documentation integration: **98 pages built**; `git diff --check`, workflow parsing, and generated-output hygiene passed.
+- Fixture CI is read-only and path-filtered, disables checkout credential persistence, has no service container or external fixture, and has a five-minute job timeout.
+
+:::caution[Local compatibility is not independent interoperability]
+Both producers, the validator, the consumer, the logical-origin map, and all fixtures are controlled in one repository. The five servers are independently stoppable, but they are not independently operated implementations. The fixture did not exercise public DNS, real certificates, Internet routing, third-party deployment practices, or a separately written consumer. Do not describe this result as protocol interoperability.
+:::
+
+The spike also did **not** create a production package, root workspace, live Q06 URL contract, registry or resolver, global identity or trust, external service, durable Change List, remote write endpoint, private federation, actual TLS, public search service, or shared network runtime.
+
+## What remains open
+
+- Q06 still decides how the live corpus keeps page URLs stable across path, renderer, and domain changes. The fixture URL map is test scaffolding, not the production answer.
+- The smallest provisional profile must now be extracted from the fixture's descriptor, complete inventory, Linkset, record, and conformance behavior without promoting fixture URLs or its URN into live authority.
+- One independently operated producer or consumer must pass the published fixtures and conformance tests before Cyberbaser can claim interoperability.
+- Durable Change Lists and immutable revision URLs require retained publication history. A deterministic clean rebuild from a fixed snapshot does not provide that history.
+- Webmention, WebSub, ActivityPub, signatures, relays, DHTs, Memento history, remote proposal intake, public global search, and production licensed mirroring remain optional follow-ons.
+- No direct remote writes, private crawling, portable global trust, or multi-master synchronization are proposed.
+
+The architecture survived its bounded local falsification test. The next research item is **publish the smallest provisional profile, fixtures, and conformance tests, then recruit an independently operated implementation**. Until that succeeds, the honest result is local fixture compatibility, not interoperability.
+
+## References
+
+<details>
+<summary>Primary specifications, security guidance, implementation evidence, and prior art</summary>
+
+- [Web Linking — RFC 8288](https://www.rfc-editor.org/rfc/rfc8288.html)
+- [Linkset — RFC 9264](https://www.rfc-editor.org/rfc/rfc9264.html)
+- [ResourceSync Framework 1.1](https://www.openarchives.org/rs/1.1/resourcesync)
+- [Atom Syndication Format — RFC 4287](https://www.rfc-editor.org/rfc/rfc4287.html), [Feed Paging and Archiving — RFC 5005](https://www.rfc-editor.org/rfc/rfc5005.html), and [Atom Deleted Entry — RFC 6721](https://www.rfc-editor.org/rfc/rfc6721.html)
+- [Webmention — W3C Recommendation](https://www.w3.org/TR/webmention/) and [WebSub — W3C Recommendation](https://www.w3.org/TR/websub/)
+- [Web Annotation Data Model](https://www.w3.org/TR/annotation-model/)
+- [Data Catalog Vocabulary 3](https://www.w3.org/TR/vocab-dcat-3/)
+- [PROV-O](https://www.w3.org/TR/prov-o/) and [SKOS Reference](https://www.w3.org/TR/skos-reference/)
+- [Memento — RFC 7089](https://www.rfc-editor.org/rfc/rfc7089.html)
+- [HTTP Semantics — RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html), [HTTP Caching — RFC 9111](https://www.rfc-editor.org/rfc/rfc9111.html), and [Digest Fields — RFC 9530](https://www.rfc-editor.org/rfc/rfc9530.html)
+- [Profile Link Relation — RFC 6906](https://www.rfc-editor.org/rfc/rfc6906.html) and [Well-Known URIs — RFC 8615](https://www.rfc-editor.org/rfc/rfc8615.html)
+- [Robots Exclusion Protocol — RFC 9309](https://www.rfc-editor.org/rfc/rfc9309.html)
+- [OWASP SSRF Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html)
+- [Creative Commons BY-SA 4.0 legal code](https://creativecommons.org/licenses/by-sa/4.0/legalcode.en)
+- [IndieWeb principles](https://indieweb.org/principles) and [POSSE](https://indieweb.org/POSSE)
+- [Federated Wiki: Chorus of Voices](https://federated.wiki/chorus-of-voices.html)
+- [The Sybil Attack](https://www.microsoft.com/en-us/research/publication/the-sybil-attack/)
+- [Principles of Open Scholarly Infrastructure](https://openscholarlyinfrastructure.org/)
+
+</details>
+
+### Related inside cyberbaser
+
+- [Vision](/cyberbaser/getting-started/vision/) and [Direction](/cyberbaser/getting-started/direction/) — the long arc and the measured federation fork
+- [Architecture](/cyberbaser/design/architecture/) — the renderer-agnostic hub and why every crawler, index, and graph is a spoke
+- [Translation layer](/cyberbaser/design/translation-layer/) — why proposals bind to exact bytes and fail stale
+- [Contribution workflows](/cyberbaser/design/contribution-workflows/) — local trust and moderation sovereignty
+- [Selective publishing](/cyberbaser/research/proposal-selective-publishing/) — the public projection every federation artifact inherits
+- [Is git the right source of truth?](/cyberbaser/research/source-of-truth/) — the earlier survey whose federation remedy this page corrects
+- [Challenge 09 · Source of truth alternatives](/cyberbaser/agent-context/zz-challenges/09-source-of-truth-alternatives/) — the historical brief, preserved as context rather than current architecture

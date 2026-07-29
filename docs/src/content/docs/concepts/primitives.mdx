@@ -7,7 +7,7 @@ status: research
 tags: [concepts, primitives]
 ---
 
-Everything in cyberbaser reduces to the eight ideas below, and two of them carry the weight: **translation layer** and **round-trip editability**. Get those right and the contribution paths, stable URLs, and single source of truth compose on top for free; get them wrong and the rest is aspiration. The other six are the vocabulary the rest of these docs assume you have.
+Everything in Cyberbaser reduces to the eight ideas below, and two carry most of the weight: **one owner-controlled source** and **exact-change interoperability across replaceable surfaces**. Rendering may use parsed or structured models; accepted external proposals may not regenerate untouched source. The historical “translation layer” and “round-trip editability” names remain as anchors, but R12 changed their mechanism from whole-file conversion to exact source-bound operations.
 
 Each entry is a one-line definition, a picture of the real thing, and a dropdown with why it matters and how cyberbaser uses it.
 
@@ -17,7 +17,7 @@ Each entry is a one-line definition, a picture of the real thing, and a dropdown
   <a class="cb-navchip" href="#wikilink"><span class="cb-navchip-n">03</span><span class="cb-navchip-t">Wikilink</span></a>
   <a class="cb-navchip" href="#backlink"><span class="cb-navchip-n">04</span><span class="cb-navchip-t">Backlink</span></a>
   <a class="cb-navchip cb-navchip-hard" href="#translation-layer"><span class="cb-navchip-n">05 · core</span><span class="cb-navchip-t">Translation Layer</span></a>
-  <a class="cb-navchip cb-navchip-hard" href="#round-trip-editability"><span class="cb-navchip-n">06 · core</span><span class="cb-navchip-t">Round-Trip Editability</span></a>
+  <a class="cb-navchip cb-navchip-hard" href="#round-trip-editability"><span class="cb-navchip-n">06 · core</span><span class="cb-navchip-t">Exact-Change Editability</span></a>
   <a class="cb-navchip" href="#open-authoring"><span class="cb-navchip-n">07</span><span class="cb-navchip-t">Open Authoring</span></a>
   <a class="cb-navchip" href="#stable-urls"><span class="cb-navchip-n">08</span><span class="cb-navchip-t">Stable URLs</span></a>
 </nav>
@@ -48,7 +48,7 @@ Each entry is a one-line definition, a picture of the real thing, and a dropdown
 
 The vault is the *unit of content* cyberbaser operates on, and it is the durable half of the arrangement. Cyberbaser is delivery; the vault is the thing. If cyberbaser disappears the vault still opens and still works, which is Principle 5.
 
-Concretely: the dogfood vault lives in its own repo, [`cybersader/cyberbase`](https://github.com/cybersader/cyberbase). Cyberbaser never edits it in place or restructures it. A publish boundary (`publish.yml`, default-deny) selects which folders are public, `@cyberbaser/projection` copies the selected files verbatim into a build tree, and a renderer turns that tree into a site. 933 of the vault's pages are published this way today. Nothing in the vault is cyberbaser-shaped: no required frontmatter, no rename, no lockfile.
+Concretely: the dogfood vault lives in its own repo, [`cybersader/cyberbase`](https://github.com/cybersader/cyberbase). Cyberbaser never edits it in place or restructures it. A publish boundary (`publish.yml`, default-deny) selects which folders are public, `@cyberbaser/projection` copies the selected files verbatim into a build tree, and a renderer turns that tree into a site. Today 933 Markdown sources are selected and projected into 931 public page URLs. Nothing in the vault is cyberbaser-shaped: no required frontmatter, no rename, no lockfile.
 
 </details>
 
@@ -60,7 +60,7 @@ Concretely: the dogfood vault lives in its own repo, [`cybersader/cyberbase`](ht
 
 **Exactly one authoritative place for any piece of content; every other copy is derived from it and can be thrown away.**
 
-<div class="cb-ssot" role="img" aria-label="One git repo is the source. The website, your Obsidian vault, and the web CMS are all derived from it.">
+<div class="cb-ssot" role="img" aria-label="One owner-controlled repository is authoritative. The published site is derivative, the local editor authors it directly, and a future external authoring spoke returns proposals rather than owning another source.">
   <div class="cb-ssot-core">
     <div class="cb-tree">
       <div class="cb-tree-hd"><span class="cb-tree-fold">▾</span> <svg class="cb-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M13.09 23.549a1.54 1.54 0 0 1-2.18 0L.451 13.089a1.54 1.54 0 0 1 0-2.179l7.191-7.19 2.733 2.733a1.85 1.85 0 0 0 .964 2.326v6.66a1.849 1.849 0 1 0 1.54 0V8.957l2.508 2.508a1.85 1.85 0 1 0 1.09-1.09l-2.634-2.634a1.85 1.85 0 0 0-2.378-2.377L8.73 2.63 10.91.451a1.54 1.54 0 0 1 2.179 0l10.459 10.46a1.54 1.54 0 0 1 0 2.179z"/></svg>handbook · main<span class="cb-tree-tag">git</span></div>
@@ -73,18 +73,18 @@ Concretely: the dogfood vault lives in its own repo, [`cybersader/cyberbase`](ht
   <div class="cb-ssot-spokes">
     <div class="cb-ssot-spoke"><svg class="cb-ssot-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h14M13 6l6 6-6 6"/></svg><div class="cb-ssot-view"><svg class="cb-ssot-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6a9.4 9.4 0 1 0 0 18.8 9.4 9.4 0 0 0 0-18.8z M2.6 12h18.8 M12 2.6c3.1 3 3.1 15.8 0 18.8 M12 2.6c-3.1 3-3.1 15.8 0 18.8"/></svg><span class="cb-ssot-vlab">the website</span></div></div>
     <div class="cb-ssot-spoke"><svg class="cb-ssot-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h14M13 6l6 6-6 6"/></svg><div class="cb-ssot-view"><svg class="cb-ssot-icon cb-ssot-icon-fill" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.355 18.538a68.967 68.959 0 0 0 1.858-2.954.81.81 0 0 0-.062-.9c-.516-.685-1.504-2.075-2.042-3.362-.553-1.321-.636-3.375-.64-4.377a1.707 1.707 0 0 0-.358-1.05l-3.198-4.064a3.744 3.744 0 0 1-.076.543c-.106.503-.307 1.004-.536 1.5-.134.29-.29.6-.446.914l-.31.626c-.516 1.068-.997 2.227-1.132 3.59-.124 1.26.046 2.73.815 4.481.128.011.257.025.386.044a6.363 6.363 0 0 1 3.326 1.505c.916.79 1.744 1.922 2.415 3.5zM8.199 22.569c.073.012.146.02.22.02.78.024 2.095.092 3.16.29.87.16 2.593.64 4.01 1.055 1.083.316 2.198-.548 2.355-1.664.114-.814.33-1.735.725-2.58l-.01.005c-.67-1.87-1.522-3.078-2.416-3.849a5.295 5.295 0 0 0-2.778-1.257c-1.54-.216-2.952.19-3.84.45.532 2.218.368 4.829-1.425 7.531zM5.533 9.938c-.023.1-.056.197-.098.29L2.82 16.059a1.602 1.602 0 0 0 .313 1.772l4.116 4.24c2.103-3.101 1.796-6.02.836-8.3-.728-1.73-1.832-3.081-2.55-3.831zM9.32 14.01c.615-.183 1.606-.465 2.745-.534-.683-1.725-.848-3.233-.716-4.577.154-1.552.7-2.847 1.235-3.95.113-.235.223-.454.328-.664.149-.297.288-.577.419-.86.217-.47.379-.885.46-1.27.08-.38.08-.72-.014-1.043-.095-.325-.297-.675-.68-1.06a1.6 1.6 0 0 0-1.475.36l-4.95 4.452a1.602 1.602 0 0 0-.513.952l-.427 2.83c.672.59 2.328 2.316 3.335 4.711.09.21.175.43.253.653z"/></svg><span class="cb-ssot-vlab">your vault</span></div></div>
-    <div class="cb-ssot-spoke"><svg class="cb-ssot-arrow cb-ssot-arrow-2" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6l-5 6 5 6M3 12h18M16 6l5 6-5 6"/></svg><div class="cb-ssot-view"><svg class="cb-ssot-icon cb-ssot-icon-fill" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.947 13.177c0 3.263-2 5.649-4.736 5.649h-2.773v-5.65H6.282v10.387h7.93c5.403 0 9.788-4.668 9.788-10.386h-5.052ZM7.894.476 0 1.212l.948 10.352 5.157-.456-.526-5.615 2.737-.245c2.737-.246 4.91 1.93 5.227 5.193l5.052-.458c-.49-5.752-5.297-9.998-10.7-9.507Z"/></svg><span class="cb-ssot-vlab">web edits</span></div></div>
+    <div class="cb-ssot-spoke"><svg class="cb-ssot-arrow cb-ssot-arrow-2" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6l-5 6 5 6M3 12h18M16 6l5 6-5 6"/></svg><div class="cb-ssot-view"><svg class="cb-ssot-icon cb-ssot-icon-fill" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.947 13.177c0 3.263-2 5.649-4.736 5.649h-2.773v-5.65H6.282v10.387h7.93c5.403 0 9.788-4.668 9.788-10.386h-5.052ZM7.894.476 0 1.212l.948 10.352 5.157-.456-.526-5.615 2.737-.245c2.737-.246 4.91 1.93 5.227 5.193l5.052-.458c-.49-5.752-5.297-9.998-10.7-9.507Z"/></svg><span class="cb-ssot-vlab">external proposals · unshipped</span></div></div>
   </div>
 </div>
 
-<p class="cb-fig-cap">One authoritative source. The wiki, the Obsidian view, and the Web CMS are all built from it. Change the repo and every view follows.</p>
+<p class="cb-fig-cap">One authoritative source. Published views are disposable, the owner edits it directly, and any future browser or CMS-like spoke must return a bounded proposal rather than become another content authority.</p>
 
 <details>
 <summary>Why it matters, and how cyberbaser uses it</summary>
 
 One source prevents drift between representations, makes conflict resolution tractable (one side always wins), and keeps the mental model small enough to hold.
 
-Today that source is the vault's git repo on its default branch. The published site is rebuilt from it. The maintainer's local Obsidian folder is a working copy. A web edit is a commit against it, spliced into the existing bytes rather than re-serialized, so the repo never has to reconcile two dialects of the same file.
+Today that source is the vault's git repo on its default branch. The published site is rebuilt from it. The maintainer's local Obsidian folder is a working copy and direct authoring surface. An external tool submits a proposal against a known base; the owner-controlled boundary resolves and reviews the exact source operation. The eventual transport may be a commit, local candidate, or another forge-agnostic mechanism.
 
 Git is the current *manifestation* of this primitive, not its essence. Principle 1 says "a source of truth you own", not "a git repo" — and the [source-of-truth research](/cyberbaser/research/source-of-truth/) keeps an off-ramp open, because a maintainer who does not want a forge still needs storage they control.
 
@@ -127,7 +127,7 @@ Git is the current *manifestation* of this primitive, not its essence. Principle
 
 A standard markdown link (`[text](path/to/file.md)`) breaks the moment the file moves. Wikilinks reference identity, not location, so a growing knowledge base can be reorganized without turning into a graveyard of dead links.
 
-For cyberbaser this is the canary. `[[X]]` written from any surface must stay `[[X]]` in the file. The moment a write path flattens it to `[X](x.md)`, round-trip fidelity is gone and so is the reason the project exists — which is exactly what `@cyberbaser/ofm` calls `damage` and exits non-zero on. It is also why writes are byte splices: nothing that never reads the link can degrade it.
+For Cyberbaser this is the canary. If a proposal does not target `[[X]]`, those exact source bytes must remain `[[X]]`. A rich surface may render the link or represent it as a block internally, but its adapter cannot flatten untouched source to `[X](x.md)` when producing a candidate. `@cyberbaser/ofm` classifies that construct loss as `damage`; exact source operations prevent it by never rewriting the unrelated link.
 
 </details>
 
@@ -173,15 +173,15 @@ Most renderers already compute them, which is the catch: they each compute them 
 
 ## Translation Layer
 
-**The step that turns Obsidian-flavored markdown into a web page while keeping enough intact that an edit made on the web can be saved back without garbling the file.** The hardest idea in the project, and the one everything else leans on.
+**The contract that renders authoring semantics through replaceable output spokes while preserving untouched source by construction when an external proposal is accepted.** Rendering may parse and transform. Source application may change only the declared bytes.
 
-<div class="cb-xlate" role="img" aria-label="Vault markdown flows through a remark and rehype pipeline to a published page; edits return clean to the source. Below, a three-tier scale of what survives the round-trip.">
+<div class="cb-xlate" role="img" aria-label="Vault Markdown renders into a published page. An accepted external proposal returns as an exact source-bound operation rather than a whole-file rewrite. The tiers describe rendering and preservation expectations.">
   <div class="cb-xlate-row">
     <div class="cb-xlate-cell">
       <div class="cb-xlate-lab"><svg class="cb-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M22.27 19.385H1.73A1.73 1.73 0 010 17.655V6.345a1.73 1.73 0 011.73-1.73h20.54A1.73 1.73 0 0124 6.345v11.308a1.73 1.73 0 01-1.73 1.731zM5.769 15.923v-4.5l2.308 2.885 2.307-2.885v4.5h2.308V8.078h-2.308l-2.307 2.885-2.308-2.885H3.46v7.847zM21.232 12h-2.309V8.077h-2.307V12h-2.308l3.461 4.039z"/></svg>vault markdown</div>
       <div class="cb-xlate-src"><span class="cb-xlate-l"># Tomatoes</span><span class="cb-xlate-l">&gt; [!note]+ Spacing</span><span class="cb-xlate-l">&#91;&#91;Companion planting|companions&#93;&#93;</span><span class="cb-xlate-l">!&#91;&#91;bed-layout.png&#93;&#93;</span></div>
     </div>
-    <div class="cb-glance-link cb-xlate-conn" aria-hidden="true"><span class="cb-glance-lab">publish</span><span class="cb-flowline cb-flowline-r"></span><span class="cb-glance-lab cb-glance-lab-g">edit returns clean</span></div>
+    <div class="cb-glance-link cb-xlate-conn" aria-hidden="true"><span class="cb-glance-lab">publish</span><span class="cb-flowline cb-flowline-r"></span><span class="cb-glance-lab cb-glance-lab-g">exact proposal returns</span></div>
     <div class="cb-xlate-cell">
       <div class="cb-xlate-lab">published page</div>
       <div class="cb-mock cb-mock-sm">
@@ -190,15 +190,15 @@ Most renderers already compute them, which is the catch: they each compute them 
       </div>
     </div>
   </div>
-  <div class="cb-xlate-tierhd">what survives the round-trip</div>
+  <div class="cb-xlate-tierhd">what the renderer supports and the write boundary preserves</div>
   <div class="cb-xlate-tiers">
-    <div class="cb-xlate-tier cb-dial-open"><div class="cb-xlate-tier-t">Tier 1 · full</div><div class="cb-xlate-tier-d">wikilinks, callouts, embeds, code, math, mermaid, tables. Round-trips ✓</div></div>
+    <div class="cb-xlate-tier cb-dial-open"><div class="cb-xlate-tier-t">Tier 1 · full</div><div class="cb-xlate-tier-d">wikilinks, callouts, embeds, code, math, Mermaid, tables. Rendered and preserved ✓</div></div>
     <div class="cb-xlate-tier cb-dial-mid"><div class="cb-xlate-tier-t">Tier 2 · partial</div><div class="cb-xlate-tier-d">simple Dataview, block refs, aliases, frontmatter. Never lossy</div></div>
     <div class="cb-xlate-tier cb-dial-locked"><div class="cb-xlate-tier-t">Tier 3 · none</div><div class="cb-xlate-tier-d">Canvas, DataviewJS, graph. Documented workaround</div></div>
   </div>
 </div>
 
-<p class="cb-fig-cap">The same content on the left as you write it, and on the right as the web shows it. Tier 1 features have to come back from a web edit exactly as they went in.</p>
+<p class="cb-fig-cap">The source on the left and a derivative rendered view on the right. A rich editor may use that rendered model, but an accepted proposal changes only its approved source range; every untouched Tier 1 construct remains the original bytes.</p>
 
 <details>
 <summary>Why it matters, and how cyberbaser uses it</summary>
@@ -215,11 +215,11 @@ The mechanism is the tiered feature list: Tier 1 must survive an edit, Tier 2 re
 
 ## Round-Trip Editability
 
-**Edit the same page from Obsidian, from the web, or from the forge, and every other surface sees the change without corruption.**
+**The owner edits the authority directly; external web, forge, rich-editor, and agent surfaces propose changes against that same source without regenerating its untouched remainder.** The historical name remains, but the mechanism is exact-change interoperability rather than whole-document serialization.
 
-<p class="cb-fig-cap">Edit in any one of these. The other two read back the exact same file.</p>
+<p class="cb-fig-cap">Different surfaces can present the same source. Only the owner-local tool edits it directly; external surfaces submit source-bound proposals.</p>
 
-<div class="cb-trip" role="img" aria-label="The same markdown shown in three surfaces, Obsidian, the Web CMS, and GitHub. The callout body is identical in all three.">
+<div class="cb-trip" role="img" aria-label="The same Markdown is presented in a local editor, a future rich browser authoring spoke, and a forge. The local editor authors the source directly; the external surfaces return bounded proposals.">
   <div class="cb-mock cb-mock-sm">
     <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><svg class="cb-mock-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.355 18.538a68.967 68.959 0 0 0 1.858-2.954.81.81 0 0 0-.062-.9c-.516-.685-1.504-2.075-2.042-3.362-.553-1.321-.636-3.375-.64-4.377a1.707 1.707 0 0 0-.358-1.05l-3.198-4.064a3.744 3.744 0 0 1-.076.543c-.106.503-.307 1.004-.536 1.5-.134.29-.29.6-.446.914l-.31.626c-.516 1.068-.997 2.227-1.132 3.59-.124 1.26.046 2.73.815 4.481.128.011.257.025.386.044a6.363 6.363 0 0 1 3.326 1.505c.916.79 1.744 1.922 2.415 3.5zM8.199 22.569c.073.012.146.02.22.02.78.024 2.095.092 3.16.29.87.16 2.593.64 4.01 1.055 1.083.316 2.198-.548 2.355-1.664.114-.814.33-1.735.725-2.58l-.01.005c-.67-1.87-1.522-3.078-2.416-3.849a5.295 5.295 0 0 0-2.778-1.257c-1.54-.216-2.952.19-3.84.45.532 2.218.368 4.829-1.425 7.531zM5.533 9.938c-.023.1-.056.197-.098.29L2.82 16.059a1.602 1.602 0 0 0 .313 1.772l4.116 4.24c2.103-3.101 1.796-6.02.836-8.3-.728-1.73-1.832-3.081-2.55-3.831zM9.32 14.01c.615-.183 1.606-.465 2.745-.534-.683-1.725-.848-3.233-.716-4.577.154-1.552.7-2.847 1.235-3.95.113-.235.223-.454.328-.664.149-.297.288-.577.419-.86.217-.47.379-.885.46-1.27.08-.38.08-.72-.014-1.043-.095-.325-.297-.675-.68-1.06a1.6 1.6 0 0 0-1.475.36l-4.95 4.452a1.602 1.602 0 0 0-.513.952l-.427 2.83c.672.59 2.328 2.316 3.335 4.711.09.21.175.43.253.653z"/></svg><span class="cb-mock-url">vault/notes/tiling.md</span></div>
     <div class="cb-mock-body"><div class="cb-mock-callout"><span class="cb-mock-callout-i">i</span> Seal the grout before the first wash.</div></div>
@@ -235,16 +235,16 @@ The mechanism is the tiered feature list: Tier 1 must survive an edit, Tier 2 re
 </div>
 
 
-<div class="cb-trip-rail"><span class="cb-trip-eqx">edit anywhere → the source comes back <span class="cb-trip-eq">unchanged</span></span><span class="cb-trip-note">one plain file, the same every time</span></div>
+<div class="cb-trip-rail"><span class="cb-trip-eqx">propose from any external spoke → approved bytes change, <span class="cb-trip-eq">untouched bytes do not</span></span><span class="cb-trip-note">one authoritative file, no parallel source</span></div>
 
 <details>
 <summary>Why it matters, and how cyberbaser uses it</summary>
 
 Without this, a contributor is locked into whichever surface they started on and the independent-paths idea collapses. It is also the only way the maintainer keeps Obsidian as their daily tool without dreading what a web contribution will do to a file.
 
-It constrains every other decision: no lossy transform, no CMS-specific schema that differs from the vault's, no write path that re-emits a file it did not need to change. It is enforced mechanically rather than by review — `ofm-check` runs on every pull request and classifies the change as `clean`, `suspect`, or `damage`.
+It constrains every other decision: no second content authority, no source adapter that re-emits a complete file, and no external surface that bypasses owner review. `ofm-check` mechanically **classifies** each pull-request change as `clean`, `suspect`, or `damage`; it remains report-only rather than enforced (see [Q10](/cyberbaser/reference/open-questions/#q10--what-enforces-the-moderation-policy)).
 
-Honest status: proven for the paths that exist. Two live contributions have gone edit → queue → merge → redeploy → verified live. The in-page WYSIWYG surface, which is the hardest case, is not built.
+Honest status: the owner-local and GitHub-backed lanes have run end to end. The single-splice correction primitive and local pilot card are mechanically rehearsed. A generalized rich/WYSIWYG adapter, multi-operation contract, and product review surface are not built.
 
 </details>
 
@@ -254,9 +254,9 @@ Honest status: proven for the paths that exist. Two live contributions have gone
 
 ## Open Authoring
 
-**A reader proposes a change without commit access and without touching git**: the fork, branch, commit, and pull request all happen for them. The pattern comes from Decap/Netlify CMS and continues in Sveltia.
+**A reader can submit a bounded proposal without commit access, git knowledge, or a forced account.** A fork and pull request are one possible forge adapter, not the primitive. The durable requirement is a source-bound proposal that the owner can review and apply through their chosen operating model.
 
-<div class="cb-openauth" role="img" aria-label="A reader edits a page with no account and no git. Behind the scenes that becomes a fork, branch, commit, and pull request. The maintainer reviews the resulting diff.">
+<div class="cb-openauth" role="img" aria-label="A reader proposes a change without git. One possible forge adapter turns it into a pull request, and the maintainer reviews the exact diff. This adapter is illustrative and unshipped.">
   <div class="cb-oa-cell">
     <div class="cb-mock cb-mock-sm">
       <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><svg class="cb-mock-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.947 13.177c0 3.263-2 5.649-4.736 5.649h-2.773v-5.65H6.282v10.387h7.93c5.403 0 9.788-4.668 9.788-10.386h-5.052ZM7.894.476 0 1.212l.948 10.352 5.157-.456-.526-5.615 2.737-.245c2.737-.246 4.91 1.93 5.227 5.193l5.052-.458c-.49-5.752-5.297-9.998-10.7-9.507Z"/></svg><span class="cb-mock-url">wiki.example.org/italian-game</span></div>
@@ -267,8 +267,8 @@ Honest status: proven for the paths that exist. Two live contributions have gone
   <span class="cb-flowline cb-flowline-r cb-oa-conn" aria-hidden="true"></span>
   <div class="cb-oa-cell">
     <div class="cb-ghflow">
-      <div class="cb-ghflow-hd"><svg class="cb-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>generated for you</div>
-      <div class="cb-ghflow-sub">you never see this</div>
+      <div class="cb-ghflow-hd"><svg class="cb-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>one possible forge adapter</div>
+      <div class="cb-ghflow-sub">illustrative · not shipped</div>
       <div class="cb-ghflow-row"><span class="cb-ghflow-k">fork</span> the repo</div>
       <div class="cb-ghflow-row"><span class="cb-ghflow-k">branch</span> patch-1</div>
       <div class="cb-ghflow-row"><span class="cb-ghflow-k">commit</span> "fix opening tip"</div>
@@ -293,9 +293,9 @@ Honest status: proven for the paths that exist. Two live contributions have gone
 
 This removes the biggest contribution barrier. The alternatives are giving strangers write access (a security problem) or making them fork by hand (exactly the friction being eliminated).
 
-Cyberbaser takes the *pattern* but not the products. The CMS category that popularized it re-serializes whole files, which is what R12 measured and removed from the write path, so today the fork-and-PR dance is done by the forge's own web editor and the review happens in the pull request. `@cyberbaser/trust` classifies each one against mechanical gates before a human looks.
+Cyberbaser keeps the pattern but does not prescribe one transport. The evaluated CMS products regenerated whole files, which R12 removed from the source-update path. That rejects their save adapters, not rich browser authoring. A future structured surface remains valid if it emits exact, owner-reviewable proposals. Today the forge's own web editor creates the pull request, and `@cyberbaser/trust` classifies it against mechanical gates before a human looks.
 
-The gap, stated plainly: **the fully anonymous path does not exist yet.** Every current entry point still needs a GitHub account, which means the persona Principle 3 was written for has no working route. That is tracked as an open question, not a shipped feature.
+The gap, stated plainly: **the fully anonymous path and the generalized rich-authoring adapter do not exist yet.** Every shipped outside-contributor entry point still needs a GitHub account. The concierge pilot tests only a narrow correction workflow; its seven fields are not the eventual interface or proposal schema.
 
 </details>
 

@@ -1,6 +1,6 @@
 ---
 title: Architecture
-description: What cyberbaser is as built — five validator packages, three CI jobs, one pinned Quartz spoke, no server, and every human interface still borrowed from GitHub.
+description: The owner-controlled hub as built — six boundary packages, replaceable authoring and rendering spokes, current GitHub/Quartz dogfood, and the interfaces still missing.
 sidebar:
   order: 21
 status: research
@@ -25,9 +25,11 @@ tags: [design, architecture]
   SVG (it scales down to ~5px text on a phone).
 */}
 
-Cyberbaser, as built, is **five small libraries and three CI jobs that judge a markdown vault**: what may be published, whether an edit damaged the content, and who has to look at a change before it merges. It operates no server and runs entirely on someone else's runner. Every screen a human actually touches still belongs to GitHub or to Quartz.
+Cyberbaser, as built, is **six small packages and three vault-side dogfood CI jobs around an owner-controlled Markdown source**. The packages select what may publish, project disposable copies, prepare one exact candidate splice in memory, classify integrity and trust, and inspect rendered links. None writes the owner's authoritative source. The current GitHub and Quartz screens prove one arrangement; they are replaceable spokes, not the architecture's essence.
 
-## What a contribution looks like
+The stable model is broader than today's interfaces. Local editors, forge editors, reader-correction controls, rich browser or CMS-like tools, and agents may all be authoring spokes. External spokes must emit bounded proposals against a pinned source base and converge on owner review. The owner continues to author the source directly in their preferred local tool. Renderers remain independently replaceable output spokes.
+
+## What an external proposal looks like today
 
 <div class="cb-journey cb-journey-4" role="img" aria-label="Four screens in sequence. First, a published page with a typo and an edit-this-page pencil. Second, GitHub's plain-text editor with the line being fixed. Third, a review card showing the trust route, the diff and the machine checks. Fourth, the corrected page live again.">
 
@@ -77,7 +79,7 @@ Cyberbaser, as built, is **five small libraries and three CI jobs that judge a m
         <div class="cb-review-actions"><span class="cb-review-btn cb-review-approve">Approve</span><span class="cb-review-btn cb-review-reject">Ask for changes</span></div>
       </div>
     </div>
-    <p class="cb-jstep-cap">Every field here is already computed — the route, the fidelity verdict, the diff. <strong>Nothing renders it.</strong> The maintainer opens github.com, reads a raw diff and clicks Merge.</p>
+    <p class="cb-jstep-cap">The route, integrity verdict, and diff are computed for the GitHub path, but no shipped product card renders them together. The private pilot kit can render one local study card for an exact correction; it is not a queue, console, or general proposal UI.</p>
   </div>
 
   <div class="cb-jstep">
@@ -92,14 +94,14 @@ Cyberbaser, as built, is **five small libraries and three CI jobs that judge a m
         </div>
       </div>
     </div>
-    <p class="cb-jstep-cap">The merge fires one rebuild of all 933 pages: publish boundary, projection with its post-hoc leak test, Quartz, two gates, deploy. <strong>3m07s to 4m52s</strong>, measured over five runs.</p>
+    <p class="cb-jstep-cap">The merge rebuilds all 933 selected Markdown sources into 931 public page URLs: publish boundary, projection with its post-hoc leak test, Quartz, two gates, deploy. <strong>3m07s to 4m52s</strong>, measured over five runs.</p>
   </div>
 
 </div>
 
 <p class="cb-fig-note"><span class="cb-chip cb-chip-mute">honest</span>Two of these four screens are ours in name only. Screen 2 is GitHub's editor and screen 3 does not exist: its contents are printed into a CI step summary that is one click deep in the Actions tab.</p>
 
-The step-3 card is the interesting one, because none of it is speculative work. `.cyberbaser/trust.yml` already sets the tiers, `@cyberbaser/trust` already runs nine mechanical checks and emits `auto-merge`, `quick-review`, `full-review` or `reject`, and `@cyberbaser/ofm` already classifies the change as `clean`, `suspect` or `damage`. The pipeline computes the whole card and then throws it at a log file. **The console's data layer is finished; the console is the missing 5%, not the missing 95%.**
+The step-3 card is the interesting one because most of its evidence already exists. `.cyberbaser/trust.yml` sets the tiers, `@cyberbaser/trust` runs nine mechanical checks and emits `auto-merge`, `quick-review`, `full-review`, or `reject`, and `@cyberbaser/ofm` classifies the change as `clean`, `suspect`, or `damage`. The GitHub path scatters that evidence across logs, labels, and a raw diff. The private correction pilot proves that a bounded local card can assemble richer evidence, but no shipped general review surface exists.
 
 <div class="cb-phone">
   <div class="cb-phone-notch" aria-hidden="true"></div>
@@ -120,7 +122,7 @@ The step-3 card is the interesting one, because none of it is speculative work. 
 
 <p class="cb-fig-note"><span class="cb-chip cb-chip-stop">not built</span>No queue, no auth, no server. Whether this should ever be a hosted screen or a static page generated in CI is the <a href="#open-the-console-fork">console fork</a>, still open and costed below.</p>
 
-## What authoring looks like
+## What owner-local direct authoring looks like
 
 <div class="cb-journey cb-journey-3" role="img" aria-label="Three screens. First, Obsidian editing a note with wikilinks and a callout. Second, a terminal pushing straight to main. Third, the rebuilt site live.">
 
@@ -176,7 +178,7 @@ The step-3 card is the interesting one, because none of it is speculative work. 
         </div>
       </div>
     </div>
-    <p class="cb-jstep-cap">All 933 pages rebuild through the same pipeline a contributor's merge fires, minus the two checks that never ran. Callout and wikilink survive the trip because the projection copies bytes and never re-serializes a file (<a href="/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25">R12</a>).</p>
+    <p class="cb-jstep-cap">All 933 selected Markdown sources rebuild through the same pipeline a contributor's merge fires, minus the two checks that never ran. The live sitemap contains 931 public page URLs. Callout and wikilink survive the trip because the projection copies bytes and never re-serializes a file (<a href="/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25">R12</a>).</p>
   </div>
 
 </div>
@@ -215,21 +217,23 @@ An honest typo that deletes a callout is caught in the contribution journey and 
 
 ## The verdict
 
-**Cyberbaser, as built, is five small libraries and three CI jobs that decide things about a markdown vault:** what may be published, whether a change damaged the content, and who has to look at a change before it merges. Every one of those capabilities is ours and tested; every one of them runs on someone else's runner, and **every human interface the system currently has belongs to GitHub or to Quartz.** The exceptions are one hyperlink and two terminal commands.
+**Cyberbaser, as built, is six small packages and three vault-side dogfood CI jobs that govern parts of a Markdown knowledge base:** what may publish, how disposable copies are projected, whether a proposed change damaged the content, which review route applies, whether links resolve, and how one exact candidate splice can be prepared in memory. None writes the owner's authoritative source.
 
-The gap is narrower than it looks. The pipeline already computes everything a maintainer console would show (which files crossed the publish boundary and which rule denied the rest, the fidelity verdict per changed file, the trust route and its reasons, the leak test, the artifact size against the host's cap) and emits all of it as structured JSON. **No human has ever seen any of it rendered.**
+The broader architecture is a stable owner-controlled hub between replaceable authoring and rendering spokes. A conforming rich editor or CMS-like surface may model content however it chooses, but its durable output is a bounded proposal against a pinned base. It cannot directly regenerate the source, become a second authority, or bypass owner review. This adapter contract is an architectural invariant, not a shipped generalized API.
+
+The current interfaces remain much narrower. GitHub and Quartz own nearly every shipped screen. The private pilot kit renders one local exact-correction review artifact, while the GitHub path still scatters governance evidence across a raw diff, labels, and logs.
 
 :::caution[What this page does not claim]
-There is no CMS, no auth component, no moderation UI, no preview deployment, and no server. `main` on the vault repo has **no branch protection and no rulesets** (verified 2026-07-26: `branches/main/protection` returns 404, `rulesets` returns `[]`), `ofm-check.yml` is `continue-on-error: true`, and the auto-merge step in `trust-gate.yml` is commented out behind six named preconditions. **Nothing in this system can currently block a merge.** Everything below is written from the code, not from the plan.
+No browser/CMS authoring spoke, auth component, product moderation UI, preview deployment, generalized adapter API, or Cyberbaser server is shipped. A serializer-backed CMS writer is architecturally inadmissible; rich presentation itself is not. `main` on the vault repo has **no branch protection and no rulesets** (verified 2026-07-26: `branches/main/protection` returns 404, `rulesets` returns `[]`), `ofm-check.yml` is `continue-on-error: true`, and the auto-merge step in `trust-gate.yml` is commented out behind six named preconditions. **Nothing in this system can currently block a merge.**
 :::
 
-| As built, verified 2026-07-26 | |
+| As built (current-repo inventory 2026-07-29; dated vault observations retained) | |
 |---|---|
-| Packages | 5 (`ofm`, `publish`, `projection`, `linkcheck`, `trust`) |
-| Tests green | 165 across the five packages, under `bun test` |
-| CI workflows | 3 on the vault repo, 1 on this repo |
+| Packages | 6 (`correction`, `ofm`, `publish`, `projection`, `linkcheck`, `trust`) |
+| Tests green | 187 across the six packages in fresh package-scoped runs on 2026-07-29 |
+| CI workflows | 3 on the vault repo, 2 on this repo (`deploy.yml`, `federation-fixture.yml`) |
 | Renderer spokes | 1 (Quartz v4.5.2, pinned, unforked), 0 tests |
-| Pages live | 933 at [cybersader.github.io/cyberbase](https://cybersader.github.io/cyberbase/) |
+| Public corpus | 933 Markdown sources selected and projected; 931 page URLs in the live sitemap at [cybersader.github.io/cyberbase](https://cybersader.github.io/cyberbase/) |
 | Servers cyberbaser operates | 0 |
 | Human interfaces that are ours | 4 of 17 interaction points: one anchor tag, two CLIs, and this docs site |
 
@@ -246,12 +250,12 @@ The two lanes that run alongside the build are deliberately decoupled: `ofm-chec
 
 ## Component reference
 
-Two things worth knowing before the table. The renderer spoke has **zero tests** while the packages have 165, and `encodeRepoPath` in `EditThisPage.tsx` is exported specifically to be testable and has no test. And `agents: []` means the entire agent branch of the trust classifier, the most elaborate logic in that package, is unreachable in production today: every real PR takes the trusted-human branch or the terminal fallback.
+Two things worth knowing before the table. The renderer spoke has **zero tests** while the six packages have 187, and `encodeRepoPath` in `EditThisPage.tsx` is exported specifically to be testable and has no test. And `agents: []` means the entire agent branch of the trust classifier, the most elaborate logic in that package, is unreachable in production today: every real PR takes the trusted-human branch or the terminal fallback.
 
 <details>
-<summary>Every package, deployable and config artifact — what it holds, where it runs, who owns it (14 rows)</summary>
+<summary>Every package, deployable and config artifact — what it holds, where it runs, who owns it (15 rows)</summary>
 
-Test counts are `bun test` runs on 2026-07-26.
+Package test counts were reconfirmed with package-scoped `bun test` runs on 2026-07-29. Historical workflow and interface measurements retain their original dates.
 
 | Component | What it does | Executes | State it holds | Tests | Ownership |
 |---|---|---|---|---|---|
@@ -260,6 +264,7 @@ Test counts are `bun test` runs on 2026-07-26.
 | [`@cyberbaser/projection`](https://github.com/cybersader/cyberbaser/tree/main/packages/projection) | Runs the selector, pre-flights frontmatter, guards case collisions, lints path safety over the published set, copies to an output tree, then re-verifies the boundary against what landed. Writes `projection-report.json` | CI (`publish-site.yml`) | A disposable content tree plus the report | 28 | **Ours.** The post-hoc leak test (verify the copy, do not trust the plan) is the non-obvious part |
 | [`@cyberbaser/linkcheck`](https://github.com/cybersader/cyberbaser/tree/main/packages/linkcheck) | Reads emitted HTML from any renderer, resolves every internal href against disk, sorts breaks into 4 classes with budgets. Zero dependencies | Dev machine only | None | 9 | **Ours, but replaceable.** This is `lychee --offline` with a per-class budget. First package to swap if maintenance gets tight |
 | [`@cyberbaser/trust`](https://github.com/cybersader/cyberbaser/tree/main/packages/trust) | Reads `.cyberbaser/trust.yml`, derives a tier from author and author type, runs 9 mechanical checks, emits a route. Fails closed on a missing config | CI (`trust-gate.yml`) | None. Reads two files, prints a verdict | 18 | **Ours.** The individual checks are ordinary; the fail-closed tiering and the base-ref read are not |
+| [`@cyberbaser/correction`](https://github.com/cybersader/cyberbaser/tree/main/packages/correction) | Resolves one exact UTF-8 quote and prepares/applies one base-bound candidate splice in memory. Fails closed on ambiguity, stale bytes, invalid UTF-8, or tampering | Library + private pilot harness | None. Pure byte inputs and outputs; no file I/O or editorial decision | 22 | **Ours.** A narrow exact-change primitive, not the generalized authoring-adapter contract |
 | [`renderers/quartz-cyberbase`](https://github.com/cybersader/cyberbaser/tree/main/renderers/quartz-cyberbase) | `setup.sh` clones Quartz at the pinned tag and verifies it; `build.sh` symlinks a projected tree and builds. Config, layout and theme fill in Quartz's schema | CI + dev | None | **0** | **Ours (glue) over borrowed schema.** `EditThisPage.tsx` is the only UI element in the system we wrote; `RelativeFolderLinks.ts` fixes a real Quartz v4.5.2 link bug (248 broken attachment links to 7, measured) |
 | Quartz v4.5.2 | The renderer: markdown to a static site, search, graph, explorer, backlinks | CI | The emitted site | n/a | **Commodity.** Pinned by tag, unforked, adopted on measurement ([R14](/cyberbaser/research/quartz-spike-results/)) |
 | `publish-site.yml` (268 lines) | Checks out vault plus cyberbaser, projects, uploads the report, builds Quartz, runs two custom gates, deploys Pages. Refuses `pull_request_target` on purpose | GitHub Actions | The Pages deployment plus a 30-day report artifact | 0 | **Ours** (the job graph and the two gates) on **borrowed** actions |
@@ -267,7 +272,7 @@ Test counts are `bun test` runs on 2026-07-26.
 | `trust-gate.yml` (208 lines) | Reads the policy from the base ref, builds a change description from the PR diff, runs `cb-trust`, writes a step summary and applies a label | GitHub Actions | A PR label plus a step summary | 0 | **Ours.** The forge adapter is a 60-line program inlined in a YAML heredoc, where it cannot be tested or reused |
 | `publish.yml` (23 lines, in the vault) | 15 folder allow globs. The `audiences:` map the selector supports is unused | Read in CI | Publish policy | n/a | **Yours** (a file in your repo) |
 | `.cyberbaser/trust.yml` (46 lines) | `trusted: [cybersader]`, `agents: []`, 5 caps, 15 allowed new folders, frontmatter allowlist `tags, updated` | Read in CI | Trust policy | n/a | **Yours.** Deliberately outside `.github/` so it stays forge-portable |
-| This docs site (`docs/`) | Astro 6 plus Starlight 0.38 and 9 plugins, 56 content pages | CI (`deploy.yml`) + dev | Its own Pages deployment | 21 Playwright | **Commodity** stack; the content and `brand.css` are ours. Shares no code with the vault pipeline |
+| This docs site (`docs/`) | Astro 6 plus Starlight 0.38 and 9 plugins, 59 source content files | CI (`deploy.yml`) + dev | Its own Pages deployment | 173 Playwright tests in the most recent full run | **Commodity** stack; the content and `brand.css` are ours. Shares no code with the vault pipeline |
 | GitHub | Identity, the editor, forks, PRs, review, merge, Actions, Pages, the audit trail | GitHub | Everything a human touches | n/a | **Borrowed interface** |
 
 </details>
@@ -297,7 +302,7 @@ The illustrations above are the shape. These are the hand-offs, and the point of
 | 10 | Merge to `main` fires `publish-site.yml` | GitHub Actions | Borrowed trigger |
 | 11 | Checkout vault (depth 1, no credentials) plus cyberbaser at `main` | `actions/checkout` | Borrowed |
 | 12 | `cb-project`: selector, pre-flight, case-collision guard, path safety lint, copy, post-hoc leak test. Exits non-zero on a config error, unparseable frontmatter, a case collision or a boundary leak | `projection` + `publish` | **Automated (ours).** The first point in the loop that can fail the build, and it is already past the merge |
-| 13 | `setup.sh` clones Quartz v4.5.2 and overlays our files; `build.sh` builds 933 pages | ours + Quartz | Automated, then **commodity** |
+| 13 | `setup.sh` clones Quartz v4.5.2 and overlays our files; `build.sh` consumes 933 selected Markdown sources and emits 931 public page URLs | ours + Quartz | Automated, then **commodity** |
 | 14 | Two custom gates: no `:` in an emitted path, artifact under the 1 GB cap | inline in the workflow | **Automated (ours)** |
 | 15 | `upload-pages-artifact` then `deploy-pages`. Bytes live | GitHub | Borrowed |
 
@@ -324,9 +329,11 @@ The separations that keep the system honest, with how each one is currently held
 |---|---|---|
 | **Vault (source of truth)** | hold build artifacts · depend on cyberbaser plugins to open in Obsidian · let its file layout be dictated by the URL scheme | **Convention.** R16 shipped verbatim paths partly to keep this true |
 | **Publish boundary** | publish by default · trust the plan instead of the result · let a published page inline a private one | **Code.** Fail-closed config, post-hoc leak test, cross-boundary embed check, all fail the build |
-| **Hub (the packages)** | apply lossy transforms · re-serialize a whole file in any write path · be coupled to one renderer · hold content state outside the commit it produces | **Code and decision.** [R12](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25) removed the re-serializing write path after measuring 4.6% byte-identity over 1,430 real files. Every package is a decider, not a writer |
+| **Hub (the packages)** | apply lossy transforms · regenerate untouched source · be coupled to one renderer or authoring UI · take the owner's editorial authority | **Code and decision.** [R12](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25) removed whole-file re-serialization after measuring 4.6% byte identity over 1,430 real files. Packages may select, project disposable copies, classify, inspect, or prepare candidate bytes; none writes the owner's authoritative source |
+| **Authoring adapter** | write canonical files directly · become a second content authority · authorize itself · hide stale or ambiguous source mapping | **Architectural contract, generalized adapter unbuilt.** A conforming local, browser, CMS-like, forge, or agent spoke binds to a pinned base and emits a bounded proposal. Its UI and internal model are replaceable; its source application rules are not |
 | **Spoke renderer** | be treated as permanent or unique · hold contribution or auth state · be forked | **Convention, with one crack.** Quartz is pinned and unforked, but the folder-link fix landed as a Quartz plugin rather than in the projection. Worth watching |
-| **Edit surfaces** | require Obsidian to be running · keep content outside the vault · make the maintainer do anything special per edit | **Borrowed.** GitHub satisfies all three today, at the cost of requiring an account |
+| **Federation spokes** | become naming, merge, moderation or navigation authority · flatten conflicting issuers · hold the only copy of knowledge | **Research invariant, not built.** Every crawler, graph store, cache, search provider and ranking model is replaceable, exportable and rebuildable from peer publications and chosen seeds |
+| **Owner-local editor** | be replaced or required to act as a client of an external contribution surface | **Principle and current practice.** The owner edits the authoritative source directly in their preferred tool; external proposal rules do not force the owner through a Cyberbaser editor |
 | **Governance** | let a change promote its own author · decide from a policy the change itself supplied | **Code.** The policy is read from the base ref, and the classifier fails closed on unknown author types |
 
 ## Open architectural questions
@@ -337,7 +344,7 @@ The full list lives in [Open Questions](/cyberbaser/reference/open-questions/). 
 
 **It does not. The hub is libraries plus CI jobs.** Every capability runs either on a GitHub-hosted runner (`publish`, `projection`, `ofm`, `trust`, Quartz) or on a developer's machine (`linkcheck`, the CLIs). Nothing of ours runs in a reader's browser and nothing of ours runs on a server, because there is no server.
 
-Exactly one component in the whole design would need one: **the anonymous write endpoint**, because accepting writes from someone with no account requires a credential the client cannot hold and a rate-limit ledger the client cannot keep. It is specified in [the hub bill of materials](/cyberbaser/research/proposal-hub-bom/) and **it is not built.** Its trigger is a real anonymous contributor, which has not happened.
+Any public account-free intake needs a trusted execution point for credentials, abuse controls, and durable intake state. That could be hosted, self-hosted, or part of another explicitly chosen operating model; none is built. A trusted rich editor used inside an owner's existing environment may have a different deployment shape, but it still cannot bypass the exact-proposal and owner-review boundary.
 
 This replaces the question that stood on this page from 2026-06-21 to 2026-07-26, when the honest answer was that nobody had checked.
 
@@ -377,35 +384,41 @@ Thirteen of the seventeen are not a cyberbaser surface, and the four that are co
 
 Reframed rather than answered. [R12](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25) removed the whole-file round-trip, so the question is no longer "how does the AST survive re-serialization" but "what does a raw-text splice do when the spliced region contains an embed or a block reference". Still the one genuinely unsolved Tier-1 item in the [translation layer](/cyberbaser/design/translation-layer/).
 
-### Open: incremental builds, and what a second vault does to them
+### Open: incremental builds, and what federation adds
 
-Partly measured, not solved. 933 pages rebuild fully in 3m07s to 4m52s in CI, and the artifact sits at roughly a quarter of the 1 GB Pages cap. Nothing incremental exists: every push rebuilds everything.
+Partly measured, not solved. All 933 selected Markdown sources rebuild into 931 public page URLs in 3m07s to 4m52s in CI, and the artifact sits at roughly a quarter of the 1 GB Pages cap. Nothing incremental exists: every push rebuilds everything.
 
-The question changes shape rather than answer once a second knowledge base is in the picture. Two vaults that link to each other are two independent sites, each with its own source of truth, discovering each other over a public manifest rather than sharing a database.
+Federation does not turn that pipeline into one multi-vault build or shared database. Each base keeps its own source of truth and publishes its own public pages, descriptor, inventory, outbound relationships and change information. Other bases and meta-wikis discover those publications from user-chosen seeds and ordinary links.
 
-<div class="cb-fed" role="img" aria-label="Two browser windows side by side, each a separate wiki with its own vault. Between them, a two-way arrow labelled well-known manifest and harvest by commit hash.">
+<div class="cb-fed" role="img" aria-label="Two browser windows side by side, each a separate wiki with its own vault. One cites the other through an ordinary direct HTTPS link. Optional backlink notification is locally moderated, but the link does not depend on it.">
   <div class="cb-fed-site">
     <div class="cb-mock cb-mock-sm">
       <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">cybersader.github.io/cyberbase</span></div>
       <div class="cb-mock-body"><div class="cb-mock-h">Zero trust</div><p class="cb-mock-txt">See <span class="cb-linkchip">Segmentation</span> and <span class="cb-linkchip">Mesh policy ↗</span>.</p></div>
     </div>
-    <span class="cb-fed-cap">your wiki · <span class="cb-fed-did">did:web:cybersader.github.io</span></span>
+    <span class="cb-fed-cap">your wiki · <span class="cb-fed-did">stable HTTPS page</span></span>
   </div>
   <div class="cb-fed-link" aria-hidden="true">
-    <span class="cb-fed-lab">/.well-known/</span>
+    <span class="cb-fed-lab">ordinary link</span>
     <svg class="cb-fed-hop" viewBox="0 0 24 24"><path d="M4 9h16M4 9l3-3M4 9l3 3M20 15H4M20 15l-3-3M20 15l-3 3"/></svg>
-    <span class="cb-fed-lab cb-fed-lab-g">harvest by commit</span>
+    <span class="cb-fed-lab cb-fed-lab-g">moderated Webmention</span>
   </div>
   <div class="cb-fed-site">
     <div class="cb-mock cb-mock-sm">
       <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">notes.someone-else.org</span></div>
       <div class="cb-mock-body"><div class="cb-mock-h">Mesh policy</div><p class="cb-mock-txt">Their vault, their host, their moderation rules.</p></div>
     </div>
-    <span class="cb-fed-cap">someone else's wiki · <span class="cb-fed-did">did:web:someone-else.org</span></span>
+    <span class="cb-fed-cap">their wiki · <span class="cb-fed-did">local moderation</span></span>
   </div>
 </div>
 
-<p class="cb-fig-note"><span class="cb-chip cb-chip-mute">researched, not built</span>Nothing in the pipeline knows about a second vault yet. The manifest-plus-harvest shape is written up in <a href="/cyberbaser/research/federation/">federation</a>; the cost that lands here is that a cross-vault link cannot be resolved by a build that only sees one repo.</p>
+<p class="cb-fig-note"><span class="cb-chip cb-chip-mute">level zero</span>The direct owner link is the architecture's failure floor. Optional Webmention can notify the target, but neither navigation nor authority depends on it. The active <a href="/cyberbaser/research/federation/#active-local-prototype-prove-the-shape-with-fixtures">fixture prototype</a> expands this to three subject bases and two competing meta-wikis with peer-published descriptors, inventories and Linksets.</p>
+
+A meta-wiki is an ordinary base, not a central graph service. It publishes its own collections, mappings, annotations, mirrors and indexes as source-qualified claims. Many can disagree or fork. None can overwrite the owner records of another base.
+
+Every crawler, local graph cache, graph database, search engine, ranking model and public index is a **swappable spoke** around those publications. Each stores issuer and retrieval provenance, returns direct owner URLs, and can be deleted and rebuilt from chosen seeds. If losing one of those stores loses knowledge, naming, moderation state or basic navigation, it was not a spoke; it had quietly become the hub.
+
+The bounded test runs with controlled local origins instead of waiting for an outside operator. It makes no interoperability claim: an independently implemented producer or consumer remains the later proof that the published profile travels between implementations.
 
 ## Related
 

@@ -1,0 +1,20 @@
+---
+import Default from '@astrojs/starlight/components/PageSidebar.astro';
+import { PageBacklinks } from 'starlight-site-graph/components';
+
+const normalizePath = (path: string) => path.replace(/\/+$/, '') || '/';
+const isHomepage = normalizePath(Astro.url.pathname) === normalizePath(import.meta.env.BASE_URL);
+---
+
+{/* The graph is intentionally omitted. It allocated a 3200×2400 WebGL canvas
+    even in a collapsed sidebar, kept Pixi/D3 work running, and caused browser
+    responsiveness failures. Backlinks remain as the lightweight useful part. */}
+<Default>
+  <slot />
+</Default>
+
+{!isHomepage && (
+  <PageBacklinks class="right-sidebar-panel slsg-backlinks-panel">
+    <h2 slot="title">{Astro.locals.t('starlight-site-graph.backlinks')}</h2>
+  </PageBacklinks>
+)}

@@ -13,19 +13,20 @@ Design principles are constraints on future decisions. Each principle below:
 2. **Justifies it** with a reason grounded in prior art or a specific failure mode
 3. **Says what it rules out**, so it's falsifiable: if future evidence overturns the reason, the principle goes too
 
-These are the current working set for the research phase. They're candidates, not carved in stone. As the [Ecosystem](/cyberbaser/concepts/ecosystem/) and [Prior Art](/cyberbaser/research/prior-art/) work deepens, some of these will get sharper and some will get replaced.
+These are the current working constraints for the v1 Build phase. Evidence can sharpen or replace them, but implementation must respect them until a decision record says otherwise.
 
 ---
 
 ## 1. A single source of truth you own
 
-**Rule:** One authoritative copy of the content, in a version-controlled vault the maintainer owns. In the current manifestation that is a git repo (`cybersader/cyberbase` on GitHub today), and every contribution path (Web CMS, Obsidian + Git, direct GitHub) ultimately produces commits to it. No sidecar databases, no parallel content stores, no vendor-proprietary formats. Git-backed is how version control happens today; it is the present implementation, not the essence, and the layer never forces git on contributors.
+**Rule:** One authoritative copy of the content, in a version-controlled vault the maintainer owns. In the current manifestation that is a git repo (`cybersader/cyberbase` on GitHub today). Accepted changes must return to that source as byte-preserving edits; no contribution surface becomes a second authority. No sidecar content database, parallel source store, or vendor-proprietary format may replace it. Git-backed is how version control happens today, not the essence, and the general product must not require contributors or maintainers to operate GitHub.
 
 **Why:** Every Obsidian-publishing tool that's taken off has one failure mode in common: they store content in a place the user doesn't own (Notion workspaces, Publish's proprietary CDN, CMS databases). When the tool goes away or changes pricing, the content is trapped. A user-owned, version-controlled source of truth means cyberbaser can disappear tomorrow and the vault still works perfectly on its own.
 
 **Rules out:**
 - Sidecar databases for "enriched" content
-- CMSes that don't write directly to git
+- A CMS or sidecar database that becomes a second content authority
+- An adapter that synchronizes by regenerating the authoritative source
 - Content that only exists in a CDN or rendered-HTML form
 - Any solution where the vault is not a self-sufficient Obsidian vault in isolation
 
@@ -54,46 +55,50 @@ These are the current working set for the research phase. They're candidates, no
 
 ---
 
-## 2. Obsidian semantics must round-trip
+## 2. Authoring semantics and untouched bytes must survive edits
 
-**Rule:** Any authoring-tool feature that renders in the vault and also renders on the web must survive a round-trip edit (Obsidian is the first-class case). If a contributor edits via the Web CMS, the file the maintainer sees in their editor must be functionally identical (same wikilinks resolved, same callouts, same block refs), not a flattened, downgraded version.
+**Rule:** Any authoring-tool feature that renders in the vault and on the web must remain functionally intact after an accepted edit (Obsidian is the first-class case). R12 makes the external-proposal mechanism non-negotiable: every Cyberbaser-mediated application operates on exact source bytes, and **no adapter may regenerate the untouched remainder of the file**. `@cyberbaser/ofm` validates changes; it never rewrites the file. Cyberbaser does not replace or mediate the owner's primary local editor.
 
-**Why:** This is the invariant that makes three independent contribution paths possible. If web edits corrupt Obsidian-specific syntax, contributors get locked into whichever tool they started with. The project collapses into "just another publisher" or "just another CMS" rather than a bridge.
+**Why:** The 1,430-file gate measured only **4.6% exact byte identity** after whole-file AST serialization. The failure was architectural formatting normalization, not a tuning problem. Preserving untouched bytes by construction prevents a small correction from flattening wikilinks, callouts, block references, spacing, line endings, or unrelated author choices.
 
 **Rules out:**
 - Lossy transforms (e.g., `[[Page]]` → `[Page](page.md)` on save)
 - "Simplified" markdown dialects that drop Obsidian extensions
-- CMS editors that strip unknown syntax
+- CMS save adapters that strip unknown syntax or regenerate the whole file
 - Publishing pipelines that render-then-edit instead of edit-then-render
+- Any "safe" writer whose correctness depends on serializing the untouched remainder of a document
 
-**Load-bearing dependency:** the [translation layer](/cyberbaser/design/translation-layer/). If round-trip correctness can't be guaranteed, this principle becomes an aspiration and the whole "three paths" vision collapses.
+**Load-bearing evidence:** the [R12 gate measurement](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25) and the [translation layer](/cyberbaser/design/translation-layer/). Future rich, raw, WYSIWYG, CMS-like, forge, or agent surfaces remain allowed, but their adapters must emit exact source-bound proposals rather than reopen the serializer question.
 
-<div class="cb-rt" role="img" aria-label="One web edit, and the two ways it could be saved: a faithful file that keeps the wikilink, callout, and block ref, versus a flattened file that loses them.">
+<div class="cb-rt" role="img" aria-label="One web edit and two possible adapter outputs: a bounded exact candidate that leaves the wikilink, callout, and block reference untouched, versus a forbidden whole-file serialization that flattens them.">
   <div class="cb-rt-fan">
     <div class="cb-mock cb-mock-sm">
       <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><svg class="cb-mock-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.947 13.177c0 3.263-2 5.649-4.736 5.649h-2.773v-5.65H6.282v10.387h7.93c5.403 0 9.788-4.668 9.788-10.386h-5.052ZM7.894.476 0 1.212l.948 10.352 5.157-.456-.526-5.615 2.737-.245c2.737-.246 4.91 1.93 5.227 5.193l5.052-.458c-.49-5.752-5.297-9.998-10.7-9.507Z"/></svg><span class="cb-mock-url">wiki.example.org/ir-verbs</span></div>
-      <div class="cb-mock-body"><div class="cb-mock-h">Vivir</div><div class="cb-mock-edit"><span class="cb-mock-edit-txt">See &#91;&#91;Ser vs Estar&#93;&#93; for the tricky ones.<span class="cb-mock-caret"></span></span><span class="cb-mock-save">Save</span></div></div>
+      <div class="cb-mock-body"><div class="cb-mock-h">Vivir</div><div class="cb-mock-edit"><span class="cb-mock-edit-txt">See &#91;&#91;Ser vs Estar&#93;&#93; for the tricky ones.<span class="cb-mock-caret"></span></span><span class="cb-mock-save">Propose change</span></div></div>
     </div>
   </div>
-  <p class="cb-rt-cap">one web edit, two ways to save it</p>
+  <p class="cb-rt-cap">one web edit, two possible adapter outputs</p>
   <div class="cb-rt-arrows" aria-hidden="true"><span class="cb-rt-al"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h14M13 6l6 6-6 6"/></svg></span><span class="cb-rt-ar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h14M13 6l6 6-6 6"/></svg></span></div>
   <div class="cb-rt-pair">
-    <div class="cb-rt-good"><div class="cb-review"><div class="cb-review-hd"><span>✓ saved file · round-trips</span><span class="cb-review-status">opens in Obsidian</span></div><div class="cb-review-diff"><div class="cb-diff cb-diff-add">+ See &#91;&#91;Ser vs Estar&#93;&#93; for the tricky ones.</div><div class="cb-diff cb-diff-add">+ &gt; [!tip] Use estar for the permanent ones.</div><div class="cb-diff cb-diff-add">+ ^use-estar</div></div></div></div>
+    <div class="cb-rt-good"><div class="cb-review"><div class="cb-review-hd"><span>✓ exact candidate · bounded operation</span><span class="cb-review-status">untouched bytes preserved</span></div><div class="cb-review-diff"><div class="cb-diff cb-diff-add">+ See &#91;&#91;Ser vs Estar&#93;&#93; for the tricky ones.</div><div class="cb-diff cb-diff-add">+ &gt; [!tip] Use estar for the permanent ones.</div><div class="cb-diff cb-diff-add">+ ^use-estar</div></div></div></div>
     <div class="cb-rt-bad"><div class="cb-review"><div class="cb-review-hd"><span>✕ flattened · what the rule forbids</span><span class="cb-review-status">links break</span></div><div class="cb-review-diff"><div class="cb-diff cb-diff-rm">- See &#91;Ser vs Estar&#93;(ser-vs-estar.md) for the tricky ones.</div><div class="cb-diff cb-diff-rm">- Tip: use estar for the permanent ones.</div><div class="cb-diff cb-diff-rm">- (block ref ^use-estar dropped)</div></div></div></div>
   </div>
-  <p class="cb-fig-cap">Edit on the web, and the file comes back with the wikilink, callout, and block ref intact. The flattened version on the right is the failure this rule exists to prevent.</p>
+  <p class="cb-fig-cap">The conforming adapter returns a bounded candidate and leaves the wikilink, callout, and block-ref bytes outside the operation untouched. Only the owner-controlled route may apply an approved operation. The flattened whole-file output on the right is the failure this rule prevents.</p>
 </div>
 
 ---
 
-## 3. Contributors shouldn't need to learn git
+## 3. Contributors shouldn't need git or a forced account
 
-**Rule:** At least one contribution path must work for a domain expert who has never used git, cloned a repo, or understood branching. The Web CMS exists for this reason.
+**Rule:** At least one contribution path must work for a domain expert who has never used git, cloned a repo, understood branching, or created an account merely to report a correction. Accounts may supply trust signals later; they are not the safety mechanism.
 
-**Why:** The biggest barrier to community contribution on existing markdown wikis is that they require git fluency. The contributors these knowledge bases target (domain experts, subject-matter writers, students; cyber practitioners are just our first dogfood audience) include many people who can write excellent content but would bounce off `git clone`. The awesome-list model on GitHub is the floor: edit the file in the web UI, click "Propose change." Cyberbaser must be at least that easy.
+**Current state:** this product path has **not shipped**. The live site's edit link opens GitHub and therefore requires a GitHub account. [Q09 remains open](/cyberbaser/reference/open-questions/#q09--what-is-the-contribution-path-for-someone-with-no-account). The immediate [concierge pilot](/cyberbaser/research/concierge-human-correction-pilot/) tests a narrower claim with five readers and one independent owner; it is an experiment, not an endpoint, editor, writer, or proof that the rule is satisfied.
+
+**Why:** The biggest barrier to community contribution on existing markdown wikis is not only git fluency, but the platform wall around it. Domain experts, subject-matter writers, and students may be able to improve a page yet reasonably refuse a forge account. The contribution must still arrive as a bounded proposal that the owner can review safely.
 
 **Rules out:**
 - "Just send a PR" as the only contribution path
+- A GitHub or forge account as the only way to report a useful correction
 - Required CLI tools for contributors
 - Documentation that assumes git knowledge
 - Merge conflict resolution that requires a terminal
@@ -121,18 +126,18 @@ These are the current working set for the research phase. They're candidates, no
 
 ---
 
-## 4. Every contribution path must work independently
+## 4. Every offered contribution path must work independently
 
-**Rule:** The Web CMS, Obsidian+Git, and direct-GitHub paths must each work end-to-end without depending on the others. A contributor using the Web CMS should not need Obsidian running. An Obsidian user should not need the Web CMS deployed.
+**Rule:** Any contribution path Cyberbaser offers must work end-to-end without being a client of another contribution surface. This principle does **not** require three named paths, a Web CMS, or a particular interface. Direct owner authoring and external proposals are distinct lanes; independence does not require them to share an editor, moderation UI, or source-application mechanism. Today the owner-local Obsidian+Git lane and GitHub's account-required external proposal are operational; the account-free path is still under experiment.
 
-**Why:** If the Web CMS depends on a live Obsidian instance to render previews, that's a fragile single point of failure. If the Obsidian path depends on the CMS deploy being up, power users get blocked by unrelated outages. Independence is what lets each path serve its own user population without coupling failure modes.
+**Why:** A reader-facing intake must not depend on a live Obsidian instance, and a local authoring path must not depend on an intake service being deployed. Independence keeps one surface's outage, retirement, or replacement from blocking the others.
 
 **Rules out:**
 - Architectures where one path is a privileged client of another
 - Shared session state between paths
 - Preview pipelines that can only render through one surface
 
-<div class="cb-paths" role="img" aria-label="Three contribution lanes, Obsidian, Web CMS, and GitHub, each reaching one shared git repo. The Web CMS lane is down, but the other two still commit.">
+<div class="cb-paths" role="img" aria-label="Independent contribution lanes reach one authoritative source. The account-free intake lane is unshipped, while the existing local and GitHub mechanisms continue without depending on it.">
   <div class="cb-path">
     <div class="cb-path-hd"><svg class="cb-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.355 18.538a68.967 68.959 0 0 0 1.858-2.954.81.81 0 0 0-.062-.9c-.516-.685-1.504-2.075-2.042-3.362-.553-1.321-.636-3.375-.64-4.377a1.707 1.707 0 0 0-.358-1.05l-3.198-4.064a3.744 3.744 0 0 1-.076.543c-.106.503-.307 1.004-.536 1.5-.134.29-.29.6-.446.914l-.31.626c-.516 1.068-.997 2.227-1.132 3.59-.124 1.26.046 2.73.815 4.481.128.011.257.025.386.044a6.363 6.363 0 0 1 3.326 1.505c.916.79 1.744 1.922 2.415 3.5zM8.199 22.569c.073.012.146.02.22.02.78.024 2.095.092 3.16.29.87.16 2.593.64 4.01 1.055 1.083.316 2.198-.548 2.355-1.664.114-.814.33-1.735.725-2.58l-.01.005c-.67-1.87-1.522-3.078-2.416-3.849a5.295 5.295 0 0 0-2.778-1.257c-1.54-.216-2.952.19-3.84.45.532 2.218.368 4.829-1.425 7.531zM5.533 9.938c-.023.1-.056.197-.098.29L2.82 16.059a1.602 1.602 0 0 0 .313 1.772l4.116 4.24c2.103-3.101 1.796-6.02.836-8.3-.728-1.73-1.832-3.081-2.55-3.831zM9.32 14.01c.615-.183 1.606-.465 2.745-.534-.683-1.725-.848-3.233-.716-4.577.154-1.552.7-2.847 1.235-3.95.113-.235.223-.454.328-.664.149-.297.288-.577.419-.86.217-.47.379-.885.46-1.27.08-.38.08-.72-.014-1.043-.095-.325-.297-.675-.68-1.06a1.6 1.6 0 0 0-1.475.36l-4.95 4.452a1.602 1.602 0 0 0-.513.952l-.427 2.83c.672.59 2.328 2.316 3.335 4.711.09.21.175.43.253.653z"/></svg>Obsidian + Git<span class="cb-path-st cb-path-up">● up</span></div>
     <div class="cb-mock cb-mock-sm"><div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">vault/stars/andromeda.md</span></div><div class="cb-mock-body"><span class="cb-path-chip cb-path-chip-ok">commit ✓</span></div></div>
@@ -140,7 +145,7 @@ These are the current working set for the research phase. They're candidates, no
     <span class="cb-path-foot">still commits</span>
   </div>
   <div class="cb-path cb-path-down">
-    <div class="cb-path-hd"><svg class="cb-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.947 13.177c0 3.263-2 5.649-4.736 5.649h-2.773v-5.65H6.282v10.387h7.93c5.403 0 9.788-4.668 9.788-10.386h-5.052ZM7.894.476 0 1.212l.948 10.352 5.157-.456-.526-5.615 2.737-.245c2.737-.246 4.91 1.93 5.227 5.193l5.052-.458c-.49-5.752-5.297-9.998-10.7-9.507Z"/></svg>Web CMS<span class="cb-path-st cb-path-dn">● down</span></div>
+    <div class="cb-path-hd"><svg class="cb-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.947 13.177c0 3.263-2 5.649-4.736 5.649h-2.773v-5.65H6.282v10.387h7.93c5.403 0 9.788-4.668 9.788-10.386h-5.052ZM7.894.476 0 1.212l.948 10.352 5.157-.456-.526-5.615 2.737-.245c2.737-.246 4.91 1.93 5.227 5.193l5.052-.458c-.49-5.752-5.297-9.998-10.7-9.507Z"/></svg>Account-free intake<span class="cb-path-st cb-path-dn">● unshipped</span></div>
     <div class="cb-mock cb-mock-sm"><div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">deploy offline</span></div><div class="cb-mock-body"><span class="cb-path-chip cb-path-chip-bad">✕ no deploy</span></div></div>
     <div class="cb-path-arrow cb-path-arrow-cut" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h14M13 6l6 6-6 6"/></svg></div>
     <span class="cb-path-foot cb-path-foot-dn">can't reach it</span>
@@ -159,7 +164,7 @@ These are the current working set for the research phase. They're candidates, no
     <div class="cb-tree-row"><svg viewBox="0 0 16 16" class="cb-tree-ic" aria-hidden="true"><path d="M4 1.8h4.2L12 5.4V14.2H4z"/><path d="M8.2 1.8V5.4H12"/></svg>orion-nebula.md</div>
   </div>
 </div>
-<p class="cb-fig-cap">Two paths keep committing while the third is down. No path is a client of another, so one outage blocks no one else.</p>
+<p class="cb-fig-cap">The missing account-free lane does not block the two mechanisms that exist. If it ships, it must reach the authoritative source without becoming a dependency of either one.</p>
 
 ---
 
@@ -219,7 +224,7 @@ These are the current working set for the research phase. They're candidates, no
 - Speculative refactors without a written motivation
 - "Let me just try it and see" commits on the critical path
 - Adding dependencies without a documented trade-off
-- Populating later roadmap phases with concrete steps while Phase R is still active
+- Promoting an experiment into product work before its precommitted decision rule has evidence
 
 <p class="cb-rt-cap">Same feature. The only difference is what got committed first.</p>
 <div class="cb-gate" role="img" aria-label="Two identical pull requests. The one that commits code first is blocked by a failing check; the one that commits the decision doc first passes and can merge.">

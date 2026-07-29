@@ -1,6 +1,6 @@
 ---
 title: Getting Started
-description: What cyberbaser is, the mental model, what phase it's in, and where to look first.
+description: What cyberbaser is, the current v1 product interpretation, what is being tested now, and where to look first.
 sidebar:
   order: 0
 status: research
@@ -8,50 +8,54 @@ status: research
 
 ## What cyberbaser is
 
-Cyberbaser is **an interoperability layer for contributable, version-controlled knowledge bases.** A central **hub** sits between the surfaces people author from (Obsidian, an edit button on the page, a web CMS, GitHub), the renderers that publish the result, and other knowledge bases, keeping every change faithful as it round-trips between them. CMS-like contribution and a public wiki are things the layer enables, not the whole of what it is. It works on any markdown content, **not just one domain.** (We dogfood it on a cybersecurity vault, [`cybersader/cyberbase`](https://github.com/cybersader/cyberbase); that's just the first content, not the point.)
+Cyberbaser is **an interoperability layer for contributable, version-controlled knowledge bases.** It sits between the surfaces people author from, the systems that publish their work, and eventually other independently owned knowledge bases. It is general-purpose, not tied to one domain or one authoring tool. Obsidian is first-class, and [`cybersader/cyberbase`](https://github.com/cybersader/cyberbase) is the first dogfood vault rather than the scope.
 
-**The mental model:** [write wherever you like → the hub translates every surface into the *same* faithful markdown and reviews each change → that markdown, with full history, is the single source of truth → the wiki is a generated view of it](/cyberbaser/design/architecture/).
+The current v1 interpretation is an **owner-controlled change boundary** around a version-controlled knowledge base. Reader correction controls, trusted rich browser or CMS-like tools, forge editors, local Markdown tools, and agents may all be replaceable authoring spokes. External spokes submit bounded, exact source-bound proposals; the owner keeps direct local authoring and the final decision. Renderers and hosts remain independently replaceable output spokes.
+
+GitHub, GitHub Actions, Pages, and pinned Quartz implement the working dogfood path. They are current infrastructure, not the product essence. [Architecture shows what is actually built and borrowed](/cyberbaser/design/architecture/).
 
 Two repos, easy to confuse:
 
 | Repo | Role |
 |---|---|
-| [`cybersader/cyberbaser`](https://github.com/cybersader/cyberbaser) (this repo) | The tooling **and** the thinking: the hub, translation layer, CMS integration, deployment, and the first-principles research |
-| [`cybersader/cyberbase`](https://github.com/cybersader/cyberbase) | The example content vault we dogfood on: plain markdown, one example, not the scope |
+| [`cybersader/cyberbaser`](https://github.com/cybersader/cyberbaser) (this repo) | The change-boundary packages, renderer adapters, research, and canonical project knowledge base |
+| [`cybersader/cyberbase`](https://github.com/cybersader/cyberbase) | The dogfood content vault: plain Markdown, one example, not the scope |
 
-## Current phase: Research & Foundations
+## Current phase: v1 Build
 
-Cyberbaser is in **Phase R**: building first-principles understanding before shipping implementation. The [Roadmap](/cyberbaser/getting-started/roadmap/) is explicit: the Phase-0 publishing prototype is parked, and no later phase gets concrete steps until the problem, principles, and key decisions have real content.
+Research & Foundations closed on 2026-07-25. The live dogfood stack selects and projects 933 Markdown sources into 931 public page URLs and has rehearsed the GitHub-backed contribution loop twice. What has **not** shipped is the account-free path for a reader or a general operating model for a maintainer who does not use GitHub.
 
-This is deliberate. The old approach jumped to code before the principles justified the choices; the reinit inverted that — write the thinking, then write the code. A lot of that thinking is now done (see the research findings below).
+The immediate milestone is the precommitted [concierge human-correction pilot](/cyberbaser/research/concierge-human-correction-pilot/): five ordinary readers and one independently operated Markdown-KB owner test a local, account-free correction workflow before any product surface is built. Its seven-field form is only a study instrument and cannot select the future reader UI or trusted-contributor editor. `@cyberbaser/correction` provides exact quote anchoring and fail-closed single-splice preparation/application for the experiment. It is a no-I/O primitive, not a shipped editor, writer, contribution product, or generalized adapter API.
+
+Federation remains the long-term non-central seam. The five-origin fixture is controlled local evidence only; provisional profile work waits for a concrete need from an independently operated peer.
 
 ## Where to look
 
 <div class="cb-grid">
-  <a class="cb-card" href="/cyberbaser/design/architecture/">
-    <span class="cb-card-label">★ Start here</span>
-    <span class="cb-card-title">How it all fits together</span>
-    <span class="cb-card-desc">The system, visually: author from anywhere → the hub translates + governs → one markdown source of truth → a published wiki. With mockups of what it's like to use.</span>
+  <a class="cb-card" href="/cyberbaser/getting-started/direction/">
+    <span class="cb-card-label">★ Current direction</span>
+    <span class="cb-card-title">What is building now</span>
+    <span class="cb-card-desc">The owner-controlled change boundary, the precommitted concierge pilot, the remaining product forks, and the difference between shipped evidence and vision.</span>
   </a>
-  <a class="cb-card" href="/cyberbaser/concepts/problem/">
-    <span class="cb-card-title">The problem</span>
-    <span class="cb-card-desc">What it actually solves: lossless round-trip fidelity across markdown surfaces (Obsidian and others) + low-friction contribution + no lock-in, and why contribution is a curve, not a wall.</span>
+  <a class="cb-card" href="/cyberbaser/design/architecture/">
+    <span class="cb-card-title">How it works today</span>
+    <span class="cb-card-desc">The packages, CI jobs, GitHub and Quartz dogfood infrastructure, human hand-offs, and boundaries between owned and borrowed components.</span>
+  </a>
+  <a class="cb-card" href="/cyberbaser/research/concierge-human-correction-pilot/">
+    <span class="cb-card-label">Immediate milestone</span>
+    <span class="cb-card-title">The human-correction pilot</span>
+    <span class="cb-card-desc">Five readers, one independent owner, exact source anchoring, local review, fixed thresholds, and no product claim before results.</span>
   </a>
   <a class="cb-card" href="/cyberbaser/getting-started/vision/">
     <span class="cb-card-title">The vision</span>
-    <span class="cb-card-desc">What it becomes, told as user journeys: author from anywhere, one faithful source of truth, contributable by anyone.</span>
+    <span class="cb-card-desc">The complete long arc, with every capability marked built, designed, deferred, reassigned, killed, or dropped.</span>
   </a>
   <a class="cb-card" href="/cyberbaser/getting-started/principles/">
     <span class="cb-card-title">The principles</span>
-    <span class="cb-card-desc">The rules that constrain every decision: markdown is the source of truth, semantics round-trip, contributors don't need git.</span>
-  </a>
-  <a class="cb-card" href="/cyberbaser/research/">
-    <span class="cb-card-label">Decisions</span>
-    <span class="cb-card-title">Research findings</span>
-    <span class="cb-card-desc">What's been decided and what hasn't been tested: the SSOT analysis, the v1 architecture, and the living risk register.</span>
+    <span class="cb-card-desc">Owner-controlled source, exact byte preservation, no forced account, independent offered paths, and evidence before implementation.</span>
   </a>
   <a class="cb-card" href="/cyberbaser/getting-started/roadmap/">
     <span class="cb-card-title">The roadmap</span>
-    <span class="cb-card-desc">Phased plan. Phase R is the only active one, with hard exit criteria; later phases stay deferred until the research justifies them.</span>
+    <span class="cb-card-desc">v1 Build exit criteria, the immediate pilot, remaining enforcement and URL work, and deferred future phases.</span>
   </a>
 </div>

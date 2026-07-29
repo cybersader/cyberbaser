@@ -1,15 +1,15 @@
 # Cyberbaser Project Context
 
-> Last aligned: 2026-06-21 (post vision-sweep). If this file disagrees with the docs site, the docs site wins — and this file should be fixed in the same session.
+> Last aligned: 2026-07-29 (replaceable-authoring clarification + concierge-pilot direction). If this file disagrees with the docs site, the docs site wins, and this file should be fixed in the same session.
 
 ## What This Project Is
 
-**Cyberbaser is an interoperability layer for contributable, version-controlled knowledge bases.** It sits *between* the tools people author in (Obsidian first-class, but any markdown surface), the renderers that publish the result (Quartz, Starlight, anything), and — eventually — other knowledge bases, keeping one plain-text corpus faithful as changes round-trip through all of them.
+**Cyberbaser is an interoperability layer for contributable, version-controlled knowledge bases.** It sits *between* replaceable authoring tools (Obsidian first-class, rich browser or CMS-like surfaces allowed), replaceable renderers (Quartz, Starlight, anything), and eventually other knowledge bases. The owner's plain-text corpus remains authoritative: external tools return bounded, source-bound proposals rather than regenerating or owning the files.
 
 Three pillars, held in one phrase:
-- **Interoperability** — author from any tool, render with any generator, federate with any other base (v2+). The hub is the *between*.
-- **Contributable** — anyone can help maintain it, governed by a maintainer-set **trust curve + moderation queue**, never an account wall. "Contributable, not controllable."
-- **Version-controlled / resilient** — plain text with full history: durable, portable, owned. Git is how version control happens today; it is the current manifestation, **not the essence**, and the layer never forces git on contributors.
+- **Interoperability** — author from different tools, render with swappable generators, and eventually connect independently owned bases. Federation is long-term **owner-controlled publication**: ordinary meta-wikis may curate, map, annotate, mirror, index, disagree, and fork, while every crawler, graph, and search index remains a disposable view. No central Cyberbaser database or registry sits in the authority chain. The five-origin fixture is controlled local evidence only; a profile waits for demonstrated peer need.
+- **Contributable** — the product boundary must let an owner accept bounded changes under a maintainer-set **trust curve + moderation queue**, without treating accounts as the safety mechanism. The current GitHub dogfood path still requires an account; the precommitted concierge pilot tests the missing account-free human workflow.
+- **Version-controlled / resilient** — plain text with full history: durable, portable, owned. Git is how version control happens in the dogfood stack today; it is the current manifestation, **not the essence**, and the general product must not require contributors or maintainers to operate GitHub.
 
 **It is general, not a cyber tool.** The `cybersader/cyberbase` vault (cybersecurity content) is the first dogfooding corpus, not the scope. Any wiki — research, handbook, course, standard — is the target.
 
@@ -18,25 +18,31 @@ There are two repos to keep straight:
 | Repo | Role |
 |---|---|
 | `cybersader/cyberbase` | The dogfood content vault (cyber topics) — the first content, not the point |
-| `cybersader/cyberbaser` (this repo) | The layer: research, translation-layer R&D, contribution/trust design, the docs site that publishes the research |
+| `cybersader/cyberbaser` (this repo) | The layer: owner-controlled change-boundary packages, research, contribution/trust design, and the docs site that publishes the canonical KB |
+
+## Current Phase and Immediate Milestone
+
+**Current phase: v1 Build.** Research & Foundations closed on 2026-07-25. The current product interpretation is an **owner-controlled change boundary** around a version-controlled knowledge base: decide what may publish, accept bounded proposals against pinned source, preserve untouched bytes, classify integrity and trust, and keep the final decision with the owner. Reader controls, trusted rich browser/WYSIWYG/CMS-like tools, forge editors, local Markdown tools, and agents may all be replaceable authoring spokes.
+
+The immediate milestone is the precommitted [concierge human-correction pilot](/cyberbaser/research/concierge-human-correction-pilot/): five ordinary readers and one independently operated Markdown-KB owner test one local, account-free correction workflow before account-free automation is built. Its seven-field form is a study instrument and cannot select the eventual reader UI, rich editor, generalized proposal record, or adapter API. `@cyberbaser/correction` is the exact quote-anchor and single-splice primitive used by that experiment. It performs no I/O and is not a shipped contribution product.
 
 ## The Architecture in One Line
 
-Write anywhere → the **hub** keeps every surface the same faithful markdown and reviews each change (trust curve + moderation) → that markdown, with history, is the single source of truth you own → the published wiki is a generated view of it. **The hub is the product; renderers are swappable commodity spokes** — never couple the hub to one SSG.
+Replaceable external authoring spokes submit bounded proposals against pinned source → the **owner-controlled boundary** decides what may publish, verifies exact changes, and classifies integrity and trust → the owner approves application to one authoritative Markdown source → swappable renderers publish disposable views. The owner's local editor remains a separate direct-authoring lane. GitHub, Actions, Pages, and Quartz implement the current dogfood path; none is the product essence. Federation follows the same non-central rule later: each base publishes its own authority, ordinary meta-wikis publish source-qualified claims, and every crawler, graph store, cache, and search provider remains a disposable spoke.
 
 ## Hard Constraints (violating these = going the wrong direction)
 
-1. **Renderer-agnostic.** Astro/Starlight is the current prototype only. Quartz already wins forward publishing; the reverse (web-edit → clean vault file) is the differentiator no SSG can do.
-2. **No hyperscalers.** Self-hosting preferred (Forgejo for identity/hosting; see RA-01 — PKCE against Forgejo's OIDC eliminates the OAuth proxy). GitHub Pages is the *current* deploy target; Cloudflare is edge-only (CDN/WAF/rate-limit), never the host. No AWS/GCP.
-3. **Accounts are never forced.** Contribution safety = moderation queue + maintainer's trust curve. Identity gates are mostly theater; an account is a trust signal, not a wall.
-4. **The keystone is the lossless round-trip** (proven in `spikes/ofm-roundtrip/`, 20/21). Every design decision gets checked against translation-layer implications.
-5. **Research before implementation.** The Phase-0 prototype is parked; no feature without a written justification.
+1. **Renderer-agnostic and forge-agnostic.** Quartz and GitHub are the current dogfood infrastructure only. The change boundary must survive swapping either one.
+2. **No hyperscalers.** Self-hosting preferred (Forgejo for identity/hosting; see RA-01). GitHub Pages is the *current* deploy target; Cloudflare is edge-only (CDN/WAF/rate-limit), never the host. No AWS/GCP.
+3. **Accounts are not the safety mechanism.** Contribution safety = owner review plus the maintainer's trust curve. The current GitHub path still has an account wall, so do not claim the general product requirement is satisfied.
+4. **No whole-file writer or second authority.** The real-vault gate measured 4.6% byte identity and killed whole-file regeneration in Cyberbaser-mediated source application. External adapters bind to pinned source and emit bounded operations; `@cyberbaser/ofm` validates and `@cyberbaser/correction` prepares one base-bound candidate without performing I/O. Rich presentation is allowed; direct reserialized saves are not.
+5. **Evidence before product claims.** The precommitted concierge pilot comes before account-free automation. A primitive, fixture, or study workflow earns only its narrow tested claim and cannot select a rich editor or generalized adapter contract.
 
 ## Who It's For
 
-- **Knowledge owners** with a markdown KB who want it publicly contributable without a separate publishing stack or a walled garden.
-- **Readers** who spot a wrong fact and will fix it in three clicks, but never via a CLI or signup.
-- **Developers** who fix things by editing a `.md` and opening a PR.
+- **Knowledge owners** with a markdown KB who need an owner-controlled boundary around publication and proposed changes, without surrendering the source.
+- **Readers** who spot a wrong fact but will not use a CLI or create a forge account. Their product path is not shipped; the concierge pilot is the immediate falsification test.
+- **Developers** who can use the current GitHub dogfood path by editing a `.md` and opening a PR.
 - **AI agents** maintaining content through the same reviewed pipeline as humans — the tool is deliberately agent-friendly.
 - **User (Cybersader)**: cybersecurity professional, Obsidian power user, WSL on Windows, collaborates heavily with Claude Code across sibling projects.
 

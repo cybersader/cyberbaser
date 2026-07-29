@@ -7,14 +7,16 @@ status: research
 tags: [design, translation-layer, architecture]
 ---
 
-Obsidian-flavored markdown contains constructs a generic markdown tool destroys on contact: wikilinks, callouts, embeds, block refs, `$math$`. The translation layer is the contract for **which of them survive the trip to the web and back**, sorted into three tiers. Since [R12](/cyberbaser/research/v1-build-plan/) that contract is enforced by *not rewriting files at all* — an edit is a raw-text splice into the original bytes, and `@cyberbaser/ofm` validates the result instead of producing it.
+Obsidian-flavored Markdown contains constructs a generic Markdown writer destroys on contact: wikilinks, callouts, embeds, block refs, and `$math$`. The translation layer separates two jobs: render the source through replaceable output spokes, and return accepted external changes without regenerating untouched source. Since [R12](/cyberbaser/research/v1-build-plan/), Cyberbaser-mediated source application uses exact raw-text operations against the original bytes, while `@cyberbaser/ofm` validates the result instead of producing it.
+
+R12 constrains the source-write mechanism, not the authoring interface. A browser editor may parse content, present blocks, or provide WYSIWYG controls. To conform, its adapter must map the intended edit back to a pinned source range, emit a bounded proposal, and preserve every byte outside that proposal by construction.
 
 > [!warning]+ The one thing that would sink the project
 > If a contribution path cannot change a page without damaging the rest of it, the "many independent paths" vision collapses into "one path plus some lossy alternatives." Everything below exists to make that failure detectable and then impossible.
 
 ## What actually happens to a file
 
-A web edit does not round-trip through a parser. It finds the bytes it is allowed to change, replaces them, and leaves every other byte alone.
+An accepted external proposal is not applied by serializing an editor model back into the file. A surface may parse or model content for display, but source application resolves the approved operation against the original bytes, changes only that range, and leaves every other byte alone.
 
 <div class="cb-tl-splice">
   <figure class="cb-glance-panel">
@@ -37,7 +39,7 @@ A web edit does not round-trip through a parser. It finds the bytes it is allowe
       <div class="cb-mock-body">
         <div class="cb-mock-h">Tomatoes</div>
         <div class="cb-mock-callout"><span class="cb-mock-callout-i">i</span> <strong>Spacing</strong> — Plant them 30cm apart.</div>
-        <div class="cb-mock-edit"><span class="cb-mock-edit-txt">Plant them 45cm apart.<span class="cb-mock-caret"></span></span><span class="cb-mock-save">Save</span></div>
+        <div class="cb-mock-edit"><span class="cb-mock-edit-txt">Plant them 45cm apart.<span class="cb-mock-caret"></span></span><span class="cb-mock-save">Propose change</span></div>
       </div>
     </div>
     <figcaption class="cb-glance-cap">a reader corrects one number in place</figcaption>
@@ -52,11 +54,11 @@ A web edit does not round-trip through a parser. It finds the bytes it is allowe
       </div>
       <p class="cb-tl-note">Callout marker, wikilink, alias, and embed untouched — not "re-emitted identically", <em>never read</em>. churn 0.004 · constructs 3 → 3 · escapes 0 → 0.</p>
     </div>
-    <figcaption class="cb-glance-cap">what lands in the repo</figcaption>
+    <figcaption class="cb-glance-cap">the exact candidate shown to the owner</figcaption>
   </figure>
 </div>
 
-This is the whole design in one picture. The old plan was to parse the file into an AST and write it back out; measured against 1430 real vault files, that produced a byte-identical result **4.6% of the time** (36.9% even with stringify options tuned to this vault). The failures were formatting normalization, not construct damage, but a diff full of normalization noise is unreviewable and unmergeable. So whole-file re-serialization is out of the write path permanently.
+This is the source-application rule in one picture, not a prescription for the editor UI. The old plan parsed the file into an AST and wrote it back out; measured against 1,430 real vault files, that produced a byte-identical result **4.6% of the time**. Stringify options tuned to this vault raised exact byte identity only to **5.1%**; **36.9%** matched only after trailing-whitespace normalization. The failures were formatting normalization, not construct damage, but a diff full of normalization noise is unreviewable and unmergeable. Whole-file re-serialization is therefore out of every Cyberbaser-mediated source update permanently. Rich presentation remains possible when its adapter produces exact proposals instead of complete files.
 
 ## The tier contract
 
@@ -116,12 +118,12 @@ Three mechanical checks, all of them shipping code rather than intent:
 2. **`ofm-check.yml`** runs that classifier on every pull request against the vault.
 3. **The corpus runner** re-measures byte identity over the whole vault on demand, so the 4.6% number stays a measurement rather than a memory.
 
-The suite is 10 tests in `ofm`, part of 165 across the five packages. The classifier's first real verdict on a live contribution (PR #6, 2026-07-25) was `clean · churn 0.005 · escapes 0→0`.
+The suite is 10 tests in `ofm`, part of 187 across the six current packages in fresh package-scoped runs. The classifier's first real verdict on a live contribution (PR #6, 2026-07-25) was `clean · churn 0.005 · escapes 0→0`.
 
 <details>
 <summary>The failure this design is aimed at, and the one caveat</summary>
 
-The target is not the maintainer's own edits — those are already fine. It is any **third-party writer that re-serializes**: a git-backed CMS, a structured editor, a sync leg from another tool. The dormant Notion sync in the vault's history is the worked example: it wrote plain CommonMark with zero wikilinks (nothing OFM to corrupt), but it mirrored by delete-and-recreate, 1570 deletions in paired commits. A validator that only checked syntax would have called every one of those commits clean.
+The target is not the maintainer's own edits; those directly author the source. It is any **third-party adapter that regenerates the authoritative file from a parsed or structured model**: a serializer-backed CMS writer, an unsafe editor adapter, or a sync leg from another tool. A structured or rich editor is allowed when its adapter emits bounded source-anchored proposals instead. The dormant Notion sync in the vault's history is the worked example of the rejected behavior: it wrote plain CommonMark with zero wikilinks, but mirrored by delete-and-recreate, producing 1,570 deletions in paired commits. A validator that only checked syntax would have called every one of those commits clean.
 
 The caveat: `roundtrip()` exists in the library as a **diagnostic** and is expected to diverge on most real files. It must never be called from a write path. The README says so; this page says so; treat any future code that does it as a defect.
 
@@ -142,7 +144,7 @@ Open, tracked in [Open Questions](/cyberbaser/reference/open-questions/):
 Closed by measurement, recorded here so nobody reopens them:
 
 - *Is `astro-loader-obsidian` sufficient for Tier 1?* Not applicable — the vault renders through Quartz ([R14](/cyberbaser/research/quartz-spike-results/)), which scored 20/20 on the OFM checklist.
-- *What is the incremental build story?* Not a problem at this scale: 933 pages build in about 160 seconds in CI, and a full OFM corpus pass over 1430 files takes 7.3 seconds on ext4. (Benchmark on ext4 — the same reads are roughly 780x slower across a 9p mount.)
+- *What is the incremental build story?* Not a problem at this scale: 933 selected Markdown sources build into 931 public page URLs in about 160 seconds in CI, and a full OFM corpus pass over 1430 files takes 7.3 seconds on ext4. (Benchmark on ext4 — the same reads are roughly 780x slower across a 9p mount.)
 
 </details>
 

@@ -17,13 +17,13 @@ tags: [research]
 |---|---|---|---|
 | Q01 | Local research vault audit | **Closed — declined** | Plan critique, 2026-07-25 |
 | Q02 | Is `astro-loader-obsidian` enough for Tier 1? | **Closed — not applicable** | R14 |
-| Q03 | Web CMS: rendered preview or raw markdown? | **Closed — moot** | R12 |
+| Q03 | Serializer-backed Web CMS: rendered preview or raw Markdown? | **Closed as framed** | R12 |
 | Q04 | How do we guarantee no lossy round-trip? | **Answered, unenforced** | R12 |
 | Q05 | Incremental builds at thousands of pages | **Closed on scale, residue named** | R12, R14, R16 |
 | Q06 | Content addressability: slugs, hashes, or titles? | 🔴 **Open** | — |
 | Q07 | Where does the Decap OAuth proxy live? | **Closed — moot**, superseded by Q09 | R12 |
 | Q08 | Does the fork flow actually attribute the contributor? | 🔴 **Open** (reopened) | — |
-| Q09 | What is the contribution path for someone with no account? | 🔴 **Open** | — |
+| Q09 | What is the contribution path for someone with no account? | 🔴 **Open — bounded experiment not run** | — |
 | Q10 | What enforces the moderation policy? | 🔴 **Open** | — |
 
 Four genuinely open. Q08, Q09 and Q10 are new here; all three were being treated as settled somewhere in the docs without ever having been decided.
@@ -43,8 +43,8 @@ Four genuinely open. Q08, Q09 and Q10 are new here; all three were being treated
 
 **Asked:** 2026-07-26 (the honest replacement for Q07).
 **Why it matters:** [Principle 3](/cyberbaser/getting-started/principles/) says contributors shouldn't need to learn git and shouldn't be forced into an account. Half of that is met. The other half has no implementation: GitHub's web editor, the only path open to an outside contributor, requires a GitHub account.
-**Blocks:** Principle 3's core persona, and any claim that "accounts are optional."
-**Status:** 🔴 **open, rated critical** in the [risk register](/cyberbaser/research/assumptions-and-risks/#the-real-gating-risks-ranked). A design exists — the `cb-intake` anonymous submission endpoint in the [hub BOM](/cyberbaser/research/proposal-hub-bom/) — and nothing is built. The abuse controls (rate limiting, first-time-contributor holds) belong to the same design, not to a separate CMS or proxy.
+**Blocks:** Principle 3's core persona, and any product claim that "accounts are optional."
+**Status:** 🔴 **open under a bounded experiment.** No account-free endpoint, product editor, hosted review console, automatic writer, or forge integration has shipped. The internal exact-correction dry run and private operator rehearsal completed locally, but zero ordinary readers and zero independent owners have produced counted evidence. The immediate [concierge human-correction pilot](/cyberbaser/research/concierge-human-correction-pilot/) precommits five reader attempts and one independently operated owner. Its seven-field form is a study instrument, not the product UI or generalized proposal contract. Passing would justify only the smallest measured automation; it would not select a rich editor, which remains architecturally allowed through a conforming exact-proposal adapter. The experiment has no R-number and does not close this question.
 
 ---
 
@@ -62,15 +62,15 @@ Four genuinely open. Q08, Q09 and Q10 are new here; all three were being treated
 **Asked:** 2026-04-11
 **Source:** [Primitives · Content-Addressable URLs](/cyberbaser/concepts/primitives/#stable-urls)
 **Why it matters:** breaking external URLs when the vault is reorganized is unacceptable for a wiki; links must survive reorganization.
-**Blocks:** it no longer blocks the deploy (the vault is live), which makes it worse rather than better: **933 pages now have URLs derived from their current file paths**, so every deferral increases the cost of choosing a convention later.
-**Status:** 🔴 **open, and the oldest genuinely unresolved question on this page.** R16 shipped verbatim paths as a v0 default and R16/R19 declined the folder renames, but no `permalink` convention, alias handling, or redirect table was ever decided. [Renderer URLs](/cyberbaser/research/proposal-renderer-urls/) argues for path-slug plus `aliases`; [dissent §1.3](/cyberbaser/research/dissent/) calls it a half-day convention decision with no owner. Still no owner.
+**Blocks:** it no longer blocks the deploy (the vault is live), which makes it worse rather than better: **933 Markdown sources are selected and projected into 931 public page URLs derived from their current file paths**, so every deferral increases the cost of choosing a convention later.
+**Status:** 🔴 **open, and the oldest genuinely unresolved question on this page.** R16 shipped verbatim paths as a v0 default and R16/R19 declined the folder renames, but no `permalink` convention, alias handling, or redirect table was ever decided. [Renderer URLs](/cyberbaser/research/proposal-renderer-urls/) argues for path-slug plus `aliases`; [dissent §1.3](/cyberbaser/research/dissent/) calls it a half-day convention decision with no owner. The five-origin federation fixture used a controlled local URL map only; it is not production evidence, and provisional profile work waits behind demonstrated peer need. Still no owner.
 
 ## Answered, with a named residue
 
 ### Q04 — How do we guarantee no lossy round-trip in practice?
 
 **Asked:** 2026-04-11 · **Answered:** 2026-07-25 by [R12](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25), empirically.
-**The answer, and the redefinition it required:** the gate ran the round-trip over all 1430 real vault files and returned **4.6% byte-identity, zero mask leaks, zero parse errors**. Whole-file re-serialization cannot preserve real files, so it is banned from every write path. Enforcement was re-scoped from "does the file survive re-serialization" to **"no construct damage in a change,"** which is what `@cyberbaser/ofm`'s `clean | suspect | damage` classifier computes.
+**The answer, and the redefinition it required:** the gate ran whole-file parse/stringify over all 1,430 real vault files and returned **4.6% byte identity, zero mask leaks, zero parse errors**. Whole-file regeneration cannot preserve real formatting diversity, so it is banned from Cyberbaser-mediated source application and from adapters writing on the owner's behalf. This constrains source emission, not rich editor or CMS-shaped presentation. Enforcement was re-scoped from “does the file survive re-serialization” to **“no construct damage in a change,”** which is what `@cyberbaser/ofm`'s `clean | suspect | damage` classifier computes.
 **Residue, and it is real:** the check runs report-only (see Q10), and the per-feature equivalence rules the original question implied — is `[[Foo]]` ≡ `[[Foo|Foo]]`, does `![[img.png|200]]` have to survive — were never written down. They live in the classifier's code, not in a document. That half sits with [challenge 05](/cyberbaser/agent-context/zz-challenges/05-translation-equivalence/).
 
 ---
@@ -79,7 +79,7 @@ Four genuinely open. Q08, Q09 and Q10 are new here; all three were being treated
 
 **Asked:** 2026-04-11 · **Closed on scale:** R12, then measured again in R14 and R16.
 **What was measured:** the full OFM corpus pass over 1430 files takes **7.3 s** on ext4 (R12); Quartz builds the 1420-page vault in **1:55** locally (R14) and **160 s** in CI (R16). Scale was never the problem. Note the ~780x penalty measured for many-small-file reads on a 9p mount, which is why benchmarks run on ext4.
-**Residue:** there is still no incremental build. Every push to `main` triggers a full rebuild, and the measured end-to-end deploys ran **3m07s to 4m52s** across five successful runs. That is tolerable at 933 pages and is the number to watch, not the theoretical ceiling.
+**Residue:** there is still no incremental build. Every push to `main` triggers a full rebuild, and the measured end-to-end deploys ran **3m07s to 4m52s** across five successful runs. That is tolerable for 933 selected Markdown sources and 931 public page URLs, and is the number to watch, not the theoretical ceiling.
 
 ## Closed
 
@@ -95,9 +95,9 @@ Four genuinely open. Q08, Q09 and Q10 are new here; all three were being treated
 
 ---
 
-### Q03 — Should the Web CMS show rendered Obsidian preview, or raw markdown?
+### Q03 — Should the serializer-backed Web CMS show rendered Obsidian preview, or raw Markdown?
 
-**Closed as moot**, 2026-07-25 by **R12**. There is no web CMS. Decap, Sveltia, TinaCMS, EmDash and Pages CMS were all disqualified for re-serializing the file on save ([write-path proposal](/cyberbaser/research/proposal-write-path/)). The editing surface today is GitHub's plain-text editor: raw markdown, no preview. The surviving form of the question — should a contributor see a rendered view of their change before it merges — is the per-PR preview, which is [designed and unbuilt](/cyberbaser/research/proposal-hub-bom/#per-pr-rendered-previews).
+**Closed as framed**, 2026-07-25 by **R12**. Decap, Sveltia, TinaCMS, EmDash, and Pages CMS were disqualified in their evaluated save configurations because each regenerated the complete file ([write-path proposal](/cyberbaser/research/proposal-write-path/)). The old finalist choice is therefore moot. R12 does not prohibit a rich browser, WYSIWYG, or CMS-like authoring spoke whose adapter emits exact source-bound proposals. The surviving questions are how such a spoke represents unsupported constructs, maps rendered intent to source bytes, and shows a rendered candidate before owner approval; all remain unbuilt.
 
 ---
 

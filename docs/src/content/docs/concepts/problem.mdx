@@ -53,27 +53,27 @@ And one more the project only recently admitted (R22, 2026-07-26): **the maintai
 
 ## Contribution on your terms
 
-The deepest part of cyberbaser is not the publisher or even the translation layer. It is *how contribution is governed*, and the governing insight is that **identity gates buy almost nothing while moderation buys everything**. Requiring an email does not stop abuse (aliasing is trivial); requiring a GitHub account mainly filters out the domain expert who spotted the error. The question worth asking is not "who are you?" but "can this hurt anything before a human approves it?" — and if every contribution lands in a moderation queue, the answer is no.
+The deepest part of Cyberbaser is not the publisher or even the translation layer. It is *how external contribution is governed*, and the governing insight is that **identity gates buy almost nothing while owner review buys everything**. Requiring an email does not stop abuse (aliasing is trivial); requiring a GitHub account mainly filters out the domain expert who spotted the error. The question worth asking is not "who are you?" but "can this hurt anything before the owner approves it?" If every external proposal stays bounded and enters an owner-controlled review route, the answer is no.
 
 So the maintainer sets the trust curve, [Discourse-style](https://blog.discourse.org/2018/06/understanding-discourse-trust-levels/), and picks how steep it is:
 
-<div class="cb-dial" role="img" aria-label="A trust dial from fully open to locked down. Fully open: anyone edits, all moderated. Balanced: anonymous edits queued, verified contributors get faster review. Locked down: KYC or invite required. Every edit still passes through moderation.">
+<div class="cb-dial" role="img" aria-label="A trust dial from fully open to locked down. Fully open: anyone may propose, all receive owner review. Balanced: anonymous proposals queue heavily and verified contributors receive faster review. Locked down: proposal access requires KYC or an invitation. Every external proposal remains bounded and owner-controlled.">
   <div class="cb-dial-bar">
     <div class="cb-dial-seg cb-dial-open">
       <div class="cb-dial-seg-t">Fully open</div>
-      <div class="cb-dial-seg-d">anyone edits, all moderated; IP only, for rate-limiting</div>
+      <div class="cb-dial-seg-d">anyone proposes, all owner-reviewed; IP only for rate-limiting</div>
     </div>
     <div class="cb-dial-seg cb-dial-mid">
       <div class="cb-dial-seg-t">Balanced</div>
-      <div class="cb-dial-seg-d">anonymous edits queued; email / verified get faster review; long-trusted edit directly</div>
+      <div class="cb-dial-seg-d">anonymous proposals queue heavily; verified and long-trusted contributors get faster owner-controlled review</div>
     </div>
     <div class="cb-dial-seg cb-dial-locked">
       <div class="cb-dial-seg-t">Locked down</div>
-      <div class="cb-dial-seg-d">KYC or invite required to edit at all</div>
+      <div class="cb-dial-seg-d">KYC or invite required to submit an external proposal</div>
     </div>
   </div>
   <div class="cb-dial-ends"><span>← more open</span><span>more locked →</span></div>
-  <p class="cb-dial-cap">You set where your wiki sits on this dial. Wherever it sits, every edit still passes through the moderation queue before it goes live.</p>
+  <p class="cb-dial-cap">You set where your wiki sits on this dial. Wherever it sits, every external proposal remains source-bound and reaches an owner-controlled decision before it can go live. The owner's local direct-authoring lane is separate.</p>
 </div>
 
 This is live, not aspirational: [`@cyberbaser/trust`](/cyberbaser/research/v1-build-plan/) reads `.cyberbaser/trust.yml` from the PR's base branch (so a PR cannot promote its own author) and classifies each contribution against mechanical gates. It labels a route today; it does not merge.
@@ -83,12 +83,12 @@ This is live, not aspirational: [`@cyberbaser/trust`](/cyberbaser/research/v1-bu
 
 **Denial-of-service is a separate problem.** Content abuse is caught by the moderation queue; volumetric abuse (floods, DoS) is handled at the infrastructure edge with rate-limiting and a WAF — see [RA-01](/cyberbaser/design/reference-architectures/self-hosted-forgejo-auth/). Don't conflate the two.
 
-**Multiple surfaces, one pipeline.** A contributor should be able to act from wherever they are:
+**Multiple external surfaces, one proposal boundary.** A contributor should be able to act from wherever they are:
 
-- **In-page editing** — click edit on the rendered page and change it there. Feasible only because writes are splice-only against the raw file; a CMS that re-serializes the whole document would corrupt it ([R12](/cyberbaser/research/v1-build-plan/)).
-- **Obsidian + git** and **direct forge edits**, for people who prefer them.
+- **In-page correction** — select a passage on the rendered page and submit a bounded source proposal.
+- **Rich browser, WYSIWYG, CMS-like, forge, and agent surfaces** — different presentation, the same pinned-base and exact-change requirements. A native save adapter that re-serializes the whole document is not conforming ([R12](/cyberbaser/research/v1-build-plan/)).
 
-Every surface feeds the same pipeline: contribution → whatever trust step the maintainer set → moderation queue → merge → live. **Compose, don't build from scratch:** trust levels, moderation queues, and rate-limiting have mature implementations ([Discourse](https://www.discourse.org/)-style trust, serverless contribution bots like [Contribunator](https://github.com/Contribunator/Contribunator) and [Staticman](https://staticman.net/), edge WAFs). Wiring them into one coherent pipeline is a tech-stack design problem. This answers the two biggest [product risks](/cyberbaser/research/assumptions-and-risks/): the account wall, and moderation.
+External surfaces converge on the same boundary: bounded proposal → maintainer-set trust route → owner review → accepted exact operation → live rebuild. **The owner's Obsidian or other local Markdown editor is a separate direct-authoring lane** and rejoins only at publication. Compose rather than rebuild mature trust, queue, and rate-limiting mechanisms ([Discourse](https://www.discourse.org/)-style trust, proposal bots like [Contribunator](https://github.com/Contribunator/Contribunator) and [Staticman](https://staticman.net/), edge WAFs). The product work is making those replaceable surfaces obey one coherent source and review boundary.
 
 </details>
 
@@ -117,7 +117,7 @@ Every surface feeds the same pipeline: contribution → whatever trust step the 
 
 Cyberbaser is doing its job when one page is all of this at once.
 
-<div class="cb-pinned" role="img" aria-label="A published wiki page in a browser. It reads as an ordinary well-kept wiki, an Obsidian callout rendered intact, a reader fixing a typo inline with a Save button, and a toast showing the edit merged and live in about two minutes.">
+<div class="cb-pinned" role="img" aria-label="A published wiki page in a browser. It reads as an ordinary well-kept wiki, an Obsidian callout renders intact, a reader proposes a small correction, and a status toast shows that the owner approved it and the rebuilt page is live.">
   <div class="cb-mock">
     <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">wiki.example.org/guides/getting-started</span><span class="cb-mock-live">● Published</span></div>
     <div class="cb-mock-body">
@@ -125,10 +125,10 @@ Cyberbaser is doing its job when one page is all of this at once.
       <div class="cb-mock-line"></div>
       <div class="cb-mock-line cb-mock-line-85"></div>
       <div class="cb-mock-callout"><span class="cb-mock-callout-i">i</span> Community-maintained. Edits are reviewed before they go live.</div>
-      <div class="cb-mock-edit"><span class="cb-mock-edit-txt">…fixing a small typo here<span class="cb-mock-caret"></span></span><span class="cb-mock-save">Save</span></div>
+      <div class="cb-mock-edit"><span class="cb-mock-edit-txt">…proposing a small correction<span class="cb-mock-caret"></span></span><span class="cb-mock-save">Propose change</span></div>
     </div>
   </div>
-  <span class="cb-toast">merged · live in ~4 min</span>
+  <span class="cb-toast">owner approved · rebuilt live</span>
   <span class="cb-pin" aria-hidden="true" style="top:25%;left:4%">1</span>
   <span class="cb-pin" aria-hidden="true" style="top:73%;left:4%">2</span>
   <span class="cb-pin" aria-hidden="true" style="top:49%;left:4%">3</span>
@@ -137,13 +137,13 @@ Cyberbaser is doing its job when one page is all of this at once.
 
 <div class="cb-wins">
   <div class="cb-win"><span class="cb-win-n">1</span><span>Lands from a search and just reads as a well-kept wiki. The markdown vault behind it is invisible.</span></div>
-  <div class="cb-win"><span class="cb-win-n">2</span><span>A reader fixes a typo in three clicks, no git and no account, and sees it live within minutes.</span></div>
+  <div class="cb-win"><span class="cb-win-n">2</span><span>A reader proposes a small correction without git or a forced account, then the owner decides whether it should enter the source.</span></div>
   <div class="cb-win"><span class="cb-win-n">3</span><span>Obsidian syntax survived the trip: callouts and wikilinks render intact.</span></div>
-  <div class="cb-win"><span class="cb-win-n">4</span><span>Every edit is reviewed and merged through moderation before it goes live.</span></div>
+  <div class="cb-win"><span class="cb-win-n">4</span><span>Every external proposal reaches an owner-controlled review boundary before it can go live.</span></div>
   <div class="cb-win"><span class="cb-win-n">5</span><span>The same vault still opens clean in Obsidian, and contributors of any git fluency produce identical-quality edits.</span></div>
 </div>
 
-How much of that is real today: the [live vault site](https://cybersader.github.io/cyberbase/) serves 933 pages, and two rehearsed contributions have gone edit → moderation queue → merge → redeploy → verified live, measured at 3-5 minutes. The gap is item 2's "no account" — every current edit path still runs through a GitHub account. See [Direction](/cyberbaser/getting-started/direction/) for what is built versus what is still a claim.
+How much of that is real today: the [live vault site](https://cybersader.github.io/cyberbase/) selects and projects 933 Markdown sources into 931 public page URLs, and two rehearsed GitHub contributions have gone edit → review → merge → redeploy → verified live, measured at 3–5 minutes. The gap is item 2's no-account reader path: the only working external proposal route still requires GitHub. The owner's local authoring path is separate. See [Direction](/cyberbaser/getting-started/direction/) for what is built versus what is still a claim.
 
 ## Related
 

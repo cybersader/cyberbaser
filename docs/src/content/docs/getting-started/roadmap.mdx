@@ -7,7 +7,7 @@ status: research
 tags: [roadmap, planning]
 ---
 
-Cyberbaser is an **interoperability layer for contributable, version-controlled knowledge bases**. The contributable-wiki capability is what that layer enables: the current build uses Obsidian (and other markdown surfaces) as a first-class authoring surface, a Git-backed vault as today's source of truth, and zero-git contribution for anyone. The roadmap reflects this: research and architecture come first, features are built on that foundation, and every significant decision is [logged with rationale](/cyberbaser/agent-context/zz-log/).
+Cyberbaser is an **interoperability layer for contributable, version-controlled knowledge bases**. The contributable-wiki capability is what that layer enables: the current build uses Obsidian (and other markdown surfaces) as a first-class authoring surface and a Git-backed vault as today's source of truth. The dogfood contribution path currently requires GitHub; the account-free product path has not shipped and is now under a bounded [concierge pilot](/cyberbaser/research/concierge-human-correction-pilot/). The roadmap reflects this: research and architecture come first, features are built on that foundation, and every significant decision is [logged with rationale](/cyberbaser/agent-context/zz-log/).
 
 See the [vault vision mining](/cyberbaser/agent-context/zz-log/2026-04-13-vault-vision-mining/) for the original dream, and the [vault tech stack mining](/cyberbaser/agent-context/zz-log/2026-04-13-vault-tech-stack-mining/) for the 300+ curated links that seed the research below.
 
@@ -19,7 +19,7 @@ This page is the **living roadmap** — only active and future phases live here.
 
 ## Current phase: v1 Build (foundations closed 2026-07-25)
 
-**If you're returning after a long gap, the arc so far in five sentences.** The research phase settled the identity (an interoperability layer, not a publishing tool), proved a masking layer that protects Obsidian syntax through a markdown parser, and wrote the foundations. An adversarial pass then [audited the plan itself](/cyberbaser/research/plan-critique/) and produced [three competing designs for what v1 is](/cyberbaser/research/v1-build-plan/). Rather than argue, we ran the deciding measurement: the round-trip pipeline against **all 1430 real vault files**, which returned 4.6% byte-identity and proved that *whole-file re-serialization can never preserve real files* — so no such step is allowed in any write path, ever. That locked the v1 shape ([R12](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25)): **byte-preservation by construction** (edits are raw-text splices), **validation as the product** (a detector for tools that corrupt markdown), and governance on top. The first artifact, the [`@cyberbaser/ofm` validator](https://github.com/cybersader/cyberbaser/tree/main/packages/ofm), is built and tested.
+**If you're returning after a long gap, the arc so far in five sentences.** The research phase settled the identity (an interoperability layer, not a publishing tool), proved a masking layer that protects Obsidian syntax through a Markdown parser, and wrote the foundations. An adversarial pass then [audited the plan itself](/cyberbaser/research/plan-critique/) and produced [three competing designs for what v1 is](/cyberbaser/research/v1-build-plan/). Rather than argue, we ran the deciding measurement against **all 1,430 real vault files**: whole-file serialization returned 4.6% byte identity, so no Cyberbaser-mediated source update or adapter writing on the owner's behalf may regenerate the untouched file. That locked the v1 shape ([R12](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25)): **byte preservation by construction**, **mechanical validation**, and governance on top. R12 constrains source emission, not presentation, so rich browser, WYSIWYG, or CMS-like authoring remains possible through a conforming exact-proposal adapter.
 
 ### What the research phase resolved (the decision record)
 
@@ -30,9 +30,9 @@ Every entry links to evidence. The full log lives in `.claude/41-QUESTIONS-RESOL
 | Identity | An interoperability layer for contributable, version-controlled knowledge bases | [Assumptions & risks](/cyberbaser/research/assumptions-and-risks/) |
 | Source of truth | Git stays, scoped, with an off-ramp; 83+ systems evaluated | [SSOT analysis](/cyberbaser/research/source-of-truth/) |
 | Renderer | A commodity spoke, never coupled to the hub; two-spoke plan (Quartz for the vault, Starlight for these docs) | [Renderer + URLs](/cyberbaser/research/proposal-renderer-urls/) |
-| Auth / contribution | Trust curve + moderation queue, accounts never forced; PKCE on the self-hosted path | [RA-01](/cyberbaser/design/reference-architectures/self-hosted-forgejo-auth/) |
+| Contribution policy | Trust curve + moderation queue; accounts are not the intended safety wall. The account-free product path remains unshipped and Q09 stays open | [Contribution workflows](/cyberbaser/design/contribution-workflows/) |
 | Demand gate | Waived — the maintainer is user #1; dogfooding is the validation (R08) | [Plan critique](/cyberbaser/research/plan-critique/) |
-| CMS | **None in the write path.** Every candidate re-serializes; the write path is raw-text only | [The write path](/cyberbaser/research/proposal-write-path/) |
+| Serializer-backed CMS writers | **Rejected.** Every evaluated save adapter regenerated complete files. Rich browser/WYSIWYG/CMS-like authoring remains allowed as a replaceable proposal spoke | [The write path](/cyberbaser/research/proposal-write-path/) |
 | Plugin execution | Killed for v1 (0.9% of vault files need it; Tier-3 coupling) | [Plan critique](/cyberbaser/research/plan-critique/) |
 | Real-time collab / RBAC / mixed-privacy | Out of cyberbaser — owned by a private sibling project (R10) | [Option space](/cyberbaser/research/option-space/) |
 | The v1 shape | Byte-preservation + validator + governance, decided by measurement (R09→R12) | [v1 build plan](/cyberbaser/research/v1-build-plan/) |
@@ -40,11 +40,14 @@ Every entry links to evidence. The full log lives in `.claude/41-QUESTIONS-RESOL
 
 ### Building now
 
-- [x] **`@cyberbaser/ofm` v0.1** — the validator: masking core, change classifier (`clean | suspect | damage`), corpus reporter, CLI. Built + 10 tests green + smoke-tested on the real vault (2026-07-25).
-- [ ] **CI gate on the vault repo** — `ofm-check diff` on every markdown-touching PR, report-only first, then required. This makes [Principle 2](/cyberbaser/getting-started/principles/) enforced instead of aspirational.
-- [x] **The publish boundary, selector half** — `@cyberbaser/publish` v0.1 (2026-07-25): the default-deny selector, slug contract, and safety lint, 91 tests green. Remaining: the maintainer authors the real `publish.yml`, plus projection wiring.
-- [x] **Renderer decided by measurement** — Quartz adopted for the vault site (R14, 2026-07-25): the real vault builds in 1:55 and scores 20/20 on the OFM checklist; the path census killed the mass-rename question (0 collisions, 2 violations). [Results + the fine print](/cyberbaser/research/quartz-spike-results/). Remaining: projection wiring, pre-publish fixes, the v4-vs-v5 pick.
-- [ ] **Edit path, when triggered** — the raw CM6 widget ships when a real non-git contributor is blocked or mobile dogfood friction recurs; until then "edit on GitHub" is the web path. The [suggestion unit](/cyberbaser/research/option-space/) (CriticMarkup + reject-all invariance) is the candidate beyond that.
+- [x] **Byte-preserving foundation** — `@cyberbaser/ofm` is a validator, never a writer; the publish boundary, projection, Quartz spoke, link checker, and trust classifier are built. The live vault proves the GitHub-backed dogfood path, not the general product.
+- [ ] **Bounded concierge human-correction pilot — immediate.** Five ordinary readers and one independently operated Markdown-KB owner test whether a reader can submit a useful exact correction without an account and whether the owner can review and apply the one-splice candidate locally without GitHub. The internal mechanical dry run and private operator rehearsal are complete, but no counted human attempt or threshold result exists. [Read the thresholds and stop conditions](/cyberbaser/research/concierge-human-correction-pilot/).
+- [ ] **Q09 remains open while the experiment runs.** The concierge is a study role, not a shipped intake endpoint, editor, hosted review console, automatic writer, or forge integration. Product automation is justified only if the pilot passes its reader-completion, anchoring, integrity, review-burden, owner-preference, and privacy thresholds.
+- [ ] **Make enforcement honest without breaking daily authoring.** `ofm-check` remains report-only, the trust route remains decision-only, and direct maintainer pushes need a compatible validation path. See [Q10](/cyberbaser/reference/open-questions/#q10--what-enforces-the-moderation-policy).
+- [ ] **Close the general-maintainer gap.** The dogfood stack still assumes GitHub and Actions. The pilot tests one local, non-GitHub review-and-apply workflow, but does not choose or ship the hosted, one-click self-hosted, or local-first operating model.
+- [ ] **Freeze stable URLs.** Q06 and the slug-diff gate remain open for the live corpus.
+
+The five-origin federation fixture remains **controlled local evidence only**. It does not create an interoperability claim or an immediate protocol workstream. Extracting and publishing a provisional profile waits until an independently operated peer demonstrates a concrete need to implement against it; the fixture can supply test material if that need appears. [Federation result and limits](/cyberbaser/research/federation/#measured-local-fixture-the-narrow-claim-passed).
 
 ### Reopened research (deleted in error 2026-07-25, restored 2026-07-26)
 
@@ -59,9 +62,10 @@ A knowledge-ops commit removed these open research tasks with no decision record
 
 **Exit criteria for v1 Build:**
 
-- [x] The vault renders and publishes through the publish boundary with leak tests green — **live 2026-07-25: [cybersader.github.io/cyberbase](https://cybersader.github.io/cyberbase/)** (R16: 933 pages + 373 assets, verbatim-path v0, deploy 16 s)
+- [x] The vault renders and publishes through the publish boundary with leak tests green — **live 2026-07-25: [cybersader.github.io/cyberbase](https://cybersader.github.io/cyberbase/)** (R16: 933 Markdown sources selected + 373 assets; 931 public page URLs, verbatim-path v0, deploy 16 s)
 - [ ] The round-trip CI gate is a required check on the vault repo (report-only window running; its first rehearsal caught a masked crash on emoji paths, fixed — see R17)
 - [ ] The maintainer makes a real web edit that lands as a clean splice-only commit — **machinery proven 2026-07-25/26**: two rehearsal edits ran the full circuit (queue → `ofm-check: clean` → merge → auto-redeploy → verified live), and every page now carries an "Edit this page" link. The criterion closes on the maintainer's own first click.
+- [ ] The bounded human-correction pilot records five reader attempts and one independent owner's result against the precommitted thresholds; passing would justify only the smallest measured automation, not close Q09 by itself.
 - [ ] URL contract frozen with the slug-diff gate on
 
 ---
@@ -90,7 +94,7 @@ Each gets a real outline only after the current phase's exit criteria are met. R
 Point at [cybersader/cyberbase](https://github.com/cybersader/cyberbase) through the publish boundary and deploy to a real domain. Depends on the boundary + URL freeze above. (The old "translation layer spike" phase was deleted by R12: forward rendering is bought from the commodity renderer, and the reverse direction needs no serializer because nothing re-serializes.)
 
 ### Contribution beyond the maintainer
-The anonymous write endpoint, the trust-curve classifier, and possibly the [suggestion unit](/cyberbaser/research/option-space/). Triggered by a real external contributor, per R08's honest reading.
+Run the bounded [concierge correction pilot](/cyberbaser/research/concierge-human-correction-pilot/) first. If its precommitted thresholds pass, automate only the measured work around intake, exact source anchoring, and local review-card generation. The trust classifier already exists. No account-free endpoint, browser editor, automatic writer, or hosted moderation surface is shipped. Rich authoring remains architecturally allowed, but this pilot cannot select or justify building it.
 
 ### Community onboarding
 CONTRIBUTING.md, docs, examples, first external contributor.

@@ -10,8 +10,37 @@ test.describe('Smoke', () => {
     await expect(page.locator('.cb-rotate-wrap')).toBeVisible();
     // CTA buttons render
     await expect(page.getByRole('link', { name: /Read the vision/i })).toBeVisible();
-    // Architecture stack SVG renders
-    await expect(page.locator('.cb-stack-svg')).toBeVisible();
+    // Four-lane contribution storyboard renders with honest current-state labels
+    // and no controls that could be mistaken for working product UI.
+    const storyboard = page.locator('.cb-storyboard');
+    const lanes = storyboard.locator(':scope > .cb-jstep');
+    await expect(storyboard).toBeVisible();
+    await expect(lanes).toHaveCount(4);
+
+    await expect(lanes.nth(0)).toContainText('Reader micro-correction');
+    await expect(lanes.nth(0)).toContainText('Cyberbaser concept');
+    await expect(lanes.nth(0)).toContainText('unbuilt');
+    await expect(lanes.nth(0)).toContainText('seven-field concierge study form');
+
+    await expect(lanes.nth(1)).toContainText('Trusted rich authoring');
+    await expect(lanes.nth(1)).toContainText('external editor');
+    await expect(lanes.nth(1)).toContainText('unselected');
+    await expect(lanes.nth(1)).toContainText('source-bound proposal');
+
+    await expect(lanes.nth(2)).toContainText('Maintainer local authoring');
+    await expect(lanes.nth(2)).toContainText('owner local');
+    await expect(lanes.nth(2)).toContainText('working');
+    await expect(lanes.nth(2)).toContainText('authoritative source');
+    await expect(lanes.nth(2)).toContainText('direct local edit');
+
+    await expect(lanes.nth(3)).toContainText('Owner review');
+    await expect(lanes.nth(3)).toContainText('static pilot card');
+    await expect(lanes.nth(3)).toContainText('pending owner');
+    await expect(lanes.nth(3)).toContainText('decision recorded separately');
+    await expect(lanes.nth(3)).toContainText('static local card');
+
+    await expect(page.locator('.cb-storyboard-note')).toContainText('no generalized interactive review UI has shipped');
+    await expect(storyboard.locator('a[href], button, input, select, textarea, summary, [contenteditable="true"], [tabindex]:not([tabindex="-1"]), [role="button"], [role="link"], [role="checkbox"], [role="radio"], [role="switch"]')).toHaveCount(0);
   });
 
   test('announcement banner renders', async ({ page }) => {
@@ -72,14 +101,15 @@ test.describe('Key content pages render', () => {
 });
 
 test.describe('Rich content fixtures (custom components)', () => {
-  test('problem page has the triangle diagram', async ({ page }) => {
+  test('problem page has the trust dial', async ({ page }) => {
     await page.goto(`${BASE}/concepts/problem/`);
-    await expect(page.locator('.cb-triangle-svg')).toBeVisible();
+    await expect(page.locator('.cb-dial')).toBeVisible();
+    await expect(page.locator('.cb-dial-seg')).toHaveCount(3);
   });
 
-  test('architecture page has the hub + glance diagrams', async ({ page }) => {
+  test('architecture page has contribution journey + glance diagrams', async ({ page }) => {
     await page.goto(`${BASE}/design/architecture/`);
-    await expect(page.locator('.cb-hub')).toBeVisible();
+    await expect(page.locator('.cb-journey-4').first()).toBeVisible();
     await expect(page.locator('.cb-glance')).toBeVisible();
   });
 
@@ -88,17 +118,16 @@ test.describe('Rich content fixtures (custom components)', () => {
     await expect(page.locator('.cb-layers')).toBeVisible();
   });
 
-  test('translation layer page has tier tables', async ({ page }) => {
+  test('translation layer page has exact-splice comparison', async ({ page }) => {
     await page.goto(`${BASE}/design/translation-layer/`);
-    await expect(page.locator('.cb-tier').first()).toBeVisible();
-    await expect(page.locator('.cb-tier-1')).toBeVisible();
-    await expect(page.locator('.cb-tier-2')).toBeVisible();
-    await expect(page.locator('.cb-tier-3')).toBeVisible();
+    await expect(page.locator('.cb-tl-splice')).toBeVisible();
+    await expect(page.locator('.cb-tl-splice .cb-glance-panel')).toHaveCount(3);
   });
 
-  test('primitives page has definition blocks', async ({ page }) => {
+  test('primitives page has source-authority and translation visuals', async ({ page }) => {
     await page.goto(`${BASE}/concepts/primitives/`);
-    await expect(page.locator('.cb-def').first()).toBeVisible();
+    await expect(page.locator('.cb-ssot')).toBeVisible();
+    await expect(page.locator('.cb-xlate')).toBeVisible();
   });
 });
 

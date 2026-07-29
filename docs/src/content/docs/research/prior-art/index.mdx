@@ -49,7 +49,7 @@ For each entry: **what they got right**, **what they gave up**, and **the lesson
 - **Web-based editing** — no CMS layer; readers can't edit, period.
 - **MDX components** — pure markdown in, static HTML out. No rich interactive content in-page.
 
-**Lesson for cyberbaser:** Quartz proves that an Obsidian-aware static publisher is viable and not that hard to build. The gap Quartz doesn't fill is *exactly* the contribution layer — which means cyberbaser can learn from Quartz's translation decisions while layering Decap (or similar) on top.
+**Lesson for Cyberbaser:** Quartz proves that an Obsidian-aware static publisher is viable. The gap it does not fill is the owner-controlled contribution boundary. Decap remains useful prior art for contribution UX, but its native writer cannot simply be layered on top: R12 disqualified that whole-file save path. A rich surface needs a separate pinned-base exact-proposal adapter.
 
 ---
 
@@ -127,17 +127,17 @@ For each entry: **what they got right**, **what they gave up**, and **the lesson
 - **No rendered UI** — looks like whatever GitHub's markdown renderer does
 - **Not suitable for long-form content** — works for lists, breaks for articles
 
-**Lesson for cyberbaser:** The awesome-list contribution flow is the **floor** for ease-of-contribution. If contributing to cyberbaser is harder than contributing to `awesome-siem`, we have failed. The three-clicks-to-merge property is the target for Path A (Web CMS).
+**Lesson for Cyberbaser:** The awesome-list flow is the **floor** for discoverability and low-friction proposal intake. Cyberbaser should make a small correction at least as understandable without inheriting GitHub's account wall or implying direct source writes. It is useful UX evidence, not a selected Web CMS path.
 
 ---
 
 ## Synthesis — what the evidence says
 
 > [!tip]+ The pattern
-> **Obsidian fidelity** is solved by Quartz / Digital Garden / Publish.
-> **Zero-friction contribution** is solved by awesome lists / Decap.
-> **No vendor lock-in** is solved by any git-backed solution.
+> **Obsidian-aware rendering** is solved by Quartz, Digital Garden, and Publish.
+> **Low-friction proposal UX** has useful precedents in awesome lists and Open Authoring.
+> **No vendor lock-in** starts with an owner-controlled, versioned source.
 >
-> **Nothing existing has all three at once.** Cyberbaser's hypothesis is that the gap isn't a missing tool — it's a missing *composition*. Take Quartz-style fidelity (via translation layer plugins), bolt on Decap's Open Authoring for the low-friction path, keep a version-controlled store as the source of truth (a git repo today). All parts exist; nobody has put them together.
+> **Nothing existing supplies all three under one safe source boundary.** Cyberbaser's current hypothesis is a missing composition: replaceable reader, rich-editor, forge, and agent surfaces; deliberate adapters that emit pinned, bounded source proposals; an owner-controlled exact-change, integrity, trust, and review boundary; and replaceable renderers outward. The evaluated Decap-style native save paths are evidence about UX, not conforming writers.
 >
-> If the composition works, cyberbaser is novel-by-integration rather than novel-by-invention. That's a much cheaper bet than inventing new primitives.
+> If this composition works, Cyberbaser remains novel by integration where possible, while owning the exact-change and owner-control contract that existing tools do not provide.

@@ -529,6 +529,10 @@ main .content-panel:has(+ .content-panel .cb-hero) {
     z-index: 10;
   }
   .main-frame { padding-inline-start: 0 !important; }
+  /* Starlight only adds auto margins at its 72rem desktop breakpoint.
+   * Once we hide both sidebars here, the capped content container otherwise
+   * stays pinned to the left panel padding across common half-screen widths. */
+  .main-pane .content-panel > .sl-container { margin-inline: auto; }
   .right-sidebar-panel { display: none !important; }
   .right-sidebar-container {
     width: 0 !important; min-width: 0 !important;
@@ -627,212 +631,6 @@ main .content-panel:has(+ .content-panel .cb-hero) {
  * new line as ONE unit when it can't fit alongside the suffix
  * "wiki that anyone can contribute to.". Natural wrapping handles
  * all viewport widths without needing a layout decision in JS. */
-
-/* ────────────────────────────────────────────────────────────────────────
- * Splash architecture stack (home index.mdx)
- * Vertical cross-section: readers at top, web wiki, translation layer
- * (the hot spot), GitHub vault, authoring surfaces at the bottom.
- * Rules live here in brand.css (not inline MDX) so they actually apply
- * to SVG descendants — :global() doesn't work in MDX <style> blocks.
- * ──────────────────────────────────────────────────────────────────────── */
-.cb-stack-wrapper {
-  max-width: 980px;
-  margin: 1.5rem auto 4rem;
-  padding: 0 1rem;
-}
-.cb-stack-svg {
-  width: 100%;
-  height: auto;
-  display: block;
-}
-.cb-stack-caption {
-  text-align: center;
-  font-size: 0.88rem;
-  color: var(--sl-color-gray-2);
-  line-height: 1.65;
-  margin-top: 1.25rem;
-  max-width: 52rem;
-  margin-left: auto;
-  margin-right: auto;
-}
-.cb-stack-caption strong { color: var(--sl-color-white); font-weight: 600; }
-.cb-stack-caption em { color: var(--sl-color-accent-high); font-style: italic; }
-
-/* ── Labels (small uppercase rail labels) ─────────────────────── */
-.cb-stack-svg .cbs-rail-label {
-  fill: var(--sl-color-gray-3);
-  font-size: 10px;
-  letter-spacing: 0.2em;
-  font-family: system-ui, sans-serif;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-.cb-stack-svg .cbs-flow-label {
-  fill: var(--sl-color-gray-3);
-  font-size: 9.5px;
-  font-family: system-ui, sans-serif;
-  font-style: italic;
-}
-
-/* ── Reader circles at the top ───────────────────────────────── */
-.cb-stack-svg .cbs-reader circle {
-  fill: var(--sl-color-gray-6);
-  stroke: var(--sl-color-gray-4);
-  stroke-width: 1.3;
-  transition: stroke 0.3s ease;
-}
-.cb-stack-svg .cbs-reader:hover circle {
-  stroke: var(--sl-color-accent);
-}
-.cb-stack-svg .cbs-reader-icon {
-  font-size: 18px;
-  dominant-baseline: middle;
-}
-.cb-stack-svg .cbs-reader-name {
-  fill: var(--sl-color-gray-2);
-  font-size: 10px;
-  font-family: system-ui, sans-serif;
-  font-weight: 500;
-}
-
-/* ── Standard layer boxes (web wiki, github vault) ────────────── */
-.cb-stack-svg .cbs-layer rect {
-  fill: var(--sl-color-gray-5);
-  stroke: var(--sl-color-gray-4);
-  stroke-width: 1.3;
-  transition: stroke 0.3s ease, fill 0.3s ease;
-}
-.cb-stack-svg .cbs-layer-vault rect {
-  fill: var(--sl-color-gray-5);
-  stroke: #10b981;
-  stroke-width: 1.8;
-}
-.cb-stack-svg .cbs-layer-title {
-  fill: var(--sl-color-white);
-  font-size: 16px;
-  font-family: 'Space Grotesk', system-ui, sans-serif;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-.cb-stack-svg .cbs-layer-title-vault {
-  fill: var(--sl-color-white);
-  font-size: 15px;
-  font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
-  font-weight: 700;
-}
-.cb-stack-svg .cbs-layer-title-hot {
-  fill: var(--sl-color-accent-high);
-  font-size: 18px;
-  font-family: 'Space Grotesk', system-ui, sans-serif;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-}
-.cb-stack-svg .cbs-layer-sub {
-  fill: var(--sl-color-gray-2);
-  font-size: 11px;
-  font-family: system-ui, sans-serif;
-  font-weight: 400;
-}
-.cb-stack-svg .cbs-layer-sub-mini {
-  fill: var(--sl-color-gray-3);
-  font-size: 10px;
-  font-family: system-ui, sans-serif;
-  font-style: italic;
-}
-
-/* ── Translation layer (HOT SPOT) — gentle breathing pulse ───── */
-.cb-stack-svg .cbs-layer-hot rect {
-  animation: cbs-hot-pulse 5s ease-in-out infinite;
-}
-@keyframes cbs-hot-pulse {
-  0%, 100% {
-    filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.15));
-  }
-  50% {
-    filter: drop-shadow(0 0 16px rgba(16, 185, 129, 0.42));
-  }
-}
-
-/* ── Authoring surface boxes at the bottom ────────────────────── */
-.cb-stack-svg .cbs-surface rect {
-  fill: var(--sl-color-gray-6);
-  stroke: var(--sl-color-gray-4);
-  stroke-width: 1;
-  transition: stroke 0.3s ease, fill 0.3s ease;
-}
-.cb-stack-svg .cbs-surface:hover rect {
-  stroke: var(--sl-color-accent);
-  fill: var(--sl-color-gray-5);
-}
-.cb-stack-svg .cbs-surf-title {
-  fill: var(--sl-color-white);
-  font-size: 12.5px;
-  font-family: 'Space Grotesk', system-ui, sans-serif;
-  font-weight: 600;
-}
-.cb-stack-svg .cbs-surface.cbs-surf-hot .cbs-surf-title {
-  fill: var(--sl-color-accent-high);
-}
-.cb-stack-svg .cbs-surf-sub {
-  fill: var(--sl-color-gray-2);
-  font-size: 10px;
-  font-family: system-ui, sans-serif;
-  font-style: italic;
-}
-.cb-stack-svg .cbs-surf-mini {
-  fill: var(--sl-color-gray-3);
-  font-size: 9px;
-  font-family: system-ui, sans-serif;
-}
-
-/* The "inline edit" highlight surface gets its own gentle pulse */
-.cb-stack-svg .cbs-surf-hot rect {
-  animation: cbs-inline-pulse 3.6s ease-in-out infinite;
-}
-@keyframes cbs-inline-pulse {
-  0%, 100% { filter: drop-shadow(0 0 3px rgba(16, 185, 129, 0.25)); }
-  50%      { filter: drop-shadow(0 0 10px rgba(16, 185, 129, 0.55)); }
-}
-
-/* ── Flow arrows (between layers) ─────────────────────────────── */
-.cb-stack-svg .cbs-flow-up {
-  fill: none;
-  stroke: url(#cbs-hot);
-  stroke-width: 1.8;
-  marker-end: url(#cbs-arrow-up);
-}
-.cb-stack-svg .cbs-flow-down {
-  fill: none;
-  stroke: #8b94a3;
-  stroke-width: 1.3;
-  stroke-dasharray: 3 3;
-  marker-end: url(#cbs-arrow-down);
-}
-
-/* Contribution-path arrows — dashed, with animated offset so they
- * visually "flow" upward (toward the vault). Subtle but alive. */
-.cb-stack-svg .cbs-contrib-arrow {
-  stroke-dasharray: 5 4;
-  animation: cbs-flow-dash 1.6s linear infinite;
-}
-@keyframes cbs-flow-dash {
-  0%   { stroke-dashoffset: 18; }
-  100% { stroke-dashoffset: 0; }
-}
-/* The "inline edit" contribution arrow gets a faster, brighter flow */
-.cb-stack-svg .cbs-contrib-hot {
-  stroke-width: 2.2;
-  animation-duration: 1.1s;
-}
-
-/* Honor reduced-motion preferences — suspend all animations. */
-@media (prefers-reduced-motion: reduce) {
-  .cb-stack-svg .cbs-layer-hot rect,
-  .cb-stack-svg .cbs-surf-hot rect,
-  .cb-stack-svg .cbs-contrib-arrow {
-    animation: none;
-  }
-}
 
 /* ────────────────────────────────────────────────────────────────────────
  * Layered stack (cb-layers) — used on ecosystem page to show the four
@@ -1404,6 +1202,7 @@ main .content-panel:has(+ .content-panel .cb-hero) {
   .cb-gate, .cb-gate-cellwrap, .cb-gate-card, .cb-gate-check, .cb-gate-check-tx,
   /* illustration system (bottom of this file) */
   .cb-journey, .cb-jstep, .cb-jstep-hd, .cb-jstep-frame, .cb-jarr,
+  .cb-storyboard, .cb-rich-toolbar, .cb-rich-foot,
   .cb-phone, .cb-phone-screen, .cb-phone-status, .cb-phone-body,
   .cb-ed, .cb-ed-bar, .cb-ed-code, .cb-ed-line, .cb-ed-foot,
   .cb-diffcard, .cb-diffcard-hd, .cb-diffcard-body, .cb-dl,
@@ -2639,6 +2438,76 @@ main .content-panel:has(+ .content-panel .cb-hero) {
     .sl-markdown-content .cb-journey-4 > .cb-jstep:nth-child(3) { grid-area: 4 / 1 / 7 / 2; }
     .sl-markdown-content .cb-journey-4 > .cb-jstep:nth-child(4) { grid-area: 4 / 2 / 7 / 3; }
   }
+}
+
+/* ── Homepage authoring storyboard ────────────────────────────────────────
+ * Four experiences, shown as real interfaces rather than a topology diagram.
+ * The shared journey subgrid keeps each row balanced without fixed heights. */
+.sl-markdown-content .cb-storyboard-title {
+  max-width: 48rem;
+  margin: 2.2rem auto 0;
+  text-align: center;
+}
+.sl-markdown-content .cb-storyboard-lead {
+  max-width: 46rem;
+  margin: 0.65rem auto 0;
+  text-align: center;
+  color: var(--sl-color-gray-2);
+}
+.sl-markdown-content .cb-storyboard { margin-top: 1.8rem; }
+.sl-markdown-content .cb-storyboard .cb-jstep-hd { flex-wrap: wrap; }
+.sl-markdown-content .cb-storyboard .cb-jstep-t { flex: 1 1 10rem; }
+.sl-markdown-content .cb-storyboard .cb-mock-edit,
+.sl-markdown-content .cb-storyboard .cb-review-actions { flex-wrap: wrap; }
+.sl-markdown-content .cb-storyboard .cb-review-av { flex: 0 0 auto; }
+.sl-markdown-content .cb-storyboard .cb-review-who { flex-wrap: wrap; }
+.sl-markdown-content .cb-storyboard-note strong { color: var(--sl-color-white); }
+
+.sl-markdown-content .cb-rich-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.32rem;
+  min-width: 0;
+  padding: 0.38rem 0.7rem;
+  border-bottom: 1px solid var(--sl-color-gray-5);
+  background: var(--sl-color-gray-6);
+}
+.sl-markdown-content .cb-rich-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.6rem;
+  min-height: 1.45rem;
+  padding: 0.12rem 0.35rem;
+  border: 1px solid var(--sl-color-gray-4);
+  border-radius: 5px;
+  color: var(--sl-color-gray-1);
+  font-family: ui-monospace, monospace;
+  font-size: 0.66rem;
+  line-height: 1;
+}
+.sl-markdown-content .cb-rich-tool-strong { font-weight: 800; }
+.sl-markdown-content .cb-rich-tool-em { font-style: italic; }
+.sl-markdown-content .cb-rich-canvas {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+.sl-markdown-content .cb-rich-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 0.5rem 0.7rem;
+  border-top: 1px solid var(--sl-color-gray-5);
+  background: var(--sl-color-gray-6);
+}
+
+@media (max-width: 520px) {
+  .sl-markdown-content .cb-storyboard .cb-jstep-hd :is(.cb-who, .cb-chip) { max-width: 9.5rem; }
+  .sl-markdown-content .cb-storyboard .cb-check-meta { display: none; }
 }
 
 /* ── Figure furniture ─────────────────────────────────────────────────────

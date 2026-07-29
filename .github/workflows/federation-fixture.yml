@@ -1,0 +1,56 @@
+name: Federation fixture
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'spikes/federation-fixture/**'
+      - 'packages/publish/**'
+      - 'packages/projection/**'
+      - 'packages/linkcheck/**'
+      - 'packages/ofm/**'
+      - 'packages/trust/**'
+      - '.github/workflows/federation-fixture.yml'
+  pull_request:
+    paths:
+      - 'spikes/federation-fixture/**'
+      - 'packages/publish/**'
+      - 'packages/projection/**'
+      - 'packages/linkcheck/**'
+      - 'packages/ofm/**'
+      - 'packages/trust/**'
+      - '.github/workflows/federation-fixture.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: federation-fixture-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: spikes/federation-fixture
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.11'
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run tests
+        run: bun test
+
+      - name: Run fixture verifier
+        run: bun run verify

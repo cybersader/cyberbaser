@@ -1,47 +1,60 @@
 ---
 title: Development
-description: How to run the cyberbaser docs site locally, run tests, and deploy.
+description: How to run and validate the canonical docs site and the current v1 packages.
 sidebar:
   order: 0
 status: research
 ---
 
-## Local dev
+Cyberbaser is in **v1 Build**. This repository contains two different publish concerns:
+
+- `docs/` is the Astro + Starlight pipeline for the canonical project knowledge base.
+- The dogfood vault is published separately through the owner-controlled boundary and a pinned Quartz renderer.
+
+GitHub, Actions, Pages, and Quartz are the current dogfood infrastructure, not permanent product dependencies.
+
+## Docs site: local development
 
 ```bash
 cd docs
 bun install
 bun run dev              # http://localhost:4321/cyberbaser/
-bun run dev --host       # also binds to 0.0.0.0 (Tailscale / LAN / Docker)
+bun run dev:host         # bind to 0.0.0.0 for LAN or Tailscale
 ```
 
-Dev server hot-reloads on markdown and component changes. The base path is `/cyberbaser` — remember to include it in test URLs.
+The dev server hot-reloads content and component changes. The base path is `/cyberbaser`, so include it in test URLs.
 
-## Build
+## Docs site: build and tests
 
 ```bash
 cd docs
 bun run build            # static build to docs/dist/
-bun run preview          # serve the built output on :4321
+bun run preview --host   # serve the built output
+bun run test:local       # headless Playwright suites
+bun run test:e2e         # headed browser
 ```
 
-The build runs the full translation layer (remark/rehype plugins), Pagefind search indexing, and sitemap generation.
+The build runs the Starlight content pipeline, Pagefind indexing, and sitemap generation. The docs site publishes research and project direction; it is not the account-free contribution product surface.
 
-## Tests
+## Package tests
 
-Playwright smoke tests verify the site builds, key pages render, and the Nova theme / Starlight plugins are wired correctly.
+Run package tests from the repository root:
 
 ```bash
-cd docs
-bun run test:local       # runs Playwright against local build
-bun run test:e2e         # headed browser
-bun run test:e2e:ui      # Playwright UI mode
+bun test --cwd packages/ofm
+bun test --cwd packages/publish
+bun test --cwd packages/projection
+bun test --cwd packages/linkcheck
+bun test --cwd packages/trust
+bun test --cwd packages/correction
 ```
 
-## Deploy
+`@cyberbaser/correction` is an exact UTF-8 quote-anchor and single-splice, no-I/O primitive for the precommitted [concierge pilot](/cyberbaser/research/concierge-human-correction-pilot/). Passing its tests does not make it a shipped editor, endpoint, writer, or account-free product path.
 
-Currently: dev-only. Deploy is wired to **GitHub Pages** via `.github/workflows/deploy.yml` (it builds with Bun, then uses `actions/upload-pages-artifact` and `actions/deploy-pages`). It's held during Phase R: no public deploy until the content is ready. GitHub Pages is the current target only; the renderer and host are swappable, and self-hosting (for example behind Forgejo) is the preferred path for anything that needs identity. Cloudflare, if used at all, is an edge layer (CDN, WAF, rate-limiting), not the host.
+## Deployments
 
-When you're ready to publish:
-1. Enable GitHub Pages for the repo (Settings → Pages → Source: GitHub Actions).
-2. Push to `main`. The workflow builds the site and deploys it via `actions/deploy-pages`. No extra secrets are required.
+The docs site deploys to GitHub Pages through `.github/workflows/deploy.yml`.
+
+The live dogfood vault uses its own pipeline: fail-closed publication selection, projection and leak verification, pinned Quartz, and GitHub Pages. It currently selects and projects 933 Markdown sources into 931 public page URLs. That stack is evidence that one arrangement works; Cyberbaser's boundary must remain renderer- and forge-agnostic.
+
+Cloudflare, if used at all, is an edge layer for CDN, WAF, or rate limiting, not the host. Self-hosted infrastructure remains preferred for components that eventually require identity or write intake.

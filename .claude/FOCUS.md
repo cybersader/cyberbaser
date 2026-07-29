@@ -2,39 +2,42 @@
 
 > Update when direction changes, milestones complete, or priorities shift.
 
-**Current:** Phase R exit, **shape locked (R12, 2026-07-25) — building.** The gate measurement ran: pipeline D over all 1430 real vault files = **4.6% byte-identical** (tuned: 36.9%), zero mask leaks, zero parse errors, failures = formatting normalization. Verdict: whole-file AST re-serialization can never reach byte fidelity, so the locked shape is **byte-preservation by construction (raw-text splice-only write path) + `@cyberbaser/ofm` as a validator (corpus runner, diff classifier, masking core) + governance**. Full results + reasoning: `/cyberbaser/research/v1-build-plan/` ("Gate result" section). First artifact in progress: the `@cyberbaser/ofm` package.
+**Current:** **v1 Build.** The current product interpretation is an **owner-controlled change boundary** around a version-controlled knowledge base: decide what may publish, accept bounded proposals against pinned source, preserve untouched bytes, classify integrity and trust, and leave final control with the owner. Authoring tools are replaceable spokes: reader controls, trusted rich browser/WYSIWYG/CMS-like tools, forge editors, local Markdown tools, and agents may present different experiences. External spokes converge on exact proposals and owner review; the owner keeps direct local authoring. GitHub, Actions, Pages, and pinned Quartz are the working dogfood stack, not the product essence. The internal agentic correction dry run and private four-command pilot-operator rehearsal completed on 2026-07-28. Together they prove only that one bounded candidate and the `pilot:init` → `pilot:prepare` → `pilot:render` → `pilot:decision` path can complete locally without writing source. The immediate milestone remains the precommitted five-reader, one-independent-owner [concierge human-correction pilot](/cyberbaser/research/concierge-human-correction-pilot/). `@cyberbaser/correction` supplies exact quote anchoring and fail-closed single-splice preparation/application as a no-I/O primitive; neither the package, private kit, nor seven-field study instrument is a shipped editor, generalized adapter contract, writer, or account-free product path.
 
-Last updated: 2026-07-25 (evening — R09 gate run, R12 locked)
+Federation remains the long-term non-central seam. The five-origin fixture is controlled local compatibility only, not independent interoperability and not the next build workstream. Preserve it as evidence; extract a provisional profile only after an independently operated peer demonstrates a concrete need.
+
+Last updated: 2026-07-29 (replaceable-authoring vision aligned; R12 scope clarified without a new decision; independent human pilot still next)
 
 ## Locked This Cycle (do not relitigate without new evidence)
 
 - **Identity / essence:** *an interoperability layer for contributable, version-controlled knowledge bases.* General, not cyber (cyberbase = dogfood). Category word: "layer." Never pitch as "publishing tool / CMS / Obsidian-to-web."
-- **Hub-and-spoke:** the hub (round-trip + trust/moderation + federation later) is the product and is renderer-agnostic; SSGs are swappable spokes. Quartz already wins forward publishing.
+- **Owner-controlled boundary, hub-and-spoke:** the current v1 product is the change boundary around an owner-controlled vault: publish selection, pinned source/base identity, bounded exact changes, integrity/trust judgments, and owner review. Authoring and rendering tools are independently replaceable spokes. External authoring spokes propose; the owner-local editor writes the authority directly. Quartz and GitHub are current dogfood spokes. Federation is the long-term owner-controlled publication seam between independent bases and ordinary meta-wikis, **never a central Cyberbaser database or registry**. The local fixture is controlled evidence only; profile extraction waits for demonstrated peer need.
 - **Contribution model:** maintainer-set **trust curve + moderation queue**; accounts never forced ("contributable, not controllable"); DoS handled at the edge, separate from content moderation.
 - **Hosting/identity:** GitHub Pages current deploy target; Cloudflare edge-only; **self-hosted Forgejo preferred** (RA-01: PKCE against Forgejo OIDC, no OAuth proxy). No hyperscalers.
 - **SSOT:** git, *scoped* — current manifestation, not essence, with an off-ramp (Principle 1 = "a single source of truth you own").
-- **Keystone:** OFM round-trip proven 20/21 (`spikes/ofm-roundtrip/`); markdown-first block schema is the path (mdast-util-to-markdown + CodeMirror 6 leading candidates).
+- **Write-path rule:** the 20/21 fixture spike proved masking through a parse, but the 1,430-file gate measured only 4.6% byte identity and disproved whole-file round-tripping. Cyberbaser-mediated source application uses exact, base-bound operations and preserves untouched bytes by construction; `@cyberbaser/ofm` validates and classifies damage. This constrains adapter output, not rich browser/WYSIWYG/CMS-shaped presentation.
 - **Visual language for the docs:** real-UI mockups (browser windows, file trees, diffs, review cards) with tool logos; no abstract box diagrams; equal grids; topics varied and general.
 
 ## Project State
 
-- Phase-0 Astro + Starlight prototype: parked; publishes the research (~81 pages, 77 Playwright tests green).
-- Docs site = **the canonical KB** (vision-swept 2026-06-21). `.claude/` numbered files are now pointer stubs; see `PROJECT_CONTEXT.md` → knowledge-ops map.
-- Problem, ecosystem, primitives, prior art, vision, principles, architecture, translation-layer, contribution-workflows: all substantive with visuals. Roadmap exit criteria re-anchored (see `20-ROADMAP.md`).
+- **Current phase: v1 Build.** Research & Foundations closed on 2026-07-25; the [public roadmap](/cyberbaser/getting-started/roadmap/) carries the exit criteria.
+- The current built product is a content-integrity and governance pipeline around an owner-controlled vault: publish boundary, projection, OFM validator, link checker, trust classifier, and exact-correction primitive.
+- The GitHub-backed dogfood path is live: 933 Markdown sources are selected and projected into 931 public page URLs through pinned Quartz, with two rehearsed contribution loops. This proves one infrastructure arrangement, not that GitHub or Quartz defines Cyberbaser.
+- The account-free product path is unshipped. The internal agentic dry run and private pilot-operator rehearsal completed, but no reader attempt, independent-owner review, owner-controlled application, live correction, human timing, or owner-preference result exists. The rehearsals count toward none of the pilot thresholds and do not close Q09.
+- Docs site = **the canonical KB**. Astro + Starlight publishes the research and remains parked as a product surface; `.claude/` is the fresh-agent orientation and pointer layer.
 
 ## What's Next
 
-**The old items 2-3 (zero-account bot evaluation, 3-way CMS bake-off, plugin execution testing) are retired** — the plan critique showed all three were pre-R08 artifacts serving contributors who don't exist yet (`/cyberbaser/research/plan-critique/`). The sequence now:
+**Immediate milestone: run the precommitted concierge human-correction pilot exactly as written.** The sequence now:
 
-1. ~~The gate measurement~~ **RUN 2026-07-25** (results in `/cyberbaser/research/v1-build-plan/`): 4.6% byte-identical, 0 mask leaks, 0 parse errors, 83.1% of files OFM-free, 7.3 s full pass on ext4, ~780x 9p penalty measured, 0 files >100 MB. Q05 + the LFS check closed as side effects.
-2. ~~Lock the shape~~ **LOCKED 2026-07-25 (R12)**: byte-preservation by construction + validator + governance. No whole-file re-serialization in the write path, ever.
-3. **Build `@cyberbaser/ofm`** (~2 d, in progress): the validator package — corpus runner, two-version diff classifier, masking core, 21 fixtures + corpus-derived cases as tests, `ofm-check` CLI. The first artifact the maintainer can actually run.
-4. ~~Wire the CI gate~~ **LIVE 2026-07-25** (cyberbase#4 merged, report-only): every markdown PR on the vault now gets `ofm-check` classification (clean/suspect/damage). Flip to required after the observation window by removing `continue-on-error` + branch protection. ~~Notion-leg audit~~ **DONE 2026-07-25 (R13)**: sync dormant since 2024-08, frozen and absorbed — `/cyberbaser/research/notion-writer-audit/`.
-5. ~~Publish boundary + Quartz spike~~ **DONE 2026-07-25 (R14, 3-agent wave)**: Quartz **adopted** — real vault, 1:55 build, 20/20 OFM checklist; census found **0 slug collisions, 2 lint violations** (mass rename dead). `@cyberbaser/publish` v0.1 built: selector (fail-closed, byte-identical, audience-ready) + slug contract + safety lint, 91 tests green. Results: `/cyberbaser/research/quartz-spike-results/`.
-6. ~~Pre-publish list + first deploy~~ **LIVE 2026-07-25 (R16): https://cybersader.github.io/cyberbase/** — 933 pages + 373 assets through projection → pinned Quartz v4.5.2 → Pages. publish.yml agent-authored/maintainer-approved (R15); v0 ships **verbatim paths** (D2 lowercase deferred to projection v2 pending an asset-alias story); CI build 160 s, deploy 16 s, 25% of cap.
-7. ~~The contribution loop~~ **CLOSED + PROVEN 2026-07-25/26 (R17)**: two rehearsal PRs ran the full circuit (edit → queue → `ofm-check` → merge → auto-redeploy → verified live); the gate's quotepath crash was caught by rehearsal #1 and fixed; **every page now carries "Edit this page"** (931/931 links verified). Formal criterion 3 closes when the maintainer personally clicks Edit and lands one.
-8. ~~Tracks 2 + 3~~ **SHIPPED 2026-07-26 (R18)**: `@cyberbaser/linkcheck` (first real number: 1145 broken → **779** after the `RelativeFolderLinks` fix; attachment class 248 → 7), theme + the reported explorer-scroll bug (root-caused to upstream `overscroll-behavior`, verified with headless wheel events), and `@cyberbaser/trust` landed in the vault as **decision-only** labeling. Five packages, **151 tests green**.
-9. **Next up:** (a) **the identity gap** — `agents:` is empty because there's no bot account yet; agent auto-merge is inert until one exists (this is the real blocker on the agent-contributor thesis); (b) flip `ofm-check` to required (read the logs, not just the checkmarks — R17); (c) wire linkcheck into the publish workflow at the frozen baseline budget (ratchet, per R19); (d) URL freeze + slug-diff gate; (e) Quartz v5 evaluation (pin stays v4.5.2 until re-measured).
+1. **Keep the product boundary honest.** The v1 product is the owner-controlled change boundary: publication selection, exact byte-preserving candidate changes, integrity classification, trust routing, and owner decision. GitHub/Actions/Pages and Quartz remain dogfood adapters and spokes.
+2. ~~Build and mechanically dry-run the exact-correction path~~ **COMPLETED 2026-07-28:** `@cyberbaser/correction` resolves one exact UTF-8 quote, prepares one base-bound splice, and fails closed if the bytes changed. The internal run completed local projection, pinned rendering, link-delta comparison, redacted review output, source-isolation checks, and cleanup for one spelling-only candidate. It performed no source write or deployment and supplies no human or independent-owner evidence.
+3. ~~Prepare the private pilot operator path~~ **COMPLETED 2026-07-28:** the ignored-workspace `pilot:init` → `pilot:prepare` → `pilot:render` → `pilot:decision` sequence passed a complete Cyberbase-profile rehearsal, including a fresh decision-time render verification. Source bytes and Git status remained unchanged, every artifact reported zero counted evidence, and the rehearsal workspace was removed.
+4. **NEXT: run the independent pilot:** five ordinary readers, one independently operated Markdown-KB owner, a blank account-free study form, owner-confirmed page-to-source mapping, local review cards, owner-controlled local application, and thresholds fixed before attempt one. All five reader rows and all human thresholds remain `Not run`; Q09 remains open.
+5. **Let evidence decide the smallest next automation.** A pass may justify intake, anchoring, or review-card automation only where the measured concierge burden supports it. It does not select or validate a rich editor, automatic writer, hosted console, or generalized adapter as the next build. Conforming rich authoring remains architecturally allowed; this pilot cannot justify it. A failure narrows or stops the tested claim.
+6. **Make enforcement honest without breaking local authoring (Q10):** OFM is report-only, trust is decision-only, and the maintainer's direct push path still needs compatible validation.
+7. **Close the remaining concrete gaps:** verify contributor attribution (Q08), freeze the URL contract and slug-diff gate (Q06), and decide the operating model for a maintainer who does not use GitHub.
+8. **Preserve federation as long-term evidence:** keep the five-origin fixture bounded and local. Seek a concrete need from an independently operated peer before extracting any provisional profile or conformance work.
 
 **Closed by R19 — do NOT reopen without new evidence:** the 669 remaining broken links are the maintainer's inherited content debt (old Notion exports), explicitly out of scope; the 43 emoji folder renames are declined (73 path-qualified wikilinks, and they are daily navigation). A future agent finding a pile of broken links or ugly encoded URLs should read R19 before "fixing" anything.
 
@@ -46,11 +49,13 @@ Last updated: 2026-07-25 (evening — R09 gate run, R12 locked)
 
 ## Deliberately NOT Doing Right Now
 
-- Locking any of the three v1 shapes before the gate measurement (R09)
-- Building the CMS, editor, auth, or collaboration features before the shape is locked
-- Publishing the real vault before selective publishing has a mechanism (Phase 3 gate)
-- Mixed-privacy, RBAC, real-time collaboration inside cyberbaser — assigned to the private sibling project (see `.workspace/sibling-boundary-analysis.md`)
-- Extending the Phase-0 prototype beyond what publishing the research requires
+- Whole-file re-serialization, direct external source writes, or a CMS/sidecar database becoming a second authority; R12 ruled those out by measurement. Rich browser or CMS-shaped presentation is not the banned part
+- Selecting or building the rich trusted-contributor editor before evidence and a separate product decision justify that work
+- Calling the concierge, seven-field study form, local review card, or `@cyberbaser/correction` primitive a shipped editor, generalized adapter contract, endpoint, automatic writer, or account-free contribution product
+- Promoting the federation fixture into a production package, provisional profile, live Q06 URL contract, registry, shared runtime, global identity/trust system, or remote write endpoint before demonstrated peer need
+- Calling controlled local fixture compatibility “interoperability” before an independently operated implementation exists
+- Mixed-privacy, RBAC, real-time collaboration inside cyberbaser; assigned to the private sibling project (see `.workspace/sibling-boundary-analysis.md`)
+- Extending the Astro + Starlight docs site into the product surface; it publishes the canonical KB
 - Relitigating locked decisions above without new evidence
 
 ## Running the Docs Site

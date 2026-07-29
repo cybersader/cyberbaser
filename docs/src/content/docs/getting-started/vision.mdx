@@ -7,7 +7,9 @@ status: research
 tags: [vision, identity, federation]
 ---
 
-**Anyone can fix a page they are reading, and the person who owns that page keeps the file.** Cyberbaser is the layer that makes both true at once: a stranger edits on the web, the change comes back as clean markdown in a vault its owner controls, and the owner approves it without having to be a developer. The long arc is that those vaults link to each other, so a wiki is one web among many rather than one site standing alone.
+**Anyone can improve a page through an interface that fits the work, while the person who owns that page keeps the file.** Cyberbaser is the layer that makes both true at once. A reader can propose a small correction where they notice it. A trusted contributor can use a richer browser or WYSIWYG surface. The owner keeps authoring locally and decides which external proposals enter the authoritative Markdown. The long arc is that independently owned bases link to each other, so a wiki is one web among many rather than one site standing alone.
+
+Cyberbaser does not prescribe one authoring interface. Forms, inline editors, rich browser tools, CMS-like front ends, forge editors, local Markdown tools, and agents may all be replaceable spokes. Their presentation can differ; the invariant is that an external spoke submits a bounded, source-bound proposal through the owner-controlled change boundary instead of regenerating or directly owning the source.
 
 <div class="cbv-story">
   <div class="cbv-beat">
@@ -56,7 +58,7 @@ tags: [vision, identity, federation]
     <span class="cbv-beat-st"><span class="cbv-tag cbv-tag-built">Built</span> Merge to live is measured. The credit row is not built.</span>
   </div>
 </div>
-<p class="cb-fig-cap">The whole product is this loop. Fix it where you read it, approve it where you happen to be, and the file in the owner's vault stays clean markdown the entire time.</p>
+<p class="cb-fig-cap">Reader correction is one contribution experience, not the whole product. Rich trusted-contributor authoring, the owner's local editor, and the owner's review boundary are separate experiences that can evolve independently around the same authoritative Markdown source.</p>
 
 :::note[How to read this page]
 This is the vision in full, **including the parts that do not exist**. Every capability carries a status chip, so nothing here is quietly promised. For what is actually running this week, see [Direction](/cyberbaser/getting-started/direction/). For why the pieces are shaped this way, see [Principles](/cyberbaser/getting-started/principles/).
@@ -83,7 +85,7 @@ Some of that shipped. Some was decided against for a written reason. Some simply
 <div class="cbv-led">
   <div class="cbv-led-row">
     <span class="cbv-tag cbv-tag-defer">Deferred</span>
-    <span class="cbv-led-tx"><strong>Click "edit page" and edit right there</strong><span class="cbv-led-sub">A raw text-editing widget ships when a real non-git contributor is blocked, or when mobile friction recurs. Today "Edit this page" is on every published page and it opens GitHub's editor. <em>Honest caveat: the trigger cannot currently fire, because there is no anonymous surface for such a contributor to arrive on and nothing instrumented to notice one.</em></span></span>
+    <span class="cbv-led-tx"><strong>Click "edit page" and edit right there</strong><span class="cbv-led-sub">A replaceable browser authoring surface remains part of the vision. It may be a lightweight correction control, raw editor, rich WYSIWYG experience, or another conforming interface; R12 constrains its proposal output, not its presentation. Today "Edit this page" is on every published page and opens GitHub's raw editor. No product-owned browser surface is shipped or instrumented yet.</span></span>
   </div>
   <div class="cbv-led-row">
     <span class="cbv-tag cbv-tag-built">Built</span>
@@ -107,7 +109,7 @@ Some of that shipped. Some was decided against for a written reason. Some simply
   </div>
   <div class="cbv-led-row">
     <span class="cbv-tag cbv-tag-killed">Killed</span>
-    <span class="cbv-led-tx"><strong>A git-backed CMS as the zero-git path</strong><span class="cbv-led-sub">Every candidate re-serializes whole files, and re-serialization was measured at 4.6% byte-identity across 1430 real files. No CMS in the write path, ever. The design pages still describe one; that is documentation debt, not a live plan.</span></span>
+    <span class="cbv-led-tx"><strong>A serializer-backed CMS writer as the zero-git path</strong><span class="cbv-led-sub">Every evaluated candidate regenerated whole files, and re-serialization measured 4.6% byte identity across 1,430 real files. Those save adapters are disqualified. A rich browser, WYSIWYG, or CMS-like interface remains allowed as a replaceable authoring spoke if it emits bounded source proposals and never regenerates untouched Markdown.</span></span>
   </div>
   <div class="cbv-led-row">
     <span class="cbv-tag cbv-tag-killed">Killed</span>
@@ -143,7 +145,7 @@ Built, and not asked for in 2024:
 
 Bought for free by adopting a commodity renderer: sitemap, RSS, per-page social images, alias redirects, backlinks, hover previews, and search. That is the hub-and-spoke architecture working exactly as intended, and nobody ever wrote it down as a win, which is why it reads as drift instead.
 
-One thing to correct rather than celebrate: **graph view was deliberately deferred** on the only usability evidence available, which said it is a writer's tool that confuses readers. The renderer's default layout ships it anyway. A reasoned product decision was reversed by a dependency's defaults, and nobody noticed either the reversal or the free wins that came with it.
+One thing to correct rather than celebrate: **graph view was deliberately deferred** on the only usability evidence available, which said it is a writer's tool that confuses readers. The renderer's default layout shipped it anyway. That reversal was corrected on 2026-07-29 after browser diagnostics found the graph allocating a 3200×2400 WebGL canvas in a collapsed sidebar and continuing Pixi/D3 work. The docs override now omits the graph while retaining lightweight backlinks.
 
 </details>
 
@@ -189,7 +191,7 @@ Related reading: [The problem](/cyberbaser/concepts/problem/) · [Contribution o
 
 ### A web of webs where you control your web
 
-One wiki is a dead end. The value shows up when knowledge bases can **reference each other** without a central directory in the middle: your wiki cites a page in mine, mine shows that yours cites it, and neither of us signs up for anything. Each side keeps its own files, its own host, and its own rules about who may contribute.
+One wiki is a dead end. The value shows up when independently owned bases can **reference, curate, annotate, compare and fork each other** without a central Cyberbaser database: your wiki cites a page in mine, an ordinary meta-wiki publishes a collection containing both, another meta-wiki disputes its mapping, and nobody gains authority over anyone else's files. Each base keeps its own host, publication state, history, rights and contribution rules.
 
 <div class="cbv-fed">
   <div class="cbv-fed-col">
@@ -217,20 +219,18 @@ One wiki is a dead end. The value shows up when knowledge bases can **reference 
     <span class="cbv-fed-foot">Files: their laptop · theirs</span>
   </div>
 </div>
-<p class="cb-fig-cap">Two wikis, two owners, two hosts, nobody's account in the middle. This is the part with the most written research behind it and the least work done on it.</p>
+<p class="cb-fig-cap">This is the level-zero experience: a direct owner link still works with every federation service down. Meta-wikis, inventories, annotations, graph views and search providers add context around that link; none sits in its click path.</p>
 
 <details class="cbv-more">
 <summary>What was already researched, what it would take, and the honest status</summary>
 
-An 83-system survey looked at [Nostr](https://nostr.com/), [ActivityPub](https://www.w3.org/TR/activitypub/), the [AT Protocol](https://atproto.com/), IPNS, [Ward Cunningham's Federated Wiki](http://fed.wiki.org/), Matrix, and [decentralised identifiers](https://www.w3.org/TR/did-core/). Two findings matter here.
+The earlier 83-system survey looked at [Nostr](https://nostr.com/), [ActivityPub](https://www.w3.org/TR/activitypub/), the [AT Protocol](https://atproto.com/), IPNS, [Ward Cunningham's Federated Wiki](http://fed.wiki/), Matrix, and decentralized identifiers. Its durable finding still holds: **git has a structural zero on federation**, and changing the source of truth does not remove the need for a connection layer.
 
-**Git has a structural zero on federation.** It scored 21 out of 26 against requirements derived from this project's own constraints, and two of its three zeros are sub-repository access control and federation or discovery. Git has no namespace, no announce, no crawl.
+The protocol sketch from that survey does not hold. The current [federation research](/cyberbaser/research/federation/) rejects `did:web + custom /.well-known/ manifest + commit-hash harvest` as the spine. The replacement is **federation by publication**: ordinary direct HTTPS links form the durable floor; each base publishes its own descriptor, public inventory, outbound Linksets, revisions, rights and capabilities; ordinary meta-wikis publish source-qualified collections, mappings, annotations and licensed mirrors; and every crawler, graph database, cache and search provider is a disposable view.
 
-**No alternative fixes that zero without breaking something git satisfies by definition.** The systems with native federation are the wrong primitive for versioned documents, and the ones with the best permission models do not store markdown. So the recorded conclusion is that **a federation layer has to be built regardless of the source-of-truth choice**, which means federation is not a reason to leave git and is not blocked by anything.
+That shape permits recursion and disagreement without a central Cyberbaser database. A meta-wiki can contain another meta-wiki, fork its collection, dispute its mapping, disappear, or be replaced. None receives naming, merge, moderation or truth authority. Signatures and digests can prove limited facts about bytes; they do not prove truth or permission.
 
-The sketched shape, retrofitted in front of git rather than replacing it: a `/.well-known/` manifest describing the knowledge base, `did:web` identity anchored on domain ownership, and harvest keyed on content hashes so a subscriber can tell exactly what changed. Nostr's lesson is the one to steal: identity is a keypair rather than an account, and the relay you use is replaceable without losing your identity or your audience.
-
-**Status, stated plainly: federation is named as a pillar in eight files and has shaped zero decisions and produced zero tasks.** It needs a verdict of its own, the same as everything else on this page: own it, defer it with a trigger, or kill it. Right now it is the one item with no owner.
+**Status, stated plainly:** the architecture is researched and the next falsification task is active, but no network feature is built and no R-number locks it. The controlled prototype uses three subject wikis, two competing meta-wikis, two differently ranked search providers and one deletable cache. It is scoped to run locally now rather than wait for an outside operator; an independently implemented peer is still required before calling the profile interoperable.
 
 Full survey: [Is git the right source of truth?](/cyberbaser/research/source-of-truth/) · design sketch: [Federation](/cyberbaser/research/federation/) · original brief: [Challenge 09](/cyberbaser/agent-context/zz-challenges/09-source-of-truth-alternatives/)
 
@@ -252,7 +252,7 @@ The reconciliation, stated once so it stops drifting: **compose where a commodit
   <div class="cb-ledger-col cb-ledger-not">
     <span class="cb-ledger-hd">Nothing to compose, so it is ours</span>
     <div class="cb-ledger-row"><span class="cb-ledger-ic cb-ledger-no">!</span><span class="cb-ledger-tx"><strong>A rendered preview per proposal</strong><span class="cb-ledger-sub">The current host deploys exactly one environment per repository. Designed at three days; not built. This is what the phone approval depends on.</span></span></div>
-    <div class="cb-ledger-row"><span class="cb-ledger-ic cb-ledger-no">!</span><span class="cb-ledger-tx"><strong>An anonymous write endpoint</strong><span class="cb-ledger-sub">The only always-on piece in the design, and the reason Principle 3 has no implementation today</span></span></div>
+    <div class="cb-ledger-row"><span class="cb-ledger-ic cb-ledger-no">!</span><span class="cb-ledger-tx"><strong>An anonymous proposal-intake endpoint</strong><span class="cb-ledger-sub">The only potentially always-on piece in the design. It may accept proposals, but cannot write canonical source or authorize application</span></span></div>
     <div class="cb-ledger-row"><span class="cb-ledger-ic cb-ledger-yes">✓</span><span class="cb-ledger-tx"><strong>Knowing a clean edit from a damaging one</strong><span class="cb-ledger-sub">Built, and the clearest example of the rule. No renderer or forge can tell you that a tool just flattened your wikilinks.</span></span></div>
   </div>
 </div>
@@ -265,7 +265,7 @@ The reconciliation, stated once so it stops drifting: **compose where a commodit
 | A rendered preview before approving | Designed, priced at three days, not built | A second deploy target with origin isolation; the current host allows one environment per repository |
 | Approving from a phone | Not built | The preview above; it is the whole point of the phone case |
 | Auto-approval for trusted contributors on trivial changes | Classifier built, decision-only | The classifier labels a route; it does not merge. The gate workflow has never executed. |
-| Submitting a change with no account | Not built | The anonymous write endpoint, which was the single strongest recommendation of the adversarial review and was deferred anyway |
+| Submitting a change with no account | Not built | A proposal-intake mechanism that cannot write source or authorize application; the bounded human pilot runs first |
 | Contributor attribution on the page | Not built | A decision, first. See the ledger above. |
 | The maintainer never leaves their own editor | True today | Nothing. This one works. |
 
@@ -304,7 +304,7 @@ These are journeys, not features, and the examples deliberately vary. Swap in a 
 
 **The zero-git contributor.** An HR lead reads the onboarding page in their company handbook and spots an outdated reference. They fix it in place. What happens next is the maintainer's setting: on an open wiki it submits anonymously, on a tighter one they verify an email first. Either way it lands in a queue rather than going straight live. They never clone anything and never learn git. **Today this person's only route is the forge's web editor, which needs an account, so this journey is the vision rather than the present.**
 
-**The maintainer.** Changes arrive in a queue. The trust curve they set when they stood the wiki up decides how much scrutiny each one gets: anonymous edits queue heavily, verified contributors get faster review, long-trusted contributors edit directly. The maintainer never leaves their own editor as the primary authoring surface, and web contributions flow into the same file they edit by hand, with no parallel system to keep in sync. **Measured, honestly: the loop currently takes three to five minutes, not the sixty to ninety seconds an earlier draft of this page claimed.**
+**The maintainer.** External proposals arrive through an owner-controlled review boundary. The trust curve they set when they stood the wiki up decides how much scrutiny each one gets: anonymous proposals queue heavily, verified contributors receive faster review, and long-trusted contributors may receive a lighter policy route. Every external spoke still submits a pinned, bounded proposal; none writes the authority directly. The maintainer keeps their own local editor as the primary direct-authoring surface, with no parallel content system to synchronize. **Measured, honestly: the current GitHub-backed loop takes three to five minutes, not the sixty to ninety seconds an earlier draft claimed.**
 
 </details>
 

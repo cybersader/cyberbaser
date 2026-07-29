@@ -150,18 +150,18 @@ Logseq's file→DB migration is entering its **fourth year**, with markdown expo
 
 ### Federation + discovery protocols
 
-How does one knowledge base find and pull from another, the way DNS lets one site find another? **No existing protocol fully solves this discovery problem.** The surprise: a 2002 protocol — [OAI-PMH](https://www.openarchives.org/pmh/) — is architecturally *closer* to what cyberbaser needs (crawl + incremental harvest by datestamp) than any modern "decentralized" protocol, because ActivityPub / AT Protocol / Nostr all optimize for ephemeral social delivery and treat durable versioned documents as an afterthought.
+How does one knowledge base find and follow another without a central Cyberbaser database? **No single protocol supplies the whole model, because the durable answer is composition rather than a network substrate.** Ordinary direct HTTPS links provide the failure floor; owner-published descriptors, inventories and Linksets add machine-readable discovery; local crawlers build disposable views; optional feeds and transports accelerate updates. OAI-PMH remains useful harvesting prior art, but it is one adapter among several rather than the federation spine.
 
 | Protocol | Solves | Viability | Note |
 |---|---|:---:|---|
-| [Federated Wiki](http://fed.wiki/) (Ward Cunningham) | discovery + fork-across-sites | medium | **Closest prior art.** Worked since 2011. Failed on UX, not tech: neighborhoods are *session-scoped* and evaporate on refresh. JSON, not markdown. |
-| [OAI-PMH](https://www.openarchives.org/pmh/) | crawl / incremental harvest | low | The right *shape* for KB discovery — but metadata-only, no content, no auth. |
-| [ActivityPub](https://www.w3.org/TR/activitypub/) + [WebFinger](https://webfinger.net/) | social federation + identity | low | Wrong primitive for versioned docs: object IDs are single-server, no versioning, no transclusion. |
-| [Matrix](https://matrix.org/) | **federated access control** | low | Best federated ACL model (power levels) — but rooms are chat, not pages. |
-| [DIDs](https://www.w3.org/TR/did-core/) (`did:web`) | portable identity | medium | Not federation itself, but the identity primitive any federated KB needs. Pragmatic via domain ownership. |
-| [Nostr](https://nostr.com/) (NIP-23) | addressable content | low | Markdown-ish + addressable, but no ACL, no versioning, no real crawl. |
+| [Federated Wiki](http://fed.wiki/) (Ward Cunningham) | fork-across-sites and visible provenance | medium | **Closest product prior art.** Its owned-copy and neighborhood ideas matter; its bespoke page model and session-scoped discovery do not become the substrate. |
+| [Linkset](https://www.rfc-editor.org/rfc/rfc9264.html) | independently published typed links, including third-party contexts | high | The key graph-publication primitive, provided consumers retain publisher and retrieval provenance. |
+| [ResourceSync](https://www.openarchives.org/rs/1.1/resourcesync) | complete inventories, changes, deletions, dumps and rebuild | high | The strongest recovery candidate. It is source publication, not authentication or truth. |
+| [OAI-PMH](https://www.openarchives.org/pmh/) | incremental metadata harvest | low | Useful repository adapter and prior art, but metadata-oriented and requires a known base URL. |
+| [ActivityPub](https://www.w3.org/TR/activitypub/) + [WebFinger](https://webfinger.net/) | social delivery and known-entity discovery | low | Useful optional notification patterns, not authoritative document history or ordinary-link discovery. |
+| [DIDs](https://www.w3.org/TR/did-core/) and [Nostr](https://nostr.com/) | portable keys and signed announcements | optional | Neither is required for base or page identity. Signatures authenticate covered bytes, not truth, rights or local trust. |
 
-The composed answer: a minimal "DNS-for-KBs" would need **`did:web` identity + a `/.well-known/kb-manifest.json` discovery endpoint + an OAI-PMH-style incremental harvest keyed on git commit hashes + addressable content records.** Every piece exists; none is assembled. And critically — **this layer must be built regardless of SSOT**, so it is not a reason to leave git.
+The corrected composed answer is **federation by publication**: owner-controlled HTTPS pages and direct links; an arbitrary-path descriptor advertised from normal pages; source-owned inventories and change information; Linksets for outbound and third-party relationships; and source-qualified collections, mappings and annotations published by ordinary meta-wikis. Crawlers, graph stores and search providers are disposable views. No custom well-known path, DID method, git commit hash, registry or mandatory index sits in the authority chain. This layer is still needed regardless of SSOT, so it is not a reason to leave git.
 
 ### Hybrid CRDT + git ("edit live, archive to git")
 
@@ -181,7 +181,7 @@ None of Obsidian Sync / Publish / Headless / LiveSync / Relay can be the SSOT un
 
 The strongest good-faith case for *replacing* git, argued by an adversarial agent against the full evidence.
 
-**Position:** Adopt **Jazz/CoJSON** as the authoritative role-gated store + a one-way git+`.md` mirror generated by an Obsidian-syntax-aware serializer + `did:web` KB manifests for federation. Git survives as a *derived* archive, not the arbiter of who-sees-what. Trigger is **not v1** — it's the v2+ mixed-privacy + federation vision, where git's two zeros become unfixable.
+**Position:** Adopt **Jazz/CoJSON** as the authoritative role-gated store + a one-way git+`.md` mirror generated by an Obsidian-syntax-aware serializer + an owner-published federation profile. Git survives as a *derived* archive, not the arbiter of who-sees-what. Trigger is **not v1**: it is the v2+ mixed-privacy vision, where git's access-control zero becomes unfixable. The newer [federation research](/cyberbaser/research/federation/) shows that public federation itself does not require changing the SSOT.
 
 **Best arguments:**
 - Git's two `0/2` scores are *precisely* the v2+ vision pillars. The CMS layer can't fix them — it inherits GitHub's repo-level all-or-nothing read access.
@@ -199,7 +199,7 @@ The strongest good-faith case for *keeping* git, treating every higher capabilit
 - **Constraint 3 is a git tautology.** "No lock-in / vanilla-Obsidian-survives" is satisfied by exactly one property: the authoritative store is plain `.md` bytes with versioning. Git *is* that. Every contender scoring `obsidian=no` fails this by construction. Git is the *only* surveyed system where "the vault survives if cyberbaser disappears" is true by definition rather than by a serializer someone must keep writing.
 - **The CMS layer genuinely neutralizes the non-git-user weakness** — and the most mature anonymous-contribution path on the planet ([Decap open authoring](https://decapcms.org/docs/open-authoring/)) sits *directly on top of git*. You get the non-technical UX *and* keep plain files *and* keep the review gate.
 - **The PR review gate is the killer feature, not the friction.** Three independent research tracks converged: every CRDT/sync alternative auto-converges with no human-review step. For a wiki where factual accuracy *is* the product, that is fatal. Git is the only surveyed system with draft→review→publish as a first-class primitive.
-- **Federation + mixed-privacy are retrofittable in front of git** — and no alternative SSOT ships them either, so you give up nothing by waiting. Every KB is already a cloneable, hash-versioned git mirror: an ideal harvest target.
+- **Public federation is retrofittable in front of git** because the source base can generate descriptors, inventories, Linksets and exact public representations from its fail-closed projection. Mixed privacy remains the separate hard problem. Git commits may be provenance, but they are not network identity or the harvest key.
 
 **Its own honest weakness (the agent's words):** if the v2+ mixed-privacy + federation vision is the *real* destination rather than a someday-maybe, then "keep git and bolt everything on" quietly concedes that **git stops being the arbiter of visibility the moment mixed-privacy ships** — you end up running a permission-aware content API as the true access boundary, with git demoted to a file store behind it. At that point a purpose-built system with native field-level roles + a git-export mirror might be the more honest architecture — the *inverse* of this position.
 
@@ -227,7 +227,7 @@ Concretely:
 
 **v1 (ship on git):** GitHub repo as SSOT holding plain Obsidian `.md`, **continuously mirrored to Forgejo/Codeberg** to break vendor dependence + [Decap/Sveltia open authoring](/cyberbaser/agent-context/zz-challenges/02-cms-evaluation/) for anonymous contribution + branch protection & required review as the editorial gate + the existing [Astro/Starlight](/cyberbaser/design/architecture/) publish pipeline.
 
-**v2+ (retrofit in front of git, SSOT unchanged):** mixed-privacy via separate-repo tiers (zero-engineering) graduating to a permission-aware read/edit API proxy; federation via `/.well-known/kb-manifest.json` + OAI-PMH-style harvest keyed on commit hashes + `did:web` identity. Real-time collab deferred until an Obsidian-syntax-aware CRDT↔`.md` serializer with a debounced git-commit pipeline exists.
+**v2+ (retrofit in front of git, SSOT unchanged):** mixed-privacy via separate-repo tiers graduating to a permission-aware read/edit API proxy; public federation via owner-controlled HTTPS publication, direct links, an arbitrary-path descriptor, complete inventories, Linksets, and ordinary meta-wikis whose claims remain source-qualified. Every crawler, graph store and search index is a swappable spoke. Real-time collaboration stays deferred until an Obsidian-syntax-aware CRDT↔`.md` serializer with a debounced git-commit pipeline exists.
 
 **Run in parallel as R&D (don't adopt):** prototype the Jazz/CoJSON + serializer path. The day that serializer round-trips wikilinks/callouts/embeds loss-free is the day the off-ramp opens.
 

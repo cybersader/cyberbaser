@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "attemptId": "HC-01",
+  "profile": "cyberbase-rehearsal",
+  "repository": "https://github.com/cybersader/cyberbase",
+  "checkoutDir": "",
+  "baseCommit": "",
+  "sourcePath": "",
+  "publicUrl": "",
+  "sourceAuthorizedForLocalProcessing": false,
+  "independentOwnerAttested": false,
+  "readerUnaided": false,
+  "accessInterruption": false,
+  "correctionKind": "typo",
+  "selectorContext": {},
+  "ownerPolicyRevision": "cyberbase-rehearsal-anonymous-full-review-v1",
+  "ownerPolicy": {
+    "trusted": [],
+    "agents": [],
+    "caps": {
+      "lines": 10,
+      "files": 1,
+      "proseWords": 25,
+      "typoLines": 4,
+      "typoWords": 4
+    },
+    "allowedNewFolders": [],
+    "frontmatterAllowlist": []
+  },
+  "publicationBoundary": "cyberbaser",
+  "renderer": {
+    "profile": "cyberbase-quartz-v4.5.2",
+    "basePath": "cyberbase",
+    "buildCommand": "renderers/quartz-cyberbase/build.sh <content-dir> <quartz-dir>"
+  }
+}

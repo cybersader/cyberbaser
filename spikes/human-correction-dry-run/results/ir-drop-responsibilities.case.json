@@ -1,0 +1,15 @@
+{
+  "artifactType": "sanitized-internal-correction-case",
+  "baseCommit": "b320c5c2c92d646b9df7019c9e29034341ebff6b",
+  "caseId": "DRY-4447FE60DEA5",
+  "evidenceItems": 8,
+  "kind": "typo",
+  "publicUrl": "https://cybersader.github.io/cyberbase/%F0%9F%93%81-05---Organizational-Cyber/Incident-Response/%E2%AC%87%EF%B8%8F-IR-DROP/%E2%AC%87%EF%B8%8F-IR-DROP",
+  "quote": "This can call out responsibilites, processes, and help tell people where to go or what to do",
+  "rationale": "“responsibilites” is an unambiguous one-letter omission in ordinary English prose. Replacing it with “responsibilities” is purely orthographic, preserves the technical meaning and Markdown structure, does not change a heading identifier or link target, and can be applied as one exact contiguous byte splice.",
+  "replacement": "This can call out responsibilities, processes, and help tell people where to go or what to do",
+  "repository": "https://github.com/cybersader/cyberbase",
+  "schemaVersion": 1,
+  "scope": "internal agentic evidence only; not a human pilot result or product runtime",
+  "sourceMapping": "owner-supplied; local path and raw evidence redacted"
+}
