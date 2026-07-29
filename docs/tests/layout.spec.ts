@@ -148,6 +148,66 @@ test.describe('Layout regression: homepage contribution storyboard', () => {
   }
 });
 
+test.describe('Layout regression: recently updated pages', () => {
+  for (const width of [360, 390]) {
+    test(`recent page rows stack cleanly @${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 1200 });
+      await page.goto(`${BASE}/`);
+
+      const rows = page.locator('.cb-recent-item');
+      await expect(rows).toHaveCount(8);
+      await expect(rows.first()).toBeVisible();
+
+      const boxes = await rows.evaluateAll((items) => items.map((item) => {
+        const rect = (selector: string) => {
+          const box = item.querySelector(selector)!.getBoundingClientRect();
+          return { top: box.top, bottom: box.bottom, left: box.left, right: box.right };
+        };
+        return { link: rect('.cb-recent-link'), date: rect('.cb-recent-date'), body: rect('.cb-recent-body') };
+      }));
+
+      for (const box of boxes) {
+        expect(box.body.top).toBeGreaterThanOrEqual(box.date.bottom - 1);
+        expect(Math.abs(box.body.left - box.date.left)).toBeLessThanOrEqual(1);
+        expect(box.date.left).toBeGreaterThanOrEqual(box.link.left - 1);
+        expect(box.body.right).toBeLessThanOrEqual(box.link.right + 1);
+      }
+    });
+  }
+
+  for (const width of [900, 1280]) {
+    test(`recent page rows align date and body columns @${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 1200 });
+      await page.goto(`${BASE}/`);
+
+      const rows = page.locator('.cb-recent-item');
+      await expect(rows).toHaveCount(8);
+      await expect(rows.first()).toBeVisible();
+
+      const boxes = await rows.evaluateAll((items) => items.map((item) => {
+        const toBox = (element: Element) => {
+          const box = element.getBoundingClientRect();
+          return { top: box.top, bottom: box.bottom, left: box.left, right: box.right };
+        };
+        return {
+          row: toBox(item),
+          date: toBox(item.querySelector('.cb-recent-date')!),
+          body: toBox(item.querySelector('.cb-recent-body')!),
+        };
+      }));
+
+      for (const box of boxes) {
+        expect(box.body.left).toBeGreaterThan(box.date.right);
+        expect(box.body.right).toBeLessThanOrEqual(box.row.right + 1);
+        expect(Math.abs(box.body.left - boxes[0].body.left)).toBeLessThanOrEqual(1);
+      }
+      for (let index = 1; index < boxes.length; index += 1) {
+        expect(boxes[index].row.top).toBeGreaterThanOrEqual(boxes[index - 1].row.bottom - 1);
+      }
+    });
+  }
+});
+
 test.describe('Layout regression: content-region centering', () => {
   const pages = ['/', '/getting-started/'];
   const widths = [960, 1024, 1144, 1151, 1152, 1272];
@@ -276,6 +336,11 @@ test.describe('Layout regression: no Starlight margin-top leak in components', (
     ['/', '.cb-storyboard .cb-jstep'],
     ['/', '.cb-rich-toolbar'],
     ['/', '.cb-rich-foot'],
+    ['/', '.cb-recent'],
+    ['/', '.cb-recent-list'],
+    ['/', '.cb-recent-item'],
+    ['/', '.cb-recent-link'],
+    ['/', '.cb-recent-body'],
     ['/design/architecture/', '.cb-journey-4'],
     ['/design/architecture/', '.cb-jstep'],
     ['/design/architecture/', '.cb-glance'],

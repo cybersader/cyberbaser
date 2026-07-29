@@ -272,7 +272,7 @@ Package test counts were reconfirmed with package-scoped `bun test` runs on 2026
 | `trust-gate.yml` (208 lines) | Reads the policy from the base ref, builds a change description from the PR diff, runs `cb-trust`, writes a step summary and applies a label | GitHub Actions | A PR label plus a step summary | 0 | **Ours.** The forge adapter is a 60-line program inlined in a YAML heredoc, where it cannot be tested or reused |
 | `publish.yml` (23 lines, in the vault) | 15 folder allow globs. The `audiences:` map the selector supports is unused | Read in CI | Publish policy | n/a | **Yours** (a file in your repo) |
 | `.cyberbaser/trust.yml` (46 lines) | `trusted: [cybersader]`, `agents: []`, 5 caps, 15 allowed new folders, frontmatter allowlist `tags, updated` | Read in CI | Trust policy | n/a | **Yours.** Deliberately outside `.github/` so it stays forge-portable |
-| This docs site (`docs/`) | Astro 6 plus Starlight 0.38 and 9 plugins, 59 source content files | CI (`deploy.yml`) + dev | Its own Pages deployment | 173 Playwright tests in the most recent full run | **Commodity** stack; the content and `brand.css` are ours. Shares no code with the vault pipeline |
+| This docs site (`docs/`) | Astro 6 plus Starlight 0.38 and 9 plugins, 59 source content files | CI (`deploy.yml`) + dev | Its own Pages deployment | 183 Playwright tests in the most recent full run | **Commodity** stack; the content and `brand.css` are ours. Shares no code with the vault pipeline |
 | GitHub | Identity, the editor, forks, PRs, review, merge, Actions, Pages, the audit trail | GitHub | Everything a human touches | n/a | **Borrowed interface** |
 
 </details>

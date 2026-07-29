@@ -25,6 +25,6 @@ export default defineConfig({
     command: 'bun run build && bun run preview',
     url: 'http://localhost:4321/cyberbaser/',
     reuseExistingServer: false,
-    timeout: 180000,
+    timeout: 300000,
   },
 });

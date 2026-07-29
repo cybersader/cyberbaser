@@ -6,6 +6,8 @@ sidebar:
   hidden: true
 ---
 
+import RecentPages from '../../components/RecentPages.astro';
+
 <div class="cb-hero" role="img" aria-label="Cyberbaser is an interoperability layer for contributable, version-controlled knowledge bases">
 <span class="cb-hero-eyebrow">v1 Build · concierge pilot next</span>
 <h2 class="cb-hero-headline">The contributable wiki, owner-controlled.</h2>
@@ -218,6 +220,8 @@ sidebar:
     <span class="cb-card-desc">Obsidian Publish, Quartz, Digital Garden, Notion-as-wiki, awesome lists — the data points.</span>
   </a>
 </div>
+
+<RecentPages />
 
 {/* Styles for .cb-hero, .cb-rotate-wrap, .cb-flow-svg, .cb-sv-* etc. live in
     src/styles/brand.css. MDX <style> blocks can't use :global() reliably,

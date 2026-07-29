@@ -43,6 +43,64 @@ test.describe('Smoke', () => {
     await expect(storyboard.locator('a[href], button, input, select, textarea, summary, [contenteditable="true"], [tabindex]:not([tabindex="-1"]), [role="button"], [role="link"], [role="checkbox"], [role="radio"], [role="switch"]')).toHaveCount(0);
   });
 
+  test('homepage shows eight recently updated reader-facing pages', async ({ page, request }) => {
+    await page.goto(`${BASE}/`);
+
+    const section = page.locator('.cb-recent');
+    const rows = section.locator('.cb-recent-item');
+    await expect(section.getByRole('heading', { name: 'Recently updated' })).toBeVisible();
+    await expect(rows).toHaveCount(8);
+
+    const entries = await rows.evaluateAll((items) => items.map((item) => {
+      const link = item.querySelector<HTMLAnchorElement>('.cb-recent-link');
+      const time = item.querySelector<HTMLTimeElement>('time');
+      return {
+        href: link?.getAttribute('href') ?? '',
+        links: item.querySelectorAll('a').length,
+        title: item.querySelector('.cb-recent-title')?.textContent?.trim() ?? '',
+        description: item.querySelector('.cb-recent-description')?.textContent?.trim() ?? '',
+        datetime: time?.dateTime ?? '',
+      };
+    }));
+
+    const sectionIndexes = new Set([
+      `${BASE}/getting-started/`,
+      `${BASE}/concepts/`,
+      `${BASE}/design/`,
+      `${BASE}/research/`,
+      `${BASE}/reference/`,
+      `${BASE}/development/`,
+    ]);
+
+    for (const entry of entries) {
+      expect(entry.links).toBe(1);
+      expect(entry.title).not.toBe('');
+      expect(entry.description).not.toBe('');
+      expect(Number.isNaN(Date.parse(entry.datetime))).toBe(false);
+      expect(entry.href.startsWith(`${BASE}/`)).toBe(true);
+      expect(entry.href.endsWith('/')).toBe(true);
+      expect(entry.href).not.toBe(`${BASE}/`);
+      expect(entry.href).not.toContain('/agent-context/');
+      expect(entry.href).not.toContain('/changelog/');
+      expect(entry.href).not.toContain('/tags/');
+      expect(sectionIndexes.has(entry.href)).toBe(false);
+
+      const response = await request.get(entry.href);
+      expect(response.status()).toBe(200);
+    }
+
+    for (let index = 1; index < entries.length; index += 1) {
+      const previous = entries[index - 1];
+      const current = entries[index];
+      const previousTime = Date.parse(previous.datetime);
+      const currentTime = Date.parse(current.datetime);
+      expect(currentTime).toBeLessThanOrEqual(previousTime);
+      if (currentTime === previousTime) expect(current.href >= previous.href).toBe(true);
+    }
+
+    await expect(section.locator('astro-island, button, input, select, textarea, [contenteditable="true"]')).toHaveCount(0);
+  });
+
   test('announcement banner renders', async ({ page }) => {
     await page.goto(`${BASE}/`);
     // Starlight-announcement injects into its own class

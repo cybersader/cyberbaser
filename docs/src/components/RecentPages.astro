@@ -1,0 +1,90 @@
+---
+import { getCollection, type CollectionEntry } from 'astro:content';
+import { getContentCommitDate, getContentCommitDates } from '../lib/git-updates';
+
+const LIMIT = 8;
+const DESCRIPTION_LIMIT = 132;
+const READER_SECTIONS = new Set([
+  'getting-started',
+  'concepts',
+  'design',
+  'research',
+  'reference',
+  'development',
+]);
+const commitDates = getContentCommitDates();
+
+function isReaderPage(id: string): boolean {
+  const [section, ...rest] = id.split('/');
+  return READER_SECTIONS.has(section) && rest.length > 0;
+}
+
+function getUpdatedAt(entry: CollectionEntry<'docs'>): Date | undefined {
+  if (entry.data.lastUpdated === false) return;
+  if (entry.data.lastUpdated instanceof Date) return entry.data.lastUpdated;
+  if (!entry.filePath) return;
+  return getContentCommitDate(commitDates, entry.filePath);
+}
+
+function toHref(id: string): string {
+  const base = import.meta.env.BASE_URL.replace(/\/+$/, '');
+  const route = id.replace(/\/index$/, '').replace(/^\/+|\/+$/g, '');
+  return `${base}/${route}/`;
+}
+
+function truncateAtWord(value: string): string {
+  const text = value.replace(/\s+/g, ' ').trim();
+  if (text.length <= DESCRIPTION_LIMIT) return text;
+
+  const candidate = text.slice(0, DESCRIPTION_LIMIT + 1);
+  const boundary = candidate.lastIndexOf(' ');
+  const cut = boundary > DESCRIPTION_LIMIT * 0.7 ? boundary : DESCRIPTION_LIMIT;
+  return `${candidate.slice(0, cut).trimEnd()}…`;
+}
+
+const entries = await getCollection('docs');
+const pages = entries
+  .filter((entry) => entry.data.draft !== true && isReaderPage(entry.id))
+  .map((entry) => {
+    const updatedAt = getUpdatedAt(entry);
+    if (!updatedAt) return;
+
+    return {
+      id: entry.id,
+      href: toHref(entry.id),
+      title: entry.data.title || entry.id,
+      description: entry.data.description ? truncateAtWord(entry.data.description) : '',
+      updatedAt,
+      dateIso: updatedAt.toISOString().slice(0, 10),
+    };
+  })
+  .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+  .sort((a, b) => {
+    const dateDifference = b.updatedAt.getTime() - a.updatedAt.getTime();
+    if (dateDifference !== 0) return dateDifference;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  })
+  .slice(0, LIMIT);
+---
+
+{pages.length > 0 && (
+  <section class="cb-recent not-content" aria-labelledby="recent-pages-heading">
+    <div class="cb-recent-intro">
+      <h2 id="recent-pages-heading">Recently updated</h2>
+      <p>Reader-facing pages changed most recently in the source repository.</p>
+    </div>
+    <ul class="cb-recent-list">
+      {pages.map((page) => (
+        <li class="cb-recent-item">
+          <a class="cb-recent-link" href={page.href}>
+            <time class="cb-recent-date" datetime={page.updatedAt.toISOString()}>{page.dateIso}</time>
+            <span class="cb-recent-body">
+              <span class="cb-recent-title">{page.title}</span>
+              {page.description && <span class="cb-recent-description">{page.description}</span>}
+            </span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </section>
+)}
