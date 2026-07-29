@@ -103,143 +103,79 @@ sidebar:
 
 </div>
 
-<div class="cb-stack-wrapper">
+<h2 id="authoring-storyboard" class="cb-storyboard-title">Different interfaces, one owner-controlled boundary</h2>
+<p class="cb-storyboard-lead">Cyberbaser does not prescribe one editor. Readers, trusted contributors, and the owner can work through interfaces suited to their jobs. External tools propose bounded changes; the owner's Markdown source and final decision stay authoritative.</p>
 
-  <svg class="cb-stack-svg" viewBox="0 0 920 640" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Current v1 cross-section: readers consume a Quartz-rendered wiki; an owner-controlled change boundary selects public content and validates exact changes around an owner-controlled vault. Obsidian and GitHub are current dogfood paths, while account-free intake is only a concierge experiment.">
-    <defs>
-      <linearGradient id="cbs-hot" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0" stop-color="#8b94a3"/>
-        <stop offset="0.5" stop-color="#10b981"/>
-        <stop offset="1" stop-color="#8b94a3"/>
-      </linearGradient>
-      <linearGradient id="cbs-hot-fill" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="rgba(16,185,129,0.18)"/>
-        <stop offset="1" stop-color="rgba(16,185,129,0.04)"/>
-      </linearGradient>
-      <filter id="cbs-glow">
-        <feGaussianBlur stdDeviation="6" result="b"/>
-        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-      </filter>
-      <marker id="cbs-arrow-up" viewBox="0 0 10 10" refX="5" refY="2" markerWidth="6" markerHeight="6" orient="auto">
-        <path d="M0,10 L5,0 L10,10 Z" fill="#10b981"/>
-      </marker>
-      <marker id="cbs-arrow-down" viewBox="0 0 10 10" refX="5" refY="8" markerWidth="6" markerHeight="6" orient="auto">
-        <path d="M0,0 L5,10 L10,0 Z" fill="#8b94a3"/>
-      </marker>
-    </defs>
+<section class="cb-storyboard cb-journey cb-journey-4" aria-labelledby="authoring-storyboard">
+  <div class="cb-jstep">
+    <div class="cb-jstep-hd"><span class="cb-jstep-n">R</span><span class="cb-jstep-t">Reader micro-correction</span><span class="cb-who cb-who-ours">Cyberbaser concept</span><span class="cb-chip cb-chip-info">unbuilt</span></div>
+    <div class="cb-jstep-frame">
+      <div class="cb-mock cb-mock-sm cb-mock-fill">
+        <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">kb.example/security/passwords</span><span class="cb-mock-live">live</span></div>
+        <div class="cb-mock-body">
+          <div class="cb-mock-h">Password rotation</div>
+          <p class="cb-mock-txt">Rotate every <span class="cb-mock-hl cb-mock-hl-bad">90 days</span>, regardless of compromise.</p>
+          <div class="cb-mock-edit"><span class="cb-mock-edit-txt">“every 90 days” selected</span><span class="cb-mock-save">Propose correction</span></div>
+        </div>
+      </div>
+    </div>
+    <p class="cb-jstep-cap">This is the intended lightweight reader experience, not a working UI. The current pilot instead uses a seven-field concierge study form, which is not the final interface.</p>
+  </div>
 
-    {/* ═══ LAYER 1: READERS (consumers at top) ═══ */}
-    <text class="cbs-rail-label" x="460" y="25" text-anchor="middle">CONSUMED BY</text>
-    <g class="cbs-reader">
-      <circle cx="300" cy="60" r="22"/>
-      <text class="cbs-reader-icon" x="300" y="67" text-anchor="middle">🧑‍💻</text>
-      <text class="cbs-reader-name" x="300" y="104" text-anchor="middle">practitioner</text>
-    </g>
-    <g class="cbs-reader">
-      <circle cx="400" cy="60" r="22"/>
-      <text class="cbs-reader-icon" x="400" y="67" text-anchor="middle">🎓</text>
-      <text class="cbs-reader-name" x="400" y="104" text-anchor="middle">student</text>
-    </g>
-    <g class="cbs-reader">
-      <circle cx="500" cy="60" r="22"/>
-      <text class="cbs-reader-icon" x="500" y="67" text-anchor="middle">🔍</text>
-      <text class="cbs-reader-name" x="500" y="104" text-anchor="middle">searcher</text>
-    </g>
-    <g class="cbs-reader">
-      <circle cx="600" cy="60" r="22"/>
-      <text class="cbs-reader-icon" x="600" y="67" text-anchor="middle">🤝</text>
-      <text class="cbs-reader-name" x="600" y="104" text-anchor="middle">colleague</text>
-    </g>
+  <div class="cb-jstep">
+    <div class="cb-jstep-hd"><span class="cb-jstep-n">T</span><span class="cb-jstep-t">Trusted rich authoring</span><span class="cb-who cb-who-commodity">external editor</span><span class="cb-chip cb-chip-info">unselected</span></div>
+    <div class="cb-jstep-frame">
+      <div class="cb-mock cb-mock-sm cb-mock-fill cb-rich">
+        <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">editor.example/zero-trust</span></div>
+        <div class="cb-rich-toolbar" aria-hidden="true"><span class="cb-rich-tool cb-rich-tool-strong">B</span><span class="cb-rich-tool cb-rich-tool-em">I</span><span class="cb-rich-tool">H2</span><span class="cb-rich-tool">↗</span><span class="cb-rich-tool">❝</span></div>
+        <div class="cb-mock-body cb-rich-canvas">
+          <div class="cb-mock-h">Zero trust</div>
+          <p class="cb-mock-txt">Treat every request as untrusted, then verify identity, device, and context.</p>
+          <div class="cb-mock-callout"><span class="cb-mock-callout-i">i</span>Rendered callouts and links stay visible while writing.</div>
+        </div>
+        <div class="cb-rich-foot"><span class="cb-chip cb-chip-info">source-bound proposal</span><span class="cb-mock-save">Submit for review</span></div>
+      </div>
+    </div>
+    <p class="cb-jstep-cap">A rich browser, WYSIWYG, or CMS-like tool can be swapped in through a deliberate adapter. It may model blocks internally, but it must emit exact proposals instead of reserializing the file.</p>
+  </div>
 
-    {/* Arrow: readers → web wiki */}
-    <path d="M460,115 L460,148" class="cbs-flow-up"/>
-    <text class="cbs-flow-label" x="470" y="136">reads</text>
+  <div class="cb-jstep">
+    <div class="cb-jstep-hd"><span class="cb-jstep-n">M</span><span class="cb-jstep-t">Maintainer local authoring</span><span class="cb-who cb-who-yours">owner local</span><span class="cb-chip cb-chip-ok">working</span></div>
+    <div class="cb-jstep-frame">
+      <div class="cb-ed cb-ed-fill">
+        <div class="cb-ed-bar"><span class="cb-ed-tab">zero-trust.md<span class="cb-ed-dirty"></span></span><span class="cb-who cb-who-yours">local</span></div>
+        <div class="cb-ed-code">
+          <div class="cb-ed-line"><span class="cb-ed-n">8</span><span class="cb-ed-t cb-ed-dim">---</span></div>
+          <div class="cb-ed-line"><span class="cb-ed-n">9</span><span class="cb-ed-t"><span class="cb-ed-tok">aliases:</span> [Zero-trust model]</span></div>
+          <div class="cb-ed-line"><span class="cb-ed-n">10</span><span class="cb-ed-t cb-ed-dim">---</span></div>
+          <div class="cb-ed-line cb-ed-hot"><span class="cb-ed-n">14</span><span class="cb-ed-t"><span class="cb-ed-tok">&gt; [!tip]</span> Verify every request<span class="cb-mock-caret"></span></span></div>
+          <div class="cb-ed-line"><span class="cb-ed-n">15</span><span class="cb-ed-t">See <span class="cb-ed-tok">&#91;&#91;Identity#Signals&#93;&#93;</span>.</span></div>
+        </div>
+        <div class="cb-ed-foot"><span class="cb-chip cb-chip-ok">authoritative source</span>direct local edit · no Cyberbaser editor required</div>
+      </div>
+    </div>
+    <p class="cb-jstep-cap">The owner keeps writing directly in the Markdown tool they prefer. Cyberbaser must not replace that editor or force owner work through an external moderation form.</p>
+  </div>
 
-    {/* ═══ LAYER 2: WEB WIKI ═══ */}
-    <g class="cbs-layer">
-      <rect x="120" y="150" width="680" height="60" rx="10"/>
-      <text class="cbs-layer-title" x="460" y="180" text-anchor="middle">PUBLISHED VIEW</text>
-      <text class="cbs-layer-sub" x="460" y="198" text-anchor="middle">Quartz + GitHub Pages today · swappable renderer and host</text>
-    </g>
+  <div class="cb-jstep">
+    <div class="cb-jstep-hd"><span class="cb-jstep-n">✓</span><span class="cb-jstep-t">Owner review</span><span class="cb-who cb-who-ours">Cyberbaser boundary</span><span class="cb-chip cb-chip-info">static pilot card</span></div>
+    <div class="cb-jstep-frame">
+      <div class="cb-review cb-review-fill">
+        <div class="cb-review-hd"><span class="cb-review-av">27</span><span class="cb-review-who">candidate <span class="cb-review-trust">base 8c21… pinned</span></span><span class="cb-chip cb-chip-warn">full review</span></div>
+        <div class="cb-review-diff"><div class="cb-diff cb-diff-rm">- Rotate every 90 days.</div><div class="cb-diff cb-diff-add">+ Change after compromise or exposure.</div></div>
+        <div class="cb-checks">
+          <div class="cb-check cb-check-ok"><span class="cb-check-ic">✓</span><span class="cb-check-t">OFM integrity: clean</span><span class="cb-check-meta">1 splice</span></div>
+          <div class="cb-check cb-check-ok"><span class="cb-check-ic">✓</span><span class="cb-check-t">Untouched bytes: identical</span><span class="cb-check-meta">exact</span></div>
+          <div class="cb-check cb-check-ok"><span class="cb-check-ic">✓</span><span class="cb-check-t">Candidate-only link regressions: 0</span><span class="cb-check-meta">rendered</span></div>
+        </div>
+        <div class="cb-rich-foot"><span class="cb-chip cb-chip-warn">pending owner</span><span>decision recorded separately</span></div>
+      </div>
+    </div>
+    <p class="cb-jstep-cap">Reader, rich-editor, forge, and agent proposals converge on this evidence boundary: pinned source, exact diff, integrity and trust evidence, and rendered comparison. The private pilot kit renders a static local card; the owner records the decision separately. A generalized review UI remains unbuilt.</p>
+  </div>
+</section>
 
-    {/* Arrow: web wiki → translation */}
-    <path d="M460,215 L460,248" class="cbs-flow-up"/>
-    <text class="cbs-flow-label" x="470" y="236">rendered by</text>
-
-    {/* ═══ LAYER 3: TRANSLATION LAYER (HOT SPOT) ═══ */}
-    <g class="cbs-layer-hot" filter="url(#cbs-glow)">
-      <rect x="80" y="250" width="760" height="90" rx="14" fill="url(#cbs-hot-fill)" stroke="url(#cbs-hot)" stroke-width="2.5"/>
-      <text class="cbs-layer-title-hot" x="460" y="282" text-anchor="middle">OWNER-CONTROLLED CHANGE BOUNDARY</text>
-      <text class="cbs-layer-sub" x="460" y="302" text-anchor="middle">publish selection · exact splice · OFM integrity · trust route</text>
-      <text class="cbs-layer-sub-mini" x="460" y="322" text-anchor="middle">classifies and prepares changes; the owner remains the authority</text>
-    </g>
-
-    {/* Bidirectional arrows: boundary ↔ vault */}
-    <path d="M440,345 L440,380" class="cbs-flow-up"/>
-    <path d="M480,380 L480,345" class="cbs-flow-down"/>
-    <text class="cbs-flow-label" x="496" y="368">publishes / proposes exact change</text>
-
-    {/* ═══ LAYER 4: OWNER-CONTROLLED VAULT ═══ */}
-    <g class="cbs-layer cbs-layer-vault">
-      <rect x="120" y="382" width="680" height="78" rx="10"/>
-      <text class="cbs-layer-title-vault" x="460" y="412" text-anchor="middle">OWNER-CONTROLLED VAULT</text>
-      <text class="cbs-layer-sub" x="460" y="430" text-anchor="middle">plain Markdown · version history · GitHub dogfood today</text>
-      <text class="cbs-layer-sub-mini" x="460" y="448" text-anchor="middle">the authoritative files remain yours</text>
-    </g>
-
-    {/* Arrows from 5 authoring surfaces up to the vault */}
-    <path d="M130,530 L165,465" class="cbs-flow-up cbs-contrib-arrow"/>
-    <path d="M305,530 L320,465" class="cbs-flow-up cbs-contrib-arrow"/>
-    <path d="M475,530 L475,465" class="cbs-flow-up cbs-contrib-arrow cbs-contrib-hot"/>
-    <path d="M645,530 L605,465" class="cbs-flow-up cbs-contrib-arrow"/>
-    <path d="M810,530 L780,465" class="cbs-flow-up cbs-contrib-arrow"/>
-
-    {/* ═══ LAYER 5: CHANGE ORIGINS AND STATUS ═══ */}
-    <text class="cbs-rail-label" x="460" y="500" text-anchor="middle">CHANGE ORIGINS · CURRENT STATUS</text>
-
-    <g class="cbs-surface">
-      <rect x="40" y="530" width="180" height="84" rx="10"/>
-      <text class="cbs-surf-title" x="130" y="554" text-anchor="middle">Owner local edit</text>
-      <text class="cbs-surf-sub" x="130" y="575" text-anchor="middle">built · dogfood</text>
-      <text class="cbs-surf-mini" x="130" y="596" text-anchor="middle">Obsidian today</text>
-      <text class="cbs-surf-mini" x="130" y="610" text-anchor="middle">direct local workflow</text>
-    </g>
-
-    <g class="cbs-surface">
-      <rect x="240" y="530" width="150" height="84" rx="10"/>
-      <text class="cbs-surf-title" x="315" y="554" text-anchor="middle">Account-free intake</text>
-      <text class="cbs-surf-sub" x="315" y="575" text-anchor="middle">pilot only</text>
-      <text class="cbs-surf-mini" x="315" y="596" text-anchor="middle">human concierge</text>
-      <text class="cbs-surf-mini" x="315" y="610" text-anchor="middle">not a product path</text>
-    </g>
-
-    <g class="cbs-surface cbs-surf-hot">
-      <rect x="405" y="530" width="140" height="84" rx="10" fill="rgba(16,185,129,0.08)" stroke="#10b981" stroke-width="1.5"/>
-      <text class="cbs-surf-title" x="475" y="554" text-anchor="middle">GitHub editor</text>
-      <text class="cbs-surf-sub" x="475" y="575" text-anchor="middle">built · borrowed</text>
-      <text class="cbs-surf-mini" x="475" y="596" text-anchor="middle">account required</text>
-      <text class="cbs-surf-mini" x="475" y="610" text-anchor="middle">raw Markdown · PR</text>
-    </g>
-
-    <g class="cbs-surface">
-      <rect x="560" y="530" width="150" height="84" rx="10"/>
-      <text class="cbs-surf-title" x="635" y="554" text-anchor="middle">Other local editor</text>
-      <text class="cbs-surf-sub" x="635" y="575" text-anchor="middle">compatible in principle</text>
-      <text class="cbs-surf-mini" x="635" y="596" text-anchor="middle">plain Markdown</text>
-      <text class="cbs-surf-mini" x="635" y="610" text-anchor="middle">no product adapter yet</text>
-    </g>
-
-    <g class="cbs-surface">
-      <rect x="725" y="530" width="160" height="84" rx="10"/>
-      <text class="cbs-surf-title" x="805" y="554" text-anchor="middle">Automation adapter</text>
-      <text class="cbs-surf-sub" x="805" y="575" text-anchor="middle">future · bounded</text>
-      <text class="cbs-surf-mini" x="805" y="596" text-anchor="middle">must use exact changes</text>
-      <text class="cbs-surf-mini" x="805" y="610" text-anchor="middle">no automatic writer</text>
-    </g>
-  </svg>
-
-  <p class="cb-stack-caption">The current v1 boundary sits between an owner-controlled vault and a swappable published view. <strong>Two change mechanisms are shipped in the dogfood stack</strong>: the owner's local workflow and GitHub's account-required editor. Account-free intake is a precommitted concierge experiment, and every future adapter must preserve untouched bytes and owner authority.</p>
-</div>
+<p class="cb-fig-note cb-storyboard-note"><span class="cb-chip cb-chip-mute">one authority</span><strong>Interfaces are replaceable; the source boundary is not.</strong> The inline reader control shown here is a target concept, not shipped UI. The actual pilot uses a seven-field study form, a static local evidence card, and a separate owner decision record; no generalized interactive review UI has shipped. Rich authoring is intended but unselected; the owner's local editor remains primary.</p>
 
 ---
 
@@ -261,7 +197,7 @@ sidebar:
   <a class="cb-card" href="/cyberbaser/design/translation-layer/">
     <span class="cb-card-label">22 · Hard problem</span>
     <span class="cb-card-title">The translation layer</span>
-    <span class="cb-card-desc">Obsidian syntax → web HTML without losing round-trip fidelity. This is where the project lives or dies.</span>
+    <span class="cb-card-desc">Replaceable renderers outward; exact, source-bound candidate changes inward. Untouched Markdown bytes never pass through a whole-file serializer.</span>
   </a>
 
   <a class="cb-card" href="/cyberbaser/getting-started/principles/">

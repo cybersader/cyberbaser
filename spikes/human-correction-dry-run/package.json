@@ -1,0 +1,34 @@
+{
+  "name": "human-correction-dry-run",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Private, offline evidence harness for repeatable one-file, one-quote, one-splice correction dry runs.",
+  "packageManager": "bun@1.3.11",
+  "bin": {
+    "cb-correction-dry-run": "bin/dry-run.js",
+    "cb-correction-live-run": "bin/live-run.js",
+    "cb-correction-pilot-init": "bin/pilot-init.js",
+    "cb-correction-pilot-prepare": "bin/pilot-prepare.js",
+    "cb-correction-pilot-render": "bin/pilot-render.js",
+    "cb-correction-pilot-decision": "bin/pilot-decision.js"
+  },
+  "scripts": {
+    "test": "bun test",
+    "verify": "bun run bin/verify.js",
+    "dry-run": "bun run bin/dry-run.js",
+    "live-run": "bun run bin/live-run.js",
+    "pilot:init": "bun run bin/pilot-init.js",
+    "pilot:prepare": "bun run bin/pilot-prepare.js",
+    "pilot:render": "bun run bin/pilot-render.js",
+    "pilot:decision": "bun run bin/pilot-decision.js"
+  },
+  "dependencies": {
+    "@cyberbaser/correction": "file:../../packages/correction",
+    "@cyberbaser/linkcheck": "file:../../packages/linkcheck",
+    "@cyberbaser/ofm": "file:../../packages/ofm",
+    "@cyberbaser/projection": "file:../../packages/projection",
+    "@cyberbaser/publish": "file:../../packages/publish",
+    "@cyberbaser/trust": "file:../../packages/trust"
+  }
+}

@@ -4,6 +4,6 @@
 >
 > **Canonical**: `docs/src/content/docs/getting-started/vision.mdx` · published at `/cyberbaser/getting-started/vision/`
 
-## Current truth (summary, 2026-06-21)
+## Current truth (summary, 2026-07-29)
 
-**Cyberbaser is an interoperability layer for contributable, version-controlled knowledge bases.** It turns any markdown knowledge base (Obsidian is the first-class surface we dogfood) into a living, contributable public wiki: read on the web, edit in place, or extend from your own vault, and no path corrupts the others. Today the vault lives in git as the single source of truth; the layer never forces git on contributors. Contribution is a maintainer-controlled trust curve with a moderation queue: **contributable, not controllable**.
+**Cyberbaser is an interoperability layer for contributable, version-controlled knowledge bases.** Reader correction controls, trusted rich browser or CMS-like tools, forge editors, local Markdown tools, agents, and renderers may all be replaceable spokes. External authoring spokes submit bounded proposals against pinned source; the owner keeps the authoritative Markdown, direct local authoring, and final approval. R12 forbids whole-file source regeneration, not rich interfaces. Contribution remains a maintainer-controlled trust curve with owner review: **contributable, not controllable**.

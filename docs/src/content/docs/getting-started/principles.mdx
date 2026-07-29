@@ -25,7 +25,8 @@ These are the current working constraints for the v1 Build phase. Evidence can s
 
 **Rules out:**
 - Sidecar databases for "enriched" content
-- CMSes that don't write directly to git
+- A CMS or sidecar database that becomes a second content authority
+- An adapter that synchronizes by regenerating the authoritative source
 - Content that only exists in a CDN or rendered-HTML form
 - Any solution where the vault is not a self-sufficient Obsidian vault in isolation
 
@@ -56,33 +57,33 @@ These are the current working constraints for the v1 Build phase. Evidence can s
 
 ## 2. Authoring semantics and untouched bytes must survive edits
 
-**Rule:** Any authoring-tool feature that renders in the vault and on the web must remain functionally intact after an accepted edit (Obsidian is the first-class case). R12 makes the mechanism non-negotiable: write paths operate on raw text with exact splices, and **no whole-file re-serialization may sit in a write path, ever**. `@cyberbaser/ofm` validates changes; it never rewrites the file.
+**Rule:** Any authoring-tool feature that renders in the vault and on the web must remain functionally intact after an accepted edit (Obsidian is the first-class case). R12 makes the external-proposal mechanism non-negotiable: every Cyberbaser-mediated application operates on exact source bytes, and **no adapter may regenerate the untouched remainder of the file**. `@cyberbaser/ofm` validates changes; it never rewrites the file. Cyberbaser does not replace or mediate the owner's primary local editor.
 
 **Why:** The 1,430-file gate measured only **4.6% exact byte identity** after whole-file AST serialization. The failure was architectural formatting normalization, not a tuning problem. Preserving untouched bytes by construction prevents a small correction from flattening wikilinks, callouts, block references, spacing, line endings, or unrelated author choices.
 
 **Rules out:**
 - Lossy transforms (e.g., `[[Page]]` → `[Page](page.md)` on save)
 - "Simplified" markdown dialects that drop Obsidian extensions
-- CMS editors that strip unknown syntax or reformat the whole file
+- CMS save adapters that strip unknown syntax or regenerate the whole file
 - Publishing pipelines that render-then-edit instead of edit-then-render
 - Any "safe" writer whose correctness depends on serializing the untouched remainder of a document
 
-**Load-bearing evidence:** the [R12 gate measurement](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25) and the [translation layer](/cyberbaser/design/translation-layer/). Future editing surfaces must conform to that contract rather than reopen the serializer question.
+**Load-bearing evidence:** the [R12 gate measurement](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25) and the [translation layer](/cyberbaser/design/translation-layer/). Future rich, raw, WYSIWYG, CMS-like, forge, or agent surfaces remain allowed, but their adapters must emit exact source-bound proposals rather than reopen the serializer question.
 
-<div class="cb-rt" role="img" aria-label="One web edit, and the two ways it could be saved: a faithful file that keeps the wikilink, callout, and block ref, versus a flattened file that loses them.">
+<div class="cb-rt" role="img" aria-label="One web edit and two possible adapter outputs: a bounded exact candidate that leaves the wikilink, callout, and block reference untouched, versus a forbidden whole-file serialization that flattens them.">
   <div class="cb-rt-fan">
     <div class="cb-mock cb-mock-sm">
       <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><svg class="cb-mock-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.947 13.177c0 3.263-2 5.649-4.736 5.649h-2.773v-5.65H6.282v10.387h7.93c5.403 0 9.788-4.668 9.788-10.386h-5.052ZM7.894.476 0 1.212l.948 10.352 5.157-.456-.526-5.615 2.737-.245c2.737-.246 4.91 1.93 5.227 5.193l5.052-.458c-.49-5.752-5.297-9.998-10.7-9.507Z"/></svg><span class="cb-mock-url">wiki.example.org/ir-verbs</span></div>
-      <div class="cb-mock-body"><div class="cb-mock-h">Vivir</div><div class="cb-mock-edit"><span class="cb-mock-edit-txt">See &#91;&#91;Ser vs Estar&#93;&#93; for the tricky ones.<span class="cb-mock-caret"></span></span><span class="cb-mock-save">Save</span></div></div>
+      <div class="cb-mock-body"><div class="cb-mock-h">Vivir</div><div class="cb-mock-edit"><span class="cb-mock-edit-txt">See &#91;&#91;Ser vs Estar&#93;&#93; for the tricky ones.<span class="cb-mock-caret"></span></span><span class="cb-mock-save">Propose change</span></div></div>
     </div>
   </div>
-  <p class="cb-rt-cap">one web edit, two ways to save it</p>
+  <p class="cb-rt-cap">one web edit, two possible adapter outputs</p>
   <div class="cb-rt-arrows" aria-hidden="true"><span class="cb-rt-al"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h14M13 6l6 6-6 6"/></svg></span><span class="cb-rt-ar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h14M13 6l6 6-6 6"/></svg></span></div>
   <div class="cb-rt-pair">
-    <div class="cb-rt-good"><div class="cb-review"><div class="cb-review-hd"><span>✓ saved file · round-trips</span><span class="cb-review-status">opens in Obsidian</span></div><div class="cb-review-diff"><div class="cb-diff cb-diff-add">+ See &#91;&#91;Ser vs Estar&#93;&#93; for the tricky ones.</div><div class="cb-diff cb-diff-add">+ &gt; [!tip] Use estar for the permanent ones.</div><div class="cb-diff cb-diff-add">+ ^use-estar</div></div></div></div>
+    <div class="cb-rt-good"><div class="cb-review"><div class="cb-review-hd"><span>✓ exact candidate · bounded operation</span><span class="cb-review-status">untouched bytes preserved</span></div><div class="cb-review-diff"><div class="cb-diff cb-diff-add">+ See &#91;&#91;Ser vs Estar&#93;&#93; for the tricky ones.</div><div class="cb-diff cb-diff-add">+ &gt; [!tip] Use estar for the permanent ones.</div><div class="cb-diff cb-diff-add">+ ^use-estar</div></div></div></div>
     <div class="cb-rt-bad"><div class="cb-review"><div class="cb-review-hd"><span>✕ flattened · what the rule forbids</span><span class="cb-review-status">links break</span></div><div class="cb-review-diff"><div class="cb-diff cb-diff-rm">- See &#91;Ser vs Estar&#93;(ser-vs-estar.md) for the tricky ones.</div><div class="cb-diff cb-diff-rm">- Tip: use estar for the permanent ones.</div><div class="cb-diff cb-diff-rm">- (block ref ^use-estar dropped)</div></div></div></div>
   </div>
-  <p class="cb-fig-cap">Edit on the web, and the file comes back with the wikilink, callout, and block ref intact. The flattened version on the right is the failure this rule exists to prevent.</p>
+  <p class="cb-fig-cap">The conforming adapter returns a bounded candidate and leaves the wikilink, callout, and block-ref bytes outside the operation untouched. Only the owner-controlled route may apply an approved operation. The flattened whole-file output on the right is the failure this rule prevents.</p>
 </div>
 
 ---
@@ -127,7 +128,7 @@ These are the current working constraints for the v1 Build phase. Evidence can s
 
 ## 4. Every offered contribution path must work independently
 
-**Rule:** Any contribution path Cyberbaser offers must work end-to-end without being a client of another contribution surface. This principle does **not** require three named paths, a Web CMS, or a particular interface. Today the shipped mechanisms are the maintainer's local Obsidian+Git path and GitHub's account-required editor; the account-free path is still under experiment.
+**Rule:** Any contribution path Cyberbaser offers must work end-to-end without being a client of another contribution surface. This principle does **not** require three named paths, a Web CMS, or a particular interface. Direct owner authoring and external proposals are distinct lanes; independence does not require them to share an editor, moderation UI, or source-application mechanism. Today the owner-local Obsidian+Git lane and GitHub's account-required external proposal are operational; the account-free path is still under experiment.
 
 **Why:** A reader-facing intake must not depend on a live Obsidian instance, and a local authoring path must not depend on an intake service being deployed. Independence keeps one surface's outage, retirement, or replacement from blocking the others.
 

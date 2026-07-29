@@ -1,10 +1,10 @@
 # Cyberbaser Project Context
 
-> Last aligned: 2026-07-27 (v1 Build + concierge-pilot direction). If this file disagrees with the docs site, the docs site wins, and this file should be fixed in the same session.
+> Last aligned: 2026-07-29 (replaceable-authoring clarification + concierge-pilot direction). If this file disagrees with the docs site, the docs site wins, and this file should be fixed in the same session.
 
 ## What This Project Is
 
-**Cyberbaser is an interoperability layer for contributable, version-controlled knowledge bases.** It sits *between* the tools people author in (Obsidian first-class, but any markdown surface), the renderers that publish the result (Quartz, Starlight, anything), and — eventually — other knowledge bases, keeping one plain-text corpus faithful as changes round-trip through all of them.
+**Cyberbaser is an interoperability layer for contributable, version-controlled knowledge bases.** It sits *between* replaceable authoring tools (Obsidian first-class, rich browser or CMS-like surfaces allowed), replaceable renderers (Quartz, Starlight, anything), and eventually other knowledge bases. The owner's plain-text corpus remains authoritative: external tools return bounded, source-bound proposals rather than regenerating or owning the files.
 
 Three pillars, held in one phrase:
 - **Interoperability** — author from different tools, render with swappable generators, and eventually connect independently owned bases. Federation is long-term **owner-controlled publication**: ordinary meta-wikis may curate, map, annotate, mirror, index, disagree, and fork, while every crawler, graph, and search index remains a disposable view. No central Cyberbaser database or registry sits in the authority chain. The five-origin fixture is controlled local evidence only; a profile waits for demonstrated peer need.
@@ -22,21 +22,21 @@ There are two repos to keep straight:
 
 ## Current Phase and Immediate Milestone
 
-**Current phase: v1 Build.** Research & Foundations closed on 2026-07-25. The current product interpretation is an **owner-controlled change boundary** around a version-controlled knowledge base: decide what may publish, prepare only exact byte-preserving changes, classify integrity and trust, and keep the final decision with the owner.
+**Current phase: v1 Build.** Research & Foundations closed on 2026-07-25. The current product interpretation is an **owner-controlled change boundary** around a version-controlled knowledge base: decide what may publish, accept bounded proposals against pinned source, preserve untouched bytes, classify integrity and trust, and keep the final decision with the owner. Reader controls, trusted rich browser/WYSIWYG/CMS-like tools, forge editors, local Markdown tools, and agents may all be replaceable authoring spokes.
 
-The immediate milestone is the precommitted [concierge human-correction pilot](/cyberbaser/research/concierge-human-correction-pilot/): five ordinary readers and one independently operated Markdown-KB owner test a local, account-free correction workflow before any endpoint or editor is built. `@cyberbaser/correction` is the exact quote-anchor and single-splice primitive used by that experiment. It performs no I/O and is not a shipped contribution product.
+The immediate milestone is the precommitted [concierge human-correction pilot](/cyberbaser/research/concierge-human-correction-pilot/): five ordinary readers and one independently operated Markdown-KB owner test one local, account-free correction workflow before account-free automation is built. Its seven-field form is a study instrument and cannot select the eventual reader UI, rich editor, generalized proposal record, or adapter API. `@cyberbaser/correction` is the exact quote-anchor and single-splice primitive used by that experiment. It performs no I/O and is not a shipped contribution product.
 
 ## The Architecture in One Line
 
-An owner-controlled vault → a **change boundary** decides what may publish and admits only exact, reviewable byte changes → validators classify integrity and trust without taking authority from the owner → swappable renderers publish disposable views. GitHub, Actions, Pages, and Quartz implement the current dogfood path; none is the product essence. Federation follows the same non-central rule later: each base publishes its own authority, ordinary meta-wikis publish source-qualified claims, and every crawler, graph store, cache, and search provider remains a disposable spoke.
+Replaceable external authoring spokes submit bounded proposals against pinned source → the **owner-controlled boundary** decides what may publish, verifies exact changes, and classifies integrity and trust → the owner approves application to one authoritative Markdown source → swappable renderers publish disposable views. The owner's local editor remains a separate direct-authoring lane. GitHub, Actions, Pages, and Quartz implement the current dogfood path; none is the product essence. Federation follows the same non-central rule later: each base publishes its own authority, ordinary meta-wikis publish source-qualified claims, and every crawler, graph store, cache, and search provider remains a disposable spoke.
 
 ## Hard Constraints (violating these = going the wrong direction)
 
 1. **Renderer-agnostic and forge-agnostic.** Quartz and GitHub are the current dogfood infrastructure only. The change boundary must survive swapping either one.
 2. **No hyperscalers.** Self-hosting preferred (Forgejo for identity/hosting; see RA-01). GitHub Pages is the *current* deploy target; Cloudflare is edge-only (CDN/WAF/rate-limit), never the host. No AWS/GCP.
 3. **Accounts are not the safety mechanism.** Contribution safety = owner review plus the maintainer's trust curve. The current GitHub path still has an account wall, so do not claim the general product requirement is satisfied.
-4. **No whole-file writer.** The real-vault gate measured 4.6% byte identity and killed re-serialization. Write paths use exact raw-text splices; `@cyberbaser/ofm` validates and `@cyberbaser/correction` prepares one base-bound candidate without performing I/O.
-5. **Evidence before product claims.** The precommitted concierge pilot comes before an account-free endpoint or editor. A primitive, fixture, or study workflow earns only its narrow tested claim.
+4. **No whole-file writer or second authority.** The real-vault gate measured 4.6% byte identity and killed whole-file regeneration in Cyberbaser-mediated source application. External adapters bind to pinned source and emit bounded operations; `@cyberbaser/ofm` validates and `@cyberbaser/correction` prepares one base-bound candidate without performing I/O. Rich presentation is allowed; direct reserialized saves are not.
+5. **Evidence before product claims.** The precommitted concierge pilot comes before account-free automation. A primitive, fixture, or study workflow earns only its narrow tested claim and cannot select a rich editor or generalized adapter contract.
 
 ## Who It's For
 

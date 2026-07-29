@@ -17,9 +17,9 @@ Most questions about "what is this / where does this belong / what should I do" 
 
 ## Current Phase
 
-**v1 Build** — see `.claude/20-ROADMAP.md` and the canonical [Direction](docs/src/content/docs/getting-started/direction.mdx) page. The current product interpretation is an **owner-controlled change boundary** around a version-controlled knowledge base: publication selection, exact byte-preserving candidate changes, integrity/trust classification, and owner decision. GitHub, Actions, Pages, and pinned Quartz are the current dogfood infrastructure, not the product essence.
+**v1 Build** — see `.claude/20-ROADMAP.md` and the canonical [Direction](docs/src/content/docs/getting-started/direction.mdx) page. The current product interpretation is an **owner-controlled change boundary** around a version-controlled knowledge base: publication selection, pinned source/base identity, bounded exact changes, integrity/trust classification, and owner decision. Reader controls, rich browser/WYSIWYG/CMS-like tools, forge editors, local Markdown tools, and agents may all be replaceable authoring spokes. External spokes propose; the owner keeps direct local authoring and source authority. GitHub, Actions, Pages, and pinned Quartz are the current dogfood infrastructure, not the product essence.
 
-The immediate milestone is the precommitted five-reader, one-independent-owner concierge human-correction pilot. `@cyberbaser/correction` is its no-I/O exact-anchor and single-splice primitive, not a shipped editor, endpoint, automatic writer, or account-free product path. Do not build account-free automation until the pilot's fixed thresholds produce evidence.
+The immediate milestone is the precommitted five-reader, one-independent-owner concierge human-correction pilot. `@cyberbaser/correction` is its no-I/O exact-anchor and single-splice primitive, not a shipped editor, generalized adapter API, endpoint, automatic writer, or account-free product path. The seven-field form is a study instrument, not the eventual reader or rich-authoring UI. Do not build account-free automation until the pilot's fixed thresholds produce evidence.
 
 ## Repo Layout
 
@@ -64,19 +64,19 @@ bun run test:e2e     # Playwright tests
 Grounded and justified on the principles page; treat as hard constraints unless new evidence overturns them.
 
 1. **A single source of truth you own.** One authoritative, version-controlled copy. Git and GitHub are the current dogfood manifestation, not the essence or a requirement for the general maintainer.
-2. **Authoring semantics and untouched bytes survive edits.** No whole-file re-serialization in a write path. Accepted changes use exact raw-text splices; `@cyberbaser/ofm` validates and never writes.
+2. **Authoring semantics and untouched bytes survive edits.** No Cyberbaser-mediated source application may regenerate the untouched file. External adapters emit exact source-bound operations; `@cyberbaser/ofm` validates and never writes. This constrains adapter output, not interface richness.
 3. **Contributors shouldn't need git or a forced account.** The current GitHub path does not satisfy this. Contribution safety is owner review plus a maintainer-set trust curve, not an identity wall.
-4. **Every offered contribution path works independently.** This does not mandate three paths or a Web CMS. Today the local maintainer path and GitHub editor exist; account-free intake is under a bounded concierge experiment.
+4. **Every offered contribution path works independently.** This does not mandate three paths or a Web CMS. Owner-local direct authoring is distinct from external proposal lanes. Today the local path and GitHub editor exist; account-free intake is under a bounded concierge experiment, while rich trusted-contributor authoring remains intended but unselected.
 5. **The vault is primary; cyberbaser is derivative.** If cyberbaser disappears, the vault still works.
 6. **Research before implementation.** Code follows principles and measured evidence, not the other way around.
 
-Plus two architecture constraints: **the hub is renderer-agnostic** (SSGs are swappable spokes; never couple to one) and **no hyperscalers** (GitHub Pages current host, Cloudflare edge-only, self-hosted Forgejo preferred for identity).
+Plus three architecture constraints: **authoring and rendering spokes are independently replaceable**; **external authoring spokes never directly own or regenerate canonical source**; and **no hyperscalers** (GitHub Pages current host, Cloudflare edge-only, self-hosted Forgejo preferred for identity).
 
 ## The Critical Boundary: Exact Changes Without Re-serialization
 
-The deciding measurement showed that whole-file markdown re-serialization preserved exact bytes for only 4.6% of the real vault. The write-path rule is therefore fixed: preserve untouched bytes by construction and apply only exact raw-text splices. The full treatment lives in `docs/src/content/docs/design/translation-layer.mdx` (stub: `.claude/22-TRANSLATION-LAYER.md`).
+The deciding measurement showed that whole-file Markdown re-serialization preserved exact bytes for only 4.6% of the real vault. The source-application rule is therefore fixed: bind external proposals to pinned source, preserve untouched bytes by construction, and apply only declared exact operations. The full treatment lives in `docs/src/content/docs/design/translation-layer.mdx` (stub: `.claude/22-TRANSLATION-LAYER.md`).
 
-`@cyberbaser/ofm` classifies whether a before/after change damages authoring semantics. `@cyberbaser/correction` resolves one exact UTF-8 quote and prepares/applies one base-bound candidate splice in memory. Neither is a whole-file writer, and the correction core performs no file I/O. Any future editing surface must conform to this boundary.
+`@cyberbaser/ofm` classifies whether a before/after change damages authoring semantics. `@cyberbaser/correction` resolves one exact UTF-8 quote and prepares/applies one base-bound candidate splice in memory. Neither is a whole-file writer, and the correction core performs no file I/O. A future editor may be rich, block-based, WYSIWYG, or CMS-shaped, but its adapter must fail closed on stale/ambiguous mapping, emit bounded reviewable proposals, preserve all undeclared bytes, and leave application with the owner-controlled route.
 
 ## Sibling Projects (Convention References)
 
@@ -119,7 +119,8 @@ When unsure, verify instead of guessing: serve the built site and measure the bo
 
 - Turn the Astro + Starlight docs site into the product surface without a principle and explicit decision
 - Relitigate the locked decisions in `.claude/FOCUS.md` / `41-QUESTIONS-RESOLVED.md` without new evidence
-- Build a Web CMS or place any whole-file serializer in a write path
+- Put a whole-file serializer, direct external writer, or second content authority in the source-application path; rich browser/CMS-shaped presentation itself is allowed
+- Select or build the trusted-contributor rich editor before evidence and an explicit product decision justify it
 - Call the concierge pilot, local review card, or `@cyberbaser/correction` primitive a shipped account-free product
 - Extract a federation profile by momentum; controlled local fixture evidence comes first, demonstrated peer need comes before protocol work
 - Treat GitHub or Quartz as product essence rather than current dogfood infrastructure

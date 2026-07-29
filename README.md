@@ -19,7 +19,7 @@
 
 Cyberbaser sits between the tools people author in, the systems that publish their knowledge, and eventually other independently owned knowledge bases. It is general-purpose: the [`cybersader/cyberbase`](https://github.com/cybersader/cyberbase) cybersecurity vault is the first dogfood content, not the scope.
 
-The current v1 product interpretation is an **owner-controlled change boundary** around a version-controlled knowledge base. It decides what may be published, prepares only exact byte-preserving candidate changes, classifies their integrity and trust route, and keeps the final decision with the owner.
+The current v1 product interpretation is an **owner-controlled change boundary** around a version-controlled knowledge base. Reader controls, trusted rich browser/WYSIWYG/CMS-like tools, forge editors, local Markdown tools, and agents may all be replaceable authoring spokes. External spokes submit bounded proposals against pinned source; the owner keeps direct local authoring, the authoritative Markdown, and the final decision.
 
 GitHub, GitHub Actions, Pages, and pinned Quartz implement the current dogfood path. They prove one working arrangement; they are not Cyberbaser's product essence.
 
@@ -28,33 +28,29 @@ GitHub, GitHub Actions, Pages, and pinned Quartz implement the current dogfood p
 ## How it works today
 
 ```text
-OWNER-CONTROLLED VAULT
-plain Markdown + history
-        |
-        v
-CHANGE BOUNDARY
-publish selection + leak verification
-exact byte-splice candidates
-OFM integrity classification
-trust route + owner decision
-        |
-        v
-SWAPPABLE PUBLISHED VIEW
-Quartz + GitHub Pages in the dogfood stack
+OWNER LANE
+local Markdown editor → authoritative source → publish boundary → swappable rendered view
+
+EXTERNAL PROPOSAL LANES
+reader · rich/CMS-like editor · forge · agent
+        → pinned, bounded proposal
+        → exact-change + integrity + trust + rendered comparison
+        → owner decision
+        → authoritative source
 ```
 
-Two contribution mechanisms exist today:
+Two contribution mechanisms exist in the dogfood stack today:
 
-- The maintainer edits locally in Obsidian and pushes with git.
+- The maintainer edits the authoritative source locally in Obsidian and pushes with git.
 - An outside contributor uses GitHub's account-required web editor and pull-request flow.
 
-There is **no active Web CMS** and no requirement for three named paths. The principle is that every path Cyberbaser offers must work independently. The account-free product path has not shipped.
+The evaluated serializer-backed CMS writers are rejected because they regenerated complete files. That does **not** ban rich browser or CMS-shaped authoring. A conforming tool can be swapped in through a deliberate adapter that emits bounded source proposals and never becomes a second authority. The account-free product path and trusted rich-authoring product surface have not shipped.
 
 ## Current phase: v1 Build
 
-Research & Foundations closed on 2026-07-25. The immediate milestone is the precommitted [concierge human-correction pilot](https://cybersader.github.io/cyberbaser/research/concierge-human-correction-pilot/): five ordinary readers and one independently operated Markdown-KB owner test whether a useful correction can be submitted without an account, reviewed locally, applied as one exact splice, and published without GitHub.
+Research & Foundations closed on 2026-07-25. The immediate milestone is the precommitted [concierge human-correction pilot](https://cybersader.github.io/cyberbaser/research/concierge-human-correction-pilot/): five ordinary readers and one independently operated Markdown-KB owner test whether a useful correction can be submitted without an account, reviewed locally, applied as one exact splice, and published without GitHub. Its seven fields are temporary measurement inputs, not the eventual reader interface or generalized proposal schema.
 
-[`@cyberbaser/correction`](packages/correction/) supplies exact UTF-8 quote anchoring and fail-closed single-splice preparation/application for the pilot. It is a no-I/O primitive, **not** a shipped editor, intake endpoint, automatic writer, hosted console, forge integration, or account-free product.
+[`@cyberbaser/correction`](packages/correction/) supplies exact UTF-8 quote anchoring and fail-closed single-splice preparation/application for the pilot. It is a no-I/O primitive, **not** a shipped editor, generalized authoring-adapter API, intake endpoint, automatic writer, hosted console, forge integration, or account-free product.
 
 **What exists:**
 
@@ -64,13 +60,14 @@ Research & Foundations closed on 2026-07-25. The immediate milestone is the prec
 - `@cyberbaser/trust`, which computes an owner-configured review route
 - `@cyberbaser/linkcheck`, which ratschets internal-link quality
 - `@cyberbaser/correction`, the exact single-splice primitive used by the pilot
-- A live 933-page dogfood vault rendered by pinned Quartz and deployed to GitHub Pages
+- A live dogfood vault with 933 Markdown sources selected and projected into 931 public page URLs, rendered by pinned Quartz and deployed to GitHub Pages
 - The Astro + Starlight docs site, which is the canonical project knowledge base rather than the product surface
 
 **What does not exist:**
 
-- An account-free contribution endpoint or editor
-- A Web CMS in the write path
+- An account-free contribution endpoint or product editor
+- A generalized authoring-adapter API or selected trusted-contributor rich editor
+- A serializer-backed CMS writer, direct external source writer, or second authoritative content database
 - An automatic source writer
 - A hosted moderation console or per-change rendered preview
 - Required merge enforcement across the current workflows

@@ -4,8 +4,8 @@
 >
 > **Canonical**: `docs/src/content/docs/concepts/ecosystem.mdx` · published at `/cyberbaser/concepts/ecosystem/`
 
-## Current truth (summary, 2026-06-21)
+## Current truth (summary, 2026-07-29)
 
-- Four layers: **publishing/SSG** (commodity, swappable: Astro/Starlight today, Quartz, Docusaurus, MkDocs), **translation** (unified/remark/rehype, astro-loader-obsidian unproven for Tier 1), **contribution/CMS** (Decap Open Authoring, Sveltia, Tina, GitHub web editor), **hosting + auth** (GitHub Pages current, Forgejo self-host preferred, Cloudflare edge-only, GitHub OAuth = one option).
-- The docs page has a logo+link card per tool (21 tools).
-- Hypothesis: an SSG + a competent translation layer + Open Authoring + static host + self-hostable identity *composition* satisfies all three corners of the problem triangle; no single tool does.
+- Four replaceable areas: **authoring surfaces** (reader, rich browser/WYSIWYG/CMS-like, forge, local Markdown, agent), **proposal and exact-change adapters**, **rendering/publishing spokes** (Quartz for the vault, Starlight for this KB), and **hosting/identity** (GitHub Pages current, Forgejo self-host preferred, Cloudflare edge-only).
+- The evaluated Decap, Sveltia, TinaCMS, EmDash, and Pages CMS native save configurations are historical UX evidence, not current writer candidates: each regenerated complete files. A future rich integration needs a deliberate pinned-base exact-proposal adapter.
+- Current hypothesis: replaceable external authoring spokes → bounded proposals → owner-controlled exact-change/integrity/trust/review boundary → one authoritative source → replaceable renderer and host. The owner's local editor is a separate direct-authoring lane.

@@ -55,6 +55,6 @@ bun test --cwd packages/correction
 
 The docs site deploys to GitHub Pages through `.github/workflows/deploy.yml`.
 
-The live dogfood vault uses its own pipeline: fail-closed publication selection, projection and leak verification, pinned Quartz, and GitHub Pages. It currently publishes 933 pages. That stack is evidence that one arrangement works; Cyberbaser's boundary must remain renderer- and forge-agnostic.
+The live dogfood vault uses its own pipeline: fail-closed publication selection, projection and leak verification, pinned Quartz, and GitHub Pages. It currently selects and projects 933 Markdown sources into 931 public page URLs. That stack is evidence that one arrangement works; Cyberbaser's boundary must remain renderer- and forge-agnostic.
 
 Cloudflare, if used at all, is an edge layer for CDN, WAF, or rate limiting, not the host. Self-hosted infrastructure remains preferred for components that eventually require identity or write intake.

@@ -4,10 +4,10 @@
 >
 > **Canonical**: `docs/src/content/docs/concepts/problem.mdx` · published at `/cyberbaser/concepts/problem/`
 
-## Current truth (summary, 2026-06-21)
+## Current truth (summary, 2026-07-29)
 
-- **TL;DR:** a markdown knowledge base is great in private; turning it into a *contributable* public wiki, without flattening its rich syntax or forcing contributors to learn git, is a problem nobody has fully solved. Cyberbaser is the open layer that solves it.
-- **Three axes of friction** (the triangle): markdown fidelity · low-friction contribution · no vendor lock-in. Every existing tool sits on an edge; cyberbaser's bet is the interior, unlocked by the translation layer.
-- **Who it's for:** anyone with a markdown KB (Obsidian first-class, not the only one), readers who spot wrong facts, developers who PR, and **AI agents** proposing changes through the same reviewed pipeline.
-- **Contribution on your terms:** a maintainer-set trust dial (fully open → locked down); every edit passes moderation. Identity gates are mostly theater; moderation is the load-bearing safety mechanism.
-- ⚠ **The pain is not yet externally validated** — no one outside the project has confirmed demand. That is the #1 open risk (see FOCUS.md).
+- **TL;DR:** a Markdown knowledge base is excellent in private; turning it into a contributable public wiki without flattening rich syntax, forcing accounts, or surrendering source authority remains unsolved. Cyberbaser is the owner-controlled interoperability layer around that gap.
+- **Three axes of friction:** authoring fidelity · low-friction contribution · no vendor lock-in. Existing tools usually solve one or two; Cyberbaser composes replaceable spokes around one exact-change and owner-review boundary.
+- **Who it's for:** Markdown-KB owners, readers who spot wrong facts, trusted contributors using richer surfaces, developers using forge paths, and AI agents proposing changes through the same bounded external pipeline.
+- **Contribution on your terms:** a maintainer-set trust dial routes every external proposal through an owner-controlled decision. Identity is a signal, not authority. The owner's local editor remains a separate direct-authoring lane.
+- **Current evidence gap:** the account-free human path still awaits five readers and one independently operated owner under the precommitted pilot.

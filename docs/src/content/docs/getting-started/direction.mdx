@@ -186,7 +186,7 @@ tags: [vision, planning, identity]
 .sl-markdown-content .cbd-not-t { font-weight: 700; color: var(--sl-color-white); display: block; margin-bottom: 0.15rem; }
 `}</style>
 
-**Cyberbaser is in v1 Build: a content-integrity pipeline with governance, plus one immediate human-correction experiment.** A default-deny boundary decides what leaves your vault, a commodity renderer turns that into a site, and mechanical validators judge changes: [933 pages live](https://cybersader.github.io/cyberbase/), six packages, 187 tests green, the GitHub-backed contribution loop rehearsed end to end twice. The account-free product path has not shipped. A bounded [concierge pilot](/cyberbaser/research/concierge-human-correction-pilot/) now tests whether ordinary readers and one independent owner can complete a safe, local, non-GitHub correction workflow before any endpoint or editor is built.
+**Cyberbaser is in v1 Build: a content-integrity pipeline with governance, plus one immediate human-correction experiment.** A default-deny boundary decides what leaves your vault, a commodity renderer turns that into a site, and mechanical validators judge changes: [933 Markdown sources selected and projected into 931 public page URLs](https://cybersader.github.io/cyberbase/), six packages, 187 tests green, the GitHub-backed contribution loop rehearsed end to end twice. The account-free product path has not shipped. A bounded [concierge pilot](/cyberbaser/research/concierge-human-correction-pilot/) now tests whether ordinary readers and one independent owner can complete a safe, local, non-GitHub correction workflow before any endpoint or editor is built.
 
 This page exists to answer one question in under two minutes: **is this still your project?** Read the scorecard, then the forks. Everything below those two is depth you can skip.
 
@@ -217,7 +217,7 @@ Ten things the vision asks for, and where each actually stands. The labels disti
   <div class="cbd-row-hd"><span class="cbd-chip cbd-on">On track</span><span class="cbd-topic">Nothing corrupts your markdown</span></div>
   <div class="cbd-cols">
     <div class="cbd-cell"><span class="cbd-lab">What you asked for</span>A web edit must not break wikilinks, callouts or embeds, and an Obsidian edit must not break the web.</div>
-    <div class="cbd-cell"><span class="cbd-lab">Where we are</span>Stronger than promised, because it was measured. 4.6% byte-identity over 1,430 real files killed the re-serializing writer outright (R12); the write path is raw-text splice only, and <code>ofm-check</code> classifies every markdown PR clean, suspect or damage.</div>
+    <div class="cbd-cell"><span class="cbd-lab">Where we are</span>Stronger than promised, because it was measured. 4.6% byte identity over 1,430 real files killed whole-file source regeneration (R12). Within Cyberbaser's external-proposal boundary, accepted changes are exact raw-text operations and untouched bytes remain identical. Rich presentation is still allowed; the owner's local editor remains direct authoring.</div>
   </div>
 </div>
 
@@ -265,7 +265,7 @@ Ten things the vision asks for, and where each actually stands. The labels disti
   <div class="cbd-row-hd"><span class="cbd-chip cbd-none">Never started</span><span class="cbd-topic">Review the rendered page, not the diff</span></div>
   <div class="cbd-cols">
     <div class="cbd-cell"><span class="cbd-lab">What you asked for</span>A preview of the changed page before approving, on your phone if you like. It is also what the written moderation policy commits you to.</div>
-    <div class="cbd-cell"><span class="cbd-lab">Where we are</span>No preview exists anywhere in the pipeline, and per-PR previews are structurally impossible on the current host: GitHub Pages deploys exactly one environment per repo. Designed at 3 days in the <a href="/cyberbaser/research/proposal-hub-bom/">hub bill of materials</a>, then dropped from every plan.</div>
+    <div class="cbd-cell"><span class="cbd-lab">Where we are</span>No preview exists in the shipped PR pipeline, and per-PR deployment is structurally unavailable on the current host: GitHub Pages deploys exactly one environment per repo. The private pilot can compare local baseline and candidate renders for one correction, but that is study evidence, not a product preview service. The broader preview was designed at 3 days in the <a href="/cyberbaser/research/proposal-hub-bom/">hub bill of materials</a>.</div>
   </div>
 </div>
 
@@ -337,7 +337,7 @@ What a logged-out reader gets today when they act on the promise the whole proje
 
 </div>
 
-The left window is still not a shipped product. The immediate step is deliberately smaller: the [concierge human-correction pilot](/cyberbaser/research/concierge-human-correction-pilot/) uses a blank account-free study form, exact quote anchoring, one byte splice, and a local owner review card. No attempt has run. The endpoint was historically priced at 2 to 4 days, but automation now waits on the pilot's precommitted evidence rather than on another design estimate.
+The left window is still not a shipped product. The immediate step is deliberately smaller: the [concierge human-correction pilot](/cyberbaser/research/concierge-human-correction-pilot/) uses a blank seven-field account-free study instrument, exact quote anchoring, one byte splice, and a local owner review card. Its fields are measurement inputs, not the eventual product UI or adapter schema. Mechanical and operator rehearsals passed, but no counted reader attempt or independent-owner result exists. Automation waits on the pilot's precommitted evidence rather than another design estimate.
 
 ## How we got here
 
@@ -367,7 +367,7 @@ Twenty-two decisions, as a story rather than a log. One line each: what we decid
 
 - **R01** Git stays the source of truth, scoped as the current manifestation with an off-ramp, because 83+ alternatives were surveyed and none fixes git's two structural zeros without breaking the plain-`.md` constraint.
 - **R05** The round-trip is achievable, because a one-afternoon spike round-tripped 20 of 21 fixtures.
-- **R12** No whole-file re-serialization in any write path, ever, because the same pipeline over all 1,430 real vault files returned **4.6% byte-identical**. The serializer is not unbuilt, it is unbuildable, so `@cyberbaser/ofm` became a validator instead of a writer.
+- **R12** No whole-file parse/stringify regeneration in any Cyberbaser-mediated source update, because the same pipeline over all 1,430 real vault files returned **4.6% byte identity**. The serializer-backed writer is architecturally incapable of preserving untouched bytes, so `@cyberbaser/ofm` became a validator. Rich editor or CMS-shaped presentation remains allowed through an exact-proposal adapter.
 - **R13** The Notion sync is frozen and absorbed, because the audit found it last ran on 2024-08-20. The "live third writer" that three analyses worried about did not exist.
 
 <details>
@@ -408,7 +408,7 @@ Twenty-two decisions, as a story rather than a log. One line each: what we decid
 - **R09** Decide the v1 shape by measurement with the rule fixed in advance, because a four-critic consensus had already been overturned once by a dissent pass, and locking on argument would have repeated the documented mistake.
 - **R14** Quartz renders the vault and Starlight keeps these docs, because the real vault built in 1:55 and scored 20 of 20 on the Obsidian-syntax checklist, and the path census found 0 slug collisions, which killed the mass-rename plan.
 - **R15** Publish grants are read only from the `cb-publish:` key, because the first dry run found **587 stale `publish: true` flags**, including on daily notes and personal finance files.
-- **R16** The vault is live, 933 pages, because the boundary, projection and leak test all held on the first real run: 160 s build, 16 s deploy, 25% of the Pages size cap.
+- **R16** The vault is live, with 933 Markdown sources selected and projected into 931 public page URLs, because the boundary, projection and leak test all held on the first real run: 160 s build, 16 s deploy, 25% of the Pages size cap.
 - **R17** The contribution loop is closed and proven, because two rehearsal PRs ran the full circuit, and rehearsal #1 caught a crash that report-only mode had been hiding behind a green check.
 - **R18** Site quality and the trust curve shipped on measurement: 1,145 broken links down to 779, the attachment class 248 down to 7, and a trust classifier that fails closed.
 
@@ -457,7 +457,7 @@ Both columns are load-bearing. The left is what the project has actually earned.
 <div class="cbd-truth-col">
   <div class="cbd-truth-hd">Verified true</div>
   <div class="cbd-item"><span class="cbd-mark cbd-mark-y">✓</span><span class="cbd-item-tx"><strong>187 tests green</strong> across six packages; R21's first five reached 165 after the dead-code discovery was wired rather than papered over.</span></div>
-  <div class="cbd-item"><span class="cbd-mark cbd-mark-y">✓</span><span class="cbd-item-tx"><strong>933 pages live.</strong> Build 3m07s to 4m52s across five runs, deploy 16 s, artifact at 25.1% of the 1 GB Pages cap (R16).</span></div>
+  <div class="cbd-item"><span class="cbd-mark cbd-mark-y">✓</span><span class="cbd-item-tx"><strong>933 Markdown sources selected and projected; 931 public page URLs live.</strong> Build 3m07s to 4m52s across five runs, deploy 16 s, artifact at 25.1% of the 1 GB Pages cap (R16).</span></div>
   <div class="cbd-item"><span class="cbd-mark cbd-mark-y">✓</span><span class="cbd-item-tx"><strong>The boundary caught 587 stale publish flags</strong> before they could publish journals and personal finance notes (R15).</span></div>
   <div class="cbd-item"><span class="cbd-mark cbd-mark-y">✓</span><span class="cbd-item-tx"><strong>4.6% byte-identity over 1,430 real files</strong>, zero mask leaks, zero parse errors. The number that killed the serializer (R12).</span></div>
   <div class="cbd-item"><span class="cbd-mark cbd-mark-y">✓</span><span class="cbd-item-tx"><strong>Broken links 1,145 → 779</strong>, attachment class 248 → 7, from a 47-line fix to a real upstream bug (R18).</span></div>
@@ -607,7 +607,7 @@ Five forks. The account-free fork now has a bounded experiment but no product an
     </div>
     <div class="cbd-opt">
       <div class="cbd-opt-hd"><span class="cbd-opt-n">b. Automate measured work</span><span class="cbd-price">only if a passes</span></div>
-      Build only what removes demonstrated concierge burden from intake, source anchoring, and local review-card generation. Do not infer a rich editor or automatic writer.
+      Build only what removes demonstrated concierge burden from intake, source anchoring, and local review-card generation. Do not infer that a rich editor is the next justified automation. Rich authoring remains architecturally allowed if it satisfies the same exact-proposal boundary.
     </div>
     <div class="cbd-opt">
       <div class="cbd-opt-hd"><span class="cbd-opt-n">c. Narrow or stop</span><span class="cbd-price">if thresholds fail</span></div>
@@ -624,8 +624,8 @@ Five forks. The account-free fork now has a bounded experiment but no product an
 Each of these is a decision with evidence behind it, listed so you can argue with the evidence rather than discover the absence.
 
 <div class="cbd-nots">
-  <div class="cbd-not"><span class="cbd-not-t">Whole-file re-serialization, anywhere</span>4.6% byte-identity over 1,430 real files. Not "hard", architecturally incapable (R12).</div>
-  <div class="cbd-not"><span class="cbd-not-t">A CMS in the write path</span>Every candidate re-serializes the whole file, so every candidate fails the test above (R12).</div>
+  <div class="cbd-not"><span class="cbd-not-t">Whole-file regeneration in a Cyberbaser-mediated source update</span>4.6% byte identity over 1,430 real files. Not merely hard, architecturally incapable of preserving untouched bytes (R12).</div>
+  <div class="cbd-not"><span class="cbd-not-t">A serializer-backed CMS writer</span>Every evaluated candidate regenerated the complete file. CMS-shaped or rich presentation is allowed; rewriting untouched source is not (R12).</div>
   <div class="cbd-not"><span class="cbd-not-t">Running Obsidian plugins (Dataview and friends)</span>13 of 1,445 vault files need it, and it couples the product to Obsidian against the general-not-Obsidian lock. Kill stands, reasons corrected in R21.</div>
   <div class="cbd-not"><span class="cbd-not-t">Mixed privacy, RBAC, real-time collaboration</span>Owned by a private sibling project that already ships them (R10).</div>
   <div class="cbd-not"><span class="cbd-not-t">Cleaning 669 broken links or renaming 43 emoji folders</span>Inherited content debt, and those folders are your daily navigation. 73 path-qualified wikilinks would break (R19).</div>

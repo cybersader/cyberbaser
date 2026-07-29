@@ -8,10 +8,10 @@ status: research
 tags: [research, contribution, testing, governance]
 ---
 
-This page precommits the first human test of Cyberbaser's central contribution claim. It is a protocol and eventual results record. **No pilot attempts or results have been recorded yet.**
+This page precommits the first human test of Cyberbaser's central contribution claim. It is a protocol and eventual results record. **The internal agentic dry run completed on 2026-07-28, but no counted human pilot attempt or threshold result exists yet.**
 
 :::caution[Concierge experiment, not shipped product]
-The pilot uses a human concierge to carry a submission through existing local libraries. It is **not** a shipped zero-account contribution path, editor, intake endpoint, hosted review console, automatic writer, or forge integration. It also proves no cross-system interoperability: one independently operated knowledge base participating in a manually assisted study is not an independent implementation of a Cyberbaser protocol.
+The pilot uses a human concierge to carry a submission through existing local libraries. It is **not** a shipped zero-account contribution path, editor, intake endpoint, hosted review console, automatic writer, or forge integration. Those are current-state exclusions, not architectural bans on future replaceable authoring surfaces. Any future reader, rich-editor, CMS-like, forge, or agent spoke must still preserve owner authority and emit exact source-bound proposals. The pilot also proves no cross-system interoperability: one independently operated knowledge base participating in a manually assisted study is not an independent implementation of a Cyberbaser protocol.
 :::
 
 The experiment asks a deliberately narrow question before any product surface is built: can an ordinary reader describe one useful correction without an account or git, and can the owner judge and apply the resulting exact-byte patch locally, outside GitHub, without changing unrelated source bytes?
@@ -35,9 +35,93 @@ The counted pilot consists of:
 - **Five ordinary readers.** They are not Cyberbaser contributors, did not help design this protocol, do not administer the target base, and are not selected for git or Markdown expertise. Familiarity with the subject matter is allowed and useful.
 - **One concierge.** The concierge recruits participants, preserves the raw study record, converts submissions into exact local correction objects, runs the checks, and presents the review card. The concierge does not decide what the base should say and cannot approve or write a source change.
 
-An internal dry run against Cyberbase may test the instructions and tooling, but **it does not count** toward the five participant attempts, the accepted-correction threshold, the timing thresholds, or the owner-preference result.
+The completed internal dry run against Cyberbase tested the instructions and tooling, but **it does not count** toward the five participant attempts, the 3-of-5 reader threshold, the accepted-and-live threshold, either human timing threshold, the independent-owner requirement, or the owner-preference result.
 
 The independently operated base may use Cyberbaser's publication packages, but it does not have to. Independence here is about the human owner and their source of truth, not about claiming an independently implemented protocol.
+
+## Internal dry run completed (2026-07-28)
+
+The internal harness was exercised against one owner-selected, public Cyberbase typo candidate at a pinned commit. The proposed correction changed `responsibilites` to `responsibilities`. The source mapping and raw verification record remained private; the tracked artifacts contain only the selected public passage, a redacted mapping statement, aggregate evidence counts, and mechanical results.
+
+This run answers one narrow question: can the current local primitives prepare, verify, project, render, and present one exact candidate without modifying the supplied checkout? It does not answer whether readers can use the form, whether an independent owner finds the card useful, whether the owner would accept or publish the change, or whether the workflow beats email plus manual editing.
+
+### Mechanical and rendered outcomes
+
+| Stage | Measured outcome |
+|---|---|
+| **Pinned base** | Fresh clean checkout at `b320c5c2c92d646b9df7019c9e29034341ebff6b`; source SHA-256 remained `5c6176c06a7521f565199a1c25413bbc75cb2ea456eb6c8d230a8bb2c7efb794`. |
+| **Exact anchor and splice** | The quote resolved exactly once at half-open UTF-8 byte range `[302, 394)`. The candidate inserted one byte; 302 prefix bytes and 2,284 suffix bytes remained identical. |
+| **Correction integrity** | Prepared base and candidate representation digests matched the independently checked values. `@cyberbaser/ofm` returned `clean` with zero findings. |
+| **Injected trust classification** | The registered internal subject classified as tier `agent`, route `auto-merge`, under `internal-dry-run-policy-v1`. This is a policy output only, not owner approval or permission to write. |
+| **Publication projection** | Baseline and candidate each contained 933 selected Markdown sources and 373 assets. Explicit verification found 1,306 expected and actual files, with zero unexpected, missing, or denied-present files. |
+| **Inherited projection diagnostics** | Baseline and candidate each retained four selection errors, six projection warnings, and two path violations. Their equal counts are recorded as existing corpus diagnostics, not erased or attributed to the correction. Projection verification still completed with zero failures. |
+| **Pinned rendering** | Separate baseline and candidate Quartz `v4.5.2` builds completed. On the same output page, the baseline contained the old text once and the replacement zero times; the candidate contained the old text zero times and the replacement once. |
+| **Link delta** | Both outputs had 779 broken-link tuples: 669 missing pages, 101 missing assets, seven relative attachments, and two other findings. Candidate-only and baseline-only deltas were both zero; all 779 were unchanged inherited findings. |
+| **Isolation** | The candidate was applied only to its temporary copy. The supplied checkout stayed clean and byte-identical before and after, no source write or public deployment occurred, and all temporary live workspaces were removed. A post-audit full rerun also rejected symbolic links before copying, projection, or rendering. |
+| **Automated validation** | The original candidate run passed 46 tests with 213 assertions across eight files. A post-audit hardening milestone then passed 47 tests with 218 assertions after adding coverage that rejects symbolic links and prevents a pending-owner card from being misrepresented as owner-decided. Two fresh verifier processes each reported 11 PASS, 0 FAIL, `complete: true`, emitted no verifier diagnostic stderr, and produced byte-identical JSON. The `bun run verify` package-script wrapper may print Bun's fixed launcher banner to stderr. Later operator-rehearsal hardening expanded the final suite to 77 tests with 410 assertions across 12 files, as recorded below. |
+| **Review artifacts** | One sanitized case JSON, one result JSON, and one static review-card HTML were retained. Validation found no local-path leakage, credentials, contact information, raw private evidence, scripts, forms, frames, links, images, or resource/action attributes. |
+
+### Machine execution timings
+
+These are measured machine times, not participant, concierge, owner-review, or product-latency results.
+
+| Operation | Measured time |
+|---|---:|
+| Cyberbase clone | 23.41 s |
+| Quartz source clone | 0.88 s |
+| Frozen dependency install | 11.22 s |
+| Scoped tests | about 2.82 s |
+| Two fresh verifier processes | 0.922 s and 0.911 s |
+| No-write evaluation | 0.76 s |
+| Instrumented live run | 190.169 s |
+| Checkout verification, before / after | 0.027 s / 0.026 s |
+| Baseline / candidate projection | 0.440 s / 0.374 s |
+| Baseline / candidate Quartz setup | 7.538 s / 7.241 s |
+| Baseline / candidate Quartz build | 83.964 s / 84.428 s |
+| Baseline / candidate link check | 0.736 s / 0.677 s |
+| Rendered-target evidence | 0.006 s |
+| Combined copy, evaluation, card, and cleanup overhead not separately instrumented | 4.712 s |
+
+No human concierge intake, mapping confirmation, review, decision, application, or publication time was measured or inferred.
+
+### Failures and limitations observed
+
+- The selected candidate run completed without a harness repair, build failure, projection failure, rendered-target mismatch, source mutation, cleanup failure, or artifact-validation failure.
+- Command-scope mistakes remained visible. During the original candidate-run stage, unscoped repository-root `bun test` invocations discovered unrelated Playwright specs and reported the same three loader errors; the correctly scoped harness run passed 46 of 46. One verifier command placed Bun's `--cwd` flag incorrectly and printed usage text; the corrected command passed twice with byte-identical output. These were operator invocation errors, not hidden candidate-run successes. The post-audit hardening milestone passed 47 of 47, and the later final operator-rehearsal suite passed 77 of 77.
+- The candidate is a spelling-only correction, so it could not satisfy the precommitted requirement for two substantive corrections even if an owner later accepted and published it.
+- The local `auto-merge` route came from an explicitly injected internal agent policy. It is not an independent owner's trust policy, preference, decision, or authority.
+- The 779 broken-link tuples and equal projection diagnostics remain inherited corpus debt. A post-hardening full rerun again produced zero candidate-only and zero baseline-only broken tuples. Aggregate all-link counts varied across identical Quartz builds, including the unchanged baseline, so they are not treated as a stable candidate-regression signal. The supported claim is limited to broken-tuple parity and exact target-page replacement evidence.
+- One Cyberbase candidate rendered through one pinned Quartz configuration is local composition evidence. It is not human-usability evidence, demand evidence, a live correction, a shipped account-free path, or interoperability evidence.
+
+### Private pilot-operator rehearsal completed
+
+The private operator kit was then exercised through its complete Cyberbase-profile command sequence:
+
+```text
+pilot:init → pilot:prepare → pilot:render → pilot:decision
+```
+
+The final synthetic rehearsal created an ignored private attempt, prepared one exact single-line typo correction, rendered separate baseline and candidate outputs through the pinned Quartz wrapper, produced an eligible owner card, and reran the full isolated live lane at decision validation. The final decision record remained explicitly synthetic and reported `countsTowardPilot: false` and `sourceWritePerformed: false`. The supplied source SHA-256 and empty Git status were unchanged afterward, and the private rehearsal workspace was removed.
+
+Two earlier rehearsals failed closed and drove repairs. The first showed that Quartz may repeat a visually unique source passage in derivative HTML metadata, so rendered safety now requires old text to be present in the baseline and absent from the candidate, with the replacement absent from the baseline and present in the candidate; measured multiplicity remains visible. Exact quote uniqueness still comes from the bound source bytes. The second showed that equivalent Quartz builds can vary in successful-link aggregates and generated HTML hashes, so decision validation compares a deterministic safety projection while retaining candidate-only link tuples, rendered old/new safety, publication verification, source isolation, and cleanup. The blocked-evidence tamper regression still fails.
+
+The final scoped harness passed 77 tests with 410 assertions across 12 files. The one-command Cyberbase initialization path was also exercised against the clean pinned public Cyberbase checkout and the real owner-supplied IR DROP mapping: it derived the exact commit, verified the public origin, clean state, tracked source bytes, and explicit URL, then created the reader form and prefilled private operator record without source inference. This is operator-path and mechanical evidence only. The form has still been used by zero ordinary readers, and no independent owner reviewed or applied a real correction.
+
+### Pre-attempt protocol amendments (2026-07-28)
+
+The internal dry run and private operator rehearsals exposed five safety assumptions before counted attempt one. The protocol was amended before recruitment rather than silently treating the repaired procedure as the original one. The participant count, participant eligibility, independent-owner requirement, timing boundaries, success thresholds, and decision rule did not change.
+
+1. **Browser quote and replacement input became single-line.** HTML textareas normalize pasted line endings before the local form script can preserve them. The pilot instrument now rejects multiline quote and replacement values instead of claiming byte-exact browser capture. This narrows only the study form, not the correction core or future authoring adapters.
+2. **Rendered evidence became an old/new safety check rather than an HTML uniqueness rule.** Quartz may repeat source prose in derivative metadata. Source-byte uniqueness still authorizes the splice; rendered validation now requires the old text in the baseline and absent from the candidate, and the replacement absent from the baseline and present in the candidate, while recording occurrence counts.
+3. **Decision comparison became deterministic.** Equivalent pinned Quartz builds varied in aggregate successful-link counts and generated HTML hashes. Decision validation now compares the stable safety projection: source/case binding, publication projection, renderer identity and isolation, candidate-only link tuples, rendered old/new gates, no-write assertions, and cleanup. Build-variant aggregate counts and hashes remain evidence but cannot decide eligibility.
+4. **Symbolic links became an explicit stop condition before workspace copying or rendering.** The supplied checkout must contain tracked, ordinary source files only. A symlink is rejected before it can redirect a copy, projection, or render outside the intended tree.
+5. **Owner decision now requires a fresh decision-time rerun.** Stored preparation or render evidence cannot authorize itself. Before an accepted candidate can proceed, the kit revalidates identifiers and reruns the complete isolated live lane for the Cyberbase rehearsal profile; eligibility and expected status are derived from the fresh evidence.
+
+These are dated pre-attempt amendments, not human results. Any further protocol change after counted attempt one begins must be recorded with the affected attempt and cannot be retroactively hidden.
+
+### What remains for humans
+
+The next step remains the precommitted independent pilot: recruit five ordinary readers and one independently operated Markdown-KB owner; use the blank account-free study form; obtain owner-confirmed page-to-source mappings; prepare local review cards; leave every editorial decision and local application with that owner; verify any accepted correction live; measure participant, concierge, and owner time; and record the owner's forced preference after at least two eligible cards. Until that work is complete, every human threshold below remains **Not run** and Q09 remains open.
 
 ## What counts as an attempt
 
@@ -51,19 +135,21 @@ The owner, not the concierge, decides whether a correction is useful and accepta
 
 ## The exact participant form
 
-The study instrument contains only the following fields, in this order. The transport may be a paper form, a blank shared document, or an account-free survey selected for the run. It is a study instrument operated by the concierge, not a Cyberbaser endpoint or editor.
+The seven-field study instrument contains only the following fields, in this order. The transport may be a paper form, a blank shared document, or an account-free survey selected for the run. It is operated by the concierge, not a Cyberbaser endpoint or editor. Its fields are non-normative outside this study: they do not define the eventual reader interface, rich-authoring experience, generalized proposal record, or adapter contract.
 
 | Field | Required | Exact instruction shown to the participant | Handling rule |
 |---|---:|---|---|
 | **Page URL** | Yes | “Paste the URL of the page you want to correct.” | Must be a public page the owner agrees is in scope. The participant never supplies a source path. |
-| **Exact quote** | Yes | “Copy the exact text that should change. Include enough surrounding words to identify it once.” | Preserved exactly as submitted. No trimming, case folding, newline conversion, Unicode normalization, or fuzzy repair. |
-| **Replacement** | Yes | “Write the text that should replace the quote. Leave this empty only if the quoted text should be deleted.” | Preserved exactly as submitted. An empty replacement is an explicit deletion, not a missing answer. |
+| **Exact quote** | Yes | “Copy one exact line that should change. Browser textareas normalize pasted line endings, so this pilot form rejects multiline quotes.” | Supported single-line text is preserved exactly as submitted. No trimming, case folding, Unicode normalization, or fuzzy repair. |
+| **Replacement** | Yes | “Write one replacement line. Leave this empty only if the quoted text should be deleted; multiline replacements are outside this pilot form.” | Supported single-line text is preserved exactly as submitted. An empty replacement is an explicit deletion, not a missing answer. |
 | **Rationale** | Yes | “In one or two sentences, explain why this change improves the page.” | Shown to the owner unchanged except for necessary redaction of identifying data. |
 | **Factual source** | When applicable | “If this changes a fact, paste the best source you used. Otherwise write ‘not applicable’.” | A URL is evidence for review, not automatic proof. The owner judges source quality. |
 | **Public credit name** | No | “If the correction is accepted, what name may be shown publicly? Leave blank for no public credit.” | Never used as authentication or a trust signal. Blank means no public name. |
 | **Credit consent** | Yes | “May the public results page use the credit name above if the correction is accepted? Choose yes or no.” | “Yes” is valid only when a public credit name is also present. “No” or blank name means the attempt remains anonymous publicly. |
 
 The form does **not** request an email address, account, username, IP address, source-file path, git identity, demographic profile, or credentials. Recruitment contact details, if any already exist outside the study, are not copied into the submission record.
+
+The local browser instrument deliberately narrows quote and replacement fields to one line. HTML textarea values normalize CRLF and bare-CR boundaries to LF before the form script can serialize them, so claiming exact preservation for multiline browser input would be false. A reader who needs a multiline correction records the attempt as unsupported by this instrument; the concierge does not silently normalize or repair it. This restriction is a pilot limitation, not a general limit of the exact correction core.
 
 The participant supplies only the exact quote. If that quote appears more than once, the concierge may derive immediately adjacent `prefix` and `suffix` context from the owner-confirmed current source after submission. The participant is never asked to understand byte offsets. Added context may only disambiguate the submitted quote; it may not change, normalize, or silently rebase it. This follows the useful shape of the [Web Annotation Text Quote Selector](https://www.w3.org/TR/annotation-model/#text-quote-selector), while Cyberbaser's correction core deliberately applies stricter byte-exact UTF-8 matching.
 
@@ -145,6 +231,12 @@ Create separate temporary local snapshots for the baseline and candidate, using 
 
 Build both snapshots. Capture the target page in comparable baseline and candidate views at the same viewport, and retain build logs locally. A build failure, unshown target page, or semantic change not visible in the review card blocks owner approval.
 
+For the independent static-output lane, preparation emits exact private baseline and candidate source snapshots plus a render-attestation scaffold bound to the attempt, mechanical case, source digests, renderer profile, and recorded command. The owner or concierge builds separate pinned-checkout copies from those snapshots, records the two output paths, and explicitly attests that the builds were isolated. Before accepting the outputs, the kit reruns evaluation against source bytes that must still be tracked and byte-identical to the pinned revision, then compares the fresh evaluation and source snapshots with the stored preparation artifacts. Missing or altered evidence fails closed.
+
+An owner attestation is explicit study evidence, not cryptographic build provenance. The kit does not execute an arbitrary owner command and cannot prove that a deliberately misrepresented directory came from a specific renderer. If the owner cannot truthfully attest the two prepared builds, the attempt is ineligible.
+
+Exact uniqueness is enforced against the owner-confirmed source bytes, where it authorizes the splice. Rendered HTML can legitimately repeat the same prose in metadata or structured output, so raw-HTML uniqueness is not required. Instead, the baseline must contain the old text one or more times and no replacement text. The candidate must contain no old text and, for a non-empty replacement, the replacement one or more times. The review evidence retains the measured occurrence counts so renderer multiplicity remains visible. The completed Cyberbase dry run still measured exactly 1 old / 0 replacement in the baseline and 0 old / 1 replacement in the candidate; this rule does not rewrite that recorded result.
+
 The renderer is a swappable spoke. This step validates what the owner and readers will see; it does not authorize the renderer to rewrite source Markdown.
 
 ### 7. Compare internal links
@@ -177,10 +269,10 @@ Only after the previous steps complete does the concierge produce the local revi
     <div class="cb-check cb-check-off"><span class="cb-check-ic">–</span><span class="cb-check-t">trust route</span><span class="cb-check-meta">not run</span></div>
     <div class="cb-check cb-check-off"><span class="cb-check-ic">–</span><span class="cb-check-t">candidate-only link delta</span><span class="cb-check-meta">not run</span></div>
   </div>
-  <div class="cb-review-actions"><span class="cb-review-btn cb-review-approve">Accept locally</span><span class="cb-review-btn cb-review-reject">Reject / clarify</span></div>
+  <div class="cb-rich-foot"><span class="cb-chip cb-chip-warn">pending owner</span><span>owner decision recorded separately</span></div>
 </div>
 
-<p class="cb-fig-cap">Contract sketch only. Every value remains unfilled until a real attempt runs, and the card must say that no source write has occurred.</p>
+<p class="cb-fig-cap">Contract sketch only. Every value remains unfilled until a real attempt runs, the card must say that no source write has occurred, and the owner's accept/reject/clarify decision is recorded separately rather than through card controls.</p>
 
 ## Review-card contract
 
@@ -213,7 +305,7 @@ The owner chooses one of three outcomes:
 - **Reject:** the proposed content or evidence is not acceptable, even if the splice is mechanically safe.
 - **Clarify:** the intent may be useful, but the participant or mapping needs more information. This does not count as an accepted correction unless a new correction is prepared and reviewed from a current base.
 
-The concierge cannot approve on the owner's behalf. At the moment of decision, the source file is still unchanged.
+The concierge cannot approve on the owner's behalf. At the moment of decision, the source file is still unchanged. The private decision record is pre-bound to the attempt ID, mechanical case ID, and prepared candidate digest. Before any accepted candidate proceeds, the kit validates those identifiers against a freshly revalidated eligible run. For the Cyberbase rehearsal profile, decision validation reruns the complete isolated pinned-Quartz live lane and compares a deterministic safety projection of the stored and fresh evidence. The comparison retains case/evaluation binding, publication projection, renderer identity and isolation, candidate-only and baseline-only link tuples, rendered-page safety gates, source isolation/no-write assertions, and cleanup. It excludes build-variant aggregate successful-link counts and occurrences, rendered HTML byte lengths and hashes, and harmless literal multiplicity above the required presence threshold. Eligibility and expected status are derived only from the fresh evidence, so stored blocked evidence and status cannot be rewritten into an eligible decision. `pilot:decision` may therefore take as long as a full render. A safety mismatch or incomplete review-card contract stops the decision; validation itself writes no source and counts as no pilot result.
 
 After acceptance, **the owner alone initiates application through the owner's normal local workflow**. That may use the already prepared candidate bytes, but `@cyberbaser/correction` itself remains a no-I/O library and the pilot adds no automatic writer. Before the write, `applyCorrection()` runs again against the current source bytes; any stale-base error returns the attempt to preparation and review.
 
@@ -306,7 +398,7 @@ Even a fully passing pilot supports only a bounded next step.
 
 - Five readers and one owner cannot establish market demand, population-level completion rates, moderation economics, accessibility across all needs, or abuse resistance at public-internet scale.
 - A concierge hides operational work. The timing threshold measures whether that work is small enough to automate next, not whether automation already exists.
-- The study form is not a product interface. Its transport may have its own privacy, accessibility, or reliability limits and must be recorded with the results.
+- The seven-field study form is not a product interface, a minimum contribution payload, or a generalized proposal schema. Its transport may have its own privacy, accessibility, or reliability limits and must be recorded with the results.
 - Exact quote anchoring covers one existing UTF-8 file and one splice. It does not solve structural edits, multi-paragraph moves, tables requiring coordinated changes, frontmatter editing, asset uploads, new pages, deletions, or concurrent multi-author editing.
 - Owner-confirmed page-to-source mapping avoids guessing; it does not solve generalized renderer source maps.
 - Isolated rendering proves the configured baseline/candidate comparison for one base. It is not a renderer conformance suite.
@@ -318,7 +410,7 @@ Even a fully passing pilot supports only a bounded next step.
 
 Apply this rule after filling the tables without changing the thresholds:
 
-1. **All thresholds pass, no stop condition:** build only the smallest automation that removes measured concierge work from intake, exact source anchoring, and local review-card generation. Do not infer a need for a rich editor, hosted console, account system, automatic writer, or generalized adapter.
+1. **All thresholds pass, no stop condition:** build only the smallest automation that removes measured concierge work from intake, exact source anchoring, and local review-card generation. Do not infer that a rich editor, hosted console, account system, automatic writer, or generalized adapter is the next justified build. This evidence gate does not prohibit a conforming rich authoring spoke; it simply cannot select or validate one.
 2. **Usability threshold fails but safety holds:** revise the manual form or instructions and run another precommitted manual iteration. Do not build infrastructure to automate a flow people cannot complete.
 3. **Safety or privacy threshold fails, or any stop condition fires:** stop product-surface work on this path. Repair or narrow the correction contract and repeat local falsification before recruiting more participants.
 4. **Fewer than two substantive corrections are accepted and live:** the pilot has insufficient evidence of useful correction demand. Do not justify a platform from mechanically successful toy edits.
@@ -328,6 +420,7 @@ Selecting or running this experiment does **not** assign an R-number and does **
 
 ## Related
 
+- [Internal dry-run harness and sanitized evidence](https://github.com/cybersader/cyberbaser/tree/main/spikes/human-correction-dry-run) — the local mechanical evidence recorded above, not a counted pilot result
 - [Contribution Workflows](/cyberbaser/design/contribution-workflows/) — what contributors and maintainers can actually use today
 - [Translation Layer](/cyberbaser/design/translation-layer/) — the byte-preserving write-path constraint and OFM validator role
 - [Architecture](/cyberbaser/design/architecture/) — the existing package boundaries and the review surface that has not shipped

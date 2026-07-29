@@ -81,9 +81,9 @@ A log of significant design trade-offs and why each was decided the way it was. 
 
 These are decisions we know we'll need to make. When one gets decided, move it from here to the log above.
 
-- **SSG choice: Astro vs. Quartz vs. custom?** Inherited from Phase 0 as "Astro + Starlight"; not re-validated against current principles
-- **CMS choice: Decap vs. Sveltia vs. Tina?** Not yet made; Decap is the incumbent but Sveltia is worth evaluation
-- **Auth for elevated/maintainer roles: GitHub OAuth vs. self-hosted (Forgejo) vs. multi-provider?** Default: GitHub OAuth for the current Decap path. Note: contribution itself is gated by a maintainer-set trust curve + moderation queue, not a forced contributor account.
+- **Renderer choice:** resolved for dogfood. Pinned Quartz renders the vault and Starlight renders this project KB; both remain replaceable output spokes.
+- **Rich authoring surface and adapter:** open. The evaluated Decap, Sveltia, TinaCMS, EmDash, and Pages CMS writer configurations were rejected because they regenerated complete files. No editor is selected; any future rich surface needs a deliberate pinned-base exact-proposal adapter.
+- **Auth for elevated/maintainer roles: GitHub OAuth vs. self-hosted Forgejo vs. multi-provider?** Still part of the general operating-model decision. External contribution safety remains bounded proposals plus owner review, not a forced account.
 - **Hosting: GitHub Pages (current target) vs. self-hosted (Forgejo)?** GitHub Pages is the current deploy target; the old "Cloudflare" inheritance is superseded. Cloudflare, if used, is edge-only (CDN/WAF/rate-limit), not the host.
 - **Backlinks: build-time compute vs. runtime?** Not yet made. See [Architecture](/cyberbaser/design/architecture/)
 - **Asset hosting: in-vault vs. CDN?** Not yet made

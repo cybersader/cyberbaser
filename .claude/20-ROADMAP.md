@@ -1,6 +1,6 @@
 # 20 — Roadmap
 
-> **Status**: 🌳 Current (aligned 2026-07-27). The canonical public roadmap is `docs/src/content/docs/getting-started/roadmap.mdx` (`/cyberbaser/getting-started/roadmap/`); this file is the agent-side operating view.
+> **Status**: 🌳 Current (aligned 2026-07-29). The canonical public roadmap is `docs/src/content/docs/getting-started/roadmap.mdx` (`/cyberbaser/getting-started/roadmap/`); this file is the agent-side operating view.
 
 ## Current Phase: **v1 Build**
 
@@ -10,9 +10,9 @@ GitHub, GitHub Actions, Pages, and pinned Quartz are the current dogfood infrast
 
 ### Built foundation
 
-- [x] No whole-file re-serialization in any write path; accepted changes are raw-text splices.
+- [x] No whole-file re-serialization in any Cyberbaser-mediated external proposal or source-application path; accepted external changes are exact, base-bound operations. The owner's local editor remains a separate direct-authoring lane.
 - [x] `@cyberbaser/ofm` validator, fail-closed publish boundary, projection and leak verification, link checker, and trust classifier.
-- [x] Real vault published through Quartz: 933 pages live at [cybersader.github.io/cyberbase](https://cybersader.github.io/cyberbase/).
+- [x] Real vault published through Quartz: 933 Markdown sources selected and projected into 931 public page URLs at [cybersader.github.io/cyberbase](https://cybersader.github.io/cyberbase/).
 - [x] GitHub-backed contribution loop rehearsed twice end to end.
 - [x] `@cyberbaser/correction` exact UTF-8 quote-anchor and single-splice core. This is a no-I/O primitive for preparing and validating a candidate change, **not** a shipped editor, endpoint, automatic writer, or contribution product.
 
@@ -22,7 +22,7 @@ GitHub, GitHub Actions, Pages, and pinned Quartz are the current dogfood infrast
 - [ ] Test the whole human loop before automating it: account-free submission, owner-confirmed source mapping, exact quote anchoring, one-splice candidate preparation, local review card, owner-controlled local application, publication, and live verification.
 - [ ] Keep Q09 open. Passing the thresholds justifies only the smallest automation around measured work; failing narrows or stops the account-free product claim.
 
-No attempts or results exist yet. The concierge, study form, local card, and correction primitive are experiment infrastructure, not a shipped contribution path.
+No counted human attempt or threshold result exists yet. The completed internal dry run and private operator rehearsal count toward none of the pilot thresholds. The concierge, study form, local card, and correction primitive are experiment infrastructure, not a shipped contribution path.
 
 ### Other v1 Build work
 

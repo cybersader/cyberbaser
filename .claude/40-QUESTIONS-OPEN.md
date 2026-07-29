@@ -4,11 +4,11 @@
 
 Keep the canonical list short (≤ ~15). Resolve before adding.
 
-## Current state (2026-07-27)
+## Current state (2026-07-29)
 
 Four questions are genuinely open:
 
-- **Q06 — stable URLs:** the live 933-page corpus still uses verbatim path-derived URLs. The five-origin federation fixture used test-only mappings and does not settle the production contract.
+- **Q06 — stable URLs:** the live corpus selects 933 Markdown sources and exposes 931 public page URLs, still using verbatim path-derived URLs. The five-origin federation fixture used test-only mappings and does not settle the production contract.
 - **Q08 — contributor attribution:** the GitHub fork flow's commit attribution has not been independently verified, yet the licensing and future credit story depend on it.
 - **Q09 — account-free contribution:** no endpoint, editor, hosted console, automatic writer, or forge integration has shipped. The immediate milestone is the precommitted five-reader, one-independent-owner concierge pilot. `@cyberbaser/correction` is a no-I/O exact-splice primitive used by that experiment, not the answer to Q09.
 - **Q10 — moderation enforcement:** OFM is report-only, trust is decision-only, `main` has no required checks, and the maintainer's direct-push path needs validation that does not break daily local authoring.
