@@ -55,6 +55,7 @@ export default defineConfig({
       lastUpdated: true,
       components: {
         MobileMenuFooter: './src/components/MobileMenuFooter.astro',
+        PageSidebar: './src/components/PageSidebar.astro',
         PageTitle: './src/components/PageTitle.astro',
       },
       editLink: {

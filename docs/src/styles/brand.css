@@ -529,6 +529,10 @@ main .content-panel:has(+ .content-panel .cb-hero) {
     z-index: 10;
   }
   .main-frame { padding-inline-start: 0 !important; }
+  /* Starlight only adds auto margins at its 72rem desktop breakpoint.
+   * Once we hide both sidebars here, the capped content container otherwise
+   * stays pinned to the left panel padding across common half-screen widths. */
+  .main-pane .content-panel > .sl-container { margin-inline: auto; }
   .right-sidebar-panel { display: none !important; }
   .right-sidebar-container {
     width: 0 !important; min-width: 0 !important;

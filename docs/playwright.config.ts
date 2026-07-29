@@ -22,9 +22,9 @@ export default defineConfig({
   ],
 
   webServer: process.env.TEST_URL ? undefined : {
-    command: 'bun run preview',
+    command: 'bun run build && bun run preview',
     url: 'http://localhost:4321/cyberbaser/',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120000,
+    reuseExistingServer: false,
+    timeout: 180000,
   },
 });

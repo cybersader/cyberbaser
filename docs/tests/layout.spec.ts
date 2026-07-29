@@ -148,6 +148,82 @@ test.describe('Layout regression: homepage contribution storyboard', () => {
   }
 });
 
+test.describe('Layout regression: content-region centering', () => {
+  const pages = ['/', '/getting-started/'];
+  const widths = [960, 1024, 1144, 1151, 1152, 1272];
+
+  for (const path of pages) {
+    for (const width of widths) {
+      test(`${path} centers content in its available region @${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 1080 });
+        await page.goto(`${BASE}${path}`);
+
+        const geometry = await page.evaluate(() => {
+          const rect = (element: Element) => {
+            const box = element.getBoundingClientRect();
+            return {
+              left: box.left,
+              right: box.right,
+              width: box.width,
+              centerX: box.left + box.width / 2,
+            };
+          };
+          const required = (selector: string) => {
+            const element = document.querySelector(selector);
+            if (!element) throw new Error(`Missing layout element: ${selector}`);
+            return element;
+          };
+
+          const pane = required('.main-pane');
+          const panel = required('main .content-panel:has(.sl-markdown-content)');
+          const content = required('main .content-panel:has(.sl-markdown-content) > .sl-container');
+          const leftSidebar = required('#starlight__sidebar');
+          const rightSidebar = required('.right-sidebar-container');
+          const panelStyle = getComputedStyle(panel);
+          const innerLeft = panel.getBoundingClientRect().left + Number.parseFloat(panelStyle.paddingLeft);
+          const innerRight = panel.getBoundingClientRect().right - Number.parseFloat(panelStyle.paddingRight);
+
+          return {
+            viewportWidth: window.innerWidth,
+            devicePixelRatio: window.devicePixelRatio,
+            visualScale: window.visualViewport?.scale ?? 1,
+            pane: rect(pane),
+            content: rect(content),
+            leftSidebar: rect(leftSidebar),
+            rightSidebar: rect(rightSidebar),
+            leftSidebarDisplay: getComputedStyle(leftSidebar).display,
+            innerLeft,
+            innerRight,
+            leftGutter: content.getBoundingClientRect().left - innerLeft,
+            rightGutter: innerRight - content.getBoundingClientRect().right,
+          };
+        });
+
+        expect(geometry.devicePixelRatio).toBe(1);
+        expect(geometry.visualScale).toBe(1);
+
+        if (width < 1152) {
+          expect(geometry.leftSidebarDisplay).toBe('none');
+          expect(geometry.leftSidebar.width).toBeLessThanOrEqual(1);
+          expect(geometry.rightSidebar.width).toBeLessThanOrEqual(1);
+          expect(Math.abs(geometry.pane.left)).toBeLessThanOrEqual(1);
+          expect(Math.abs(geometry.pane.right - geometry.viewportWidth)).toBeLessThanOrEqual(1);
+          expect(geometry.content.width).toBeLessThanOrEqual(800);
+          expect(Math.abs(geometry.leftGutter - geometry.rightGutter)).toBeLessThanOrEqual(1);
+          expect(Math.abs(geometry.content.centerX - (geometry.innerLeft + geometry.innerRight) / 2)).toBeLessThanOrEqual(1);
+        } else {
+          expect(geometry.leftSidebar.width).toBeGreaterThan(0);
+          expect(geometry.rightSidebar.width).toBeGreaterThan(0);
+          expect(Math.abs(geometry.pane.left - geometry.leftSidebar.right)).toBeLessThanOrEqual(1);
+          expect(Math.abs(geometry.pane.right - geometry.rightSidebar.left)).toBeLessThanOrEqual(1);
+          expect(geometry.content.left).toBeGreaterThanOrEqual(geometry.pane.left);
+          expect(geometry.content.right).toBeLessThanOrEqual(geometry.pane.right + 1);
+        }
+      });
+    }
+  }
+});
+
 test.describe('Layout regression: no horizontal overflow on diagram pages', () => {
   const pages = [
     '/',

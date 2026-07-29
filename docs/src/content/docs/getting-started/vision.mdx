@@ -145,7 +145,7 @@ Built, and not asked for in 2024:
 
 Bought for free by adopting a commodity renderer: sitemap, RSS, per-page social images, alias redirects, backlinks, hover previews, and search. That is the hub-and-spoke architecture working exactly as intended, and nobody ever wrote it down as a win, which is why it reads as drift instead.
 
-One thing to correct rather than celebrate: **graph view was deliberately deferred** on the only usability evidence available, which said it is a writer's tool that confuses readers. The renderer's default layout ships it anyway. A reasoned product decision was reversed by a dependency's defaults, and nobody noticed either the reversal or the free wins that came with it.
+One thing to correct rather than celebrate: **graph view was deliberately deferred** on the only usability evidence available, which said it is a writer's tool that confuses readers. The renderer's default layout shipped it anyway. That reversal was corrected on 2026-07-29 after browser diagnostics found the graph allocating a 3200×2400 WebGL canvas in a collapsed sidebar and continuing Pixi/D3 work. The docs override now omits the graph while retaining lightweight backlinks.
 
 </details>
 
