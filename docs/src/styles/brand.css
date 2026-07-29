@@ -428,6 +428,119 @@ main .content-panel:has(+ .content-panel .cb-hero) {
 }
 
 /* ────────────────────────────────────────────────────────────────────────
+ * Recently updated — compact build-time page stream on the homepage
+ * ──────────────────────────────────────────────────────────────────────── */
+.cb-recent {
+  margin: 3.5rem 0 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--sl-color-hairline);
+}
+
+.cb-recent-intro {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.cb-recent-intro h2 {
+  margin: 0;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.cb-recent-intro p {
+  margin: 0;
+  max-width: 34rem;
+  color: var(--sl-color-gray-2);
+  font-size: 0.84rem;
+  line-height: 1.45;
+  text-align: right;
+}
+
+.cb-recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--sl-color-hairline);
+}
+
+.cb-recent-item {
+  margin: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--sl-color-hairline);
+}
+
+.cb-recent-link {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.35rem 1rem;
+  min-width: 0;
+  padding: 0.82rem 0.7rem;
+  border-radius: 7px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.cb-recent-link:hover {
+  background: var(--cb-emerald-glow);
+}
+
+.cb-recent-link:focus-visible {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: 2px;
+}
+
+.cb-recent-date {
+  color: var(--sl-color-gray-3);
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.45;
+  white-space: nowrap;
+}
+
+.cb-recent-body {
+  display: block;
+  min-width: 0;
+}
+
+.cb-recent-title {
+  display: block;
+  color: var(--sl-color-text-accent);
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 0.96rem;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.cb-recent-description {
+  display: block;
+  margin-top: 0.18rem;
+  color: var(--sl-color-gray-2);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .cb-recent-intro {
+    display: block;
+  }
+
+  .cb-recent-intro p {
+    margin-top: 0.35rem;
+    text-align: left;
+  }
+
+  .cb-recent-link {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.22rem;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────────
  * Status pill — research / planning / stable / parked
  * Used in frontmatter-driven page metadata and inline content.
  * ──────────────────────────────────────────────────────────────────────── */
@@ -1203,6 +1316,7 @@ main .content-panel:has(+ .content-panel .cb-hero) {
   /* illustration system (bottom of this file) */
   .cb-journey, .cb-jstep, .cb-jstep-hd, .cb-jstep-frame, .cb-jarr,
   .cb-storyboard, .cb-rich-toolbar, .cb-rich-foot,
+  .cb-recent, .cb-recent-intro, .cb-recent-list, .cb-recent-item, .cb-recent-link, .cb-recent-body,
   .cb-phone, .cb-phone-screen, .cb-phone-status, .cb-phone-body,
   .cb-ed, .cb-ed-bar, .cb-ed-code, .cb-ed-line, .cb-ed-foot,
   .cb-diffcard, .cb-diffcard-hd, .cb-diffcard-body, .cb-dl,
