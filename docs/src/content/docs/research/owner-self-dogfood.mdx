@@ -22,12 +22,30 @@ Run three to five attempt envelopes that cover all five obligations below. A blo
 | Obligation | What happens | Required terminal state |
 |---|---|---|
 | Normal correction | Copy one exact line from a live Cyberbase page, propose one replacement, prepare and render the candidate | Complete local owner card; no source write before the owner's decision |
-| Signed-out mobile | Open the live page and local study form from one named phone/browser while signed out, then transfer the downloaded JSON to the laptop | Exact supported values survive the handoff; device and intervention notes remain private |
+| Signed-out mobile handoff | Open the live page and local study form from one named phone/browser while signed out, then transfer the downloaded JSON to the laptop | Exact supported values survive the handoff; device and intervention notes remain private |
 | Stale source | Change the bound source or base after preparation | The next stage stops before eligibility or application; no silent rebase or fallback search |
 | Ambiguous quote | Submit a quote that occurs more than once without enough adjacent context | `quote-ambiguous`; no eligible card and no source write |
 | Owner rejection | Review a mechanically eligible candidate and choose `reject` | The bound rejection validates; no application or deployment follows |
 
 The same maintainer may perform every role. Repetition gives scenario coverage, not a sample size: do not calculate reader pass rates, human medians, or independent-owner preference from these attempts.
+
+## Precommit the series
+
+Before any `OD-*` attempt, the maintainer creates one private, non-overwriting charter at `.workspace/human-correction-pilot/owner-self-dogfood-series.json`. It declares three to five unique `OD-*` IDs, assigns each obligation above exactly once, uses every declared ID, and names the planned signed-out phone, operating system, and browser.
+
+This prevents the series from being assembled after the outcomes are known. The charter fixes only the scenario envelope and evidence boundary. Its strict schema provides no dedicated fields for candidates, paths, URLs, quotes, replacements, notes, decisions, or observations, and rejects unknown field names. The phone labels must only name the actual environment. Candidate and attempt data remain attempt-local and require the owner's later confirmation.
+
+A three-attempt allocation may combine compatible obligations like this:
+
+| Attempt | Precommitted obligations |
+|---|---|
+| `OD-01` | normal correction · signed-out mobile handoff |
+| `OD-02` | stale source · ambiguous quote |
+| `OD-03` | owner rejection |
+
+While the charter exists, the harness creates it through an exclusive non-overwriting write and refuses a second initialization. This is not cryptographic or filesystem immutability. Manual editing or deletion is outside the guarantee and invalidates the series rather than authorizing rebuilt history.
+
+The charter binds scenario assignments, but a label is not proof that its outcome occurred. Initialization copies each attempt's assignment into its private observation, decision validation rejects assignment or planned-mobile mismatch, and the attempt designated for owner rejection must end with `reject`. The stale and ambiguous obligations are demonstrated separately by their recorded fail-closed error and evidence that no Cyberbaser candidate application or deployment occurred because they stop before an eligible decision exists.
 
 ## Reuse the existing safe path
 
@@ -45,7 +63,45 @@ This follows the source boundary in [The translation layer](/cyberbaser/design/t
 
 ## Operator path
 
-From `spikes/human-correction-dry-run/`, initialize a real Cyberbase attempt with an owner-confirmed checkout, source path, and public URL:
+From `spikes/human-correction-dry-run/`, first prepare a private charter input. The values below are an example shape only; replace the sample device, operating system, and browser with the actual planned environment:
+
+```json
+{
+  "schemaVersion": 1,
+  "artifactType": "private-owner-self-dogfood-series-charter",
+  "profile": "owner-self-dogfood",
+  "attemptIds": ["OD-01", "OD-02", "OD-03"],
+  "obligationAssignments": {
+    "normal-correction": "OD-01",
+    "signed-out-mobile-handoff": "OD-01",
+    "stale-source": "OD-02",
+    "ambiguous-quote": "OD-02",
+    "owner-rejection": "OD-03"
+  },
+  "plannedSignedOutMobile": {
+    "attemptId": "OD-01",
+    "device": "Pixel 8",
+    "operatingSystem": "Android 16",
+    "browser": "Chrome 138",
+    "signedIn": false
+  },
+  "evidenceClassification": {
+    "evidenceClass": "owner-self-dogfood",
+    "countsTowardHumanPilot": false,
+    "independentOwnerEvidence": false,
+    "claimBoundary": "maintainer operational and mechanical evidence only"
+  }
+}
+```
+
+Create the canonical charter once:
+
+```bash
+bun run dogfood:series-init -- \
+  --input '/absolute/private/owner-dogfood-series.json'
+```
+
+After choosing a genuine candidate and confirming its checkout, source path, and public URL, initialize only an ID declared in that charter:
 
 ```bash
 bun run dogfood:init -- \
@@ -57,7 +113,9 @@ bun run dogfood:init -- \
   --authorize-source yes
 ```
 
-The command creates a private reader form, `operator.json`, `owner-decision.json`, and `dogfood-observation.json`. The observation scaffold records the exact device/browser/account context and whether any source write, deployment, or live verification actually occurred. It is not a trusted declaration by itself; mechanical evidence and owner-controlled publication still have to agree with it.
+The command creates a private reader form, `operator.json`, `owner-decision.json`, and `dogfood-observation.json`. It fails before checkout inspection or attempt-artifact creation when the series is missing or the OD ID was not declared, although the command may still record a private global failure log. The observation scaffold carries the attempt's exact precommitted obligations, prefills the planned signed-out phone context when applicable, and records whether any source write, deployment, or live verification actually occurred. Decision validation compares the obligations and mobile context with the canonical charter. The observation is not a trusted declaration by itself; mechanical evidence and owner-controlled publication still have to agree with it.
+
+Deliver **only** the generated `reader-form.html` to the planned phone through an owner-controlled exact-file transfer or a single-file route with directory listing disabled. Never expose the attempt directory: it also contains private operator, observation, decision, log, and run artifacts. After the HTML loads, the form makes no subsequent request, has no network intake, uploads nothing, and downloads `submission.json` locally. Manually return only that JSON to the laptop; this handoff remains measured friction rather than a hidden upload endpoint.
 
 After the reader submission is returned as `submission.json`:
 
@@ -79,7 +137,7 @@ Validation still performs no source application. For an accepted correction, the
 After a real series, Cyberbaser may report statements such as:
 
 - this maintainer completed or failed a named task on the recorded device/browser;
-- the stale or ambiguous case stopped with the recorded error and no source write;
+- the stale or ambiguous case stopped with the recorded error and no Cyberbaser candidate application or deployment;
 - the local card was sufficient for this maintainer to accept, reject, or request clarification;
 - one approved candidate reached the live Cyberbase page, if that application and live verification actually happened;
 - the manual phone-to-laptop handoff created a specific measured burden.

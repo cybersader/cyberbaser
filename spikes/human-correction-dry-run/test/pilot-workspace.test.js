@@ -2,10 +2,14 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { stableStringify } from '../src/case.js';
 import {
   assertIgnoredPath,
   attemptPaths,
   initializeAttempt,
+  initializeOwnerDogfoodSeries,
+  loadOwnerDogfoodSeries,
+  ownerDogfoodSeriesPaths,
   recordPilotError,
 } from '../src/pilot-workspace.js';
 
@@ -43,6 +47,44 @@ async function cyberbaseCheckout() {
   return { root, head: await command(['git', 'rev-parse', 'HEAD'], root) };
 }
 
+function dogfoodSeries(overrides = {}) {
+  return {
+    schemaVersion: 1,
+    artifactType: 'private-owner-self-dogfood-series-charter',
+    profile: 'owner-self-dogfood',
+    attemptIds: ['OD-01', 'OD-02', 'OD-03'],
+    obligationAssignments: {
+      'normal-correction': 'OD-01',
+      'signed-out-mobile-handoff': 'OD-01',
+      'stale-source': 'OD-02',
+      'ambiguous-quote': 'OD-02',
+      'owner-rejection': 'OD-03',
+    },
+    plannedSignedOutMobile: {
+      attemptId: 'OD-01',
+      device: 'Owner phone',
+      operatingSystem: 'Mobile OS',
+      browser: 'Mobile browser',
+      signedIn: false,
+    },
+    evidenceClassification: {
+      evidenceClass: 'owner-self-dogfood',
+      countsTowardHumanPilot: false,
+      independentOwnerEvidence: false,
+      claimBoundary: 'maintainer operational and mechanical evidence only',
+    },
+    ...overrides,
+  };
+}
+
+async function initializeSeries(workspace, charter = dogfoodSeries()) {
+  return initializeOwnerDogfoodSeries({
+    charter,
+    projectRoot: PROJECT_ROOT,
+    workspaceRoot: workspace,
+  });
+}
+
 afterEach(async () => {
   await Promise.all(cleanup.splice(0).map((target) => rm(target, { recursive: true, force: true })));
 });
@@ -77,8 +119,125 @@ describe('ignored private pilot workspace', () => {
     expect(operator.sourcePath).toBe('');
   });
 
-  test('initializes a distinct owner self-dogfood attempt and private observation scaffold', async () => {
+  test('exposes the canonical series path and dogfood CLI wiring without creating it', async () => {
+    const paths = ownerDogfoodSeriesPaths();
+    const packageData = JSON.parse(await readFile(
+      path.join(PROJECT_ROOT, 'spikes', 'human-correction-dry-run', 'package.json'),
+      'utf8',
+    ));
+    expect(paths.manifest).toBe(path.join(
+      PROJECT_ROOT,
+      '.workspace',
+      'human-correction-pilot',
+      'owner-self-dogfood-series.json',
+    ));
+    expect(packageData.scripts['dogfood:series-init']).toBe(
+      'bun run bin/dogfood-series-init.js',
+    );
+    expect(packageData.bin['cb-correction-dogfood-series-init']).toBe(
+      'bin/dogfood-series-init.js',
+    );
+    expect((await lstat(path.join(
+      PROJECT_ROOT,
+      'spikes',
+      'human-correction-dry-run',
+      'bin',
+      'dogfood-series-init.js',
+    ))).isFile()).toBe(true);
+  });
+
+  test('creates one non-overwriting ignored owner dogfood series charter', async () => {
     const workspace = await workspaceRoot();
+    const paths = ownerDogfoodSeriesPaths({
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: workspace,
+    });
+    const result = await initializeSeries(workspace);
+    const firstBytes = await readFile(paths.manifest, 'utf8');
+
+    expect(result.manifest).toBe(paths.manifest);
+    expect(result.attemptIds).toEqual(['OD-01', 'OD-02', 'OD-03']);
+    expect(firstBytes).toBe(stableStringify(dogfoodSeries()));
+    expect(await assertIgnoredPath(paths.manifest, PROJECT_ROOT)).toBe(paths.manifest);
+
+    await expect(initializeSeries(workspace, dogfoodSeries({
+      plannedSignedOutMobile: {
+        ...dogfoodSeries().plannedSignedOutMobile,
+        device: 'Changed phone',
+      },
+    }))).rejects.toMatchObject({ code: 'artifact-already-exists' });
+    expect(await readFile(paths.manifest, 'utf8')).toBe(firstBytes);
+  });
+
+  test('rejects a series manifest symlinked outside canonical storage', async () => {
+    const workspace = await workspaceRoot();
+    const paths = ownerDogfoodSeriesPaths({
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: workspace,
+    });
+    await initializeSeries(workspace);
+    const outside = path.join(await mkdtemp(path.join(os.tmpdir(), 'pilot-series-outside-')), 'series.json');
+    cleanup.push(path.dirname(outside));
+    await writeFile(outside, stableStringify(dogfoodSeries()), 'utf8');
+    await rm(paths.manifest);
+    await symlink(outside, paths.manifest, 'file');
+
+    await expect(initializeAttempt({
+      attemptId: 'OD-01',
+      profile: 'owner-self-dogfood',
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: workspace,
+    })).rejects.toMatchObject({ code: 'workspace-symlink-rejected' });
+  });
+
+  test('rejects a non-regular series manifest', async () => {
+    const workspace = await workspaceRoot();
+    const paths = ownerDogfoodSeriesPaths({
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: workspace,
+    });
+    await mkdir(paths.manifest);
+
+    await expect(loadOwnerDogfoodSeries({
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: workspace,
+    })).rejects.toMatchObject({ code: 'dogfood-series-invalid' });
+  });
+
+  test('requires a declared OD attempt before checkout inspection or attempt creation', async () => {
+    const missingWorkspace = await workspaceRoot();
+    const missingPaths = attemptPaths('OD-01', {
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: missingWorkspace,
+    });
+    await expect(initializeAttempt({
+      attemptId: 'OD-01',
+      profile: 'owner-self-dogfood',
+      checkoutDir: '/does/not/exist',
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: missingWorkspace,
+    })).rejects.toMatchObject({ code: 'dogfood-series-required' });
+    await expect(lstat(missingPaths.root)).rejects.toMatchObject({ code: 'ENOENT' });
+
+    const undeclaredWorkspace = await workspaceRoot();
+    await initializeSeries(undeclaredWorkspace);
+    const undeclaredPaths = attemptPaths('OD-04', {
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: undeclaredWorkspace,
+    });
+    await expect(initializeAttempt({
+      attemptId: 'OD-04',
+      profile: 'owner-self-dogfood',
+      checkoutDir: '/does/not/exist',
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: undeclaredWorkspace,
+    })).rejects.toMatchObject({ code: 'dogfood-attempt-not-declared' });
+    await expect(lstat(undeclaredPaths.root)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  test('initializes a declared owner self-dogfood attempt and private observation scaffold', async () => {
+    const workspace = await workspaceRoot();
+    await initializeSeries(workspace);
     const checkout = await cyberbaseCheckout();
     const publicUrl = 'https://cybersader.github.io/cyberbase/guide/';
     const result = await initializeAttempt({
@@ -109,7 +268,16 @@ describe('ignored private pilot workspace', () => {
       publicDeploymentPerformed: false,
       liveVerificationPerformed: false,
     });
-    expect(observation.readerContext.signedIn).toBe(null);
+    expect(observation.precommittedObligations).toEqual([
+      'normal-correction',
+      'signed-out-mobile-handoff',
+    ]);
+    expect(observation.readerContext).toEqual({
+      device: 'Owner phone',
+      operatingSystem: 'Mobile OS',
+      browser: 'Mobile browser',
+      signedIn: false,
+    });
     expect(observation.ownerContext).toEqual({
       device: '',
       operatingSystem: '',
@@ -262,6 +430,11 @@ describe('ignored private pilot workspace', () => {
       projectRoot: PROJECT_ROOT,
       workspaceRoot: outside,
     })).rejects.toMatchObject({ code: 'workspace-path-outside-project' });
+    await expect(initializeOwnerDogfoodSeries({
+      charter: dogfoodSeries(),
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: outside,
+    })).rejects.toMatchObject({ code: 'workspace-path-outside-project' });
 
     const symlinkTarget = await mkdtemp(path.join(os.tmpdir(), 'pilot-symlink-target-'));
     cleanup.push(symlinkTarget);
@@ -272,6 +445,11 @@ describe('ignored private pilot workspace', () => {
     await expect(initializeAttempt({
       attemptId: 'HC-05',
       profile: 'independent-counted',
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: linkedWorkspace,
+    })).rejects.toMatchObject({ code: 'workspace-symlink-rejected' });
+    await expect(initializeOwnerDogfoodSeries({
+      charter: dogfoodSeries(),
       projectRoot: PROJECT_ROOT,
       workspaceRoot: linkedWorkspace,
     })).rejects.toMatchObject({ code: 'workspace-symlink-rejected' });

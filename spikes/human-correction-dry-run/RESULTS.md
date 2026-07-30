@@ -49,12 +49,12 @@ The selected correction needed no repair. The later audit hardened checkout isol
 
 | Check | Measured result |
 |---|---|
-| Frozen install | Historical candidate run: 11.22 s. Latest owner-self-dogfood verification: completed in 11.40 s with `bun.lock` byte-unchanged. |
-| Scoped harness suite | Initial candidate run: 46 passed, 0 failed, 213 assertions across eight files, about 2.82 s. Post-audit checkout and review-state hardening: 47 passed, 0 failed, 218 assertions across eight files. Initialization, rendered-evidence, and decision hardening: 77 passed, 0 failed, 410 assertions across 12 files in 21.19 s. Owner-self-dogfood implementation before final adversarial review: 81 passed, 0 failed, 434 assertions across 12 files in 27.12 s. Final immutable-decision, observation-binding, and schema-migration hardening: 82 passed, 0 failed, 442 assertions across 12 files in 26.16 s. The final focused owner-dogfood/input/workspace/run/card subset passed 34 tests with 218 assertions in 21.71 s. |
+| Frozen install | Historical candidate run: 11.22 s. Latest charter-milestone verification: completed in 10.10 s with `bun.lock` byte-unchanged. |
+| Scoped harness suite | Initial candidate run: 46 passed, 0 failed, 213 assertions across eight files, about 2.82 s. Post-audit checkout and review-state hardening: 47 passed, 0 failed, 218 assertions across eight files. Initialization, rendered-evidence, and decision hardening: 77 passed, 0 failed, 410 assertions across 12 files in 21.19 s. Owner-self-dogfood implementation before final adversarial review: 81 passed, 0 failed, 434 assertions across 12 files in 27.12 s. Final immutable-decision, observation-binding, and schema-migration hardening: 82 passed, 0 failed, 442 assertions across 12 files in 26.16 s. After adversarial repair, the final focused owner-dogfood/input/workspace/run/card subset passed 41 tests with 276 assertions in 23.55 s. The complete charter-milestone suite then passed 89 tests with 500 assertions across 12 files in 25.49 s. |
 | Authoritative verifier | 11 PASS, 0 FAIL, `complete: true`. |
 | Dependent package suites | Correction, linkcheck, OFM, projection, publish, and trust: 187 passed, 0 failed, 558 assertions across eight files. |
 | Canonical docs build and linkcheck | Latest owner-self-dogfood update: PASS, 100 pages built. Linkcheck found the existing single `other` finding in `agent-context/zz-challenges/mdx-auto-wrapping/`, within the explicit budget of 1. Existing Starlight override, Vite externalization, and large-chunk warnings remained non-fatal. |
-| Documentation browser suite | 183 Playwright tests passed in 3.9 minutes, including homepage stability, responsive layout, recent pages, screenshots, smoke coverage, and standard-page backlinks. |
+| Documentation browser suite | 183 Playwright tests passed in 3.7 minutes, including homepage stability, responsive layout, recent pages, screenshots, smoke coverage, and standard-page backlinks. |
 | Repeated verifier determinism | Two fresh verifier processes exited zero, emitted no verifier diagnostic stderr, and produced byte-identical JSON; 0.922 s and 0.911 s. The `bun run verify` wrapper may print Bun's fixed launcher banner to stderr. |
 | Artifact validation | PASS for one sanitized case JSON, one result JSON, and one static review-card HTML. |
 
@@ -69,18 +69,33 @@ The 2026-07-30 implementation adds `owner-self-dogfood` without creating a secon
 | Attempt namespace | `owner-self-dogfood` accepts `OD-01` through `OD-99`; the existing profiles retain `HC-01` through `HC-99`. Cross-namespace IDs fail closed. |
 | Evidence class | Status, prepared, rendered, review-card, and validated-decision data report `owner-self-dogfood`, `countsTowardHumanPilot: false`, and `independentOwnerEvidence: false`. |
 | Independent-owner claim | An owner-dogfood operator record with `independentOwnerAttested: true` is rejected. |
-| Private context record | Initialization creates ignored `dogfood-observation.json` with device/browser/role fields and false source-write, deployment, and live-verification defaults. |
+| Private context record | Initialization creates ignored `dogfood-observation.json` with the attempt's precommitted obligations, device/browser/role fields, and false source-write, deployment, and live-verification defaults. The planned reader context is prefilled for the mobile obligation. |
 | Owner rejection | A correctly bound rejection validates as a private owner-self-dogfood decision while source-write and public-deployment fields remain false. The test supplies the decision fixture; it does not claim a real owner decision. |
 | Existing paths | `cyberbase-rehearsal` and `independent-counted` compatibility tests remain passing. Stored schema-v1 status without classification fields is normalized to schema v2 and then checked against the validated profile. |
-| Observation binding | Reader and owner contexts are separate structured records. Owner-dogfood decision validation strictly loads and snapshots the observation, and stops if source-write, deployment, or live-verification flags are already true. |
-| Decision immutability | The validated decision is created with an exclusive atomic link. Re-running validation with a contradictory decision returns `artifact-already-exists`, and the original decision remains byte-intact. |
+| Observation binding | Reader and owner contexts are separate structured records. Owner-dogfood decision validation compares the recorded obligations and applicable mobile context with the canonical charter, strictly loads and snapshots the observation, and stops if source-write, deployment, or live-verification flags are already true. |
+| Decision immutability | The validated decision is created with an exclusive atomic link. Re-running validation with a contradictory decision is rejected before replacement, and the original decision remains byte-intact. |
 | Authoritative verifier | Two corrected package-scoped runs emitted byte-identical JSON with 11 PASS checks and `complete: true`. |
 
 No physical phone pass, real owner decision, canonical source application, commit, push, deployment, or live correction was performed by this verification.
 
+### Series-charter precommitment
+
+The current charter milestone adds a private non-overwriting gate before any real `OD-*` initialization. The final post-review focused run measured 41 passing tests, 0 failures, and 276 assertions in 23.55 seconds.
+
+| Check | Observed result |
+|---|---|
+| Strict charter schema | Valid three-, four-, and five-attempt charters normalize successfully. Duplicate or HC IDs, missing or undeclared obligations, unused IDs, mismatched, signed-in, or whitespace-only mobile context, forged classification, and unknown privacy-expanding fields fail closed. |
+| Canonical storage | Initialization writes deterministic bytes only to ignored `.workspace/human-correction-pilot/owner-self-dogfood-series.json`. While it exists, a second initialization returns `artifact-already-exists` and preserves the first bytes. A manifest symlinked outside canonical storage is rejected. |
+| OD initialization gate | A missing charter returns `dogfood-series-required`; an undeclared OD ID returns `dogfood-attempt-not-declared`. Both failures occur before checkout inspection and leave no attempt directory, although a command may record a private global failure log. |
+| Observation binding | Initialization copies each attempt's exact assigned obligations into its private observation and prefills the planned reader context for the mobile obligation. Decision validation rejects changed obligations or a mismatched mobile context and requires the designated owner-rejection attempt to end with `reject`. Stale and ambiguous outcomes remain separate fail-closed evidence that no Cyberbaser candidate application or deployment occurred. |
+| Existing HC paths | Rehearsal and independent `HC-*` initialization remain available without a series charter. |
+| Real-series boundary | No canonical charter, physical-phone attempt, real owner decision, source application, deployment, or live verification was created during automated implementation or testing. |
+
+The harness prevents command-based replacement while the charter exists. It does not provide cryptographic or filesystem immutability. Manual editing or deletion is outside the guarantee and invalidates the series rather than authorizing a replacement history.
+
 ### Synthetic CLI smoke and adversarial attempts
 
-The actual `dogfood:*` CLI entry points were exercised with local synthetic Git fixtures carrying the public Cyberbase remote identity. These are command-path checks, not human or live-Cyberbase attempts.
+Before the series-charter gate was added, the actual `dogfood:*` CLI entry points were exercised with local synthetic Git fixtures carrying the public Cyberbase remote identity. These remain historical pre-charter command-path checks, not current charter-gate coverage, human attempts, or live-Cyberbase attempts.
 
 | Attempt | Command-path outcome |
 |---|---|
@@ -108,7 +123,7 @@ pilot:init → pilot:prepare → pilot:render → pilot:decision
 | Source checkout | SHA-256 `deff0dae352d59d3334234f00fecf73d3aa1a492f9fa04635decc304494bde6c` before and after; Git status remained empty. |
 | Cleanup | The ignored attempt and temporary checkout were removed. |
 
-The later one-command `pilot:init` prefill was also exercised against the clean pinned public Cyberbase checkout and the real owner-supplied IR DROP source mapping. It derived commit `b320c5c2c92d646b9df7019c9e29034341ebff6b`, verified the origin, clean state, tracked source bytes, and explicit public URL, then created the reader form and a prefilled private operator record. The rehearsal attempt was removed afterward.
+The later one-command `pilot:init` prefill was also exercised against the clean pinned public Cyberbase checkout and the previously selected owner-mapped IR DROP source. It derived commit `b320c5c2c92d646b9df7019c9e29034341ebff6b`, verified the origin, clean state, tracked source bytes, and explicit public URL, then created the reader form and a prefilled private operator record. The rehearsal attempt was removed afterward.
 
 Two earlier full rehearsals failed closed and were retained as adverse observations. The first exposed raw-HTML derivative multiplicity: a visually unique source passage appeared more than once in Quartz output. The rule now retains exact source-byte uniqueness while accepting one-or-more derivative appearances only when every old-text appearance disappears from the candidate and the replacement is absent from the baseline. The second exposed expected Quartz build variance in successful-link aggregates and generated HTML hashes. Decision validation now reruns the live lane and compares a deterministic safety projection that retains publication verification, candidate-only and baseline-only broken tuples, rendered old/new safety, source isolation, no-write assertions, and cleanup.
 
@@ -300,7 +315,7 @@ These are review artifacts, not the private runnable case input and not a produc
 - One public Cyberbase candidate and one pinned Quartz configuration do not establish demand, general renderer support, a generalized source map, abuse resistance, accessibility, or interoperability.
 - The harness performs no source I/O and ships no endpoint, editor, hosted console, automatic writer, account system, or account-free contribution path.
 
-The next work is the three-to-five-attempt owner self-dogfood series: a normal correction, signed-out/mobile handoff, stale source, ambiguous quote, and owner rejection. Only a genuinely owner-approved normal correction may proceed through separate owner-controlled local application and live verification. The unchanged five-reader, one-independent-owner protocol is deferred until Cyberbaser needs stronger unfamiliar-reader or independent-owner usability evidence.
+The next work is the three-to-five-attempt owner self-dogfood series: a normal correction, signed-out mobile handoff, stale source, ambiguous quote, and owner rejection. Only a genuinely owner-approved normal correction may proceed through separate owner-controlled local application and live verification. The unchanged five-reader, one-independent-owner protocol is deferred until Cyberbaser needs stronger unfamiliar-reader or independent-owner usability evidence.
 
 ## Overall result
 

@@ -3,7 +3,11 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os';
 import path from 'node:path';
 import { preparePilotAttempt, renderPilotAttempt, validatePilotOwnerDecision } from '../src/pilot-run.js';
-import { attemptPaths, initializeAttempt } from '../src/pilot-workspace.js';
+import {
+  attemptPaths,
+  initializeAttempt,
+  initializeOwnerDogfoodSeries,
+} from '../src/pilot-workspace.js';
 
 const PROJECT_ROOT = path.resolve(import.meta.dir, '../../..');
 const cleanup = [];
@@ -105,6 +109,38 @@ function operator({ attemptId = 'HC-01', checkout, correctionKind = 'typo', over
 }
 
 async function writeAttempt({ workspace, attemptId = 'HC-01', submissionData, operatorData }) {
+  if (operatorData.profile === 'owner-self-dogfood') {
+    await initializeOwnerDogfoodSeries({
+      charter: {
+        schemaVersion: 1,
+        artifactType: 'private-owner-self-dogfood-series-charter',
+        profile: 'owner-self-dogfood',
+        attemptIds: [attemptId, 'OD-98', 'OD-99'],
+        obligationAssignments: {
+          'normal-correction': 'OD-99',
+          'signed-out-mobile-handoff': attemptId,
+          'stale-source': 'OD-98',
+          'ambiguous-quote': 'OD-98',
+          'owner-rejection': attemptId,
+        },
+        plannedSignedOutMobile: {
+          attemptId,
+          device: 'Synthetic phone',
+          operatingSystem: 'Synthetic mobile OS',
+          browser: 'Synthetic browser',
+          signedIn: false,
+        },
+        evidenceClassification: {
+          evidenceClass: 'owner-self-dogfood',
+          countsTowardHumanPilot: false,
+          independentOwnerEvidence: false,
+          claimBoundary: 'maintainer operational and mechanical evidence only',
+        },
+      },
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: workspace,
+    });
+  }
   await initializeAttempt({
     attemptId,
     profile: operatorData.profile,
@@ -639,12 +675,46 @@ describe('independent static-output rendering', () => {
     const decision = JSON.parse(await readFile(paths.ownerDecision, 'utf8'));
     await writeFile(paths.ownerDecision, `${JSON.stringify({
       ...decision,
+      decision: 'accept',
+      reason: 'The precommitted rejection attempt must not accept.',
+      reviewSeconds: 7,
+      decidedAt: '2026-07-30T11:59:00.000Z',
+    }, null, 2)}\n`, 'utf8');
+    await expect(validatePilotOwnerDecision({
+      attemptId, projectRoot: PROJECT_ROOT, workspaceRoot: workspace,
+    }, { runLiveCorrection: fakeLiveRun })).rejects.toMatchObject({
+      code: 'dogfood-owner-rejection-required',
+    });
+    await writeFile(paths.ownerDecision, `${JSON.stringify({
+      ...decision,
       decision: 'reject',
       reason: 'The owner does not want this otherwise valid change.',
       reviewSeconds: 8,
       decidedAt: '2026-07-30T12:00:00.000Z',
     }, null, 2)}\n`, 'utf8');
     const observation = JSON.parse(await readFile(paths.dogfoodObservation, 'utf8'));
+    expect(observation.precommittedObligations).toEqual([
+      'signed-out-mobile-handoff',
+      'owner-rejection',
+    ]);
+    await writeFile(paths.dogfoodObservation, `${JSON.stringify({
+      ...observation,
+      precommittedObligations: ['signed-out-mobile-handoff'],
+    }, null, 2)}\n`, 'utf8');
+    await expect(validatePilotOwnerDecision({
+      attemptId, projectRoot: PROJECT_ROOT, workspaceRoot: workspace,
+    }, { runLiveCorrection: fakeLiveRun })).rejects.toMatchObject({
+      code: 'dogfood-observation-obligation-mismatch',
+    });
+    await writeFile(paths.dogfoodObservation, `${JSON.stringify({
+      ...observation,
+      readerContext: { ...observation.readerContext, device: 'Different phone' },
+    }, null, 2)}\n`, 'utf8');
+    await expect(validatePilotOwnerDecision({
+      attemptId, projectRoot: PROJECT_ROOT, workspaceRoot: workspace,
+    }, { runLiveCorrection: fakeLiveRun })).rejects.toMatchObject({
+      code: 'dogfood-observation-mobile-context-mismatch',
+    });
     await writeFile(paths.dogfoodObservation, `${JSON.stringify({
       ...observation,
       sourceWritePerformed: true,
@@ -681,8 +751,8 @@ describe('independent static-output rendering', () => {
     });
     await writeFile(paths.ownerDecision, `${JSON.stringify({
       ...decision,
-      decision: 'accept',
-      reason: 'A later contradictory decision must not replace completed evidence.',
+      decision: 'reject',
+      reason: 'A later revised rejection must not replace completed evidence.',
       reviewSeconds: 9,
       decidedAt: '2026-07-30T12:01:00.000Z',
     }, null, 2)}\n`, 'utf8');

@@ -17,7 +17,7 @@ import {
   evidenceClassification,
   ownerDecisionTemplate,
   renderAttestationTemplate,
-  validateDogfoodObservation,
+  validateDogfoodObservationSeriesBinding,
   validateOperator,
   validateOwnerDecision,
   validateRenderAttestation,
@@ -32,6 +32,7 @@ import {
   commitRunStaging,
   createRunStaging,
   loadAttemptJson,
+  loadOwnerDogfoodSeries,
   verifyAttemptWorkspace,
   writeStagedArtifact,
 } from './pilot-workspace.js';
@@ -653,9 +654,15 @@ export async function validatePilotOwnerDecision({
     });
   }
   let dogfoodObservation = null;
+  let dogfoodSeries = null;
   if (operator.profile === 'owner-self-dogfood') {
-    dogfoodObservation = validateDogfoodObservation(
+    dogfoodSeries = await loadOwnerDogfoodSeries({
+      projectRoot: paths.projectRoot,
+      workspaceRoot: paths.workspaceRoot,
+    });
+    dogfoodObservation = validateDogfoodObservationSeriesBinding(
       await loadAttemptJson(paths.dogfoodObservation, 'dogfood-observation', paths),
+      dogfoodSeries,
     );
     if (dogfoodObservation.attemptId !== paths.attemptId) {
       fail(
@@ -679,6 +686,15 @@ export async function validatePilotOwnerDecision({
     || decision.mechanicalCaseId !== mechanicalCaseId
     || decision.candidateDigest !== preparedRun.evaluation.candidate.digest) {
     fail('owner-decision-binding-mismatch', 'owner decision does not match the eligible attempt, mechanical case, and candidate digest');
+  }
+  if (
+    dogfoodSeries?.obligationAssignments['owner-rejection'] === paths.attemptId
+    && decision.decision !== 'reject'
+  ) {
+    fail(
+      'dogfood-owner-rejection-required',
+      'the attempt precommitted for owner rejection must end with a reject decision',
+    );
   }
   const classification = evidenceClassification(operator);
   const validated = deepFreeze({

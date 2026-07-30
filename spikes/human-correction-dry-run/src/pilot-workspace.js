@@ -1,10 +1,12 @@
 import { execFile } from 'node:child_process';
+import { constants } from 'node:fs';
 import {
   access,
   link,
   lstat,
   mkdir,
   mkdtemp,
+  open,
   readFile,
   realpath,
   rename,
@@ -17,11 +19,13 @@ import { fileURLToPath } from 'node:url';
 import { stableStringify } from './case.js';
 import { inspectCheckout } from './live-run.js';
 import {
+  OWNER_DOGFOOD_OBLIGATIONS,
   evidenceClassification,
   operatorDefaults,
   ownerDecisionTemplate,
   validateAttemptId,
   validateOperator,
+  validateOwnerDogfoodSeriesCharter,
   validateProfile,
   validateSourcePath,
 } from './pilot-input.js';
@@ -120,6 +124,78 @@ export function attemptPaths(attemptIdInput, {
   });
 }
 
+export function ownerDogfoodSeriesPaths({
+  projectRoot = DEFAULT_PROJECT_ROOT,
+  workspaceRoot = DEFAULT_WORKSPACE_ROOT,
+} = {}) {
+  const resolvedWorkspace = path.resolve(workspaceRoot);
+  return Object.freeze({
+    projectRoot: path.resolve(projectRoot),
+    workspaceRoot: resolvedWorkspace,
+    manifest: assertContained(
+      resolvedWorkspace,
+      path.join(resolvedWorkspace, 'owner-self-dogfood-series.json'),
+    ),
+  });
+}
+
+export async function initializeOwnerDogfoodSeries({
+  charter,
+  projectRoot = DEFAULT_PROJECT_ROOT,
+  workspaceRoot = DEFAULT_WORKSPACE_ROOT,
+} = {}) {
+  const normalized = validateOwnerDogfoodSeriesCharter(charter);
+  const paths = ownerDogfoodSeriesPaths({ projectRoot, workspaceRoot });
+  await assertNoSymlinkComponents(paths.projectRoot, paths.workspaceRoot);
+  await mkdir(paths.workspaceRoot, { recursive: true });
+  await assertNoSymlinkComponents(paths.projectRoot, paths.workspaceRoot);
+  await assertIgnoredPath(paths.manifest, paths.projectRoot);
+  await atomicCreateArtifact(paths.manifest, stableStringify(normalized), paths);
+  return Object.freeze({
+    manifest: paths.manifest,
+    attemptIds: [...normalized.attemptIds],
+    obligationAssignments: { ...normalized.obligationAssignments },
+    evidenceClassification: { ...normalized.evidenceClassification },
+  });
+}
+
+export async function loadOwnerDogfoodSeries({
+  projectRoot = DEFAULT_PROJECT_ROOT,
+  workspaceRoot = DEFAULT_WORKSPACE_ROOT,
+} = {}) {
+  const paths = ownerDogfoodSeriesPaths({ projectRoot, workspaceRoot });
+  await assertNoSymlinkComponents(paths.projectRoot, paths.manifest);
+  await assertIgnoredPath(paths.manifest, paths.projectRoot);
+  if (!(await exists(paths.manifest))) {
+    fail(
+      'dogfood-series-required',
+      'initialize the owner self-dogfood series before creating an OD attempt',
+    );
+  }
+  let handle;
+  let value;
+  try {
+    handle = await open(
+      paths.manifest,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
+    const metadata = await handle.stat();
+    if (!metadata.isFile()) {
+      fail('dogfood-series-invalid', 'owner self-dogfood series must be a regular JSON file');
+    }
+    value = JSON.parse(await handle.readFile('utf8'));
+  } catch (error) {
+    if (error instanceof PilotWorkspaceError) throw error;
+    if (error?.code === 'ELOOP') {
+      fail('workspace-symlink-rejected', 'pilot workspace components must not be symbolic links');
+    }
+    fail('dogfood-series-invalid', 'owner self-dogfood series must be readable JSON');
+  } finally {
+    await handle?.close();
+  }
+  return validateOwnerDogfoodSeriesCharter(value);
+}
+
 async function verifiedWrite(file, contents, context) {
   assertContained(context.workspaceRoot, file);
   await assertNoSymlinkComponents(context.projectRoot, path.dirname(file));
@@ -139,18 +215,30 @@ function renderReaderForm(template, attemptId, profile) {
     .replaceAll('__PROFILE_NOTICE__', profileNotice);
 }
 
-function dogfoodObservationTemplate(attemptId) {
+function dogfoodObservationTemplate(attemptId, series) {
+  const precommittedObligations = OWNER_DOGFOOD_OBLIGATIONS.filter(
+    (obligation) => series.obligationAssignments[obligation] === attemptId,
+  );
+  const mobilePlanned = precommittedObligations.includes('signed-out-mobile-handoff');
   return {
     schemaVersion: 1,
     attemptId,
     evidenceClass: 'owner-self-dogfood',
+    precommittedObligations,
     scenario: '',
-    readerContext: {
-      device: '',
-      operatingSystem: '',
-      browser: '',
-      signedIn: null,
-    },
+    readerContext: mobilePlanned
+      ? {
+          device: series.plannedSignedOutMobile.device,
+          operatingSystem: series.plannedSignedOutMobile.operatingSystem,
+          browser: series.plannedSignedOutMobile.browser,
+          signedIn: false,
+        }
+      : {
+          device: '',
+          operatingSystem: '',
+          browser: '',
+          signedIn: null,
+        },
     ownerContext: {
       device: '',
       operatingSystem: '',
@@ -241,6 +329,16 @@ export async function initializeAttempt({
   const attemptId = validateAttemptId(attemptIdInput);
   const profile = validateProfile(profileInput);
   const paths = attemptPaths(attemptId, { projectRoot, workspaceRoot });
+  let dogfoodSeries = null;
+  if (profile === 'owner-self-dogfood') {
+    dogfoodSeries = await loadOwnerDogfoodSeries({ projectRoot, workspaceRoot });
+    if (!dogfoodSeries.attemptIds.includes(attemptId)) {
+      fail(
+        'dogfood-attempt-not-declared',
+        `${attemptId} is not declared in the owner self-dogfood series`,
+      );
+    }
+  }
   await assertNoSymlinkComponents(paths.projectRoot, paths.workspaceRoot);
   await assertIgnoredPath(paths.root, paths.projectRoot);
   if (await exists(paths.root)) fail('attempt-already-exists', `${attemptId} already exists`);
@@ -273,7 +371,7 @@ export async function initializeAttempt({
     if (profile === 'owner-self-dogfood') {
       await verifiedWrite(
         path.join(staging, 'dogfood-observation.json'),
-        stableStringify(dogfoodObservationTemplate(attemptId)),
+        stableStringify(dogfoodObservationTemplate(attemptId, dogfoodSeries)),
         stagingContext,
       );
     }

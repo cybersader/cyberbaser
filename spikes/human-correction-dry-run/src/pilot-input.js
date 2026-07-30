@@ -8,6 +8,27 @@ const PROFILES = new Set(['cyberbase-rehearsal', 'owner-self-dogfood', 'independ
 const KINDS = new Set(['typo', 'factual', 'link', 'wording', 'formatting']);
 const PUBLICATION_BOUNDARIES = new Set(['cyberbaser', 'not-applicable']);
 const RENDERER_PROFILES = new Set(['cyberbase-quartz-v4.5.2', 'owner-static-output']);
+export const OWNER_DOGFOOD_OBLIGATIONS = deepFreeze([
+  'normal-correction',
+  'signed-out-mobile-handoff',
+  'stale-source',
+  'ambiguous-quote',
+  'owner-rejection',
+]);
+const OWNER_DOGFOOD_CLASSIFICATION = deepFreeze({
+  evidenceClass: 'owner-self-dogfood',
+  countsTowardHumanPilot: false,
+  independentOwnerEvidence: false,
+  claimBoundary: 'maintainer operational and mechanical evidence only',
+});
+const OWNER_DOGFOOD_SERIES_KEYS = new Set([
+  'schemaVersion', 'artifactType', 'profile', 'attemptIds', 'obligationAssignments',
+  'plannedSignedOutMobile', 'evidenceClassification',
+]);
+const OWNER_DOGFOOD_MOBILE_KEYS = new Set([
+  'attemptId', 'device', 'operatingSystem', 'browser', 'signedIn',
+]);
+const OWNER_DOGFOOD_CLASSIFICATION_KEYS = new Set(Object.keys(OWNER_DOGFOOD_CLASSIFICATION));
 const SUBMISSION_KEYS = new Set([
   'schemaVersion', 'instrumentVersion', 'attemptId', 'openedAt', 'submittedAt', 'elapsedMs',
   'pageUrl', 'exactQuote', 'replacement', 'rationale', 'factualSource', 'publicCreditName',
@@ -32,9 +53,10 @@ const RENDER_ATTESTATION_KEYS = new Set([
   'ownerConfirmedAt',
 ]);
 const DOGFOOD_OBSERVATION_KEYS = new Set([
-  'schemaVersion', 'attemptId', 'evidenceClass', 'scenario', 'readerContext', 'ownerContext',
-  'roleSeparation', 'startedAt', 'completedAt', 'manualInterventions', 'sourceWritePerformed',
-  'publicDeploymentPerformed', 'liveVerificationPerformed', 'notes',
+  'schemaVersion', 'attemptId', 'evidenceClass', 'precommittedObligations', 'scenario',
+  'readerContext', 'ownerContext', 'roleSeparation', 'startedAt', 'completedAt',
+  'manualInterventions', 'sourceWritePerformed', 'publicDeploymentPerformed',
+  'liveVerificationPerformed', 'notes',
 ]);
 const DOGFOOD_CONTEXT_KEYS = new Set([
   'device', 'operatingSystem', 'browser', 'signedIn',
@@ -86,6 +108,12 @@ function exactString(value, label, { nonEmpty = false, oneLine = false } = {}) {
     fail('invalid-unicode', `${label} must round-trip as exact UTF-8`);
   }
   return value;
+}
+
+function exactNonBlankString(value, label) {
+  const text = exactString(value, label, { nonEmpty: true, oneLine: true });
+  if (!/\S/u.test(text)) fail('blank-string', `${label} must contain a non-whitespace character`);
+  return text;
 }
 
 function exactHttpsUrl(value, label) {
@@ -370,14 +398,7 @@ export function countsTowardPilot(operator) {
 export function evidenceClassification(operatorOrProfile) {
   const operator = typeof operatorOrProfile === 'string' ? null : validateOperator(operatorOrProfile);
   const profile = operator ? operator.profile : validateProfile(operatorOrProfile);
-  if (profile === 'owner-self-dogfood') {
-    return deepFreeze({
-      evidenceClass: 'owner-self-dogfood',
-      countsTowardHumanPilot: false,
-      independentOwnerEvidence: false,
-      claimBoundary: 'maintainer operational and mechanical evidence only',
-    });
-  }
+  if (profile === 'owner-self-dogfood') return OWNER_DOGFOOD_CLASSIFICATION;
   if (profile === 'cyberbase-rehearsal') {
     return deepFreeze({
       evidenceClass: 'internal-cyberbase-rehearsal',
@@ -391,6 +412,104 @@ export function evidenceClassification(operatorOrProfile) {
     countsTowardHumanPilot: false,
     independentOwnerEvidence: operator?.independentOwnerAttested ?? false,
     claimBoundary: 'counting remains outside the preparation kit until owner application and live verification',
+  });
+}
+
+export function validateOwnerDogfoodSeriesCharter(input) {
+  const value = plainRecord(input, 'owner-dogfood-series');
+  strictKeys(value, OWNER_DOGFOOD_SERIES_KEYS, 'owner-dogfood-series');
+  requiredKeys(value, OWNER_DOGFOOD_SERIES_KEYS, 'owner-dogfood-series');
+  if (value.schemaVersion !== 1) {
+    fail('invalid-schema-version', 'owner-dogfood-series.schemaVersion must be 1');
+  }
+  if (value.artifactType !== 'private-owner-self-dogfood-series-charter') {
+    fail(
+      'invalid-dogfood-series-artifact-type',
+      'owner-dogfood-series.artifactType must be private-owner-self-dogfood-series-charter',
+    );
+  }
+  if (validateProfile(value.profile) !== 'owner-self-dogfood') {
+    fail('invalid-dogfood-series-profile', 'owner-dogfood-series.profile must be owner-self-dogfood');
+  }
+  if (!Array.isArray(value.attemptIds) || value.attemptIds.length < 3 || value.attemptIds.length > 5) {
+    fail('invalid-dogfood-series-size', 'owner-dogfood-series.attemptIds must contain three to five IDs');
+  }
+  const attemptIds = value.attemptIds.map((item) => exactAttemptId(item));
+  if (attemptIds.some((attemptId) => !attemptId.startsWith('OD-'))) {
+    fail('dogfood-attempt-id-required', 'owner dogfood series must use OD-01 through OD-99 attempt IDs');
+  }
+  if (new Set(attemptIds).size !== attemptIds.length) {
+    fail('duplicate-dogfood-attempt-id', 'owner-dogfood-series.attemptIds must be unique');
+  }
+
+  const assignments = plainRecord(value.obligationAssignments, 'dogfood-obligation-assignments');
+  const obligationKeys = new Set(OWNER_DOGFOOD_OBLIGATIONS);
+  strictKeys(assignments, obligationKeys, 'dogfood-obligation-assignments');
+  requiredKeys(assignments, obligationKeys, 'dogfood-obligation-assignments');
+  const declared = new Set(attemptIds);
+  const normalizedAssignments = {};
+  for (const obligation of OWNER_DOGFOOD_OBLIGATIONS) {
+    const assignedAttempt = exactAttemptId(assignments[obligation]);
+    if (!assignedAttempt.startsWith('OD-') || !declared.has(assignedAttempt)) {
+      fail(
+        'dogfood-obligation-attempt-not-declared',
+        `dogfood obligation ${obligation} must reference a declared OD attempt`,
+      );
+    }
+    normalizedAssignments[obligation] = assignedAttempt;
+  }
+  const usedAttempts = new Set(Object.values(normalizedAssignments));
+  const unusedAttempt = attemptIds.find((attemptId) => !usedAttempts.has(attemptId));
+  if (unusedAttempt) {
+    fail(
+      'unused-dogfood-attempt',
+      `declared dogfood attempt ${unusedAttempt} must have at least one obligation`,
+    );
+  }
+
+  const mobile = plainRecord(value.plannedSignedOutMobile, 'planned-signed-out-mobile');
+  strictKeys(mobile, OWNER_DOGFOOD_MOBILE_KEYS, 'planned-signed-out-mobile');
+  requiredKeys(mobile, OWNER_DOGFOOD_MOBILE_KEYS, 'planned-signed-out-mobile');
+  const mobileAttemptId = exactAttemptId(mobile.attemptId);
+  if (mobileAttemptId !== normalizedAssignments['signed-out-mobile-handoff']) {
+    fail(
+      'dogfood-mobile-attempt-mismatch',
+      'planned signed-out mobile attempt must match the signed-out-mobile-handoff obligation',
+    );
+  }
+  if (mobile.signedIn !== false) {
+    fail('dogfood-mobile-must-be-signed-out', 'planned signed-out mobile context must set signedIn to false');
+  }
+
+  const classification = plainRecord(value.evidenceClassification, 'dogfood-evidence-classification');
+  strictKeys(classification, OWNER_DOGFOOD_CLASSIFICATION_KEYS, 'dogfood-evidence-classification');
+  requiredKeys(classification, OWNER_DOGFOOD_CLASSIFICATION_KEYS, 'dogfood-evidence-classification');
+  for (const [key, expected] of Object.entries(OWNER_DOGFOOD_CLASSIFICATION)) {
+    if (classification[key] !== expected) {
+      fail(
+        'dogfood-evidence-classification-mismatch',
+        `dogfood evidence classification ${key} must remain fixed`,
+      );
+    }
+  }
+
+  return deepFreeze({
+    schemaVersion: 1,
+    artifactType: 'private-owner-self-dogfood-series-charter',
+    profile: 'owner-self-dogfood',
+    attemptIds: [...attemptIds],
+    obligationAssignments: normalizedAssignments,
+    plannedSignedOutMobile: {
+      attemptId: mobileAttemptId,
+      device: exactNonBlankString(mobile.device, 'planned-signed-out-mobile.device'),
+      operatingSystem: exactNonBlankString(
+        mobile.operatingSystem,
+        'planned-signed-out-mobile.operatingSystem',
+      ),
+      browser: exactNonBlankString(mobile.browser, 'planned-signed-out-mobile.browser'),
+      signedIn: false,
+    },
+    evidenceClassification: { ...OWNER_DOGFOOD_CLASSIFICATION },
   });
 }
 
@@ -506,6 +625,32 @@ export function validateDogfoodObservation(input) {
   if (value.evidenceClass !== 'owner-self-dogfood') {
     fail('invalid-dogfood-evidence-class', 'dogfood-observation.evidenceClass must be owner-self-dogfood');
   }
+  if (!Array.isArray(value.precommittedObligations)) {
+    fail(
+      'invalid-precommitted-obligations',
+      'dogfood-observation.precommittedObligations must be an array',
+    );
+  }
+  const precommittedObligations = value.precommittedObligations.map((item, index) => {
+    const obligation = exactString(
+      item,
+      `dogfood-observation.precommittedObligations[${index}]`,
+      { nonEmpty: true, oneLine: true },
+    );
+    if (!OWNER_DOGFOOD_OBLIGATIONS.includes(obligation)) {
+      fail(
+        'invalid-dogfood-obligation',
+        `dogfood-observation precommitted obligation is not canonical: ${obligation}`,
+      );
+    }
+    return obligation;
+  });
+  if (new Set(precommittedObligations).size !== precommittedObligations.length) {
+    fail(
+      'duplicate-dogfood-obligation',
+      'dogfood-observation.precommittedObligations must be unique',
+    );
+  }
   if (!Array.isArray(value.manualInterventions)) {
     fail('invalid-manual-interventions', 'dogfood-observation.manualInterventions must be an array');
   }
@@ -520,6 +665,7 @@ export function validateDogfoodObservation(input) {
     schemaVersion: 1,
     attemptId: exactAttemptId(value.attemptId),
     evidenceClass: 'owner-self-dogfood',
+    precommittedObligations,
     scenario: exactString(value.scenario, 'dogfood-observation.scenario', { oneLine: true }),
     readerContext: validateDogfoodContext(value.readerContext, 'dogfood-observation.readerContext'),
     ownerContext: validateDogfoodContext(value.ownerContext, 'dogfood-observation.ownerContext'),
@@ -538,6 +684,47 @@ export function validateDogfoodObservation(input) {
     liveVerificationPerformed: value.liveVerificationPerformed,
     notes: exactString(value.notes, 'dogfood-observation.notes'),
   });
+}
+
+export function validateDogfoodObservationSeriesBinding(observationInput, seriesInput) {
+  const observation = validateDogfoodObservation(observationInput);
+  const series = validateOwnerDogfoodSeriesCharter(seriesInput);
+  const expectedObligations = OWNER_DOGFOOD_OBLIGATIONS.filter(
+    (obligation) => series.obligationAssignments[obligation] === observation.attemptId,
+  );
+  if (expectedObligations.length === 0) {
+    fail(
+      'dogfood-observation-attempt-not-declared',
+      'dogfood observation attempt is not declared in the owner self-dogfood series',
+    );
+  }
+  if (
+    observation.precommittedObligations.length !== expectedObligations.length
+    || observation.precommittedObligations.some(
+      (obligation, index) => obligation !== expectedObligations[index],
+    )
+  ) {
+    fail(
+      'dogfood-observation-obligation-mismatch',
+      'dogfood observation obligations do not match the precommitted series assignment',
+    );
+  }
+  if (expectedObligations.includes('signed-out-mobile-handoff')) {
+    const planned = series.plannedSignedOutMobile;
+    const reader = observation.readerContext;
+    if (
+      reader.device !== planned.device
+      || reader.operatingSystem !== planned.operatingSystem
+      || reader.browser !== planned.browser
+      || reader.signedIn !== false
+    ) {
+      fail(
+        'dogfood-observation-mobile-context-mismatch',
+        'dogfood observation reader context does not match the precommitted signed-out mobile context',
+      );
+    }
+  }
+  return observation;
 }
 
 export function validateOwnerDecision(input) {

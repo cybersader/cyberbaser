@@ -9,7 +9,9 @@ import {
   evidenceClassification,
   operatorDefaults,
   validateDogfoodObservation,
+  validateDogfoodObservationSeriesBinding,
   validateOperator,
+  validateOwnerDogfoodSeriesCharter,
   validateOwnerDecision,
   validateSubmission,
 } from '../src/pilot-input.js';
@@ -34,6 +36,36 @@ function validDogfoodOperator(overrides = {}) {
     sourcePath: 'guide.md',
     publicUrl: 'https://cybersader.github.io/cyberbase/guide/',
     sourceAuthorizedForLocalProcessing: true,
+    ...overrides,
+  };
+}
+
+function validDogfoodSeries(overrides = {}) {
+  return {
+    schemaVersion: 1,
+    artifactType: 'private-owner-self-dogfood-series-charter',
+    profile: 'owner-self-dogfood',
+    attemptIds: ['OD-01', 'OD-02', 'OD-03'],
+    obligationAssignments: {
+      'normal-correction': 'OD-01',
+      'signed-out-mobile-handoff': 'OD-01',
+      'stale-source': 'OD-02',
+      'ambiguous-quote': 'OD-02',
+      'owner-rejection': 'OD-03',
+    },
+    plannedSignedOutMobile: {
+      attemptId: 'OD-01',
+      device: 'Owner phone',
+      operatingSystem: 'Mobile OS',
+      browser: 'Mobile browser',
+      signedIn: false,
+    },
+    evidenceClassification: {
+      evidenceClass: 'owner-self-dogfood',
+      countsTowardHumanPilot: false,
+      independentOwnerEvidence: false,
+      claimBoundary: 'maintainer operational and mechanical evidence only',
+    },
     ...overrides,
   };
 }
@@ -213,9 +245,13 @@ describe('strict pilot schemas and deterministic conversion', () => {
       schemaVersion: 1,
       attemptId: 'OD-01',
       evidenceClass: 'owner-self-dogfood',
+      precommittedObligations: [
+        'normal-correction',
+        'signed-out-mobile-handoff',
+      ],
       scenario: 'signed-out mobile handoff',
       readerContext: {
-        device: 'phone', operatingSystem: 'mobile OS', browser: 'mobile browser', signedIn: false,
+        device: 'Owner phone', operatingSystem: 'Mobile OS', browser: 'Mobile browser', signedIn: false,
       },
       ownerContext: {
         device: 'laptop', operatingSystem: 'desktop OS', browser: 'desktop browser', signedIn: true,
@@ -229,12 +265,152 @@ describe('strict pilot schemas and deterministic conversion', () => {
       liveVerificationPerformed: false,
       notes: '',
     });
-    expect(observation.readerContext.device).toBe('phone');
+    expect(observation.readerContext.device).toBe('Owner phone');
     expect(observation.ownerContext.device).toBe('laptop');
+    expect(
+      validateDogfoodObservationSeriesBinding(observation, validDogfoodSeries()),
+    ).toEqual(observation);
+    expect(() => validateDogfoodObservationSeriesBinding({
+      ...observation,
+      precommittedObligations: ['signed-out-mobile-handoff'],
+    }, validDogfoodSeries())).toThrow(/do not match the precommitted series assignment/u);
+    for (const [field, value] of [
+      ['device', 'Different phone'],
+      ['operatingSystem', 'Different OS'],
+      ['browser', 'Different browser'],
+      ['signedIn', true],
+    ]) {
+      expect(() => validateDogfoodObservationSeriesBinding({
+        ...observation,
+        readerContext: { ...observation.readerContext, [field]: value },
+      }, validDogfoodSeries())).toThrow(/does not match the precommitted signed-out mobile context/u);
+    }
     expect(() => validateDogfoodObservation({
       ...observation,
       ownerContext: { ...observation.ownerContext, signedIn: 'yes' },
     })).toThrow(/signedIn must be boolean or null/u);
+  });
+
+  test('validates and freezes three-to-five-attempt owner dogfood series charters', () => {
+    const three = validateOwnerDogfoodSeriesCharter(validDogfoodSeries());
+    expect(three.attemptIds).toEqual(['OD-01', 'OD-02', 'OD-03']);
+    expect(Object.isFrozen(three)).toBe(true);
+    expect(Object.isFrozen(three.obligationAssignments)).toBe(true);
+    expect(Object.isFrozen(three.plannedSignedOutMobile)).toBe(true);
+    expect(Object.isFrozen(three.evidenceClassification)).toBe(true);
+
+    const four = validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      attemptIds: ['OD-01', 'OD-02', 'OD-03', 'OD-04'],
+      obligationAssignments: {
+        'normal-correction': 'OD-01',
+        'signed-out-mobile-handoff': 'OD-01',
+        'stale-source': 'OD-02',
+        'ambiguous-quote': 'OD-03',
+        'owner-rejection': 'OD-04',
+      },
+    }));
+    expect(four.attemptIds).toHaveLength(4);
+
+    const five = validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      attemptIds: ['OD-01', 'OD-02', 'OD-03', 'OD-04', 'OD-05'],
+      obligationAssignments: {
+        'normal-correction': 'OD-01',
+        'signed-out-mobile-handoff': 'OD-02',
+        'stale-source': 'OD-03',
+        'ambiguous-quote': 'OD-04',
+        'owner-rejection': 'OD-05',
+      },
+      plannedSignedOutMobile: {
+        attemptId: 'OD-02',
+        device: 'Owner phone',
+        operatingSystem: 'Mobile OS',
+        browser: 'Mobile browser',
+        signedIn: false,
+      },
+    }));
+    expect(five.attemptIds).toHaveLength(5);
+  });
+
+  test('rejects incomplete, undeclared, signed-in, forged, and privacy-expanding series charters', () => {
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      attemptIds: ['OD-01', 'OD-02'],
+    }))).toThrow(/three to five/u);
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      attemptIds: ['OD-01', 'OD-02', 'OD-02'],
+    }))).toThrow(/must be unique/u);
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      attemptIds: ['OD-01', 'OD-02', 'HC-03'],
+    }))).toThrow(/must use OD-01 through OD-99/u);
+    for (const forbiddenField of [
+      'candidate', 'sourcePath', 'url', 'quote', 'replacement', 'notes', 'decision', 'observation',
+    ]) {
+      expect(() => validateOwnerDogfoodSeriesCharter({
+        ...validDogfoodSeries(),
+        [forbiddenField]: 'private value',
+      })).toThrow(new RegExp(`unknown field: ${forbiddenField}`, 'u'));
+    }
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      plannedSignedOutMobile: {
+        ...validDogfoodSeries().plannedSignedOutMobile,
+        notes: 'private note',
+      },
+    }))).toThrow(/unknown field: notes/u);
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      evidenceClassification: {
+        ...validDogfoodSeries().evidenceClassification,
+        ownerName: 'private owner',
+      },
+    }))).toThrow(/unknown field: ownerName/u);
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      obligationAssignments: {
+        ...validDogfoodSeries().obligationAssignments,
+        'extra-scenario': 'OD-01',
+      },
+    }))).toThrow(/unknown field: extra-scenario/u);
+
+    const missingObligation = validDogfoodSeries();
+    delete missingObligation.obligationAssignments['owner-rejection'];
+    expect(() => validateOwnerDogfoodSeriesCharter(missingObligation))
+      .toThrow(/owner-rejection is required/u);
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      obligationAssignments: {
+        ...validDogfoodSeries().obligationAssignments,
+        'owner-rejection': 'OD-04',
+      },
+    }))).toThrow(/must reference a declared OD attempt/u);
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      attemptIds: ['OD-01', 'OD-02', 'OD-03', 'OD-04'],
+    }))).toThrow(/OD-04 must have at least one obligation/u);
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      plannedSignedOutMobile: {
+        ...validDogfoodSeries().plannedSignedOutMobile,
+        attemptId: 'OD-02',
+      },
+    }))).toThrow(/must match the signed-out-mobile-handoff obligation/u);
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      plannedSignedOutMobile: {
+        ...validDogfoodSeries().plannedSignedOutMobile,
+        signedIn: true,
+      },
+    }))).toThrow(/must set signedIn to false/u);
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      plannedSignedOutMobile: {
+        ...validDogfoodSeries().plannedSignedOutMobile,
+        device: '',
+      },
+    }))).toThrow(/must not be empty/u);
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      plannedSignedOutMobile: {
+        ...validDogfoodSeries().plannedSignedOutMobile,
+        device: '   ',
+      },
+    }))).toThrow(/must contain a non-whitespace character/u);
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      evidenceClassification: {
+        ...validDogfoodSeries().evidenceClassification,
+        countsTowardHumanPilot: true,
+      },
+    }))).toThrow(/must remain fixed/u);
   });
 
   test('owner-decision identifiers must use prepared-run formats before binding validation', () => {

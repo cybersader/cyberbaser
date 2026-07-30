@@ -51,7 +51,49 @@ bun run verify
 
 Owner self-dogfood is the immediate use of this harness. It reuses the same case, evaluation, review, checkout, projection, rendering, link-delta, and decision-binding modules, but uses distinct `OD-01` through `OD-99` attempt IDs and the `owner-self-dogfood` profile. One maintainer may switch between reader and owner contexts. Status, preparation, rendering, review-card, and validated-decision outputs report `evidenceClass: owner-self-dogfood`, `countsTowardHumanPilot: false`, and `independentOwnerEvidence: false`; raw input/scaffold files are not evidence-classification outputs.
 
-Initialize one attempt from an explicit owner-confirmed Cyberbase mapping:
+Before any `OD-*` attempt, privately precommit the series. The non-overwriting charter declares three to five unique attempt IDs, assigns each of the five required obligations exactly once, uses every declared ID, names the planned signed-out phone/OS/browser, and fixes the maintainer-only evidence boundary. Its schema provides no dedicated fields for candidates, paths, URLs, quotes, replacements, notes, decisions, or observations, and rejects unknown field names. Use the mobile labels only to name the actual environment, not to embed other private data.
+
+Example shape only; replace the sample device, operating system, and browser with the actual planned environment before initialization:
+
+```json
+{
+  "schemaVersion": 1,
+  "artifactType": "private-owner-self-dogfood-series-charter",
+  "profile": "owner-self-dogfood",
+  "attemptIds": ["OD-01", "OD-02", "OD-03"],
+  "obligationAssignments": {
+    "normal-correction": "OD-01",
+    "signed-out-mobile-handoff": "OD-01",
+    "stale-source": "OD-02",
+    "ambiguous-quote": "OD-02",
+    "owner-rejection": "OD-03"
+  },
+  "plannedSignedOutMobile": {
+    "attemptId": "OD-01",
+    "device": "Pixel 8",
+    "operatingSystem": "Android 16",
+    "browser": "Chrome 138",
+    "signedIn": false
+  },
+  "evidenceClassification": {
+    "evidenceClass": "owner-self-dogfood",
+    "countsTowardHumanPilot": false,
+    "independentOwnerEvidence": false,
+    "claimBoundary": "maintainer operational and mechanical evidence only"
+  }
+}
+```
+
+Create the canonical ignored charter once:
+
+```bash
+bun run dogfood:series-init -- \
+  --input '/absolute/private/owner-dogfood-series.json'
+```
+
+The canonical file is `.workspace/human-correction-pilot/owner-self-dogfood-series.json`. While it exists, a second initialization cannot replace it. This is an exclusive non-overwriting harness write, not cryptographic or filesystem immutability. Manual editing or deletion is outside the guarantee and invalidates the series. `dogfood:init` fails before checkout inspection or attempt-artifact creation when the charter is missing or the requested OD ID was not declared; the command may still record a private global failure log.
+
+After the owner chooses a genuine candidate and confirms its page-to-source mapping, initialize the declared attempt:
 
 ```bash
 bun run dogfood:init -- \
@@ -63,9 +105,11 @@ bun run dogfood:init -- \
   --authorize-source yes
 ```
 
-Initialization creates the same local reader form and operator/decision files plus `dogfood-observation.json`, a private scaffold for the scenario, separate reader and owner device/browser/account contexts, manual interventions, and whether a source write, deployment, or live verification actually happened. Blank observation fields are not evidence, and automated browser emulation must not be labeled as a physical-phone result.
+Initialization creates the local reader form and operator/decision files plus `dogfood-observation.json`, a private scaffold that carries the attempt's exact precommitted obligations, separate reader and owner device/browser/account contexts, manual interventions, and whether a source write, deployment, or live verification actually happened. The planned phone context is prefilled for the mobile obligation. Decision validation compares both the obligations and that mobile context with the canonical charter. Blank observation fields are not evidence, and automated browser emulation must not be labeled as a physical-phone result.
 
-Place the downloaded `submission.json` in the attempt directory, then run:
+Deliver **only** the generated `reader-form.html` to the phone through an owner-controlled exact-file transfer or a single-file route with directory listing disabled. Never serve or copy the containing attempt directory: it also contains private operator, observation, decision, log, and run artifacts. After the HTML loads, the form makes no subsequent request, uploads nothing, and downloads `submission.json` locally. Transfer only that downloaded JSON back to the laptop and place it at the returned attempt path; keep this manual handoff as measured dogfood friction rather than adding an upload endpoint.
+
+Then run:
 
 ```bash
 bun run dogfood:prepare -- --attempt OD-01
@@ -74,9 +118,9 @@ bun run dogfood:render -- --attempt OD-01
 bun run dogfood:decision -- --attempt OD-01
 ```
 
-The recommended series covers a normal correction, signed-out mobile handoff, stale source, ambiguous quote, and owner rejection across three to five attempts. Any changed validated case input, including mapping, base, selector, quote, replacement, rationale, evidence, or correction kind, creates a different mechanical case ID. A changed owner decision does not create a new mechanical case; keep it bound to the existing eligible attempt and never overwrite a completed attempt. A validated rejection is a successful owner-authority outcome and still performs no source write or deployment.
+The recommended series covers a normal correction, signed-out mobile handoff, stale source, ambiguous quote, and owner rejection across three to five attempts. The charter binds those labels but does not by itself prove their outcomes. Decision validation requires the attempt assigned `owner-rejection` to end with `reject`; stale and ambiguous obligations are supported by their recorded fail-closed error and evidence that no Cyberbaser candidate application or deployment occurred because they stop before decision eligibility. Any changed validated case input, including mapping, base, selector, quote, replacement, rationale, evidence, or correction kind, creates a different mechanical case ID. A changed owner decision does not create a new mechanical case; keep it bound to the existing eligible attempt and never overwrite a completed attempt. A validated rejection is a successful owner-authority outcome and still performs no source write or deployment.
 
-The harness cannot complete the owner's editorial step on the owner's behalf. Before validating an owner-self-dogfood decision, it strictly loads `dogfood-observation.json`, binds it to the attempt, requires that source-write, deployment, and live-verification flags are still false, and snapshots the private observation into the validated decision artifact. That validated artifact is create-once: a later contradictory decision cannot replace it. An accepted candidate is applied separately through the owner's normal local Markdown workflow, followed by digest comparison, normal publication, and live verification. Nothing in this package writes canonical source, commits, pushes, deploys, or authorizes itself.
+The harness cannot complete the owner's editorial step on the owner's behalf. Before validating an owner-self-dogfood decision, it strictly loads `dogfood-observation.json`, verifies its attempt obligations and planned mobile context against the canonical charter, requires that source-write, deployment, and live-verification flags are still false, and snapshots the private observation into the validated decision artifact. That validated artifact is create-once: a later contradictory decision cannot replace it. An accepted candidate is applied separately through the owner's normal local Markdown workflow, followed by digest comparison, normal publication, and live verification. Nothing in this package writes canonical source, commits, pushes, deploys, or authorizes itself.
 
 ## Prepare a deferred independent human-pilot attempt
 
