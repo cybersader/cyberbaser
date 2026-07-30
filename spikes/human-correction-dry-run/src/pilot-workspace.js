@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import {
   access,
+  link,
   lstat,
   mkdir,
   mkdtemp,
@@ -16,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { stableStringify } from './case.js';
 import { inspectCheckout } from './live-run.js';
 import {
+  evidenceClassification,
   operatorDefaults,
   ownerDecisionTemplate,
   validateAttemptId,
@@ -111,6 +113,7 @@ export function attemptPaths(attemptIdInput, {
     readerForm: path.join(root, 'reader-form.html'),
     submission: path.join(root, 'submission.json'),
     operator: path.join(root, 'operator.json'),
+    dogfoodObservation: path.join(root, 'dogfood-observation.json'),
     ownerDecision: path.join(root, 'owner-decision.json'),
     runs: path.join(root, 'runs'),
     logs: path.join(root, 'logs'),
@@ -125,13 +128,44 @@ async function verifiedWrite(file, contents, context) {
 }
 
 function renderReaderForm(template, attemptId, profile) {
-  const rehearsalNotice = profile === 'cyberbase-rehearsal'
+  const profileNotice = profile === 'cyberbase-rehearsal'
     ? '<p class="rehearsal"><strong>Cyberbase rehearsal:</strong> this attempt supplies zero counted independent-owner evidence.</p>'
-    : '';
+    : profile === 'owner-self-dogfood'
+      ? '<p class="rehearsal"><strong>Owner self-dogfood:</strong> one maintainer is switching roles. This is operational evidence, not independent reader or owner validation.</p>'
+      : '';
   return template
     .replaceAll('__ATTEMPT_ID__', attemptId)
     .replaceAll('__PROFILE__', profile)
-    .replaceAll('__PROFILE_NOTICE__', rehearsalNotice);
+    .replaceAll('__PROFILE_NOTICE__', profileNotice);
+}
+
+function dogfoodObservationTemplate(attemptId) {
+  return {
+    schemaVersion: 1,
+    attemptId,
+    evidenceClass: 'owner-self-dogfood',
+    scenario: '',
+    readerContext: {
+      device: '',
+      operatingSystem: '',
+      browser: '',
+      signedIn: null,
+    },
+    ownerContext: {
+      device: '',
+      operatingSystem: '',
+      browser: '',
+      signedIn: null,
+    },
+    roleSeparation: 'same maintainer, separate reader and owner contexts',
+    startedAt: '',
+    completedAt: '',
+    manualInterventions: [],
+    sourceWritePerformed: false,
+    publicDeploymentPerformed: false,
+    liveVerificationPerformed: false,
+    notes: '',
+  };
 }
 
 const CYBERBASE_REPOSITORY = 'https://github.com/cybersader/cyberbase';
@@ -167,8 +201,11 @@ async function deriveCheckoutHead(checkoutDir) {
 }
 
 async function prefilledCyberbaseOperator({ attemptId, profile, prefill }) {
-  if (profile !== 'cyberbase-rehearsal') {
-    fail('cyberbase-prefill-profile-mismatch', 'Cyberbase prefill is allowed only with profile cyberbase-rehearsal');
+  if (profile !== 'cyberbase-rehearsal' && profile !== 'owner-self-dogfood') {
+    fail(
+      'cyberbase-prefill-profile-mismatch',
+      'Cyberbase prefill is allowed only with profile cyberbase-rehearsal or owner-self-dogfood',
+    );
   }
   if (prefill.sourceAuthorization !== 'yes') {
     fail('source-authorization-required', 'authorize-source must be exactly yes');
@@ -233,6 +270,13 @@ export async function initializeAttempt({
       stableStringify(operator),
       stagingContext,
     );
+    if (profile === 'owner-self-dogfood') {
+      await verifiedWrite(
+        path.join(staging, 'dogfood-observation.json'),
+        stableStringify(dogfoodObservationTemplate(attemptId)),
+        stagingContext,
+      );
+    }
     await verifiedWrite(
       path.join(staging, 'owner-decision.json'),
       stableStringify(ownerDecisionTemplate(attemptId)),
@@ -245,18 +289,19 @@ export async function initializeAttempt({
   }
 
   await assertNoSymlinkComponents(paths.projectRoot, paths.root);
+  const classification = evidenceClassification(profile);
   return Object.freeze({
     attemptId,
     profile,
     countsTowardPilot: false,
+    ...classification,
     operatorPrefilled: Boolean(prefill),
     root: paths.root,
     readerForm: paths.readerForm,
     submission: paths.submission,
     operator: paths.operator,
-    notice: profile === 'cyberbase-rehearsal'
-      ? 'zero counted independent-owner evidence'
-      : 'counting remains conditional on completed owner attestation and human study facts',
+    dogfoodObservation: profile === 'owner-self-dogfood' ? paths.dogfoodObservation : null,
+    notice: classification.claimBoundary,
   });
 }
 
@@ -307,6 +352,28 @@ export async function atomicWriteArtifact(file, contents, paths) {
   await writeFile(temporary, contents, 'utf8');
   try {
     await rename(temporary, file);
+  } finally {
+    await rm(temporary, { force: true });
+  }
+}
+
+export async function atomicCreateArtifact(file, contents, paths) {
+  assertContained(paths.workspaceRoot, file);
+  await assertNoSymlinkComponents(paths.projectRoot, path.dirname(file));
+  await assertIgnoredPath(file, paths.projectRoot);
+  const temporary = `${file}.tmp-${process.pid}-${Math.random().toString(16).slice(2)}`;
+  await assertIgnoredPath(temporary, paths.projectRoot);
+  await writeFile(temporary, contents, { encoding: 'utf8', flag: 'wx' });
+  try {
+    await link(temporary, file);
+  } catch (error) {
+    if (error?.code === 'EEXIST') {
+      fail(
+        'artifact-already-exists',
+        `${path.basename(file)} already exists; completed evidence is immutable`,
+      );
+    }
+    throw error;
   } finally {
     await rm(temporary, { force: true });
   }

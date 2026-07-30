@@ -24,7 +24,7 @@ There are two repos to keep straight:
 
 **Current phase: v1 Build.** Research & Foundations closed on 2026-07-25. The current product interpretation is an **owner-controlled change boundary** around a version-controlled knowledge base: decide what may publish, accept bounded proposals against pinned source, preserve untouched bytes, classify integrity and trust, and keep the final decision with the owner. Reader controls, trusted rich browser/WYSIWYG/CMS-like tools, forge editors, local Markdown tools, and agents may all be replaceable authoring spokes.
 
-The immediate milestone is the precommitted [concierge human-correction pilot](/cyberbaser/research/concierge-human-correction-pilot/): five ordinary readers and one independently operated Markdown-KB owner test one local, account-free correction workflow before account-free automation is built. Its seven-field form is a study instrument and cannot select the eventual reader UI, rich editor, generalized proposal record, or adapter API. `@cyberbaser/correction` is the exact quote-anchor and single-splice primitive used by that experiment. It performs no I/O and is not a shipped contribution product.
+The immediate milestone is [owner self-dogfooding](/cyberbaser/research/owner-self-dogfood/): one maintainer switches between reader and owner contexts across three to five normal and adversarial Cyberbase correction attempts. Its seven-field local form is an instrument and cannot select the eventual reader UI, rich editor, generalized proposal record, or adapter API. `@cyberbaser/correction` is the exact quote-anchor and single-splice primitive used by the series. It performs no I/O and is not a shipped contribution product. The five-reader, one-independent-owner protocol is preserved as an optional later gate before stronger usability claims.
 
 ## The Architecture in One Line
 
@@ -36,12 +36,12 @@ Replaceable external authoring spokes submit bounded proposals against pinned so
 2. **No hyperscalers.** Self-hosting preferred (Forgejo for identity/hosting; see RA-01). GitHub Pages is the *current* deploy target; Cloudflare is edge-only (CDN/WAF/rate-limit), never the host. No AWS/GCP.
 3. **Accounts are not the safety mechanism.** Contribution safety = owner review plus the maintainer's trust curve. The current GitHub path still has an account wall, so do not claim the general product requirement is satisfied.
 4. **No whole-file writer or second authority.** The real-vault gate measured 4.6% byte identity and killed whole-file regeneration in Cyberbaser-mediated source application. External adapters bind to pinned source and emit bounded operations; `@cyberbaser/ofm` validates and `@cyberbaser/correction` prepares one base-bound candidate without performing I/O. Rich presentation is allowed; direct reserialized saves are not.
-5. **Evidence before product claims.** The precommitted concierge pilot comes before account-free automation. A primitive, fixture, or study workflow earns only its narrow tested claim and cannot select a rich editor or generalized adapter contract.
+5. **Evidence before product claims.** Owner self-dogfooding comes before account-free automation. It earns only maintainer operational and mechanical claims. Independent-reader or independent-owner claims still require the preserved larger protocol. A primitive, fixture, or study workflow cannot select a rich editor or generalized adapter contract.
 
 ## Who It's For
 
 - **Knowledge owners** with a markdown KB who need an owner-controlled boundary around publication and proposed changes, without surrendering the source.
-- **Readers** who spot a wrong fact but will not use a CLI or create a forge account. Their product path is not shipped; the concierge pilot is the immediate falsification test.
+- **Readers** who spot a wrong fact but will not use a CLI or create a forge account. Their product path is not shipped; owner self-dogfooding now tests the boundary, while unfamiliar-reader usability remains unvalidated.
 - **Developers** who can use the current GitHub dogfood path by editing a `.md` and opening a PR.
 - **AI agents** maintaining content through the same reviewed pipeline as humans — the tool is deliberately agent-friendly.
 - **User (Cybersader)**: cybersecurity professional, Obsidian power user, WSL on Windows, collaborates heavily with Claude Code across sibling projects.

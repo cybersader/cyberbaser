@@ -21,7 +21,11 @@
     "pilot:init": "bun run bin/pilot-init.js",
     "pilot:prepare": "bun run bin/pilot-prepare.js",
     "pilot:render": "bun run bin/pilot-render.js",
-    "pilot:decision": "bun run bin/pilot-decision.js"
+    "pilot:decision": "bun run bin/pilot-decision.js",
+    "dogfood:init": "bun run bin/pilot-init.js",
+    "dogfood:prepare": "bun run bin/pilot-prepare.js",
+    "dogfood:render": "bun run bin/pilot-render.js",
+    "dogfood:decision": "bun run bin/pilot-decision.js"
   },
   "dependencies": {
     "@cyberbaser/correction": "file:../../packages/correction",

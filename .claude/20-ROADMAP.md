@@ -1,6 +1,6 @@
 # 20 — Roadmap
 
-> **Status**: 🌳 Current (aligned 2026-07-29). The canonical public roadmap is `docs/src/content/docs/getting-started/roadmap.mdx` (`/cyberbaser/getting-started/roadmap/`); this file is the agent-side operating view.
+> **Status**: 🌳 Current (aligned 2026-07-30). The canonical public roadmap is `docs/src/content/docs/getting-started/roadmap.mdx` (`/cyberbaser/getting-started/roadmap/`); this file is the agent-side operating view.
 
 ## Current Phase: **v1 Build**
 
@@ -16,22 +16,23 @@ GitHub, GitHub Actions, Pages, and pinned Quartz are the current dogfood infrast
 - [x] GitHub-backed contribution loop rehearsed twice end to end.
 - [x] `@cyberbaser/correction` exact UTF-8 quote-anchor and single-splice core. This is a no-I/O primitive for preparing and validating a candidate change, **not** a shipped editor, endpoint, automatic writer, or contribution product.
 
-### Immediate milestone: the precommitted concierge pilot
+### Immediate milestone: owner self-dogfooding
 
-- [ ] Run the [concierge human-correction pilot](/cyberbaser/research/concierge-human-correction-pilot/) exactly as written: five ordinary readers and one independently operated Markdown-KB owner.
-- [ ] Test the whole human loop before automating it: account-free submission, owner-confirmed source mapping, exact quote anchoring, one-splice candidate preparation, local review card, owner-controlled local application, publication, and live verification.
-- [ ] Keep Q09 open. Passing the thresholds justifies only the smallest automation around measured work; failing narrows or stops the account-free product claim.
+- [ ] Run the [owner self-dogfood series](/cyberbaser/research/owner-self-dogfood/) on Cyberbase with OD attempt IDs and one maintainer switching between reader and owner contexts.
+- [ ] Cover a normal correction, signed-out mobile handoff, stale source, ambiguous quote, and owner rejection across three to five attempts.
+- [ ] If a real correction is accepted, apply it only through the owner's normal local workflow and verify the approved candidate live. Automated attempts remain no-write.
+- [ ] Keep Q09 open. Fix only friction or safety defects actually observed in the series.
 
-No counted human attempt or threshold result exists yet. The completed internal dry run and private operator rehearsal count toward none of the pilot thresholds. The concierge, study form, local card, and correction primitive are experiment infrastructure, not a shipped contribution path.
+No owner self-dogfood attempt has completed the full reader-to-live loop yet. The completed internal dry run and private operator rehearsal are mechanical evidence only. The local form, review card, and correction primitive are experiment infrastructure, not a shipped contribution path. The five-reader, one-independent-owner protocol remains deferred and unchanged until stronger usability claims need it.
 
 ### Other v1 Build work
 
 - [ ] Make enforcement honest without breaking the maintainer's direct Obsidian+Git workflow (Q10).
 - [ ] Verify contributor attribution through the GitHub fork flow (Q08).
 - [ ] Freeze the live URL contract and add the slug-diff gate (Q06).
-- [ ] Decide the operating model for a maintainer who does not use GitHub: hosted, one-click self-hosted, or local-first. The pilot tests one local workflow but does not choose the general product model.
+- [ ] Decide the operating model for a maintainer who does not use GitHub: hosted, one-click self-hosted, or local-first. Owner self-dogfooding tests one local workflow but does not choose the general product model.
 
-**Exit criteria for v1 Build** are canonical on the public roadmap. The pilot result is one criterion; it does not by itself ship or settle an account-free product path.
+**Exit criteria for v1 Build** are canonical on the public roadmap. The owner dogfood result is one criterion; it does not by itself ship or settle an account-free product path.
 
 ---
 

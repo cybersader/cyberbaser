@@ -47,18 +47,52 @@ bun run verify
 
 `bun run verify` is the authoritative offline synthetic verifier. It reads only the synthetic public Markdown fixtures and prints deterministic JSON. A nonzero exit means at least one named criterion failed. Bun may print its fixed `$ bun run bin/verify.js` package-script launcher banner to standard error; that banner is not a verifier diagnostic.
 
-## Prepare a private human-pilot attempt
+## Run owner self-dogfood on Cyberbase
 
-The pilot operator layer is a thin concierge wrapper around the same case, evaluation, review, checkout, projection, rendering, and link-delta modules. It adds no server, database, account integration, hosted form, source writer, generalized renderer executor, or public-results publisher.
+Owner self-dogfood is the immediate use of this harness. It reuses the same case, evaluation, review, checkout, projection, rendering, link-delta, and decision-binding modules, but uses distinct `OD-01` through `OD-99` attempt IDs and the `owner-self-dogfood` profile. One maintainer may switch between reader and owner contexts. Status, preparation, rendering, review-card, and validated-decision outputs report `evidenceClass: owner-self-dogfood`, `countsTowardHumanPilot: false`, and `independentOwnerEvidence: false`; raw input/scaffold files are not evidence-classification outputs.
+
+Initialize one attempt from an explicit owner-confirmed Cyberbase mapping:
+
+```bash
+bun run dogfood:init -- \
+  --attempt OD-01 \
+  --profile owner-self-dogfood \
+  --checkout '/absolute/path/to/clean/cyberbase-checkout' \
+  --source 'owner/supplied/repository-relative-page.md' \
+  --url 'https://cybersader.github.io/cyberbase/exact-public-page/' \
+  --authorize-source yes
+```
+
+Initialization creates the same local reader form and operator/decision files plus `dogfood-observation.json`, a private scaffold for the scenario, separate reader and owner device/browser/account contexts, manual interventions, and whether a source write, deployment, or live verification actually happened. Blank observation fields are not evidence, and automated browser emulation must not be labeled as a physical-phone result.
+
+Place the downloaded `submission.json` in the attempt directory, then run:
+
+```bash
+bun run dogfood:prepare -- --attempt OD-01
+bun run dogfood:render -- --attempt OD-01
+# after the owner fills the bound owner-decision.json
+bun run dogfood:decision -- --attempt OD-01
+```
+
+The recommended series covers a normal correction, signed-out mobile handoff, stale source, ambiguous quote, and owner rejection across three to five attempts. Any changed validated case input, including mapping, base, selector, quote, replacement, rationale, evidence, or correction kind, creates a different mechanical case ID. A changed owner decision does not create a new mechanical case; keep it bound to the existing eligible attempt and never overwrite a completed attempt. A validated rejection is a successful owner-authority outcome and still performs no source write or deployment.
+
+The harness cannot complete the owner's editorial step on the owner's behalf. Before validating an owner-self-dogfood decision, it strictly loads `dogfood-observation.json`, binds it to the attempt, requires that source-write, deployment, and live-verification flags are still false, and snapshots the private observation into the validated decision artifact. That validated artifact is create-once: a later contradictory decision cannot replace it. An accepted candidate is applied separately through the owner's normal local Markdown workflow, followed by digest comparison, normal publication, and live verification. Nothing in this package writes canonical source, commits, pushes, deploys, or authorizes itself.
+
+## Prepare a deferred independent human-pilot attempt
+
+The pilot operator layer is a thin concierge wrapper around the same modules. It adds no server, database, account integration, hosted form, source writer, generalized renderer executor, or public-results publisher. This larger protocol is preserved for later if Cyberbaser needs unfamiliar-reader or independent-owner usability evidence; it is not required before owner self-dogfooding.
 
 All live material is created below the repository's ignored `.workspace/human-correction-pilot/` directory. Every command verifies its destinations with `git check-ignore`, rejects symlinked workspace components, and keeps raw submissions, credit requests, owner mappings, local paths, and private cards out of tracked files.
 
-There are two explicit profiles:
+There are three explicit profiles:
 
 - `cyberbase-rehearsal` supplies safe defaults for the public Cyberbase repository, the Cyberbaser publication boundary, the pinned Quartz `v4.5.2` wrapper, and an anonymous/full-review policy. It is permanently marked as **zero counted independent-owner evidence**.
+- `owner-self-dogfood` uses the same Cyberbase safety defaults with `OD-*` attempt IDs, a private observation scaffold, and explicit maintainer-only evidence classification. It can never claim independent owner evidence or count toward the human pilot.
 - `independent-counted` guesses no repository, checkout, source path, commit, URL, base path, or build command. It requires explicit source-processing authorization and independent-owner attestation. The Cyberbase repository is rejected under this profile, including equivalent trailing-slash and `.git` URLs. The preparation kit itself always reports `countsTowardPilot: false`; only the later private human record may count an attempt or result after a bound decision, owner-controlled application, and live verification.
 
-Initialize one attempt only after the human study is ready to begin. The existing two-argument form creates blank mapping templates for either profile:
+`countsTowardPilot` is the legacy preparation-kit compatibility field and remains false on every kit artifact. `countsTowardHumanPilot` is the explicit profile evidence-classification field and is also false for rehearsal and owner self-dogfood outputs. Neither field turns an automated or prepared artifact into a counted human result.
+
+Initialize one attempt only after the human study is ready to begin. The existing two-argument form creates blank mapping templates for any profile:
 
 ```bash
 bun run pilot:init -- --attempt HC-01 --profile cyberbase-rehearsal
@@ -66,7 +100,7 @@ bun run pilot:init -- --attempt HC-01 --profile cyberbase-rehearsal
 bun run pilot:init -- --attempt HC-01 --profile independent-counted
 ```
 
-For a Cyberbase dogfood rehearsal, the owner-confirmed mapping can instead be verified and prefilled in one command:
+For a Cyberbase rehearsal or owner self-dogfood attempt, the owner-confirmed mapping can instead be verified and prefilled in one command. Use `HC-*` with `cyberbase-rehearsal` or `OD-*` with `owner-self-dogfood`:
 
 ```bash
 bun run pilot:init -- \
@@ -78,7 +112,7 @@ bun run pilot:init -- \
   --authorize-source yes
 ```
 
-The four prefill flags are all-or-none and are accepted only for `cyberbase-rehearsal`; authorization must be exactly `yes`. The command derives the checkout's exact local `HEAD`, then reuses the live lane's repository-root, no-symlink, clean-worktree, Cyberbase-origin, tracked-source, and source-at-HEAD verification before creating anything. It writes that verified checkout, commit, owner-supplied source path, exact public URL, and authorization into `operator.json`. It never infers a source from the URL, title, slug, search, or renderer output, and it never overwrites an existing attempt.
+The four prefill flags are all-or-none and are accepted only for `cyberbase-rehearsal` or `owner-self-dogfood`; authorization must be exactly `yes`. The command derives the checkout's exact local `HEAD`, then reuses the live lane's repository-root, no-symlink, clean-worktree, Cyberbase-origin, tracked-source, and source-at-HEAD verification before creating anything. It writes that verified checkout, commit, owner-supplied source path, exact public URL, and authorization into `operator.json`. It never infers a source from the URL, title, slug, search, or renderer output, and it never overwrites an existing attempt.
 
 Successful JSON output identifies `readerForm`, `submission`, and `operator` paths explicitly. Blank initialization creates an incomplete `operator.json`; Cyberbase prefill creates a verified mapped operator. Both modes create a blank `owner-decision.json` scaffold. The form is one self-contained local file. It has exactly the seven precommitted participant fields, makes no network request, loads no remote resource, collects no account/contact/credential field, and downloads `submission.json` locally. An empty replacement requires an explicit deletion confirmation. Browsers normalize textarea line endings before script can serialize them, so this bounded instrument rejects multiline exact quotes and replacements. Supported single-line values are not trimmed, case-folded, or whitespace-repaired; rationale may still contain multiple lines.
 
@@ -96,7 +130,7 @@ Prepare the exact no-write candidate and private owner card:
 bun run pilot:prepare -- --attempt HC-01
 ```
 
-Preparation verifies the checkout before and after evaluation, requires the owner-mapped Markdown file to be tracked with bytes exactly matching the pinned commit, forces the trust subject to `anonymous` with an empty author regardless of public credit, and writes one deterministic run directory named with the existing mechanical case ID. Changed mapping, base revision, quote, or replacement therefore creates a different run instead of overwriting previous evidence. The private run includes exact `baseline-source.md` and `candidate-source.md` snapshots, a bound `render-attestation.json` scaffold, and a bound owner-decision template. These remain under ignored workspace storage and are not source writes. The initial card is explicitly incomplete: rendering is required before `ownerDecisionEligible` can become true. OFM `damage` produces no owner card; `suspect` produces a blocked card; trust remains informational.
+Preparation verifies the checkout before and after evaluation, requires the owner-mapped Markdown file to be tracked with bytes exactly matching the pinned commit, forces the trust subject to `anonymous` with an empty author regardless of public credit, and writes one deterministic run directory named with the existing mechanical case ID. Any changed validated case input creates a different run instead of overwriting previous evidence; owner decisions remain separately bound to an eligible existing case. The private run includes exact `baseline-source.md` and `candidate-source.md` snapshots, a bound `render-attestation.json` scaffold, and a bound owner-decision template. These remain under ignored workspace storage and are not source writes. The initial card is explicitly incomplete: rendering is required before `ownerDecisionEligible` can become true. OFM `damage` produces no owner card; `suspect` produces a blocked card; trust remains informational.
 
 For a Cyberbase rehearsal, reuse the existing isolated pinned-Quartz lane:
 

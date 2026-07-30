@@ -1,6 +1,6 @@
 # Testing criteria
 
-These criteria test the private dry-run harness, not the five-reader human pilot. Synthetic success cannot be reported as participant usability, owner preference, useful-correction demand, or a shipped contribution path.
+These criteria test the private dry-run harness and owner self-dogfood preparation path, not the deferred five-reader human pilot. Synthetic success cannot be reported as participant usability, owner preference, useful-correction demand, independent-owner evidence, or a shipped contribution path.
 
 ## Deterministic criteria
 
@@ -78,20 +78,20 @@ This is a documentation and command-shape simulation only. No ordinary reader or
 | DOC05 | Related contracts are linked | README links correction, OFM, trust, publish, projection, linkcheck, the pinned Quartz renderer, the canonical pilot protocol, Web Annotation, and RFC 9530. |
 | DOC06 | Live lane is bounded | README documents explicit pin/origin/clean checks, separate temporary lanes, local Quartz override, no public deployment, no source application, and cleanup-before-output. |
 
-## Human-pilot operator criteria
+## Operator and owner-self-dogfood criteria
 
-These checks validate only the private preparation kit. Synthetic fixtures and agent execution remain zero reader attempts and zero independent-owner results.
+These checks validate only the private preparation kit. Synthetic fixtures and agent execution remain zero reader attempts and zero independent-owner results. Owner self-dogfood may add maintainer operational evidence only when the maintainer actually performs the recorded steps; automated coverage cannot claim a physical-device pass or owner decision.
 
 | ID | Criterion | Observable pass condition |
 |---|---|---|
 | P01 | Seven-field local form | The template contains exactly Page URL, Exact quote, Replacement, Rationale, Factual source, Public credit name, and Credit consent in that order, with the precommitted instructions. |
 | P02 | No active intake endpoint | The form has no action/method target, remote resource, network API, storage API, contact/account/credential field, or tracking mechanism. |
 | P03 | Exact supported serialization | Single-line quote/replacement values preserve spaces, Unicode, emoji, and empty deletion exactly; multiline change fields fail closed because browsers normalize textarea line endings. Timing metadata remains separate. |
-| P04 | Strict private schemas | Submission, operator, render-attestation, and owner-decision validators reject unknown fields, invalid credit consent, unpinned mappings, missing source authorization, incomplete independent-owner/render facts, and malformed decision identifiers. |
-| P05 | Profile and counting isolation | Cyberbase is permanently rehearsal-only, URL variants cannot enter `independent-counted`, and every preparation/render/decision artifact reports `countsTowardPilot: false`. |
+| P04 | Strict private schemas | Submission, operator, dogfood-observation, render-attestation, and owner-decision validators reject unknown fields, invalid context/credit values, unpinned mappings, missing source authorization, incomplete independent-owner/render facts, and malformed decision identifiers. |
+| P05 | Profile and counting isolation | Cyberbase is limited to the non-counting `cyberbase-rehearsal` and `owner-self-dogfood` profiles, URL variants cannot enter `independent-counted`, owner dogfood cannot claim independent-owner attestation, the legacy kit field `countsTowardPilot` remains false, and profile classification reports `countsTowardHumanPilot: false` for rehearsal and dogfood outputs. |
 | P06 | Anonymous trust subject | Public credit name and consent never change the forced `anonymous` / empty-author trust input. |
 | P07 | Ignored workspace | Every attempt and artifact remains below ignored `.workspace/`; invalid IDs, existing attempts, unignored destinations, and symlinked workspace components fail closed. |
-| P08 | Deterministic run identity | Existing `caseId()` names the run; changed mapping/base/quote/replacement creates a different run and an existing run is never overwritten. |
+| P08 | Deterministic run identity | Existing `caseId()` names the run; changing any validated case input, including mapping, base, selector, quote, replacement, rationale, evidence, or correction kind, creates a different run and an existing run is never overwritten. Owner-decision changes remain separately bound to the existing eligible case. |
 | P09 | Fast path incomplete | Successful no-write preparation remains `ownerDecisionEligible: false` until render evidence exists. |
 | P10 | OFM gate | `damage` produces no owner card; `suspect` produces a visibly blocked card; only `clean` can become eligible. |
 | P11 | Public/private separation | Mechanical review JSON excludes checkout paths, source paths, raw factual evidence, and unconsented credit names; the private owner card includes mapping and participant context. |
@@ -99,8 +99,11 @@ These checks validate only the private preparation kit. Synthetic fixtures and a
 | P13 | Cyberbase reuse | Cyberbase render mode calls the existing isolated live lane and inherits its checkout, projection, render, link-delta, source-isolation, and cleanup guarantees. Decision validation reruns that same lane, compares the stored and fresh safety-relevant evidence while excluding known build-variant aggregate successes and target bytes/hashes, and derives eligibility and expected status solely from the fresh evidence. Changed link tuples, target safety gates, projection, source isolation, no-write, or cleanup evidence still fail closed. |
 | P14 | Human decision remains human and bound | No command infers accept/reject/clarify. `pilot:decision` validates the hand-entered outcome against the eligible attempt, case ID, and candidate digest, then writes only a private no-source-write validation record. A Cyberbase decision can take as long as a full render because it reruns both live lanes. |
 | P15 | Complete owner card gate | Eligibility requires rendered baseline/candidate passages, byte lengths/digests, anchor/context status, OFM findings/churn/escapes, trust reasons/checks, link totals/delta, and applicable projection evidence. |
-| P16 | Existing harness compatibility | The existing dry-run and live-run suites still pass and `bun run verify` retains byte-identical synthetic-v1 output with 11 PASS checks. |
-| P17 | Verified Cyberbase initialization | Optional Cyberbase prefill requires the complete checkout/source/URL/authorization flag set under `cyberbase-rehearsal`, derives local HEAD, reuses live checkout verification, writes only the explicit owner mapping, reports form/submission/operator paths, and fails before creation on partial, unauthorized, dirty, wrong-root, wrong-origin, non-Markdown, or untracked-source input. |
+| P16 | Existing harness compatibility | The existing dry-run and live-run suites still pass, `bun run verify` retains byte-identical synthetic-v1 output with 11 PASS checks, and stored schema-v1 preparation/render status is normalized to schema v2 without weakening profile classification checks. |
+| P17 | Verified Cyberbase initialization | Optional Cyberbase prefill requires the complete checkout/source/URL/authorization flag set under `cyberbase-rehearsal` or `owner-self-dogfood`, derives local HEAD, reuses live checkout verification, writes only the explicit owner mapping, reports form/submission/operator paths, and fails before creation on partial, unauthorized, dirty, wrong-root, wrong-origin, non-Markdown, or untracked-source input. |
+| P18 | Distinct owner-dogfood attempt namespace | `owner-self-dogfood` requires `OD-01` through `OD-99`; rehearsal and independent profiles require `HC-01` through `HC-99`. Cross-namespace attempt IDs fail closed. |
+| P19 | Explicit evidence classification | Owner-dogfood status, preparation, rendering, review, and validated-decision artifacts report `evidenceClass: owner-self-dogfood`, `countsTowardHumanPilot: false`, `independentOwnerEvidence: false`, and a maintainer-only claim boundary. |
+| P20 | Private observation and immutable rejection path | Initialization creates an ignored `dogfood-observation.json` with separate reader/owner context fields and false write/deploy/live defaults. Decision validation binds and snapshots that observation, refuses any pre-decision write/deploy/live flag, and creates the validated decision exactly once. A correctly bound owner rejection cannot later be replaced by a contradictory decision; the harness cannot invent either decision. |
 
 ## Run sequence
 

@@ -76,6 +76,10 @@ const status = Object.freeze({
   attemptId: 'HC-01',
   profile: 'independent-counted',
   countsTowardPilot: false,
+  evidenceClass: 'independent-human-pilot-candidate',
+  countsTowardHumanPilot: false,
+  independentOwnerEvidence: true,
+  claimBoundary: 'counting remains outside the preparation kit until owner application and live verification',
   ownerDecisionEligible: false,
   blockingReasons: ['render-evidence-required'],
   noWrite: {
@@ -98,6 +102,33 @@ describe('private pilot owner review card', () => {
     expect(card.html).toContain('No source write or public deployment has occurred.');
     expect(card.html).toContain('The owner must complete the bound owner-decision.json by hand');
     expect(card.html).not.toMatch(/<script\b|\s(?:src|href|action)\s*=/iu);
+  });
+
+  test('labels owner self-dogfood without implying independent human validation', () => {
+    const card = buildPilotOwnerReview({
+      submission: { ...submission, attemptId: 'OD-01' },
+      operator: {
+        ...operator,
+        profile: 'owner-self-dogfood',
+        independentOwnerAttested: false,
+        publicationBoundary: 'cyberbaser',
+      },
+      evaluation,
+      status: {
+        ...status,
+        attemptId: 'OD-01',
+        profile: 'owner-self-dogfood',
+        evidenceClass: 'owner-self-dogfood',
+        countsTowardHumanPilot: false,
+        independentOwnerEvidence: false,
+        claimBoundary: 'maintainer operational and mechanical evidence only',
+      },
+    });
+    expect(card.evidence.attempt.evidenceClass).toBe('owner-self-dogfood');
+    expect(card.evidence.attempt.countsTowardHumanPilot).toBe(false);
+    expect(card.evidence.attempt.independentOwnerEvidence).toBe(false);
+    expect(card.html).toContain('Owner self-dogfood');
+    expect(card.html).toContain('not independent human validation');
   });
 
   test('reports missing rendered views, link totals, and source binding instead of treating a thin card as complete', () => {

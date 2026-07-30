@@ -1,0 +1,101 @@
+---
+title: Owner self-dogfood
+summary: A one-maintainer, multi-context exercise of the real Cyberbase correction boundary before any broader reader study.
+description: The immediate 3–5 attempt dogfood series for exact corrections, mobile handoff, stale and ambiguous failures, owner rejection, and optional live application.
+status: research
+tags: [research, testing, contribution]
+sidebar:
+  order: 43
+---
+
+Cyberbaser's immediate evidence step is **owner self-dogfooding on the real Cyberbase stack**. One maintainer switches between the reader and owner roles, ideally using a signed-out phone for the reader context and a laptop for local review. The goal is to expose technical and operational friction now, without recruiting five people before the workflow has earned that cost.
+
+This is not independent human validation. It can show what happened for one maintainer, one device and browser, one pinned source, and one bounded proposal. It cannot establish ordinary-reader usability, independent-owner usability, demand, or a general account-free product path.
+
+> [!important] Evidence boundary
+> Owner self-dogfood contributes **zero** attempts to the deferred [five-reader concierge protocol](/cyberbaser/research/concierge-human-correction-pilot/). It does not close [Q09](/cyberbaser/reference/open-questions/#q09--what-is-the-contribution-path-for-someone-with-no-account), select a rich editor, or turn the seven-field form into the product UI.
+
+## The smallest useful series
+
+Run three to five attempt envelopes that cover all five obligations below. A blocked attempt remains part of the evidence. Changing any validated case input creates a new mechanical case ID rather than repairing history in place; an owner decision remains separately bound to the existing eligible case.
+
+| Obligation | What happens | Required terminal state |
+|---|---|---|
+| Normal correction | Copy one exact line from a live Cyberbase page, propose one replacement, prepare and render the candidate | Complete local owner card; no source write before the owner's decision |
+| Signed-out mobile | Open the live page and local study form from one named phone/browser while signed out, then transfer the downloaded JSON to the laptop | Exact supported values survive the handoff; device and intervention notes remain private |
+| Stale source | Change the bound source or base after preparation | The next stage stops before eligibility or application; no silent rebase or fallback search |
+| Ambiguous quote | Submit a quote that occurs more than once without enough adjacent context | `quote-ambiguous`; no eligible card and no source write |
+| Owner rejection | Review a mechanically eligible candidate and choose `reject` | The bound rejection validates; no application or deployment follows |
+
+The same maintainer may perform every role. Repetition gives scenario coverage, not a sample size: do not calculate reader pass rates, human medians, or independent-owner preference from these attempts.
+
+## Reuse the existing safe path
+
+The private harness under `spikes/human-correction-dry-run/` already has the required boundary:
+
+- `@cyberbaser/correction` resolves one exact UTF-8 selector and prepares one contiguous splice in memory;
+- `@cyberbaser/ofm` checks authoring-semantic damage;
+- the Cyberbaser publication selector and projection verifier run against isolated temporary copies;
+- pinned Quartz builds baseline and candidate sites separately;
+- link and rendered-text evidence are compared before an owner decision becomes eligible;
+- raw submissions, local paths, observations, decisions, and cards stay under ignored `.workspace/` storage;
+- the harness never writes canonical source, commits, pushes, deploys, or authorizes itself.
+
+This follows the source boundary in [The translation layer](/cyberbaser/design/translation-layer/) and the owner route in [Contribution workflows](/cyberbaser/design/contribution-workflows/). The exact quote shape remains related to the W3C [Text Quote Selector](https://www.w3.org/TR/annotation-model/#text-quote-selector), but Cyberbaser binds it to a pinned source revision and fails closed when the mapping is stale or ambiguous.
+
+## Operator path
+
+From `spikes/human-correction-dry-run/`, initialize a real Cyberbase attempt with an owner-confirmed checkout, source path, and public URL:
+
+```bash
+bun run dogfood:init -- \
+  --attempt OD-01 \
+  --profile owner-self-dogfood \
+  --checkout '/absolute/path/to/clean/cyberbase-checkout' \
+  --source 'owner/confirmed/page.md' \
+  --url 'https://cybersader.github.io/cyberbase/exact-page/' \
+  --authorize-source yes
+```
+
+The command creates a private reader form, `operator.json`, `owner-decision.json`, and `dogfood-observation.json`. The observation scaffold records the exact device/browser/account context and whether any source write, deployment, or live verification actually occurred. It is not a trusted declaration by itself; mechanical evidence and owner-controlled publication still have to agree with it.
+
+After the reader submission is returned as `submission.json`:
+
+```bash
+bun run dogfood:prepare -- --attempt OD-01
+bun run dogfood:render -- --attempt OD-01
+```
+
+Open the generated `owner-rendered-review.html`. If the owner records a bound `accept`, `reject`, or `clarify` decision, validate it with:
+
+```bash
+bun run dogfood:decision -- --attempt OD-01
+```
+
+Validation still performs no source application. For an accepted correction, the owner must separately apply the approved candidate through the normal local Markdown workflow, confirm the current source and candidate digest, publish normally, and verify the live URL. A pending card, rejected change, or blocked attempt is still useful dogfood evidence.
+
+## What the results may say
+
+After a real series, Cyberbaser may report statements such as:
+
+- this maintainer completed or failed a named task on the recorded device/browser;
+- the stale or ambiguous case stopped with the recorded error and no source write;
+- the local card was sufficient for this maintainer to accept, reject, or request clarification;
+- one approved candidate reached the live Cyberbase page, if that application and live verification actually happened;
+- the manual phone-to-laptop handoff created a specific measured burden.
+
+It may not report that unfamiliar readers can use the path unaided, that mobile generally works, that an independent owner prefers it, or that the account-free contribution problem is solved.
+
+## When to run the larger pilot
+
+The preserved [concierge human-correction pilot](/cyberbaser/research/concierge-human-correction-pilot/) becomes useful only when Cyberbaser needs stronger evidence before making an unfamiliar-reader or independent-owner usability claim. Its five readers, separate owner, thresholds, and `Not run` results remain unchanged. Deferring it avoids unnecessary recruitment now without weakening the standard for a future public claim.
+
+The current product sequence is therefore:
+
+1. run owner self-dogfood on Cyberbase;
+2. fix only friction and safety defects that the attempts expose;
+3. use the path for real corrections when useful;
+4. build the smallest justified intake improvement, if evidence calls for one;
+5. run the larger independent protocol only before making the stronger claims it was designed to test.
+
+See [Direction](/cyberbaser/getting-started/direction/) and the [Roadmap](/cyberbaser/getting-started/roadmap/) for how this evidence controls the next implementation decision.

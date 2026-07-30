@@ -6,7 +6,9 @@ import {
   convertReaderFieldsToCase,
   countsTowardPilot,
   createSubmissionRecord,
+  evidenceClassification,
   operatorDefaults,
+  validateDogfoodObservation,
   validateOperator,
   validateOwnerDecision,
   validateSubmission,
@@ -22,6 +24,19 @@ const FORM_FIELDS = Object.freeze({
   publicCreditName: 'Reader Name',
   creditConsent: 'no',
 });
+
+function validDogfoodOperator(overrides = {}) {
+  const value = operatorDefaults('OD-01', 'owner-self-dogfood');
+  return {
+    ...value,
+    checkoutDir: '/owner/cyberbase',
+    baseCommit: '1234567890abcdef1234567890abcdef12345678',
+    sourcePath: 'guide.md',
+    publicUrl: 'https://cybersader.github.io/cyberbase/guide/',
+    sourceAuthorizedForLocalProcessing: true,
+    ...overrides,
+  };
+}
 
 function validIndependentOperator(overrides = {}) {
   return {
@@ -171,8 +186,55 @@ describe('strict pilot schemas and deterministic conversion', () => {
       'https://github.com/cybersader/cyberbase.git',
     ]) {
       expect(() => validateOperator(validIndependentOperator({ repository })))
-        .toThrow(/permanently limited to the zero-count rehearsal profile/u);
+        .toThrow(/limited to non-counting rehearsal and owner-self-dogfood profiles/u);
     }
+  });
+
+  test('owner self-dogfood has a distinct ID namespace and can never claim independent evidence', () => {
+    const operator = validateOperator(validDogfoodOperator());
+    expect(operator.attemptId).toBe('OD-01');
+    expect(evidenceClassification(operator)).toEqual({
+      evidenceClass: 'owner-self-dogfood',
+      countsTowardHumanPilot: false,
+      independentOwnerEvidence: false,
+      claimBoundary: 'maintainer operational and mechanical evidence only',
+    });
+    expect(countsTowardPilot(operator)).toBe(false);
+    expect(() => operatorDefaults('HC-01', 'owner-self-dogfood'))
+      .toThrow(/must use an OD-01 through OD-99 attempt ID/u);
+    expect(() => operatorDefaults('OD-01', 'cyberbase-rehearsal'))
+      .toThrow(/must use an HC-01 through HC-99 attempt ID/u);
+    expect(() => validateOperator(validDogfoodOperator({ independentOwnerAttested: true })))
+      .toThrow(/cannot claim independent-owner evidence/u);
+  });
+
+  test('owner self-dogfood observation keeps reader and owner contexts separate', () => {
+    const observation = validateDogfoodObservation({
+      schemaVersion: 1,
+      attemptId: 'OD-01',
+      evidenceClass: 'owner-self-dogfood',
+      scenario: 'signed-out mobile handoff',
+      readerContext: {
+        device: 'phone', operatingSystem: 'mobile OS', browser: 'mobile browser', signedIn: false,
+      },
+      ownerContext: {
+        device: 'laptop', operatingSystem: 'desktop OS', browser: 'desktop browser', signedIn: true,
+      },
+      roleSeparation: 'same maintainer, separate reader and owner contexts',
+      startedAt: '2026-07-30T12:00:00.000Z',
+      completedAt: '',
+      manualInterventions: ['private file transfer'],
+      sourceWritePerformed: false,
+      publicDeploymentPerformed: false,
+      liveVerificationPerformed: false,
+      notes: '',
+    });
+    expect(observation.readerContext.device).toBe('phone');
+    expect(observation.ownerContext.device).toBe('laptop');
+    expect(() => validateDogfoodObservation({
+      ...observation,
+      ownerContext: { ...observation.ownerContext, signedIn: 'yes' },
+    })).toThrow(/signedIn must be boolean or null/u);
   });
 
   test('owner-decision identifiers must use prepared-run formats before binding validation', () => {

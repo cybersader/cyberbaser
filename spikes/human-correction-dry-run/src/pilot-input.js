@@ -1,10 +1,10 @@
 import path from 'node:path';
 import { deepFreeze } from './case.js';
 
-const ATTEMPT_RE = /^HC-(?:0[1-9]|[1-9][0-9])$/u;
+const ATTEMPT_RE = /^(?:HC|OD)-(?:0[1-9]|[1-9][0-9])$/u;
 const COMMIT_RE = /^[0-9a-f]{40}$/u;
 const CONTROL_RE = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u;
-const PROFILES = new Set(['cyberbase-rehearsal', 'independent-counted']);
+const PROFILES = new Set(['cyberbase-rehearsal', 'owner-self-dogfood', 'independent-counted']);
 const KINDS = new Set(['typo', 'factual', 'link', 'wording', 'formatting']);
 const PUBLICATION_BOUNDARIES = new Set(['cyberbaser', 'not-applicable']);
 const RENDERER_PROFILES = new Set(['cyberbase-quartz-v4.5.2', 'owner-static-output']);
@@ -30,6 +30,14 @@ const RENDER_ATTESTATION_KEYS = new Set([
   'candidateSourceDigest', 'rendererProfile', 'buildCommand', 'baselineSiteDir',
   'candidateSiteDir', 'builtFromPreparedSnapshots', 'builtInIsolatedWorkspaces',
   'ownerConfirmedAt',
+]);
+const DOGFOOD_OBSERVATION_KEYS = new Set([
+  'schemaVersion', 'attemptId', 'evidenceClass', 'scenario', 'readerContext', 'ownerContext',
+  'roleSeparation', 'startedAt', 'completedAt', 'manualInterventions', 'sourceWritePerformed',
+  'publicDeploymentPerformed', 'liveVerificationPerformed', 'notes',
+]);
+const DOGFOOD_CONTEXT_KEYS = new Set([
+  'device', 'operatingSystem', 'browser', 'signedIn',
 ]);
 const CASE_ID_RE = /^DRY-[0-9A-F]{12}$/u;
 const REPRESENTATION_DIGEST_RE = /^sha-256=:[A-Za-z0-9+/]{43}=:$/u;
@@ -112,7 +120,7 @@ function exactIsoDate(value, label) {
 
 function exactAttemptId(value) {
   const attemptId = exactString(value, 'attemptId', { nonEmpty: true, oneLine: true });
-  if (!ATTEMPT_RE.test(attemptId)) fail('invalid-attempt-id', 'attemptId must use HC-01 through HC-99');
+  if (!ATTEMPT_RE.test(attemptId)) fail('invalid-attempt-id', 'attemptId must use HC-01 through HC-99 or OD-01 through OD-99');
   return attemptId;
 }
 
@@ -142,7 +150,9 @@ export function validateSourcePath(value) {
 
 export function validateProfile(value) {
   const profile = exactString(value, 'profile', { nonEmpty: true, oneLine: true });
-  if (!PROFILES.has(profile)) fail('invalid-profile', 'profile must be cyberbase-rehearsal or independent-counted');
+  if (!PROFILES.has(profile)) {
+    fail('invalid-profile', 'profile must be cyberbase-rehearsal, owner-self-dogfood, or independent-counted');
+  }
   return profile;
 }
 
@@ -274,6 +284,13 @@ export function validateOperator(input) {
   requiredKeys(value, OPERATOR_KEYS, 'operator');
   if (value.schemaVersion !== 1) fail('invalid-schema-version', 'operator.schemaVersion must be 1');
   const profile = validateProfile(value.profile);
+  const attemptId = exactAttemptId(value.attemptId);
+  if (profile === 'owner-self-dogfood' && !attemptId.startsWith('OD-')) {
+    fail('dogfood-attempt-id-required', 'owner-self-dogfood must use an OD-01 through OD-99 attempt ID');
+  }
+  if (profile !== 'owner-self-dogfood' && !attemptId.startsWith('HC-')) {
+    fail('pilot-attempt-id-required', 'pilot and rehearsal profiles must use an HC-01 through HC-99 attempt ID');
+  }
   const repository = exactHttpsUrl(value.repository, 'operator.repository');
   const checkoutDir = exactString(value.checkoutDir, 'operator.checkoutDir', { nonEmpty: true, oneLine: true });
   if (!path.isAbsolute(checkoutDir)) fail('invalid-checkout-dir', 'operator.checkoutDir must be an absolute local path');
@@ -298,19 +315,22 @@ export function validateOperator(input) {
   }
   const renderer = validateRenderer(value.renderer);
 
-  if (profile === 'cyberbase-rehearsal') {
+  if (profile === 'cyberbase-rehearsal' || profile === 'owner-self-dogfood') {
     if (!isCyberbaseRepository(repository)) {
-      fail('rehearsal-repository-mismatch', 'cyberbase-rehearsal must use the public Cyberbase repository');
+      fail('cyberbase-profile-repository-mismatch', `${profile} must use the public Cyberbase repository`);
     }
     if (renderer.profile !== 'cyberbase-quartz-v4.5.2') {
-      fail('rehearsal-renderer-mismatch', 'cyberbase-rehearsal must use the pinned Cyberbase Quartz profile');
+      fail('cyberbase-profile-renderer-mismatch', `${profile} must use the pinned Cyberbase Quartz profile`);
     }
     if (publicationBoundary !== 'cyberbaser') {
-      fail('rehearsal-boundary-mismatch', 'cyberbase-rehearsal must verify the Cyberbaser publication boundary');
+      fail('cyberbase-profile-boundary-mismatch', `${profile} must verify the Cyberbaser publication boundary`);
+    }
+    if (profile === 'owner-self-dogfood' && value.independentOwnerAttested !== false) {
+      fail('dogfood-cannot-claim-independent-owner', 'owner-self-dogfood cannot claim independent-owner evidence');
     }
   } else {
     if (isCyberbaseRepository(repository)) {
-      fail('cyberbase-cannot-be-independent', 'the Cyberbase repository is permanently limited to the zero-count rehearsal profile');
+      fail('cyberbase-cannot-be-independent', 'the Cyberbase repository is limited to non-counting rehearsal and owner-self-dogfood profiles');
     }
     if (value.independentOwnerAttested !== true) {
       fail('independent-owner-attestation-required', 'independent-counted requires explicit independent-owner attestation');
@@ -322,7 +342,7 @@ export function validateOperator(input) {
 
   return deepFreeze({
     schemaVersion: 1,
-    attemptId: exactAttemptId(value.attemptId),
+    attemptId,
     profile,
     repository,
     checkoutDir,
@@ -345,6 +365,33 @@ export function validateOperator(input) {
 export function countsTowardPilot(operator) {
   validateOperator(operator);
   return false;
+}
+
+export function evidenceClassification(operatorOrProfile) {
+  const operator = typeof operatorOrProfile === 'string' ? null : validateOperator(operatorOrProfile);
+  const profile = operator ? operator.profile : validateProfile(operatorOrProfile);
+  if (profile === 'owner-self-dogfood') {
+    return deepFreeze({
+      evidenceClass: 'owner-self-dogfood',
+      countsTowardHumanPilot: false,
+      independentOwnerEvidence: false,
+      claimBoundary: 'maintainer operational and mechanical evidence only',
+    });
+  }
+  if (profile === 'cyberbase-rehearsal') {
+    return deepFreeze({
+      evidenceClass: 'internal-cyberbase-rehearsal',
+      countsTowardHumanPilot: false,
+      independentOwnerEvidence: false,
+      claimBoundary: 'zero counted independent-owner evidence; internal agentic and mechanical evidence only',
+    });
+  }
+  return deepFreeze({
+    evidenceClass: 'independent-human-pilot-candidate',
+    countsTowardHumanPilot: false,
+    independentOwnerEvidence: operator?.independentOwnerAttested ?? false,
+    claimBoundary: 'counting remains outside the preparation kit until owner application and live verification',
+  });
 }
 
 export function convertPilotSubmission(submissionInput, operatorInput) {
@@ -434,6 +481,65 @@ export function renderAttestationTemplate({ attemptId, mechanicalCaseId, baselin
   };
 }
 
+function validateDogfoodContext(input, label) {
+  const value = plainRecord(input, label);
+  strictKeys(value, DOGFOOD_CONTEXT_KEYS, label);
+  requiredKeys(value, DOGFOOD_CONTEXT_KEYS, label);
+  if (value.signedIn !== null && typeof value.signedIn !== 'boolean') {
+    fail('invalid-dogfood-signed-in', `${label}.signedIn must be boolean or null`);
+  }
+  return deepFreeze({
+    device: exactString(value.device, `${label}.device`, { oneLine: true }),
+    operatingSystem: exactString(value.operatingSystem, `${label}.operatingSystem`, { oneLine: true }),
+    browser: exactString(value.browser, `${label}.browser`, { oneLine: true }),
+    signedIn: value.signedIn,
+  });
+}
+
+export function validateDogfoodObservation(input) {
+  const value = plainRecord(input, 'dogfood-observation');
+  strictKeys(value, DOGFOOD_OBSERVATION_KEYS, 'dogfood-observation');
+  requiredKeys(value, DOGFOOD_OBSERVATION_KEYS, 'dogfood-observation');
+  if (value.schemaVersion !== 1) {
+    fail('invalid-schema-version', 'dogfood-observation.schemaVersion must be 1');
+  }
+  if (value.evidenceClass !== 'owner-self-dogfood') {
+    fail('invalid-dogfood-evidence-class', 'dogfood-observation.evidenceClass must be owner-self-dogfood');
+  }
+  if (!Array.isArray(value.manualInterventions)) {
+    fail('invalid-manual-interventions', 'dogfood-observation.manualInterventions must be an array');
+  }
+  for (const field of [
+    'sourceWritePerformed', 'publicDeploymentPerformed', 'liveVerificationPerformed',
+  ]) {
+    if (typeof value[field] !== 'boolean') {
+      fail('invalid-boolean', `dogfood-observation.${field} must be boolean`);
+    }
+  }
+  return deepFreeze({
+    schemaVersion: 1,
+    attemptId: exactAttemptId(value.attemptId),
+    evidenceClass: 'owner-self-dogfood',
+    scenario: exactString(value.scenario, 'dogfood-observation.scenario', { oneLine: true }),
+    readerContext: validateDogfoodContext(value.readerContext, 'dogfood-observation.readerContext'),
+    ownerContext: validateDogfoodContext(value.ownerContext, 'dogfood-observation.ownerContext'),
+    roleSeparation: exactString(value.roleSeparation, 'dogfood-observation.roleSeparation', { nonEmpty: true }),
+    startedAt: value.startedAt === ''
+      ? ''
+      : exactIsoDate(value.startedAt, 'dogfood-observation.startedAt'),
+    completedAt: value.completedAt === ''
+      ? ''
+      : exactIsoDate(value.completedAt, 'dogfood-observation.completedAt'),
+    manualInterventions: value.manualInterventions.map((item, index) => (
+      exactString(item, `dogfood-observation.manualInterventions[${index}]`, { nonEmpty: true })
+    )),
+    sourceWritePerformed: value.sourceWritePerformed,
+    publicDeploymentPerformed: value.publicDeploymentPerformed,
+    liveVerificationPerformed: value.liveVerificationPerformed,
+    notes: exactString(value.notes, 'dogfood-observation.notes'),
+  });
+}
+
 export function validateOwnerDecision(input) {
   const value = plainRecord(input, 'owner-decision');
   strictKeys(value, DECISION_KEYS, 'owner-decision');
@@ -473,12 +579,18 @@ export const FAIL_CLOSED_ANONYMOUS_POLICY = deepFreeze({
 export function operatorDefaults(attemptIdInput, profileInput) {
   const attemptId = exactAttemptId(attemptIdInput);
   const profile = validateProfile(profileInput);
-  const rehearsal = profile === 'cyberbase-rehearsal';
+  const cyberbaseProfile = profile === 'cyberbase-rehearsal' || profile === 'owner-self-dogfood';
+  if (profile === 'owner-self-dogfood' && !attemptId.startsWith('OD-')) {
+    fail('dogfood-attempt-id-required', 'owner-self-dogfood must use an OD-01 through OD-99 attempt ID');
+  }
+  if (profile !== 'owner-self-dogfood' && !attemptId.startsWith('HC-')) {
+    fail('pilot-attempt-id-required', 'pilot and rehearsal profiles must use an HC-01 through HC-99 attempt ID');
+  }
   return {
     schemaVersion: 1,
     attemptId,
     profile,
-    repository: rehearsal ? 'https://github.com/cybersader/cyberbase' : '',
+    repository: cyberbaseProfile ? 'https://github.com/cybersader/cyberbase' : '',
     checkoutDir: '',
     baseCommit: '',
     sourcePath: '',
@@ -489,13 +601,15 @@ export function operatorDefaults(attemptIdInput, profileInput) {
     accessInterruption: false,
     correctionKind: 'typo',
     selectorContext: {},
-    ownerPolicyRevision: rehearsal ? 'cyberbase-rehearsal-anonymous-full-review-v1' : '',
+    ownerPolicyRevision: cyberbaseProfile
+      ? `${profile}-anonymous-full-review-v1`
+      : '',
     ownerPolicy: JSON.parse(JSON.stringify(FAIL_CLOSED_ANONYMOUS_POLICY)),
-    publicationBoundary: rehearsal ? 'cyberbaser' : 'not-applicable',
+    publicationBoundary: cyberbaseProfile ? 'cyberbaser' : 'not-applicable',
     renderer: {
-      profile: rehearsal ? 'cyberbase-quartz-v4.5.2' : 'owner-static-output',
-      basePath: rehearsal ? 'cyberbase' : '',
-      buildCommand: rehearsal
+      profile: cyberbaseProfile ? 'cyberbase-quartz-v4.5.2' : 'owner-static-output',
+      basePath: cyberbaseProfile ? 'cyberbase' : '',
+      buildCommand: cyberbaseProfile
         ? 'renderers/quartz-cyberbase/build.sh <content-dir> <quartz-dir>'
         : '',
     },

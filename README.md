@@ -48,7 +48,7 @@ The evaluated serializer-backed CMS writers are rejected because they regenerate
 
 ## Current phase: v1 Build
 
-Research & Foundations closed on 2026-07-25. The immediate milestone is the precommitted [concierge human-correction pilot](https://cybersader.github.io/cyberbaser/research/concierge-human-correction-pilot/): five ordinary readers and one independently operated Markdown-KB owner test whether a useful correction can be submitted without an account, reviewed locally, applied as one exact splice, and published without GitHub. Its seven fields are temporary measurement inputs, not the eventual reader interface or generalized proposal schema.
+Research & Foundations closed on 2026-07-25. The immediate milestone is [owner self-dogfooding](https://cybersader.github.io/cyberbaser/research/owner-self-dogfood/): one maintainer switches between reader and owner contexts across three to five normal and adversarial Cyberbase corrections, including mobile handoff, stale and ambiguous proposals, and owner rejection. This produces operational and mechanical evidence only, not independent human validation. The preserved [five-reader protocol](https://cybersader.github.io/cyberbaser/research/concierge-human-correction-pilot/) remains optional before stronger usability claims. The seven local fields are temporary observation inputs, not the eventual reader interface or generalized proposal schema.
 
 [`@cyberbaser/correction`](packages/correction/) supplies exact UTF-8 quote anchoring and fail-closed single-splice preparation/application for the pilot. It is a no-I/O primitive, **not** a shipped editor, generalized authoring-adapter API, intake endpoint, automatic writer, hosted console, forge integration, or account-free product.
 

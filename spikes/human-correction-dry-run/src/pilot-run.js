@@ -14,8 +14,10 @@ import {
 import {
   convertPilotSubmission,
   countsTowardPilot,
+  evidenceClassification,
   ownerDecisionTemplate,
   renderAttestationTemplate,
+  validateDogfoodObservation,
   validateOperator,
   validateOwnerDecision,
   validateRenderAttestation,
@@ -24,6 +26,7 @@ import {
 import { buildPilotOwnerReview, reviewCardContractMissing } from './pilot-review-card.js';
 import { buildReviewCard } from './review-card.js';
 import {
+  atomicCreateArtifact,
   atomicWriteArtifact,
   attemptPaths,
   commitRunStaging,
@@ -54,15 +57,17 @@ function preparationStatus({ attemptId, operator, evaluation }) {
   const ofmClean = evaluation.ofm.verdict === 'clean';
   const publicationReady = operator.publicationBoundary === 'not-applicable';
   const blockingReasons = ['render-evidence-required'];
+  const classification = evidenceClassification(operator);
   if (evaluation.ofm.verdict === 'suspect') blockingReasons.unshift('ofm-suspect-blocks-owner-decision');
   if (evaluation.ofm.verdict === 'damage') blockingReasons.unshift('ofm-damage-stops-attempt');
   return deepFreeze({
-    schemaVersion: 1,
+    schemaVersion: 2,
     artifactType: 'private-human-correction-pilot-preparation',
     attemptId,
     mechanicalCaseId: evaluation.caseId,
     profile: operator.profile,
     countsTowardPilot: countsTowardPilot(operator),
+    ...classification,
     counting: {
       status: 'not-counted-by-preparation-kit',
       reason: 'human attempt and independent-owner results are recorded only after validated decision, owner-controlled application, and live verification',
@@ -190,6 +195,28 @@ function assertStableEqual(actual, expected, code, message) {
   if (stableStringify(actual) !== stableStringify(expected)) fail(code, message);
 }
 
+function normalizeStoredStatus(statusInput, operator) {
+  const status = clonePlain(statusInput);
+  if (status.schemaVersion === 2) return deepFreeze(status);
+  if (status.schemaVersion !== 1) {
+    fail('unsupported-status-schema', 'stored status schema is not supported');
+  }
+  const classification = evidenceClassification(operator);
+  for (const [key, expected] of Object.entries(classification)) {
+    if (Object.hasOwn(status, key) && stableStringify(status[key]) !== stableStringify(expected)) {
+      fail(
+        'prepared-status-classification-mismatch',
+        'stored status evidence classification does not match the validated profile',
+      );
+    }
+  }
+  return deepFreeze({
+    ...status,
+    schemaVersion: 2,
+    ...classification,
+  });
+}
+
 export async function preparePilotAttempt({
   attemptId,
   projectRoot,
@@ -256,6 +283,9 @@ export async function preparePilotAttempt({
       mechanicalCaseId,
       runDir,
       countsTowardPilot: status.countsTowardPilot,
+      evidenceClass: status.evidenceClass,
+      countsTowardHumanPilot: status.countsTowardHumanPilot,
+      independentOwnerEvidence: status.independentOwnerEvidence,
       ownerDecisionEligible: false,
       blockingReasons: [...status.blockingReasons],
       ownerCardCreated: Boolean(ownerReview),
@@ -282,6 +312,7 @@ async function revalidatePreparedRun({ paths, submission, operator, caseData, me
     if (error?.code) throw error;
     fail('prepared-run-unavailable', 'the prepared run artifacts could not be loaded');
   }
+  storedStatus = normalizeStoredStatus(storedStatus, operator);
   assertStableEqual(storedCase, caseData, 'prepared-case-mismatch', 'stored case does not match the current submission and owner mapping');
   const freshEvaluation = await inspectBeforeAndAfter({
     operator,
@@ -538,6 +569,9 @@ export async function renderPilotAttempt({
     mechanicalCaseId,
     runDir,
     countsTowardPilot: status.countsTowardPilot,
+    evidenceClass: status.evidenceClass,
+    countsTowardHumanPilot: status.countsTowardHumanPilot,
+    independentOwnerEvidence: status.independentOwnerEvidence,
     ownerDecisionEligible: status.ownerDecisionEligible,
     blockingReasons: [...status.blockingReasons],
     arbitraryOwnerCommandExecuted: false,
@@ -618,6 +652,26 @@ export async function validatePilotOwnerDecision({
       blockingReasons: expectedStatus.blockingReasons,
     });
   }
+  let dogfoodObservation = null;
+  if (operator.profile === 'owner-self-dogfood') {
+    dogfoodObservation = validateDogfoodObservation(
+      await loadAttemptJson(paths.dogfoodObservation, 'dogfood-observation', paths),
+    );
+    if (dogfoodObservation.attemptId !== paths.attemptId) {
+      fail(
+        'dogfood-observation-binding-mismatch',
+        'dogfood observation does not match the eligible attempt',
+      );
+    }
+    if (dogfoodObservation.sourceWritePerformed
+      || dogfoodObservation.publicDeploymentPerformed
+      || dogfoodObservation.liveVerificationPerformed) {
+      fail(
+        'dogfood-observation-conflicts-with-decision-validation',
+        'owner decision must be validated before any source write, public deployment, or live verification',
+      );
+    }
+  }
   const decision = validateOwnerDecision(
     await loadAttemptJson(paths.ownerDecision, 'owner-decision', paths),
   );
@@ -626,15 +680,23 @@ export async function validatePilotOwnerDecision({
     || decision.candidateDigest !== preparedRun.evaluation.candidate.digest) {
     fail('owner-decision-binding-mismatch', 'owner decision does not match the eligible attempt, mechanical case, and candidate digest');
   }
+  const classification = evidenceClassification(operator);
   const validated = deepFreeze({
-    schemaVersion: 1,
-    artifactType: 'private-validated-human-owner-decision',
+    artifactType: operator.profile === 'owner-self-dogfood'
+      ? 'private-validated-owner-self-dogfood-decision'
+      : 'private-validated-human-owner-decision',
     ...clonePlain(decision),
+    schemaVersion: operator.profile === 'owner-self-dogfood' ? 2 : 1,
+    ...classification,
+    ...(dogfoodObservation
+      ? { dogfoodObservationAtValidation: clonePlain(dogfoodObservation) }
+      : {}),
     ownerDecisionEligibleAtValidation: true,
-    sourceWritePerformed: false,
+    sourceWritePerformed: dogfoodObservation?.sourceWritePerformed ?? false,
+    publicDeploymentPerformed: dogfoodObservation?.publicDeploymentPerformed ?? false,
     countsTowardPilot: false,
   });
-  await atomicWriteArtifact(
+  await atomicCreateArtifact(
     path.join(preparedRun.runDir, 'validated-owner-decision.json'),
     stableStringify(validated),
     paths,

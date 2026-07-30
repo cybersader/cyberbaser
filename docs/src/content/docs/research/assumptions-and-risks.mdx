@@ -18,22 +18,23 @@ The point of this page is to **stay honest about what we haven't tested.** Bias 
 The red-team agents kept framing the audience as "cybersecurity practitioners" (the `cyberbase` vault name biases them). **Cyberbaser is a general interoperability layer for contributable, version-controlled knowledge bases, not a cyber tool**. Read the historical risks below as general contribution and adoption risks for any domain.
 </Aside>
 
-## Current v1 Build risks: the human-correction gate
+## Current v1 Build risks: owner self-dogfooding
 
-The immediate work is the bounded [concierge human-correction pilot](/cyberbaser/research/concierge-human-correction-pilot/). No attempt or result exists yet, and the concierge is not a shipped product surface. [Q09 remains open](/cyberbaser/reference/open-questions/#q09--what-is-the-contribution-path-for-someone-with-no-account).
+The immediate work is the bounded [owner self-dogfood series](/cyberbaser/research/owner-self-dogfood/). One maintainer switches between reader and owner contexts across three to five Cyberbase attempts. No completed owner self-dogfood result exists yet, and the local form is not a shipped product surface. [Q09 remains open](/cyberbaser/reference/open-questions/#q09--what-is-the-contribution-path-for-someone-with-no-account).
 
 R12 remains the hard technical boundary under every outcome: accepted changes are raw-text, exact-byte splices; untouched bytes are preserved; `@cyberbaser/ofm` validates but never writes; whole-file re-serialization never enters a write path.
 
-### The current gating risks, ranked
+### Immediate risks, ranked
 
-1. **Reader completion and correction quality (critical).** An account-free form is irrelevant if ordinary readers cannot identify and express a useful correction without coaching. *Test:* at least 3 of 5 readers submit unaided in five minutes or less, and at least two substantive corrections are accepted and verified live.
-2. **Exact source anchoring (critical).** A rendered quote can be absent, repeated, stale, generated, or mapped to the wrong source file. Guessing a path or fuzzy-matching text can turn a good correction into the wrong edit. *Test:* the owner confirms page-to-source mapping; the submitted quote plus adjacent context resolves exactly once; every accepted proposal binds to the reviewed digest and applies as one splice with zero unrelated byte changes.
-3. **Review and conversion burden (high).** A safe workflow can still fail if the concierge spends longer constructing evidence than the correction is worth, or if the owner has to reconstruct the change manually. *Test:* median concierge conversion under 10 minutes and median complete-card-to-owner-decision time under 5 minutes.
-4. **Owner preference (high).** Mechanical correctness does not prove product value. If the owner prefers receiving the same correction by email and finding the source manually, Cyberbaser has added process rather than removed it. *Test:* after at least two eligible cards, the independent owner chooses the pilot review-card workflow over email plus manual editing.
-5. **Privacy and data boundaries (critical).** Account-free intake can collect identifying data, expose private source mappings, or leak unpublished content through renders, logs, or review artifacts. *Test:* collect no account, email, IP, or credentials; keep raw evidence in ignored local storage; require zero private leaks. Any accidental exposure stops the pilot.
-6. **Non-GitHub operation for the owner (critical, scope risk).** The dogfood product still assumes a GitHub repo, Actions workflows, PRs, and GitHub observability. The pilot must show that one independently operated owner can review, accept, apply, and publish an exact correction locally without GitHub. Even a pass proves only that bounded workflow, not a hosted service, one-click self-host bundle, local-first app, or general maintainer product.
+1. **Exact source anchoring (critical).** A rendered quote can be absent, repeated, stale, generated, or mapped to the wrong source file. *Test:* an owner-confirmed mapping and pinned source produce one exact match; stale and ambiguous attempts stop before eligibility or application; no fallback search or silent rebase occurs.
+2. **Write-boundary drift (critical).** Convenience work could turn a no-I/O proposal harness into the automatic writer the architecture forbids. *Test:* every automated attempt reports no source write or deployment; only a separately reviewed owner action may apply an accepted candidate.
+3. **Review and handoff burden (high).** A safe workflow can still be pointless if phone-to-laptop transfer, source mapping, builds, or the local card cost more than the correction. *Test:* record the actual device/browser, manual interventions, and elapsed steps for one maintainer; fix only concrete burden observed in the series.
+4. **Failure visibility (critical).** Generic checkout errors or overwritten retries can hide whether stale and ambiguous proposals really failed closed. *Test:* preserve each failed run, use a new bound identity after any changed base or selector, and record the terminal error without rewriting history.
+5. **Owner authority (critical).** A mechanically eligible card must not imply approval. *Test:* validate a correctly bound rejection and confirm that no application or deployment follows; agents and trust routes may not fill in the owner's decision.
+6. **Evidence overclaim (high).** One maintainer already knows the content, source layout, and expected failures. *Test:* label every artifact as owner self-dogfood, count it as zero independent-reader and zero independent-owner evidence, and make only device- and attempt-specific claims.
+7. **Privacy and data boundaries (critical).** The local instrument can still expose source mappings or personal details through logs or tracked files. *Test:* keep raw artifacts under ignored `.workspace/` storage and require zero credential, contact, local-path, or private-source leakage into public evidence.
 
-These risks fail together: a fast form with unsafe anchoring fails; an exact splice that readers cannot complete fails; a safe review card the owner does not prefer fails. The [pilot's precommitted thresholds and stop conditions](/cyberbaser/research/concierge-human-correction-pilot/#precommitted-thresholds) decide the next step without moving the goalposts.
+The preserved [concierge human-correction pilot](/cyberbaser/research/concierge-human-correction-pilot/) still defines the stronger unfamiliar-reader and independent-owner risks. Its five-reader thresholds remain unchanged and `Not run`; it is deferred until Cyberbaser needs to make those claims.
 
 ### Federation sequencing
 

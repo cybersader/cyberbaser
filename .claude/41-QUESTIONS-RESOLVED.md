@@ -4,6 +4,12 @@
 
 ## Log
 
+### Sequencing clarification — owner self-dogfood first (2026-07-30, no R-number)
+- **Maintainer direction:** Begin dogfooding with one maintainer switching between reader and owner contexts across three to five real and adversarial Cyberbase attempts. Do not require five recruited readers before using the system.
+- **Evidence boundary:** This may support only maintainer operational and mechanical claims. It contributes zero attempts to the five-reader, one-independent-owner protocol and does not close Q09.
+- **Protocol preservation:** The precommitted independent pilot remains unchanged and `Not run`; it is deferred until Cyberbaser needs to make unfamiliar-reader or independent-owner usability claims.
+- **Consequence:** Owner self-dogfooding is the immediate roadmap milestone. Build only the smallest improvement justified by observed friction, preserve owner-controlled application, and never let the harness authorize or write canonical source itself.
+
 ### [R01] Is git the right single source of truth?
 - **Asked**: 2026-04-11 · **Resolved**: 2026-06-17
 - **Answer**: Yes, **scoped**. Git stays the SSOT as the *current manifestation*, not the essence, with an explicit off-ramp if a loss-free markdown↔block serializer ever ships.

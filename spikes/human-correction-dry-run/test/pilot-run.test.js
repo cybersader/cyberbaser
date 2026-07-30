@@ -362,6 +362,14 @@ describe('independent static-output rendering', () => {
     const prepared = await preparePilotAttempt({
       attemptId: 'HC-01', projectRoot: PROJECT_ROOT, workspaceRoot: workspace,
     });
+    const legacyStatusFile = path.join(paths.runs, prepared.mechanicalCaseId, 'status.json');
+    const legacyStatus = JSON.parse(await readFile(legacyStatusFile, 'utf8'));
+    delete legacyStatus.evidenceClass;
+    delete legacyStatus.countsTowardHumanPilot;
+    delete legacyStatus.independentOwnerEvidence;
+    delete legacyStatus.claimBoundary;
+    legacyStatus.schemaVersion = 1;
+    await writeFile(legacyStatusFile, `${JSON.stringify(legacyStatus, null, 2)}\n`, 'utf8');
     const baseline = await mkdtemp(path.join(os.tmpdir(), 'pilot-baseline-site-'));
     const candidate = await mkdtemp(path.join(os.tmpdir(), 'pilot-candidate-site-'));
     cleanup.push(baseline, candidate);
@@ -383,6 +391,7 @@ describe('independent static-output rendering', () => {
     const runDir = path.join(paths.runs, prepared.mechanicalCaseId);
     const status = JSON.parse(await readFile(path.join(runDir, 'status.json'), 'utf8'));
     const evidence = JSON.parse(await readFile(path.join(runDir, 'render-evidence.json'), 'utf8'));
+    expect(status.schemaVersion).toBe(2);
     expect(status.gates.rendering).toBe(true);
     expect(status.ownerDecisionEligible).toBe(true);
     expect(evidence.arbitraryOwnerCommandExecuted).toBe(false);
@@ -582,6 +591,112 @@ describe('independent static-output rendering', () => {
     expect(validated.candidateDigest).toBe(evaluation.candidate.digest);
     expect(validated.ownerDecisionEligibleAtValidation).toBe(true);
     expect(liveRunCalls).toBe(2);
+  });
+
+  test('validates a bound owner self-dogfood rejection without writing or deploying', async () => {
+    const attemptId = 'OD-01';
+    const quote = 'Old dogfood sentence.';
+    const replacement = 'New dogfood sentence.';
+    const repository = 'https://github.com/cybersader/cyberbase';
+    const pageUrl = 'https://example.org/cyberbase/guide';
+    const checkout = await createCheckout({ repository, source: `# Guide\n\n${quote}\n` });
+    const workspace = await createWorkspace();
+    const paths = await writeAttempt({
+      workspace,
+      attemptId,
+      submissionData: submission({ attemptId, quote, replacement, pageUrl }),
+      operatorData: operator({
+        attemptId,
+        checkout,
+        correctionKind: 'wording',
+        overrides: {
+          profile: 'owner-self-dogfood',
+          publicUrl: pageUrl,
+          independentOwnerAttested: false,
+          publicationBoundary: 'cyberbaser',
+          renderer: {
+            profile: 'cyberbase-quartz-v4.5.2',
+            basePath: 'cyberbase',
+            buildCommand: 'renderers/quartz-cyberbase/build.sh <content-dir> <quartz-dir>',
+          },
+        },
+      }),
+    });
+    const prepared = await preparePilotAttempt({
+      attemptId, projectRoot: PROJECT_ROOT, workspaceRoot: workspace,
+    });
+    expect(prepared.evidenceClass).toBe('owner-self-dogfood');
+    expect(prepared.countsTowardHumanPilot).toBe(false);
+    const runDir = path.join(paths.runs, prepared.mechanicalCaseId);
+    const evaluation = JSON.parse(await readFile(path.join(runDir, 'evaluation.json'), 'utf8'));
+    const liveEvidence = cyberbaseLiveEvidence({ evaluation, quote, replacement });
+    const fakeLiveRun = async () => liveEvidence;
+    const rendered = await renderPilotAttempt({
+      attemptId, projectRoot: PROJECT_ROOT, workspaceRoot: workspace,
+    }, { runLiveCorrection: fakeLiveRun });
+    expect(rendered.ownerDecisionEligible).toBe(true);
+
+    const decision = JSON.parse(await readFile(paths.ownerDecision, 'utf8'));
+    await writeFile(paths.ownerDecision, `${JSON.stringify({
+      ...decision,
+      decision: 'reject',
+      reason: 'The owner does not want this otherwise valid change.',
+      reviewSeconds: 8,
+      decidedAt: '2026-07-30T12:00:00.000Z',
+    }, null, 2)}\n`, 'utf8');
+    const observation = JSON.parse(await readFile(paths.dogfoodObservation, 'utf8'));
+    await writeFile(paths.dogfoodObservation, `${JSON.stringify({
+      ...observation,
+      sourceWritePerformed: true,
+    }, null, 2)}\n`, 'utf8');
+    await expect(validatePilotOwnerDecision({
+      attemptId, projectRoot: PROJECT_ROOT, workspaceRoot: workspace,
+    }, { runLiveCorrection: fakeLiveRun })).rejects.toMatchObject({
+      code: 'dogfood-observation-conflicts-with-decision-validation',
+    });
+    await writeFile(paths.dogfoodObservation, `${JSON.stringify({
+      ...observation,
+      sourceWritePerformed: false,
+    }, null, 2)}\n`, 'utf8');
+    const validated = await validatePilotOwnerDecision({
+      attemptId, projectRoot: PROJECT_ROOT, workspaceRoot: workspace,
+    }, { runLiveCorrection: fakeLiveRun });
+
+    expect(validated).toMatchObject({
+      schemaVersion: 2,
+      artifactType: 'private-validated-owner-self-dogfood-decision',
+      decision: 'reject',
+      evidenceClass: 'owner-self-dogfood',
+      countsTowardHumanPilot: false,
+      independentOwnerEvidence: false,
+      sourceWritePerformed: false,
+      publicDeploymentPerformed: false,
+      countsTowardPilot: false,
+      dogfoodObservationAtValidation: {
+        attemptId,
+        sourceWritePerformed: false,
+        publicDeploymentPerformed: false,
+        liveVerificationPerformed: false,
+      },
+    });
+    await writeFile(paths.ownerDecision, `${JSON.stringify({
+      ...decision,
+      decision: 'accept',
+      reason: 'A later contradictory decision must not replace completed evidence.',
+      reviewSeconds: 9,
+      decidedAt: '2026-07-30T12:01:00.000Z',
+    }, null, 2)}\n`, 'utf8');
+    await expect(validatePilotOwnerDecision({
+      attemptId, projectRoot: PROJECT_ROOT, workspaceRoot: workspace,
+    }, { runLiveCorrection: fakeLiveRun })).rejects.toMatchObject({
+      code: 'artifact-already-exists',
+    });
+    const retained = JSON.parse(await readFile(
+      path.join(runDir, 'validated-owner-decision.json'),
+      'utf8',
+    ));
+    expect(retained.decision).toBe('reject');
+    expect(await command(['git', 'status', '--porcelain=v1', '--untracked-files=all'], checkout.root)).toBe('');
   });
 
   test('rejects a Cyberbase decision after blocked render evidence and status are tampered eligible', async () => {

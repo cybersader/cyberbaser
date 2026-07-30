@@ -77,6 +77,47 @@ describe('ignored private pilot workspace', () => {
     expect(operator.sourcePath).toBe('');
   });
 
+  test('initializes a distinct owner self-dogfood attempt and private observation scaffold', async () => {
+    const workspace = await workspaceRoot();
+    const checkout = await cyberbaseCheckout();
+    const publicUrl = 'https://cybersader.github.io/cyberbase/guide/';
+    const result = await initializeAttempt({
+      attemptId: 'OD-01',
+      profile: 'owner-self-dogfood',
+      checkoutDir: checkout.root,
+      sourcePath: 'docs/guide.md',
+      publicUrl,
+      sourceAuthorization: 'yes',
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: workspace,
+    });
+    const paths = attemptPaths('OD-01', { projectRoot: PROJECT_ROOT, workspaceRoot: workspace });
+    const form = await readFile(paths.readerForm, 'utf8');
+    const observation = JSON.parse(await readFile(paths.dogfoodObservation, 'utf8'));
+
+    expect(result.evidenceClass).toBe('owner-self-dogfood');
+    expect(result.countsTowardHumanPilot).toBe(false);
+    expect(result.independentOwnerEvidence).toBe(false);
+    expect(result.dogfoodObservation).toBe(paths.dogfoodObservation);
+    expect(form).toContain('Owner self-dogfood');
+    expect(form).toContain('not independent reader or owner validation');
+    expect(observation).toMatchObject({
+      attemptId: 'OD-01',
+      evidenceClass: 'owner-self-dogfood',
+      roleSeparation: 'same maintainer, separate reader and owner contexts',
+      sourceWritePerformed: false,
+      publicDeploymentPerformed: false,
+      liveVerificationPerformed: false,
+    });
+    expect(observation.readerContext.signedIn).toBe(null);
+    expect(observation.ownerContext).toEqual({
+      device: '',
+      operatingSystem: '',
+      browser: '',
+      signedIn: null,
+    });
+  });
+
   test('prefills a verified Cyberbase rehearsal from one explicit owner mapping', async () => {
     const workspace = await workspaceRoot();
     const checkout = await cyberbaseCheckout();
