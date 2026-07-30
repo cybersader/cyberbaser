@@ -50,11 +50,11 @@ The selected correction needed no repair. The later audit hardened checkout isol
 | Check | Measured result |
 |---|---|
 | Frozen install | Historical candidate run: 11.22 s. Latest charter-milestone verification: completed in 10.10 s with `bun.lock` byte-unchanged. |
-| Scoped harness suite | Initial candidate run: 46 passed, 0 failed, 213 assertions across eight files, about 2.82 s. Post-audit checkout and review-state hardening: 47 passed, 0 failed, 218 assertions across eight files. Initialization, rendered-evidence, and decision hardening: 77 passed, 0 failed, 410 assertions across 12 files in 21.19 s. Owner-self-dogfood implementation before final adversarial review: 81 passed, 0 failed, 434 assertions across 12 files in 27.12 s. Final immutable-decision, observation-binding, and schema-migration hardening: 82 passed, 0 failed, 442 assertions across 12 files in 26.16 s. After adversarial repair, the final focused owner-dogfood/input/workspace/run/card subset passed 41 tests with 276 assertions in 23.55 s. The complete charter-milestone suite then passed 89 tests with 500 assertions across 12 files in 25.49 s. |
+| Scoped harness suite | Initial candidate run: 46 passed, 0 failed, 213 assertions across eight files, about 2.82 s. Post-audit checkout and review-state hardening: 47 passed, 0 failed, 218 assertions across eight files. Initialization, rendered-evidence, and decision hardening: 77 passed, 0 failed, 410 assertions across 12 files in 21.19 s. Owner-self-dogfood implementation before final adversarial review: 81 passed, 0 failed, 434 assertions across 12 files in 27.12 s. Final immutable-decision, observation-binding, and schema-migration hardening: 82 passed, 0 failed, 442 assertions across 12 files in 26.16 s. After adversarial repair, the final focused owner-dogfood/input/workspace/run/card subset passed 41 tests with 276 assertions in 23.55 s. The complete charter-milestone suite passed 89 tests with 500 assertions across 12 files in 25.49 s. After the private Tailscale handoff was added, the package-scoped suite passed 105 tests with 594 assertions across 13 files in 32.42 s. |
 | Authoritative verifier | 11 PASS, 0 FAIL, `complete: true`. |
 | Dependent package suites | Correction, linkcheck, OFM, projection, publish, and trust: 187 passed, 0 failed, 558 assertions across eight files. |
 | Canonical docs build and linkcheck | Latest owner-self-dogfood update: PASS, 100 pages built. Linkcheck found the existing single `other` finding in `agent-context/zz-challenges/mdx-auto-wrapping/`, within the explicit budget of 1. Existing Starlight override, Vite externalization, and large-chunk warnings remained non-fatal. |
-| Documentation browser suite | 183 Playwright tests passed in 3.7 minutes, including homepage stability, responsive layout, recent pages, screenshots, smoke coverage, and standard-page backlinks. |
+| Documentation browser suite | 183 Playwright tests passed in 4.0 minutes, including homepage stability, responsive layout, recent pages, screenshots, smoke coverage, and standard-page backlinks. |
 | Repeated verifier determinism | Two fresh verifier processes exited zero, emitted no verifier diagnostic stderr, and produced byte-identical JSON; 0.922 s and 0.911 s. The `bun run verify` wrapper may print Bun's fixed launcher banner to stderr. |
 | Artifact validation | PASS for one sanitized case JSON, one result JSON, and one static review-card HTML. |
 
@@ -89,9 +89,23 @@ The current charter milestone adds a private non-overwriting gate before any rea
 | OD initialization gate | A missing charter returns `dogfood-series-required`; an undeclared OD ID returns `dogfood-attempt-not-declared`. Both failures occur before checkout inspection and leave no attempt directory, although a command may record a private global failure log. |
 | Observation binding | Initialization copies each attempt's exact assigned obligations into its private observation and prefills the planned reader context for the mobile obligation. Decision validation rejects changed obligations or a mismatched mobile context and requires the designated owner-rejection attempt to end with `reject`. Stale and ambiguous outcomes remain separate fail-closed evidence that no Cyberbaser candidate application or deployment occurred. |
 | Existing HC paths | Rehearsal and independent `HC-*` initialization remain available without a series charter. |
-| Real-series boundary | No canonical charter, physical-phone attempt, real owner decision, source application, deployment, or live verification was created during automated implementation or testing. |
+| Real-series boundary | Automated implementation and tests create no canonical charter or attempt. Separately, the maintainer-approved private charter and initialized `OD-01` now exist below ignored `.workspace/` storage. No physical-phone pass, returned submission, real owner decision, source application, deployment, or live verification has occurred. |
 
 The harness prevents command-based replacement while the charter exists. It does not provide cryptographic or filesystem immutability. Manual editing or deletion is outside the guarantee and invalidates the series rather than authorizing a replacement history.
+
+### One-shot private Tailscale handoff
+
+The owner-local `dogfood:serve` command was exercised against the real ignored `OD-01` form on 2026-07-30. The successful smoke used the numeric Tailscale fallback URL because MagicDNS did not resolve inside this WSL environment; that local resolver limitation did not cause a LAN or broad-interface fallback.
+
+| Check | Observed result |
+|---|---|
+| Exact artifact | Before binding, the form matched the canonical generated instrument. The response SHA-256 then matched the ignored `OD-01/reader-form.html` byte-for-byte. No attempt-directory sibling was served. |
+| Bind boundary | The listener bound to the discovered Tailscale IPv4 (redacted from tracked results) on an ephemeral port. It did not bind to loopback, a LAN address, or `0.0.0.0`. |
+| One-shot lifecycle | The first exact GET returned the complete self-contained form, then the process reported `reason: served` and closed the listener. |
+| Intake boundary | Startup reported `acceptsSubmissions: false`. Only bodyless GET and metadata-only HEAD are allowed; body-bearing GET/HEAD and mutating methods fail without consuming the route, with request bodies capped at the server boundary. The form still downloads `submission.json` locally. |
+| Existing Serve state | `tailscale serve status --json` was byte-identical before and after the smoke. The command executes no Serve, Funnel, reset, restore, or configuration mutation. |
+| Automated coverage | The focused transport suite passed 16 tests with 91 assertions. The complete package-scoped harness passed 105 tests with 594 assertions across 13 files. |
+| Evidence claim | This proves the command mechanics on the maintainer's laptop only. It is not a physical-phone pass, reader completion, submission, owner decision, source application, or product endpoint. |
 
 ### Synthetic CLI smoke and adversarial attempts
 

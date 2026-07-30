@@ -115,7 +115,15 @@ bun run dogfood:init -- \
 
 The command creates a private reader form, `operator.json`, `owner-decision.json`, and `dogfood-observation.json`. It fails before checkout inspection or attempt-artifact creation when the series is missing or the OD ID was not declared, although the command may still record a private global failure log. The observation scaffold carries the attempt's exact precommitted obligations, prefills the planned signed-out phone context when applicable, and records whether any source write, deployment, or live verification actually occurred. Decision validation compares the obligations and mobile context with the canonical charter. The observation is not a trusted declaration by itself; mechanical evidence and owner-controlled publication still have to agree with it.
 
-Deliver **only** the generated `reader-form.html` to the planned phone through an owner-controlled exact-file transfer or a single-file route with directory listing disabled. Never expose the attempt directory: it also contains private operator, observation, decision, log, and run artifacts. After the HTML loads, the form makes no subsequent request, has no network intake, uploads nothing, and downloads `submission.json` locally. Manually return only that JSON to the laptop; this handoff remains measured friction rather than a hidden upload endpoint.
+For an owner-only phone handoff, start the bounded Tailscale transport:
+
+```bash
+bun run dogfood:serve -- --attempt OD-01 --expires-minutes 15
+```
+
+The command safe-opens only the declared attempt's canonical `reader-form.html`, verifies that it still matches the generated instrument, snapshots its bytes in memory, and binds an ephemeral listener directly to the current node's Tailscale IPv4. It prints a random capability URL, atomically allows only the first bodyless GET, and stops immediately afterward or at the bounded expiry. HEAD is metadata-only; body-bearing GET/HEAD and every mutating method are rejected without consuming the route. The link uses HTTP inside Tailscale's encrypted tunnel, not browser TLS. A bind or discovery failure stops the command; it never broadens to `0.0.0.0`, a LAN address, a loopback proxy, Tailscale Serve, or Funnel, and it neither reads nor changes existing Serve configuration.
+
+An owner-controlled exact-file transfer remains an alternative. In either case, deliver **only** the form. Never expose the attempt directory: it also contains private operator, observation, decision, log, and run artifacts. After the HTML loads, the self-contained form makes no subsequent request, has no network intake, uploads nothing, and downloads `submission.json` locally. Manually return only that JSON to the laptop. The temporary route is a study transport, not a hosted product form, contribution endpoint, account-free path, or independent-reader/owner evidence, so [Q09](/cyberbaser/reference/open-questions/#q09--what-is-the-contribution-path-for-someone-with-no-account) remains open.
 
 After the reader submission is returned as `submission.json`:
 

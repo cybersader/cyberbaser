@@ -107,7 +107,15 @@ bun run dogfood:init -- \
 
 Initialization creates the local reader form and operator/decision files plus `dogfood-observation.json`, a private scaffold that carries the attempt's exact precommitted obligations, separate reader and owner device/browser/account contexts, manual interventions, and whether a source write, deployment, or live verification actually happened. The planned phone context is prefilled for the mobile obligation. Decision validation compares both the obligations and that mobile context with the canonical charter. Blank observation fields are not evidence, and automated browser emulation must not be labeled as a physical-phone result.
 
-Deliver **only** the generated `reader-form.html` to the phone through an owner-controlled exact-file transfer or a single-file route with directory listing disabled. Never serve or copy the containing attempt directory: it also contains private operator, observation, decision, log, and run artifacts. After the HTML loads, the form makes no subsequent request, uploads nothing, and downloads `submission.json` locally. Transfer only that downloaded JSON back to the laptop and place it at the returned attempt path; keep this manual handoff as measured dogfood friction rather than adding an upload endpoint.
+The recommended phone handoff is the bounded Tailscale command:
+
+```bash
+bun run dogfood:serve -- --attempt OD-01 --expires-minutes 15
+```
+
+It safely opens only the declared attempt's canonical `reader-form.html`, verifies that its bytes still match the generated instrument, snapshots those bytes in memory, discovers the current node's active Tailscale IPv4, and binds an ephemeral listener to that address only. It prints a random one-shot URL, atomically allows only the first bodyless GET, stops the listener immediately afterward or at the bounded expiry, and accepts no submission. HEAD is metadata-only; body-bearing GET/HEAD and every mutating method are rejected without consuming the route. Treat the URL as an expiring capability secret. The link uses HTTP inside Tailscale's encrypted tunnel; it does not claim browser TLS. The command never falls back to `0.0.0.0`, a LAN address, loopback proxying, Tailscale Serve, or Funnel, and it does not read or change any existing Tailscale Serve configuration.
+
+An owner-controlled exact-file transfer remains valid. In either mode, deliver **only** the form. Never serve or copy the containing attempt directory: it also contains private operator, observation, decision, log, and run artifacts. After the HTML loads, the form makes no subsequent request, uploads nothing, and downloads `submission.json` locally. Transfer only that downloaded JSON back to the laptop and place it at the returned attempt path. This is disposable study transport, not a hosted form, intake endpoint, account-free contribution path, or independent-reader/owner evidence.
 
 Then run:
 
@@ -124,7 +132,7 @@ The harness cannot complete the owner's editorial step on the owner's behalf. Be
 
 ## Prepare a deferred independent human-pilot attempt
 
-The pilot operator layer is a thin concierge wrapper around the same modules. It adds no server, database, account integration, hosted form, source writer, generalized renderer executor, or public-results publisher. This larger protocol is preserved for later if Cyberbaser needs unfamiliar-reader or independent-owner usability evidence; it is not required before owner self-dogfooding.
+The pilot operator layer is a thin concierge wrapper around the same modules. It adds no deployed or Cyberbaser-operated product server, database, account integration, hosted form, source writer, generalized renderer executor, or public-results publisher. The optional expiring Tailscale command above is an owner-local exact-file transport and accepts no intake. This larger protocol is preserved for later if Cyberbaser needs unfamiliar-reader or independent-owner usability evidence; it is not required before owner self-dogfooding.
 
 All live material is created below the repository's ignored `.workspace/human-correction-pilot/` directory. Every command verifies its destinations with `git check-ignore`, rejects symlinked workspace components, and keeps raw submissions, credit requests, owner mappings, local paths, and private cards out of tracked files.
 

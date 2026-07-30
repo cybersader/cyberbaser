@@ -203,7 +203,7 @@ async function verifiedWrite(file, contents, context) {
   await writeFile(file, contents, { encoding: 'utf8', flag: 'wx' });
 }
 
-function renderReaderForm(template, attemptId, profile) {
+export function renderReaderForm(template, attemptId, profile) {
   const profileNotice = profile === 'cyberbase-rehearsal'
     ? '<p class="rehearsal"><strong>Cyberbase rehearsal:</strong> this attempt supplies zero counted independent-owner evidence.</p>'
     : profile === 'owner-self-dogfood'
@@ -213,6 +213,11 @@ function renderReaderForm(template, attemptId, profile) {
     .replaceAll('__ATTEMPT_ID__', attemptId)
     .replaceAll('__PROFILE__', profile)
     .replaceAll('__PROFILE_NOTICE__', profileNotice);
+}
+
+export async function renderExpectedReaderForm(attemptId, profile) {
+  const template = await readFile(path.join(TEMPLATES_DIR, 'reader-form.html'), 'utf8');
+  return renderReaderForm(template, attemptId, profile);
 }
 
 function dogfoodObservationTemplate(attemptId, series) {
@@ -357,10 +362,9 @@ export async function initializeAttempt({
     await assertIgnoredPath(staging, paths.projectRoot);
     await mkdir(path.join(staging, 'runs'));
     await mkdir(path.join(staging, 'logs'));
-    const formTemplate = await readFile(path.join(TEMPLATES_DIR, 'reader-form.html'), 'utf8');
     await verifiedWrite(
       path.join(staging, 'reader-form.html'),
-      renderReaderForm(formTemplate, attemptId, profile),
+      await renderExpectedReaderForm(attemptId, profile),
       stagingContext,
     );
     await verifiedWrite(
