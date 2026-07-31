@@ -1,6 +1,6 @@
 # Observed results
 
-- Latest harness verification: 2026-07-30
+- Latest harness verification: 2026-07-31
 - Latest completed historical internal candidate run: 2026-07-28
 - Runtime: Bun 1.3.11
 - Current branch: `feature/owner-self-dogfood`
@@ -50,11 +50,11 @@ The selected correction needed no repair. The later audit hardened checkout isol
 | Check | Measured result |
 |---|---|
 | Frozen install | Historical candidate run: 11.22 s. Latest charter-milestone verification: completed in 10.10 s with `bun.lock` byte-unchanged. |
-| Scoped harness suite | Initial candidate run: 46 passed, 0 failed, 213 assertions across eight files, about 2.82 s. Post-audit checkout and review-state hardening: 47 passed, 0 failed, 218 assertions across eight files. Initialization, rendered-evidence, and decision hardening: 77 passed, 0 failed, 410 assertions across 12 files in 21.19 s. Owner-self-dogfood implementation before final adversarial review: 81 passed, 0 failed, 434 assertions across 12 files in 27.12 s. Final immutable-decision, observation-binding, and schema-migration hardening: 82 passed, 0 failed, 442 assertions across 12 files in 26.16 s. After adversarial repair, the final focused owner-dogfood/input/workspace/run/card subset passed 41 tests with 276 assertions in 23.55 s. The complete charter-milestone suite passed 89 tests with 500 assertions across 12 files in 25.49 s. After the private Tailscale handoff was added, the package-scoped suite passed 105 tests with 594 assertions across 13 files in 32.42 s. |
+| Scoped harness suite | Initial candidate run: 46 passed, 0 failed, 213 assertions across eight files, about 2.82 s. Post-audit checkout and review-state hardening: 47 passed, 0 failed, 218 assertions across eight files. Initialization, rendered-evidence, and decision hardening: 77 passed, 0 failed, 410 assertions across 12 files in 21.19 s. Owner-self-dogfood implementation before final adversarial review: 81 passed, 0 failed, 434 assertions across 12 files in 27.12 s. Final immutable-decision, observation-binding, and schema-migration hardening: 82 passed, 0 failed, 442 assertions across 12 files in 26.16 s. After adversarial repair, the final focused owner-dogfood/input/workspace/run/card subset passed 41 tests with 276 assertions in 23.55 s. The complete charter-milestone suite passed 89 tests with 500 assertions across 12 files in 25.49 s. After the private Tailscale handoff was added, the package-scoped suite passed 105 tests with 594 assertions across 13 files in 32.42 s. After the guided wizard and adversarial decision-concurrency repairs, the complete package-scoped suite passed 120 tests with 647 assertions across 14 files in 79.88 s. |
 | Authoritative verifier | 11 PASS, 0 FAIL, `complete: true`. |
 | Dependent package suites | Correction, linkcheck, OFM, projection, publish, and trust: 187 passed, 0 failed, 558 assertions across eight files. |
 | Canonical docs build and linkcheck | Latest owner-self-dogfood update: PASS, 100 pages built. Linkcheck found the existing single `other` finding in `agent-context/zz-challenges/mdx-auto-wrapping/`, within the explicit budget of 1. Existing Starlight override, Vite externalization, and large-chunk warnings remained non-fatal. |
-| Documentation browser suite | 183 Playwright tests passed in 4.0 minutes, including homepage stability, responsive layout, recent pages, screenshots, smoke coverage, and standard-page backlinks. |
+| Documentation browser suite | The previous complete run passed 183 Playwright tests in 4.0 minutes, including homepage stability, responsive layout, recent pages, screenshots, smoke coverage, and standard-page backlinks. The 2026-07-31 smoke rerun rebuilt and started the preview server but Chromium launches all stopped at `spawn EIO` after this WSL session's Linux filesystem became read-only; no browser assertion ran, so that rerun is an environmental block rather than a pass. |
 | Repeated verifier determinism | Two fresh verifier processes exited zero, emitted no verifier diagnostic stderr, and produced byte-identical JSON; 0.922 s and 0.911 s. The `bun run verify` wrapper may print Bun's fixed launcher banner to stderr. |
 | Artifact validation | PASS for one sanitized case JSON, one result JSON, and one static review-card HTML. |
 
@@ -73,7 +73,7 @@ The 2026-07-30 implementation adds `owner-self-dogfood` without creating a secon
 | Owner rejection | A correctly bound rejection validates as a private owner-self-dogfood decision while source-write and public-deployment fields remain false. The test supplies the decision fixture; it does not claim a real owner decision. |
 | Existing paths | `cyberbase-rehearsal` and `independent-counted` compatibility tests remain passing. Stored schema-v1 status without classification fields is normalized to schema v2 and then checked against the validated profile. |
 | Observation binding | Reader and owner contexts are separate structured records. Owner-dogfood decision validation compares the recorded obligations and applicable mobile context with the canonical charter, strictly loads and snapshots the observation, and stops if source-write, deployment, or live-verification flags are already true. |
-| Decision immutability | The validated decision is created with an exclusive atomic link. Re-running validation with a contradictory decision is rejected before replacement, and the original decision remains byte-intact. |
+| Decision immutability | A guided decision is created once as a run-local `wizard-owner-decision.json`; concurrent wizard sessions cannot replace it. The validated decision is also created with an exclusive atomic link. Re-running validation is rejected before replacement, and the original decision remains byte-intact. |
 | Authoritative verifier | Two corrected package-scoped runs emitted byte-identical JSON with 11 PASS checks and `complete: true`. |
 
 No physical phone pass, real owner decision, canonical source application, commit, push, deployment, or live correction was performed by this verification.
@@ -106,6 +106,18 @@ The owner-local `dogfood:serve` command was exercised against the real ignored `
 | Existing Serve state | `tailscale serve status --json` was byte-identical before and after the smoke. The command executes no Serve, Funnel, reset, restore, or configuration mutation. |
 | Automated coverage | The focused transport suite passed 16 tests with 91 assertions. The complete package-scoped harness passed 105 tests with 594 assertions across 13 files. |
 | Evidence claim | This proves the command mechanics on the maintainer's laptop only. It is not a physical-phone pass, reader completion, submission, owner decision, source application, or product endpoint. |
+
+### Guided owner path
+
+The TTY-only `bun run dogfood` wizard was exercised against the real ignored series state without creating a submission or owner decision.
+
+| Check | Observed result |
+|---|---|
+| Current-state menu | A real pseudo-terminal showed `OD-01` as awaiting reader submission and recommended, with only charter-declared `OD-01`, `OD-02`, and `OD-03` listed. Exit completed without starting an action. |
+| Guided Tailscale action | A second pseudo-terminal selected the recommended attempt, one-shot serve action, 15-minute expiry, and explicit confirmation. The fetched bytes matched the canonical ignored form, the listener closed after that GET, a second GET could not connect, the capability URL was redacted from recorded output, and the wizard returned to the menu and exited zero. |
+| Focused safety coverage | Wizard and workspace coverage passed 26 tests with 134 assertions. A focused wizard/workspace/run pass completed 38 tests with 222 assertions. |
+| Concurrency and interruption repair | Adversarial review found phantom-attempt logging, pre-confirmation timestamps, confirmed-action signal handling, and contradictory concurrent decision replacement. Initialization failures now log globally, timestamps are created only after confirmation, confirmed actions retain terminal ownership, and 20 concurrent decision attempts produced exactly one immutable run-local winner with 19 `artifact-already-exists` failures. |
+| Evidence claim | These are command, TTY, transport, and deterministic harness results only. No physical phone, returned submission, real editorial decision, source application, commit, deployment, or live correction occurred. |
 
 ### Synthetic CLI smoke and adversarial attempts
 

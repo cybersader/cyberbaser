@@ -27,10 +27,10 @@ name = "dogfood"
 cwd = "spikes/human-correction-dry-run"
 command = "bash"
 kind = "shell"
-description = "manual owner-dogfood shell; starts no listener automatically"
+description = "guided owner-dogfood shell; run bun run dogfood (starts no listener automatically)"
 
 # ── Handy one-off commands (run from the matching shell session) ──────
 # cd docs && bun run build                    # production build -> docs/dist/
 # cd docs && bun run preview --host 0.0.0.0   # broad LAN bind; public docs only, never dogfood artifacts
 # cd docs && bun run test:local               # headless Playwright smoke tests
-# bun run dogfood:serve -- --attempt OD-NN --expires-minutes 15  # from `dogfood`; one-shot Tailscale form link
+# bun run dogfood                            # from `dogfood`; guided owner workflow

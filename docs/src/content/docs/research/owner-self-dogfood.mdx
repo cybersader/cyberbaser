@@ -63,7 +63,17 @@ This follows the source boundary in [The translation layer](/cyberbaser/design/t
 
 ## Operator path
 
-From `spikes/human-correction-dry-run/`, first prepare a private charter input. The values below are an example shape only; replace the sample device, operating system, and browser with the actual planned environment:
+For routine owner use, open the Portagenty `dogfood` shell and run:
+
+```bash
+bun run dogfood
+```
+
+The TTY-only wizard reads the create-once charter, lists only its declared attempts, derives their conservative stages, and marks the next valid action as recommended. Numbered menus guide explicit initialization, the one-shot Tailscale handoff, preparation, isolated rendering, owner-decision entry, and decision validation. Opening Portagenty or the wizard starts no listener. Exit, Ctrl-C, or EOF before final confirmation performs no pending action, and non-TTY automation is directed to the exact commands below.
+
+The wizard generates only fixed profile and binding values already controlled by the harness. A confirmed editorial decision becomes one immutable run-local `wizard-owner-decision.json`, so concurrent wizard sessions cannot overwrite each other; the exact manual path continues to use the bound `owner-decision.json` scaffold. The wizard never infers source from a URL, chooses an editorial decision, repairs stale or ambiguous input, applies source, commits, pushes, deploys, or verifies a live correction. It is an owner convenience layer over the same strict APIs, not a reader-facing product UI or account-free contribution path.
+
+The series charter remains a separate deliberate create-once prerequisite. To create a new series through the exact interface, first prepare a private charter input. The values below are an example shape only; replace the sample device, operating system, and browser with the actual planned environment:
 
 ```json
 {
@@ -115,7 +125,7 @@ bun run dogfood:init -- \
 
 The command creates a private reader form, `operator.json`, `owner-decision.json`, and `dogfood-observation.json`. It fails before checkout inspection or attempt-artifact creation when the series is missing or the OD ID was not declared, although the command may still record a private global failure log. The observation scaffold carries the attempt's exact precommitted obligations, prefills the planned signed-out phone context when applicable, and records whether any source write, deployment, or live verification actually occurred. Decision validation compares the obligations and mobile context with the canonical charter. The observation is not a trusted declaration by itself; mechanical evidence and owner-controlled publication still have to agree with it.
 
-For an owner-only phone handoff, start the bounded Tailscale transport:
+When an initialized attempt is awaiting submission, the wizard offers the bounded Tailscale transport. Its exact CLI equivalent is:
 
 ```bash
 bun run dogfood:serve -- --attempt OD-01 --expires-minutes 15

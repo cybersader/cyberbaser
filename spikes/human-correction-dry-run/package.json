@@ -13,7 +13,8 @@
     "cb-correction-pilot-render": "bin/pilot-render.js",
     "cb-correction-pilot-decision": "bin/pilot-decision.js",
     "cb-correction-dogfood-series-init": "bin/dogfood-series-init.js",
-    "cb-correction-dogfood-serve": "bin/dogfood-serve.js"
+    "cb-correction-dogfood-serve": "bin/dogfood-serve.js",
+    "cb-correction-dogfood": "bin/dogfood.js"
   },
   "scripts": {
     "test": "bun test",
@@ -24,6 +25,7 @@
     "pilot:prepare": "bun run bin/pilot-prepare.js",
     "pilot:render": "bun run bin/pilot-render.js",
     "pilot:decision": "bun run bin/pilot-decision.js",
+    "dogfood": "bun run bin/dogfood.js",
     "dogfood:series-init": "bun run bin/dogfood-series-init.js",
     "dogfood:serve": "bun run bin/dogfood-serve.js",
     "dogfood:init": "bun run bin/pilot-init.js",

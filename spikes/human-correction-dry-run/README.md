@@ -51,6 +51,22 @@ bun run verify
 
 Owner self-dogfood is the immediate use of this harness. It reuses the same case, evaluation, review, checkout, projection, rendering, link-delta, and decision-binding modules, but uses distinct `OD-01` through `OD-99` attempt IDs and the `owner-self-dogfood` profile. One maintainer may switch between reader and owner contexts. Status, preparation, rendering, review-card, and validated-decision outputs report `evidenceClass: owner-self-dogfood`, `countsTowardHumanPilot: false`, and `independentOwnerEvidence: false`; raw input/scaffold files are not evidence-classification outputs.
 
+### Guided owner path
+
+From the Portagenty `dogfood` shell, run:
+
+```bash
+bun run dogfood
+```
+
+The TTY-only wizard reads the create-once charter, shows only its precommitted attempt IDs, derives each conservative stage, and marks the next valid action as recommended. Numbered menus guide initialization, the one-shot Tailscale handoff, preparation, isolated rendering, explicit owner-decision entry, and decision validation. Fixed profile and binding values are generated from the existing contracts; source mappings and editorial decisions always require explicit owner input.
+
+Opening Portagenty or the wizard starts no listener. The wizard confirms immediately before every operation, and Exit, Ctrl-C, or EOF before confirmation performs no pending action or failure log. A confirmed editorial decision is stored once in the current run as `wizard-owner-decision.json`; concurrent wizard sessions cannot overwrite it, while the strict manual path continues to use the bound `owner-decision.json` scaffold. It never infers a source from a URL, repairs a stale or ambiguous proposal, applies source, commits, pushes, deploys, or authorizes itself. Piped/non-TTY use fails promptly and points automation to the strict commands below.
+
+The charter remains a separate create-once prerequisite rather than a routine wizard action. If it is missing, use `dogfood:series-init` deliberately.
+
+### Automation and exact CLI reference
+
 Before any `OD-*` attempt, privately precommit the series. The non-overwriting charter declares three to five unique attempt IDs, assigns each of the five required obligations exactly once, uses every declared ID, names the planned signed-out phone/OS/browser, and fixes the maintainer-only evidence boundary. Its schema provides no dedicated fields for candidates, paths, URLs, quotes, replacements, notes, decisions, or observations, and rejects unknown field names. Use the mobile labels only to name the actual environment, not to embed other private data.
 
 Example shape only; replace the sample device, operating system, and browser with the actual planned environment before initialization:
@@ -107,7 +123,7 @@ bun run dogfood:init -- \
 
 Initialization creates the local reader form and operator/decision files plus `dogfood-observation.json`, a private scaffold that carries the attempt's exact precommitted obligations, separate reader and owner device/browser/account contexts, manual interventions, and whether a source write, deployment, or live verification actually happened. The planned phone context is prefilled for the mobile obligation. Decision validation compares both the obligations and that mobile context with the canonical charter. Blank observation fields are not evidence, and automated browser emulation must not be labeled as a physical-phone result.
 
-The recommended phone handoff is the bounded Tailscale command:
+The wizard offers the bounded phone handoff when an initialized attempt is awaiting submission. Its exact CLI equivalent is:
 
 ```bash
 bun run dogfood:serve -- --attempt OD-01 --expires-minutes 15

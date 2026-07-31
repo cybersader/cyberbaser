@@ -1,4 +1,4 @@
-import { readFile, realpath, stat } from 'node:fs/promises';
+import { lstat, readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { applyCorrection, prepareCorrection } from '@cyberbaser/correction';
 import { checkSite } from '@cyberbaser/linkcheck';
@@ -48,6 +48,16 @@ export class PilotRunError extends Error {
 
 function fail(code, message, details) {
   throw new PilotRunError(code, message, details);
+}
+
+async function artifactExists(file) {
+  try {
+    await lstat(file);
+    return true;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return false;
+    throw error;
+  }
 }
 
 function clonePlain(value) {
@@ -679,9 +689,34 @@ export async function validatePilotOwnerDecision({
       );
     }
   }
-  const decision = validateOwnerDecision(
-    await loadAttemptJson(paths.ownerDecision, 'owner-decision', paths),
-  );
+  const wizardDecisionPath = path.join(preparedRun.runDir, 'wizard-owner-decision.json');
+  let decision;
+  if (await artifactExists(wizardDecisionPath)) {
+    if (operator.profile !== 'owner-self-dogfood') {
+      fail(
+        'wizard-owner-decision-profile-mismatch',
+        'wizard owner decisions require owner self-dogfood',
+      );
+    }
+    const expectedBlankDecision = ownerDecisionTemplate(paths.attemptId, {
+      mechanicalCaseId,
+      candidateDigest: preparedRun.evaluation.candidate.digest,
+    });
+    const canonicalDecision = await loadAttemptJson(paths.ownerDecision, 'owner-decision', paths);
+    if (stableStringify(canonicalDecision) !== stableStringify(expectedBlankDecision)) {
+      fail(
+        'wizard-owner-decision-authority-conflict',
+        'wizard decision requires a blank canonical scaffold',
+      );
+    }
+    decision = validateOwnerDecision(
+      await loadAttemptJson(wizardDecisionPath, 'wizard-owner-decision', paths),
+    );
+  } else {
+    decision = validateOwnerDecision(
+      await loadAttemptJson(paths.ownerDecision, 'owner-decision', paths),
+    );
+  }
   if (decision.attemptId !== paths.attemptId
     || decision.mechanicalCaseId !== mechanicalCaseId
     || decision.candidateDigest !== preparedRun.evaluation.candidate.digest) {

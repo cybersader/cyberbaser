@@ -100,7 +100,7 @@ describe('private pilot owner review card', () => {
     expect(card.evidence.trust.authorType).toBe('anonymous');
     expect(card.evidence.status.ownerDecision).toBe('pending-human-owner');
     expect(card.html).toContain('No source write or public deployment has occurred.');
-    expect(card.html).toContain('The owner must complete the bound owner-decision.json by hand');
+    expect(card.html).toContain('complete the bound owner-decision.json by hand or record the immutable guided decision');
     expect(card.html).not.toMatch(/<script\b|\s(?:src|href|action)\s*=/iu);
   });
 

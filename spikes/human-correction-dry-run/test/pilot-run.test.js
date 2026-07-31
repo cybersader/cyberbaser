@@ -685,7 +685,8 @@ describe('independent static-output rendering', () => {
     }, { runLiveCorrection: fakeLiveRun })).rejects.toMatchObject({
       code: 'dogfood-owner-rejection-required',
     });
-    await writeFile(paths.ownerDecision, `${JSON.stringify({
+    await writeFile(paths.ownerDecision, `${JSON.stringify(decision, null, 2)}\n`, 'utf8');
+    await writeFile(path.join(runDir, 'wizard-owner-decision.json'), `${JSON.stringify({
       ...decision,
       decision: 'reject',
       reason: 'The owner does not want this otherwise valid change.',
@@ -749,13 +750,6 @@ describe('independent static-output rendering', () => {
         liveVerificationPerformed: false,
       },
     });
-    await writeFile(paths.ownerDecision, `${JSON.stringify({
-      ...decision,
-      decision: 'reject',
-      reason: 'A later revised rejection must not replace completed evidence.',
-      reviewSeconds: 9,
-      decidedAt: '2026-07-30T12:01:00.000Z',
-    }, null, 2)}\n`, 'utf8');
     await expect(validatePilotOwnerDecision({
       attemptId, projectRoot: PROJECT_ROOT, workspaceRoot: workspace,
     }, { runLiveCorrection: fakeLiveRun })).rejects.toMatchObject({

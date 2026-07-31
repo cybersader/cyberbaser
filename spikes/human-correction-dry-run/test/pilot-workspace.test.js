@@ -137,6 +137,12 @@ describe('ignored private pilot workspace', () => {
     expect(packageData.bin['cb-correction-dogfood-series-init']).toBe(
       'bin/dogfood-series-init.js',
     );
+    expect(packageData.scripts.dogfood).toBe(
+      'bun run bin/dogfood.js',
+    );
+    expect(packageData.bin['cb-correction-dogfood']).toBe(
+      'bin/dogfood.js',
+    );
     expect(packageData.scripts['dogfood:serve']).toBe(
       'bun run bin/dogfood-serve.js',
     );
@@ -156,6 +162,13 @@ describe('ignored private pilot workspace', () => {
       'human-correction-dry-run',
       'bin',
       'dogfood-serve.js',
+    ))).isFile()).toBe(true);
+    expect((await lstat(path.join(
+      PROJECT_ROOT,
+      'spikes',
+      'human-correction-dry-run',
+      'bin',
+      'dogfood.js',
     ))).isFile()).toBe(true);
   });
 

@@ -272,7 +272,7 @@ export function renderPilotOwnerReviewHtml(input) {
 <section class="section"><h2>Mechanical checks</h2><dl>${row('Outside-splice bytes', evidence.byteProof.prefixIdentical && evidence.byteProof.suffixIdentical ? 'identical' : 'not identical')}${row('Bytes preserved before / after', `${evidence.byteProof.prefixBytesPreserved} / ${evidence.byteProof.suffixBytesPreserved}`)}${row('OFM verdict', evidence.ofm.verdict)}${row('OFM findings', JSON.stringify(evidence.ofm.findings))}${row('OFM churn', evidence.ofm.stats.churn)}${row('OFM escapes before / after', `${evidence.ofm.stats.escapesBefore} / ${evidence.ofm.stats.escapesAfter}`)}${row('Trust route', `${evidence.trust.tier}/${evidence.trust.route} (informational only)`)}${row('Trust reasons', JSON.stringify(evidence.trust.reasons))}${row('Trust checks', JSON.stringify(evidence.trust.checks))}${row('Trust subject', evidence.trust.authorType)}${row('Policy revision', evidence.trust.policyRevision)}</dl></section>
 ${renderSection(evidence)}
 ${publicationSection(evidence)}
-<footer class="footer">No source write or public deployment has occurred. The owner must complete the bound owner-decision.json by hand, run pilot:decision, and apply any accepted candidate through the owner's normal local workflow.</footer>
+<footer class="footer">No source write or public deployment has occurred. The owner must either complete the bound owner-decision.json by hand or record the immutable guided decision, run pilot:decision, and apply any accepted candidate through the owner's normal local workflow.</footer>
 </main>
 </body>
 </html>
