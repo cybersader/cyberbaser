@@ -1,0 +1,145 @@
+name: cyberbaser-owner-alpha
+
+# Linux Docker Engine only. Host networking is required because owner-alpha binds
+# one exact owner-selected private numeric IPv4 address and the adjacent reader
+# port in the same Linux network namespace. Do not add ports or bridge mode.
+x-owner-alpha-runtime: &owner-alpha-runtime
+  image: ${OWNER_ALPHA_IMAGE:?set OWNER_ALPHA_IMAGE to a local image ID or immutable repository digest}
+  pull_policy: never
+  network_mode: host
+  read_only: true
+  init: true
+  stdin_open: true
+  tty: true
+  attach: false
+  logging:
+    driver: none
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  restart: "on-failure:3"
+  stop_grace_period: 30s
+  environment:
+    HOME: /opt/cyberbaser/.workspace/owner-alpha/home
+    XDG_CACHE_HOME: /opt/cyberbaser/.workspace/owner-alpha/cache/xdg
+    TMPDIR: /tmp
+    OWNER_ALPHA_READY_FILE: /run/owner-alpha/ready
+    OWNER_ALPHA_CREDENTIAL_SOCKET: /run/owner-alpha-credentials/helper.sock
+    OWNER_ALPHA_STATE_PROFILE: ${OWNER_ALPHA_STATE_PROFILE:?set OWNER_ALPHA_STATE_PROFILE}
+  volumes:
+    - type: bind
+      source: ${OWNER_ALPHA_VAULT_PATH:?set OWNER_ALPHA_VAULT_PATH to the exact vault worktree root}
+      target: /vault
+      read_only: false
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ${OWNER_ALPHA_CONFIG_PATH:?set OWNER_ALPHA_CONFIG_PATH to the credential-free JSON config}
+      target: /config/owner-alpha.local.json
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: volume
+      source: owner-alpha-state
+      target: /opt/cyberbaser/.workspace
+      volume:
+        nocopy: true
+    # Mount only the broker's socket directory. Never mount a home directory,
+    # private key, token file, Git config, SSH agent, or Docker socket.
+    - type: bind
+      source: ${OWNER_ALPHA_CREDENTIAL_SOCKET_DIR:?set OWNER_ALPHA_CREDENTIAL_SOCKET_DIR}
+      target: /run/owner-alpha-credentials
+      read_only: true
+      bind:
+        create_host_path: false
+  healthcheck:
+    test:
+      - CMD
+      - bun
+      - /opt/cyberbaser/deploy/owner-alpha/healthcheck.js
+    interval: 30s
+    timeout: 3s
+    start_period: 30s
+    retries: 3
+
+x-owner-alpha-state-init: &owner-alpha-state-init
+  image: ${OWNER_ALPHA_IMAGE:?set OWNER_ALPHA_IMAGE to a local image ID or immutable repository digest}
+  pull_policy: never
+  network_mode: none
+  read_only: true
+  init: true
+  user: "0:0"
+  entrypoint:
+    - /usr/local/bin/owner-alpha-state-init
+  command:
+    - init
+  attach: false
+  logging:
+    driver: none
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  restart: "no"
+  volumes:
+    - type: volume
+      source: owner-alpha-state
+      target: /opt/cyberbaser/.workspace
+      volume:
+        nocopy: true
+
+services:
+  owner-alpha-state-init-rootless:
+    <<: *owner-alpha-state-init
+    profiles:
+      - rootless
+    environment:
+      OWNER_ALPHA_STATE_PROFILE: ${OWNER_ALPHA_STATE_PROFILE:?set OWNER_ALPHA_STATE_PROFILE}
+      OWNER_ALPHA_RUNTIME_UID: "0"
+      OWNER_ALPHA_RUNTIME_GID: "0"
+
+  owner-alpha-rootless:
+    <<: *owner-alpha-runtime
+    profiles:
+      - rootless
+    # With a rootless daemon, container 0:0 maps to the unprivileged host user
+    # that owns the vault. It is root inside the user namespace, not host root.
+    user: "0:0"
+    depends_on:
+      owner-alpha-state-init-rootless:
+        condition: service_completed_successfully
+    tmpfs:
+      - /run/owner-alpha:rw,nosuid,nodev,noexec,mode=0700,uid=0,gid=0,size=${OWNER_ALPHA_RUNTIME_TMPFS_SIZE:-16m}
+      - /tmp:rw,nosuid,nodev,exec,mode=0700,uid=0,gid=0,size=${OWNER_ALPHA_TMPFS_SIZE:?set OWNER_ALPHA_TMPFS_SIZE}
+
+  owner-alpha-state-init-rootful:
+    <<: *owner-alpha-state-init
+    profiles:
+      - rootful
+    # CAP_CHOWN is limited to this one-shot, networkless state-volume initializer.
+    # It never mounts or changes the vault.
+    cap_add:
+      - CHOWN
+    environment:
+      OWNER_ALPHA_STATE_PROFILE: ${OWNER_ALPHA_STATE_PROFILE:?set OWNER_ALPHA_STATE_PROFILE}
+      OWNER_ALPHA_RUNTIME_UID: ${OWNER_ALPHA_UID:?set OWNER_ALPHA_UID to the vault owner's numeric UID}
+      OWNER_ALPHA_RUNTIME_GID: ${OWNER_ALPHA_GID:?set OWNER_ALPHA_GID to the vault owner's numeric GID}
+
+  owner-alpha-rootful:
+    <<: *owner-alpha-runtime
+    profiles:
+      - rootful
+    # Rootful Docker must run the main process as the vault owner's exact numeric
+    # UID/GID. The application must never change vault ownership or permissions.
+    user: "${OWNER_ALPHA_UID:?set OWNER_ALPHA_UID}:${OWNER_ALPHA_GID:?set OWNER_ALPHA_GID}"
+    depends_on:
+      owner-alpha-state-init-rootful:
+        condition: service_completed_successfully
+    tmpfs:
+      - /run/owner-alpha:rw,nosuid,nodev,noexec,mode=0700,uid=${OWNER_ALPHA_UID:?set OWNER_ALPHA_UID},gid=${OWNER_ALPHA_GID:?set OWNER_ALPHA_GID},size=${OWNER_ALPHA_RUNTIME_TMPFS_SIZE:-16m}
+      - /tmp:rw,nosuid,nodev,exec,mode=0700,uid=${OWNER_ALPHA_UID:?set OWNER_ALPHA_UID},gid=${OWNER_ALPHA_GID:?set OWNER_ALPHA_GID},size=${OWNER_ALPHA_TMPFS_SIZE:?set OWNER_ALPHA_TMPFS_SIZE}
+
+volumes:
+  owner-alpha-state:
+    name: ${OWNER_ALPHA_STATE_VOLUME:?set OWNER_ALPHA_STATE_VOLUME to a dedicated named volume}

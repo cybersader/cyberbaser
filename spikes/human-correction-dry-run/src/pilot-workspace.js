@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { constants } from 'node:fs';
 import {
   access,
@@ -21,10 +21,12 @@ import { inspectCheckout } from './live-run.js';
 import {
   OWNER_DOGFOOD_OBLIGATIONS,
   evidenceClassification,
+  isSupersededOwnerDogfoodAttempt,
   operatorDefaults,
   ownerDecisionTemplate,
   validateAttemptId,
   validateOperator,
+  validateOperatorRepin,
   validateOwnerDogfoodSeriesCharter,
   validateProfile,
   validateSourcePath,
@@ -34,6 +36,10 @@ const execFileAsync = promisify(execFile);
 export const DEFAULT_PROJECT_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 export const DEFAULT_WORKSPACE_ROOT = path.join(DEFAULT_PROJECT_ROOT, '.workspace', 'human-correction-pilot');
 const TEMPLATES_DIR = fileURLToPath(new URL('../templates/', import.meta.url));
+const READER_FORM_TEMPLATES = Object.freeze({
+  'reader-form-v1': 'reader-form-v1.html',
+  'reader-form-v2': 'reader-form.html',
+});
 
 export class PilotWorkspaceError extends Error {
   constructor(code, message, details = {}) {
@@ -117,6 +123,8 @@ export function attemptPaths(attemptIdInput, {
     readerForm: path.join(root, 'reader-form.html'),
     submission: path.join(root, 'submission.json'),
     operator: path.join(root, 'operator.json'),
+    operatorRepin: path.join(root, 'operator-repin.json'),
+    bindingLock: path.join(root, '.binding-transition.lock'),
     dogfoodObservation: path.join(root, 'dogfood-observation.json'),
     ownerDecision: path.join(root, 'owner-decision.json'),
     runs: path.join(root, 'runs'),
@@ -215,9 +223,35 @@ export function renderReaderForm(template, attemptId, profile) {
     .replaceAll('__PROFILE_NOTICE__', profileNotice);
 }
 
-export async function renderExpectedReaderForm(attemptId, profile) {
-  const template = await readFile(path.join(TEMPLATES_DIR, 'reader-form.html'), 'utf8');
+export async function renderExpectedReaderForm(
+  attemptId,
+  profile,
+  instrumentVersion = 'reader-form-v2',
+) {
+  const templateName = READER_FORM_TEMPLATES[instrumentVersion];
+  if (!templateName) {
+    fail(
+      'invalid-instrument-version',
+      'reader form instrument version must be reader-form-v1 or reader-form-v2',
+    );
+  }
+  const template = await readFile(path.join(TEMPLATES_DIR, templateName), 'utf8');
   return renderReaderForm(template, attemptId, profile);
+}
+
+export async function matchReaderFormInstrumentVersion(bytes, attemptId, profile) {
+  const snapshot = Buffer.from(bytes);
+  for (const instrumentVersion of Object.keys(READER_FORM_TEMPLATES)) {
+    const expected = Buffer.from(
+      await renderExpectedReaderForm(attemptId, profile, instrumentVersion),
+      'utf8',
+    );
+    if (snapshot.equals(expected)) return instrumentVersion;
+  }
+  fail(
+    'reader-form-integrity-mismatch',
+    'reader form bytes no longer match a canonical generated instrument',
+  );
 }
 
 function dogfoodObservationTemplate(attemptId, series) {
@@ -276,7 +310,7 @@ function cyberbasePrefillOptions({ checkoutDir, sourcePath, publicUrl, sourceAut
   return values;
 }
 
-async function deriveCheckoutHead(checkoutDir) {
+export async function deriveCheckoutHead(checkoutDir) {
   if (typeof checkoutDir !== 'string' || !path.isAbsolute(checkoutDir)) {
     fail('invalid-checkout-dir', 'Cyberbase prefill checkout must be an absolute Git worktree root');
   }
@@ -311,6 +345,12 @@ async function prefilledCyberbaseOperator({ attemptId, profile, prefill }) {
     repository: CYBERBASE_REPOSITORY,
     sourcePath,
   });
+  if (checkout.publishConfigPresent !== true) {
+    fail(
+      'publication-boundary-policy-missing',
+      'Cyberbase initialization requires publish.yml at the pinned source revision',
+    );
+  }
   return validateOperator({
     ...operatorDefaults(attemptId, profile),
     checkoutDir: checkout.root,
@@ -341,6 +381,12 @@ export async function initializeAttempt({
       fail(
         'dogfood-attempt-not-declared',
         `${attemptId} is not declared in the owner self-dogfood series`,
+      );
+    }
+    if (isSupersededOwnerDogfoodAttempt(attemptId)) {
+      fail(
+        'dogfood-attempt-superseded',
+        `${attemptId} is Not run — superseded and must not be initialized`,
       );
     }
   }
@@ -418,6 +464,16 @@ export async function loadAttemptJson(file, label, paths) {
   }
 }
 
+export async function loadAttemptOperator(paths) {
+  const original = validateOperator(await loadAttemptJson(paths.operator, 'operator', paths));
+  if (!(await exists(paths.operatorRepin))) return original;
+  const repin = validateOperatorRepin(
+    await loadAttemptJson(paths.operatorRepin, 'operator-repin', paths),
+    original,
+  );
+  return repin.replacementOperator;
+}
+
 export async function createRunStaging(paths, mechanicalCaseId) {
   const runsRoot = paths.runs;
   await mkdir(runsRoot, { recursive: true });
@@ -456,6 +512,112 @@ export async function atomicWriteArtifact(file, contents, paths) {
     await rename(temporary, file);
   } finally {
     await rm(temporary, { force: true });
+  }
+}
+
+async function prepareBindingLockFile(file) {
+  let handle;
+  try {
+    handle = await open(
+      file,
+      constants.O_CREAT | constants.O_RDWR | constants.O_NOFOLLOW,
+      0o600,
+    );
+    const metadata = await handle.stat();
+    if (!metadata.isFile() || metadata.nlink !== 1) {
+      fail('attempt-binding-lock-invalid', 'attempt binding lock must be one safe regular file');
+    }
+  } catch (error) {
+    if (error?.code === 'ELOOP') {
+      fail('workspace-symlink-rejected', 'pilot workspace components must not be symbolic links');
+    }
+    if (error instanceof PilotWorkspaceError) throw error;
+    fail('attempt-binding-lock-unavailable', 'attempt binding lock file could not be prepared');
+  } finally {
+    await handle?.close();
+  }
+}
+
+async function acquireBindingLock(file) {
+  const token = `binding-lock-ready-${process.pid}-${Math.random().toString(16).slice(2)}\n`;
+  const child = spawn('flock', [
+    '--exclusive',
+    '--nonblock',
+    '--conflict-exit-code',
+    '75',
+    file,
+    'cat',
+  ], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  let output = '';
+  let stderr = '';
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk.toString();
+  });
+  child.stdin.on('error', () => {
+    // The exit handler reports lock conflicts and startup failures.
+  });
+  await new Promise((resolve, reject) => {
+    let settled = false;
+    const rejectOnce = (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
+    child.once('error', (error) => {
+      rejectOnce(new PilotWorkspaceError(
+        'attempt-binding-lock-unavailable',
+        'kernel binding lock process could not start',
+        { cause: error?.code ?? 'spawn-failed' },
+      ));
+    });
+    child.once('exit', (code) => {
+      if (settled) return;
+      if (code === 75) {
+        rejectOnce(new PilotWorkspaceError(
+          'attempt-binding-busy',
+          'another binding or decision transition is already in progress',
+        ));
+        return;
+      }
+      rejectOnce(new PilotWorkspaceError(
+        'attempt-binding-lock-unavailable',
+        'kernel binding lock process exited before acquiring the lock',
+        { exitCode: code, stderr: stderr.trim().slice(0, 2_000) },
+      ));
+    });
+    child.stdout.on('data', (chunk) => {
+      if (settled) return;
+      output += chunk.toString();
+      if (output.includes(token)) {
+        settled = true;
+        resolve();
+      }
+    });
+    child.stdin.write(token);
+  });
+  return child;
+}
+
+async function releaseBindingLock(child) {
+  if (child.exitCode !== null) return;
+  const exited = new Promise((resolve) => child.once('exit', resolve));
+  child.stdin.end();
+  await exited;
+}
+
+export async function withAttemptBindingLock(paths, action) {
+  const file = paths.bindingLock;
+  assertContained(paths.workspaceRoot, file);
+  await assertNoSymlinkComponents(paths.projectRoot, path.dirname(file));
+  await assertIgnoredPath(file, paths.projectRoot);
+  await prepareBindingLockFile(file);
+  const lock = await acquireBindingLock(file);
+  try {
+    return await action();
+  } finally {
+    await releaseBindingLock(lock);
   }
 }
 

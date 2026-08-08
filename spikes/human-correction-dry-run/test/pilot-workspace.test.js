@@ -11,6 +11,7 @@ import {
   loadOwnerDogfoodSeries,
   ownerDogfoodSeriesPaths,
   recordPilotError,
+  withAttemptBindingLock,
 } from '../src/pilot-workspace.js';
 
 const PROJECT_ROOT = path.resolve(import.meta.dir, '../../..');
@@ -33,11 +34,14 @@ async function command(args, cwd) {
   return stdout.trim();
 }
 
-async function cyberbaseCheckout() {
+async function cyberbaseCheckout({ publishConfig = true } = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'pilot-init-cyberbase-'));
   cleanup.push(root);
   await mkdir(path.join(root, 'docs'), { recursive: true });
   await writeFile(path.join(root, 'docs', 'guide.md'), '# Guide\n\nOwner-selected sentence.\n', 'utf8');
+  if (publishConfig) {
+    await writeFile(path.join(root, 'publish.yml'), 'allow:\n  - "docs/**"\n', 'utf8');
+  }
   await command(['git', 'init', '-q'], root);
   await command(['git', 'config', 'user.email', 'test@example.org'], root);
   await command(['git', 'config', 'user.name', 'Test User'], root);
@@ -119,6 +123,44 @@ describe('ignored private pilot workspace', () => {
     expect(operator.sourcePath).toBe('');
   });
 
+  test('does not strand transitions when an unlocked binding-lock file remains', async () => {
+    const workspace = await workspaceRoot();
+    const paths = attemptPaths('HC-99', {
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: workspace,
+    });
+    await mkdir(paths.root, { recursive: true });
+    await writeFile(paths.bindingLock, 'abandoned prior-process metadata\n', 'utf8');
+
+    let runs = 0;
+    await withAttemptBindingLock(paths, async () => {
+      runs += 1;
+    });
+    await withAttemptBindingLock(paths, async () => {
+      runs += 1;
+    });
+
+    expect(runs).toBe(2);
+    expect((await lstat(paths.bindingLock)).isFile()).toBe(true);
+
+    let active = 0;
+    let maxActive = 0;
+    const outcomes = await Promise.allSettled(Array.from({ length: 20 }, () => (
+      withAttemptBindingLock(paths, async () => {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        await Bun.sleep(300);
+        active -= 1;
+      })
+    )));
+    expect(maxActive).toBe(1);
+    expect(outcomes.some((outcome) => outcome.status === 'fulfilled')).toBe(true);
+    expect(outcomes.some((outcome) => outcome.status === 'rejected')).toBe(true);
+    expect(outcomes.filter((outcome) => outcome.status === 'rejected').every(
+      (outcome) => outcome.reason.code === 'attempt-binding-busy',
+    )).toBe(true);
+  });
+
   test('exposes the canonical series path and dogfood CLI wiring without creating it', async () => {
     const paths = ownerDogfoodSeriesPaths();
     const packageData = JSON.parse(await readFile(
@@ -149,6 +191,12 @@ describe('ignored private pilot workspace', () => {
     expect(packageData.bin['cb-correction-dogfood-serve']).toBe(
       'bin/dogfood-serve.js',
     );
+    expect(packageData.scripts['dogfood:repin']).toBe(
+      'bun run bin/dogfood-repin.js',
+    );
+    expect(packageData.bin['cb-correction-dogfood-repin']).toBe(
+      'bin/dogfood-repin.js',
+    );
     expect((await lstat(path.join(
       PROJECT_ROOT,
       'spikes',
@@ -162,6 +210,13 @@ describe('ignored private pilot workspace', () => {
       'human-correction-dry-run',
       'bin',
       'dogfood-serve.js',
+    ))).isFile()).toBe(true);
+    expect((await lstat(path.join(
+      PROJECT_ROOT,
+      'spikes',
+      'human-correction-dry-run',
+      'bin',
+      'dogfood-repin.js',
     ))).isFile()).toBe(true);
     expect((await lstat(path.join(
       PROJECT_ROOT,
@@ -261,6 +316,22 @@ describe('ignored private pilot workspace', () => {
     await expect(lstat(undeclaredPaths.root)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  test('rejects superseded owner attempts before checkout inspection or artifact creation', async () => {
+    const workspace = await workspaceRoot();
+    await initializeSeries(workspace);
+    for (const attemptId of ['OD-02', 'OD-03']) {
+      const paths = attemptPaths(attemptId, { projectRoot: PROJECT_ROOT, workspaceRoot: workspace });
+      await expect(initializeAttempt({
+        attemptId,
+        profile: 'owner-self-dogfood',
+        checkoutDir: '/does/not/exist',
+        projectRoot: PROJECT_ROOT,
+        workspaceRoot: workspace,
+      })).rejects.toMatchObject({ code: 'dogfood-attempt-superseded' });
+      await expect(lstat(paths.root)).rejects.toMatchObject({ code: 'ENOENT' });
+    }
+  });
+
   test('initializes a declared owner self-dogfood attempt and private observation scaffold', async () => {
     const workspace = await workspaceRoot();
     await initializeSeries(workspace);
@@ -310,6 +381,24 @@ describe('ignored private pilot workspace', () => {
       browser: '',
       signedIn: null,
     });
+  });
+
+  test('rejects a policy-free Cyberbase prefill before creating the attempt', async () => {
+    const workspace = await workspaceRoot();
+    const checkout = await cyberbaseCheckout({ publishConfig: false });
+    const paths = attemptPaths('HC-06', { projectRoot: PROJECT_ROOT, workspaceRoot: workspace });
+
+    await expect(initializeAttempt({
+      attemptId: 'HC-06',
+      profile: 'cyberbase-rehearsal',
+      checkoutDir: checkout.root,
+      sourcePath: 'docs/guide.md',
+      publicUrl: 'https://cybersader.github.io/cyberbase/guide/',
+      sourceAuthorization: 'yes',
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: workspace,
+    })).rejects.toMatchObject({ code: 'publication-boundary-policy-missing' });
+    await expect(lstat(paths.root)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   test('prefills a verified Cyberbase rehearsal from one explicit owner mapping', async () => {

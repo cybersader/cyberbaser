@@ -48,6 +48,16 @@ function present(value) {
   return value !== undefined && value !== null;
 }
 
+export function cyberbaserBoundaryEvidenceComplete(renderEvidence) {
+  const lanes = [renderEvidence?.projection?.baseline, renderEvidence?.projection?.candidate];
+  return renderEvidence?.artifactType === 'private-local-rendered-correction-run'
+    && renderEvidence?.sourceCheckout?.publishConfigPresent === true
+    && lanes.every((lane) => lane?.mode === 'cyberbaser-select-project-verify'
+      && lane?.selection?.sourcePublished === true
+      && lane?.projection?.ok === true
+      && lane?.projection?.verification?.ok === true);
+}
+
 export function reviewCardContractMissing({ operator, evaluation, renderEvidence }) {
   if (!renderEvidence) return ['rendering'];
   const missing = [];
@@ -80,10 +90,10 @@ export function reviewCardContractMissing({ operator, evaluation, renderEvidence
   requireField(Number.isSafeInteger(renderEvidence?.siteChecks?.candidate?.broken), 'links.candidateBroken');
   requireField(Number.isSafeInteger(renderEvidence?.siteChecks?.linkDelta?.counts?.candidateOnly), 'links.candidateOnly');
   if (operator.publicationBoundary === 'cyberbaser') {
-    requireField(present(renderEvidence?.projection?.baseline?.selection), 'projection.baselineSelection');
-    requireField(renderEvidence?.projection?.baseline?.projection?.verification?.ok === true, 'projection.baselineVerification');
-    requireField(present(renderEvidence?.projection?.candidate?.selection), 'projection.candidateSelection');
-    requireField(renderEvidence?.projection?.candidate?.projection?.verification?.ok === true, 'projection.candidateVerification');
+    requireField(
+      cyberbaserBoundaryEvidenceComplete(renderEvidence),
+      'projection.cyberbaserBoundary',
+    );
   } else {
     requireField(renderEvidence?.artifactType === 'private-owner-static-output-render-evidence', 'projection.notApplicable');
     requireField(renderEvidence?.preparedSourceBinding?.snapshotsRevalidated === true, 'rendering.preparedSnapshots');

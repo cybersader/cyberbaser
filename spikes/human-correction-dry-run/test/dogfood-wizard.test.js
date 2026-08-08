@@ -70,7 +70,7 @@ function dogfoodSeries() {
 function submission(attemptId = 'OD-01') {
   return {
     schemaVersion: 1,
-    instrumentVersion: 'reader-form-v1',
+    instrumentVersion: 'reader-form-v2',
     attemptId,
     openedAt: '2026-07-31T00:00:00.000Z',
     submittedAt: '2026-07-31T00:01:00.000Z',
@@ -85,6 +85,19 @@ function submission(attemptId = 'OD-01') {
   };
 }
 
+function completeCyberbaserRenderEvidence() {
+  const lane = {
+    mode: 'cyberbaser-select-project-verify',
+    selection: { sourcePublished: true },
+    projection: { ok: true, verification: { ok: true } },
+  };
+  return {
+    artifactType: 'private-local-rendered-correction-run',
+    sourceCheckout: { publishConfigPresent: true },
+    projection: { baseline: lane, candidate: lane },
+  };
+}
+
 async function workspaceRoot() {
   const root = await mkdtemp(path.join(PROJECT_ROOT, '.workspace', 'dogfood-wizard-test-'));
   cleanup.push(root);
@@ -96,6 +109,7 @@ async function cyberbaseCheckout() {
   cleanup.push(root);
   await mkdir(path.join(root, 'docs'), { recursive: true });
   await writeFile(path.join(root, 'docs', 'guide.md'), '# Guide\n\nOwner-selected sentence.\n', 'utf8');
+  await writeFile(path.join(root, 'publish.yml'), 'allow:\n  - "docs/**"\n', 'utf8');
   for (const args of [
     ['git', 'init', '-q'],
     ['git', 'config', 'user.email', 'test@example.org'],
@@ -166,9 +180,11 @@ async function renderedEligibleWorkspace() {
     },
   }), 'utf8');
   await writeFile(path.join(runDir, 'owner-decision-template.json'), stableStringify(template), 'utf8');
-  await writeFile(path.join(runDir, 'render-evidence.json'), stableStringify({
-    artifactType: 'private-local-rendered-correction-run',
-  }), 'utf8');
+  await writeFile(
+    path.join(runDir, 'render-evidence.json'),
+    stableStringify(completeCyberbaserRenderEvidence()),
+    'utf8',
+  );
   await writeFile(fixture.paths.ownerDecision, stableStringify(template), 'utf8');
   const state = await inspectDogfoodSeries({
     projectRoot: PROJECT_ROOT,
@@ -227,7 +243,17 @@ function fakeState(stage = 'awaiting-submission', attemptId = 'OD-01') {
     obligations: attemptId === 'OD-03' ? ['owner-rejection'] : ['normal-correction'],
     stage,
     stageLabel: stage.replaceAll('-', ' '),
-    blockingReasons: [],
+    blockingReasons: stage === 'blocked' ? ['publication-boundary-policy-missing'] : [],
+    canRepin: stage === 'blocked',
+    operator: stage === 'blocked'
+      ? {
+          repository: 'https://github.com/cybersader/cyberbase',
+          checkoutDir: '/legacy/cyberbase',
+          baseCommit: '1111111111111111111111111111111111111111',
+          sourcePath: 'docs/guide.md',
+          publicUrl: 'https://cybersader.github.io/cyberbase/guide/',
+        }
+      : undefined,
     paths,
     mechanicalCaseId: stage.includes('decision') || stage === 'awaiting-decision'
       ? 'DRY-0123456789AB'
@@ -262,8 +288,8 @@ describe('dogfood series inspection', () => {
     });
     expect(state.attempts.map((attempt) => [attempt.attemptId, attempt.stage])).toEqual([
       ['OD-01', 'awaiting-submission'],
-      ['OD-02', 'not-initialized'],
-      ['OD-03', 'not-initialized'],
+      ['OD-02', 'superseded'],
+      ['OD-03', 'superseded'],
     ]);
     expect(state.suggestedAttemptId).toBe('OD-01');
   });
@@ -320,9 +346,7 @@ describe('dogfood series inspection', () => {
     status.ownerDecisionEligible = true;
     status.blockingReasons = [];
     await writeFile(path.join(runDir, 'status.json'), stableStringify(status), 'utf8');
-    await writeFile(path.join(runDir, 'render-evidence.json'), stableStringify({
-      artifactType: 'private-local-rendered-correction-run',
-    }), 'utf8');
+    await writeFile(path.join(runDir, 'render-evidence.json'), stableStringify(completeCyberbaserRenderEvidence()), 'utf8');
     state = await inspectDogfoodSeries({ projectRoot: PROJECT_ROOT, workspaceRoot: fixture.workspace });
     expect(state.attempts[0].stage).toBe('awaiting-decision');
 
@@ -349,6 +373,110 @@ describe('dogfood series inspection', () => {
     }), 'utf8');
     state = await inspectDogfoodSeries({ projectRoot: PROJECT_ROOT, workspaceRoot: fixture.workspace });
     expect(state.attempts[0].stage).toBe('decision-validated');
+  }, 60_000);
+
+  test('classifies a prepared-era policy-free pin as blocked and recoverable', async () => {
+    const fixture = await initializedWorkspace();
+    const input = submission();
+    await writeFile(fixture.paths.submission, stableStringify(input), 'utf8');
+    const operator = JSON.parse(await readFile(fixture.paths.operator, 'utf8'));
+    await rm(path.join(operator.checkoutDir, 'publish.yml'));
+    const add = await command(['git', 'add', '-A'], operator.checkoutDir);
+    if (add.exitCode !== 0) throw new Error(add.stderr || add.stdout);
+    const commit = await command(['git', 'commit', '-q', '-m', 'legacy policy-free pin'], operator.checkoutDir);
+    if (commit.exitCode !== 0) throw new Error(commit.stderr || commit.stdout);
+    const legacyHead = await command(['git', 'rev-parse', 'HEAD'], operator.checkoutDir);
+    if (legacyHead.exitCode !== 0) throw new Error(legacyHead.stderr || legacyHead.stdout);
+    await writeFile(path.join(operator.checkoutDir, 'publish.yml'), 'allow:\n  - "docs/**"\n', 'utf8');
+    const restoreAdd = await command(['git', 'add', 'publish.yml'], operator.checkoutDir);
+    if (restoreAdd.exitCode !== 0) throw new Error(restoreAdd.stderr || restoreAdd.stdout);
+    const restoreCommit = await command(['git', 'commit', '-q', '-m', 'restore publication policy'], operator.checkoutDir);
+    if (restoreCommit.exitCode !== 0) throw new Error(restoreCommit.stderr || restoreCommit.stdout);
+    const currentHead = await command(['git', 'rev-parse', 'HEAD'], operator.checkoutDir);
+    if (currentHead.exitCode !== 0) throw new Error(currentHead.stderr || currentHead.stdout);
+    expect(currentHead.stdout.trim()).not.toBe(legacyHead.stdout.trim());
+    await writeFile(fixture.paths.operator, stableStringify({
+      ...operator,
+      baseCommit: legacyHead.stdout.trim(),
+    }), 'utf8');
+
+    const state = await inspectDogfoodSeries({
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: fixture.workspace,
+    });
+    expect(state.attempts[0]).toMatchObject({
+      stage: 'blocked',
+      blockingReasons: ['publication-boundary-policy-missing'],
+      canRepin: true,
+    });
+    expect(state.suggestedAttemptId).toBe('OD-01');
+  });
+
+  test('reports an advanced policy-bearing checkout as blocked without aborting the series', async () => {
+    const fixture = await renderedEligibleWorkspace();
+    const operator = JSON.parse(await readFile(fixture.paths.operator, 'utf8'));
+    await writeFile(path.join(operator.checkoutDir, 'revision.txt'), 'advanced checkout\n', 'utf8');
+    const add = await command(['git', 'add', 'revision.txt'], operator.checkoutDir);
+    if (add.exitCode !== 0) throw new Error(add.stderr || add.stdout);
+    const commit = await command(['git', 'commit', '-q', '-m', 'advance checkout'], operator.checkoutDir);
+    if (commit.exitCode !== 0) throw new Error(commit.stderr || commit.stdout);
+
+    const state = await inspectDogfoodSeries({
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: fixture.workspace,
+    });
+    expect(state.attempts[0]).toMatchObject({
+      stage: 'blocked',
+      blockingReasons: ['checkout-commit-mismatch'],
+      canRepin: false,
+    });
+  });
+
+  test('keeps a validated historical attempt visible after its checkout advances', async () => {
+    const fixture = await renderedEligibleWorkspace();
+    const decision = await recordWizardOwnerDecision({
+      attempt: fixture.attempt,
+      decision: 'accept',
+      reason: 'The completed historical decision remains visible.',
+      reviewSeconds: 12,
+      decidedAt: '2026-07-31T13:10:00.000Z',
+    });
+    await writeFile(path.join(fixture.attempt.runDir, 'validated-owner-decision.json'), stableStringify({
+      artifactType: 'private-validated-owner-self-dogfood-decision',
+      ...decision,
+      schemaVersion: 2,
+      evidenceClass: 'owner-self-dogfood',
+      countsTowardHumanPilot: false,
+      independentOwnerEvidence: false,
+      ownerDecisionEligibleAtValidation: true,
+      sourceWritePerformed: false,
+      publicDeploymentPerformed: false,
+    }), 'utf8');
+    const operator = JSON.parse(await readFile(fixture.paths.operator, 'utf8'));
+    await writeFile(path.join(operator.checkoutDir, 'revision.txt'), 'advanced after validation\n', 'utf8');
+    const add = await command(['git', 'add', 'revision.txt'], operator.checkoutDir);
+    if (add.exitCode !== 0) throw new Error(add.stderr || add.stdout);
+    const commit = await command(['git', 'commit', '-q', '-m', 'advance after validation'], operator.checkoutDir);
+    if (commit.exitCode !== 0) throw new Error(commit.stderr || commit.stdout);
+
+    const state = await inspectDogfoodSeries({
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: fixture.workspace,
+    });
+    expect(state.attempts[0]).toMatchObject({
+      stage: 'decision-validated',
+      blockingReasons: [],
+    });
+
+    await rm(operator.checkoutDir, { recursive: true, force: true });
+    const withoutCheckout = await inspectDogfoodSeries({
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: fixture.workspace,
+    });
+    expect(withoutCheckout.attempts[0]).toMatchObject({
+      stage: 'decision-validated',
+      blockingReasons: [],
+    });
   });
 
   test('allows only one concurrent owner-decision replacement', async () => {
@@ -365,7 +493,10 @@ describe('dogfood series inspection', () => {
     expect(outcomes.filter((outcome) => outcome.status === 'fulfilled')).toHaveLength(1);
     const rejected = outcomes.filter((outcome) => outcome.status === 'rejected');
     expect(rejected).toHaveLength(19);
-    expect(rejected.every((outcome) => outcome.reason.code === 'artifact-already-exists')).toBe(true);
+    expect(rejected.every((outcome) => [
+      'attempt-binding-busy',
+      'artifact-already-exists',
+    ].includes(outcome.reason.code))).toBe(true);
     const stored = JSON.parse(await readFile(
       path.join(fixture.attempt.runDir, 'wizard-owner-decision.json'),
       'utf8',
@@ -415,47 +546,116 @@ describe('guided action orchestration', () => {
     expect(calls[0]).toMatchObject({ attemptId: 'OD-01', expiresMinutes: 15 });
     expect(ui.pauses).toBe(1);
     expect(ui.resumes).toBe(1);
-    expect(ui.messages.join('\n')).toContain('expiring secret');
+    const messages = ui.messages.join('\n');
+    expect(messages).toContain('expiring secret');
+    expect(messages).toContain('"url":"http://100.64.0.42:48731/secret"');
+    expect(messages).not.toContain('"url":"http://node.example.ts.net:48731/secret"');
   });
 
-  test('cancels attempt initialization before any write or error log', async () => {
+  test('offers no initialization action for a superseded attempt', async () => {
     const ui = new ScriptedUi({
-      selects: ['OD-02', 'initialize', 'back', 'exit'],
-      inputs: ['/clean/checkout', 'docs/guide.md', 'https://example.org/guide/'],
-      confirms: [false],
+      selects: ['OD-02', 'paths', 'back', 'exit'],
     });
     let initialized = 0;
-    let logged = 0;
     await runDogfoodWizard({
       ui,
-      inspect: async () => fakeState('not-initialized', 'OD-02'),
+      inspect: async () => fakeState('superseded', 'OD-02'),
       actionOverrides: {
         initializeAttempt: async () => { initialized += 1; },
-        recordError: async () => { logged += 1; },
       },
     });
     expect(initialized).toBe(0);
-    expect(logged).toBe(0);
+    const actionMenu = ui.seenChoices.find((entry) => entry.message === 'Choose an action');
+    expect(actionMenu.choices.map((item) => item.value)).toEqual(['paths', 'back']);
   });
 
-  test('records failed initialization globally without creating a phantom attempt', async () => {
+  test('direct initialization rejects a superseded attempt before checkout inspection', async () => {
     const workspace = await workspaceRoot();
     await initializeOwnerDogfoodSeries({
       charter: dogfoodSeries(),
       projectRoot: PROJECT_ROOT,
       workspaceRoot: workspace,
     });
+    await expect(initializeAttempt({
+      attemptId: 'OD-02',
+      profile: 'owner-self-dogfood',
+      checkoutDir: '/definitely/missing/cyberbase',
+      sourcePath: 'docs/guide.md',
+      publicUrl: 'https://example.org/guide/',
+      sourceAuthorization: 'yes',
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: workspace,
+    })).rejects.toMatchObject({ code: 'dogfood-attempt-superseded' });
+    await expect(access(path.join(workspace, 'attempts', 'OD-02'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  test('blocked missing-policy attempts offer repin but no render or decision action', async () => {
     const ui = new ScriptedUi({
-      selects: ['OD-02', 'initialize', 'back', 'exit'],
-      inputs: ['/definitely/missing/cyberbase', 'docs/guide.md', 'https://example.org/guide/'],
+      selects: ['OD-01', 'back', 'exit'],
+    });
+    await runDogfoodWizard({
+      ui,
+      inspect: async () => fakeState('blocked'),
+    });
+    const actionMenu = ui.seenChoices.find((entry) => entry.message === 'Choose an action');
+    expect(actionMenu.choices.map((item) => item.value)).toEqual(['repin', 'paths', 'back']);
+    expect(ui.messages.join('\n')).toContain('publication-boundary-policy-missing');
+  });
+
+  test('cancels repin before preview or immutable write', async () => {
+    const ui = new ScriptedUi({
+      selects: ['OD-01', 'repin', 'back', 'exit'],
+      inputs: ['/replacement/cyberbase', 'Policy was absent at the original pin.'],
+      confirms: [false],
+    });
+    let repins = 0;
+    let logged = 0;
+    await runDogfoodWizard({
+      ui,
+      inspect: async () => fakeState('blocked'),
+      actionOverrides: {
+        repin: async () => { repins += 1; },
+        recordError: async () => { logged += 1; },
+      },
+    });
+    expect(repins).toBe(0);
+    expect(logged).toBe(0);
+  });
+
+  test('confirmed repin refreshes the attempt to a new submitted case', async () => {
+    const replacementCheckout = await cyberbaseCheckout();
+    const headResult = await command(['git', 'rev-parse', 'HEAD'], replacementCheckout);
+    if (headResult.exitCode !== 0) throw new Error(headResult.stderr || headResult.stdout);
+    const replacementBase = headResult.stdout.trim();
+    const ui = new ScriptedUi({
+      selects: ['OD-01', 'repin', 'back', 'exit'],
+      inputs: [replacementCheckout, 'Policy was absent at the original pin.'],
       confirms: [true, true],
     });
-    await runDogfoodWizard({ ui, projectRoot: PROJECT_ROOT, workspaceRoot: workspace });
-    await expect(access(path.join(workspace, 'attempts', 'OD-02'))).rejects.toMatchObject({ code: 'ENOENT' });
-    await access(path.join(workspace, 'logs'));
-    expect(ui.messages.join('\n')).toContain('checkout-head-unavailable');
-    expect(ui.actionStarts).toBe(1);
-    expect(ui.actionEnds).toBe(1);
+    const calls = [];
+    let repinned = false;
+    await runDogfoodWizard({
+      ui,
+      inspect: async () => fakeState(repinned ? 'submitted' : 'blocked'),
+      clock: () => Date.parse('2026-07-31T13:00:00.000Z'),
+      actionOverrides: {
+        repin: async (value) => {
+          calls.push(value);
+          repinned = true;
+          return { baseCommit: replacementBase };
+        },
+      },
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      attemptId: 'OD-01',
+      checkoutDir: replacementCheckout,
+      sourceAuthorization: 'yes',
+      reason: 'Policy was absent at the original pin.',
+      repinnedAt: '2026-07-31T13:00:00.000Z',
+    });
+    expect(ui.messages.join('\n')).toContain(`replacement base: ${replacementBase}`);
+    expect(ui.messages.join('\n')).toContain('Old runs remain unchanged.');
   });
 
   test('cancels preparation without running or logging an action', async () => {
@@ -500,33 +700,21 @@ describe('guided action orchestration', () => {
     expect(ui.actionEnds).toBe(1);
   });
 
-  test('requires explicit rejection for the precommitted rejection attempt', async () => {
+  test('offers no owner-decision action for the superseded rejection attempt', async () => {
     const ui = new ScriptedUi({
-      selects: ['OD-03', 'record-decision', 'reject', 'back', 'exit'],
-      inputs: ['The owner intentionally rejects this candidate.', '20'],
-      confirms: [true],
+      selects: ['OD-03', 'back', 'exit'],
     });
-    const recorded = [];
+    let recorded = 0;
     await runDogfoodWizard({
       ui,
-      inspect: async () => fakeState('awaiting-decision', 'OD-03'),
-      clock: () => Date.parse('2026-07-31T00:03:00.000Z'),
+      inspect: async () => fakeState('superseded', 'OD-03'),
       actionOverrides: {
-        recordDecision: async (value) => {
-          recorded.push(value);
-          return { decision: value.decision };
-        },
+        recordDecision: async () => { recorded += 1; },
       },
     });
-    expect(recorded).toHaveLength(1);
-    expect(recorded[0]).toMatchObject({
-      decision: 'reject',
-      reason: 'The owner intentionally rejects this candidate.',
-      reviewSeconds: 20,
-      decidedAt: '2026-07-31T00:03:00.000Z',
-    });
-    const decisionMenu = ui.seenChoices.find((entry) => entry.message === 'What is your editorial decision?');
-    expect(decisionMenu.choices.map((item) => item.value)).toEqual(['reject', 'cancel']);
+    expect(recorded).toBe(0);
+    const actionMenu = ui.seenChoices.find((entry) => entry.message === 'Choose an action');
+    expect(actionMenu.choices.map((item) => item.value)).toEqual(['paths', 'back']);
   });
 
   test('guards and logs a confirmed owner-decision failure', async () => {

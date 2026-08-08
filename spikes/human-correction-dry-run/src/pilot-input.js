@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { deepFreeze } from './case.js';
+import { deepFreeze, stableStringify } from './case.js';
 
 const ATTEMPT_RE = /^(?:HC|OD)-(?:0[1-9]|[1-9][0-9])$/u;
 const COMMIT_RE = /^[0-9a-f]{40}$/u;
@@ -8,6 +8,7 @@ const PROFILES = new Set(['cyberbase-rehearsal', 'owner-self-dogfood', 'independ
 const KINDS = new Set(['typo', 'factual', 'link', 'wording', 'formatting']);
 const PUBLICATION_BOUNDARIES = new Set(['cyberbaser', 'not-applicable']);
 const RENDERER_PROFILES = new Set(['cyberbase-quartz-v4.5.2', 'owner-static-output']);
+const INSTRUMENT_VERSIONS = new Set(['reader-form-v1', 'reader-form-v2']);
 export const OWNER_DOGFOOD_OBLIGATIONS = deepFreeze([
   'normal-correction',
   'signed-out-mobile-handoff',
@@ -15,6 +16,11 @@ export const OWNER_DOGFOOD_OBLIGATIONS = deepFreeze([
   'ambiguous-quote',
   'owner-rejection',
 ]);
+const SUPERSEDED_OWNER_DOGFOOD_ATTEMPTS = new Set(['OD-02', 'OD-03']);
+
+export function isSupersededOwnerDogfoodAttempt(attemptId) {
+  return SUPERSEDED_OWNER_DOGFOOD_ATTEMPTS.has(attemptId);
+}
 const OWNER_DOGFOOD_CLASSIFICATION = deepFreeze({
   evidenceClass: 'owner-self-dogfood',
   countsTowardHumanPilot: false,
@@ -39,6 +45,10 @@ const OPERATOR_KEYS = new Set([
   'publicUrl', 'sourceAuthorizedForLocalProcessing', 'independentOwnerAttested', 'readerUnaided',
   'accessInterruption', 'correctionKind', 'selectorContext', 'ownerPolicyRevision', 'ownerPolicy',
   'publicationBoundary', 'renderer',
+]);
+const OPERATOR_REPIN_KEYS = new Set([
+  'schemaVersion', 'artifactType', 'attemptId', 'reason', 'repinnedAt',
+  'previousCheckoutDir', 'previousBaseCommit', 'publishConfigPresent', 'replacementOperator',
 ]);
 const SELECTOR_KEYS = new Set(['prefix', 'suffix']);
 const RENDERER_KEYS = new Set(['profile', 'basePath', 'buildCommand']);
@@ -189,8 +199,16 @@ export function validateSubmission(input) {
   strictKeys(value, SUBMISSION_KEYS, 'submission');
   requiredKeys(value, SUBMISSION_KEYS, 'submission');
   if (value.schemaVersion !== 1) fail('invalid-schema-version', 'submission.schemaVersion must be 1');
-  if (value.instrumentVersion !== 'reader-form-v1') {
-    fail('invalid-instrument-version', 'submission.instrumentVersion must be reader-form-v1');
+  const instrumentVersion = exactString(
+    value.instrumentVersion,
+    'submission.instrumentVersion',
+    { nonEmpty: true, oneLine: true },
+  );
+  if (!INSTRUMENT_VERSIONS.has(instrumentVersion)) {
+    fail(
+      'invalid-instrument-version',
+      'submission.instrumentVersion must be reader-form-v1 or reader-form-v2',
+    );
   }
   if (!Number.isSafeInteger(value.elapsedMs) || value.elapsedMs < 0) {
     fail('invalid-elapsed-ms', 'submission.elapsedMs must be a non-negative safe integer');
@@ -206,17 +224,26 @@ export function validateSubmission(input) {
   if (creditConsent === 'yes' && publicCreditName.length === 0) {
     fail('credit-name-required', 'credit consent yes requires a non-empty public credit name');
   }
+  const exactQuote = exactString(
+    value.exactQuote,
+    'submission.exactQuote',
+    { nonEmpty: true, oneLine: true },
+  );
+  const replacement = exactString(value.replacement, 'submission.replacement', { oneLine: true });
+  if (instrumentVersion === 'reader-form-v2' && exactQuote === replacement) {
+    fail('no-op-replacement', 'reader-form-v2 replacement must differ from the exact quote');
+  }
 
   return deepFreeze({
     schemaVersion: 1,
-    instrumentVersion: 'reader-form-v1',
+    instrumentVersion,
     attemptId: exactAttemptId(value.attemptId),
     openedAt: exactIsoDate(value.openedAt, 'submission.openedAt'),
     submittedAt: exactIsoDate(value.submittedAt, 'submission.submittedAt'),
     elapsedMs: value.elapsedMs,
     pageUrl: exactHttpsUrl(value.pageUrl, 'submission.pageUrl'),
-    exactQuote: exactString(value.exactQuote, 'submission.exactQuote', { nonEmpty: true, oneLine: true }),
-    replacement: exactString(value.replacement, 'submission.replacement', { oneLine: true }),
+    exactQuote,
+    replacement,
     rationale: exactString(value.rationale, 'submission.rationale', { nonEmpty: true }),
     factualSource,
     publicCreditName,
@@ -224,7 +251,14 @@ export function validateSubmission(input) {
   });
 }
 
-export function createSubmissionRecord({ attemptId, openedAt, submittedAt, elapsedMs, fields }) {
+export function createSubmissionRecord({
+  attemptId,
+  openedAt,
+  submittedAt,
+  elapsedMs,
+  fields,
+  instrumentVersion = 'reader-form-v2',
+}) {
   const values = plainRecord(fields, 'form-fields');
   strictKeys(values, new Set([
     'pageUrl', 'exactQuote', 'replacement', 'rationale', 'factualSource', 'publicCreditName',
@@ -232,7 +266,7 @@ export function createSubmissionRecord({ attemptId, openedAt, submittedAt, elaps
   ]), 'form-fields');
   return validateSubmission({
     schemaVersion: 1,
-    instrumentVersion: 'reader-form-v1',
+    instrumentVersion,
     attemptId,
     openedAt,
     submittedAt,
@@ -387,6 +421,60 @@ export function validateOperator(input) {
     ownerPolicy: JSON.parse(JSON.stringify(ownerPolicy)),
     publicationBoundary,
     renderer,
+  });
+}
+
+export function validateOperatorRepin(input, originalOperatorInput) {
+  const value = plainRecord(input, 'operator-repin');
+  strictKeys(value, OPERATOR_REPIN_KEYS, 'operator-repin');
+  requiredKeys(value, OPERATOR_REPIN_KEYS, 'operator-repin');
+  if (value.schemaVersion !== 1) fail('invalid-schema-version', 'operator-repin.schemaVersion must be 1');
+  if (value.artifactType !== 'private-owner-self-dogfood-operator-repin') {
+    fail('invalid-operator-repin-artifact-type', 'operator-repin artifact type is invalid');
+  }
+  const originalOperator = validateOperator(originalOperatorInput);
+  const replacementOperator = validateOperator(value.replacementOperator);
+  if (originalOperator.profile !== 'owner-self-dogfood'
+    || replacementOperator.profile !== 'owner-self-dogfood') {
+    fail('operator-repin-profile-mismatch', 'operator repin requires owner self-dogfood operators');
+  }
+  const attemptId = exactAttemptId(value.attemptId);
+  if (attemptId !== originalOperator.attemptId || attemptId !== replacementOperator.attemptId) {
+    fail('operator-repin-attempt-mismatch', 'operator repin attempt IDs must match');
+  }
+  if (value.previousCheckoutDir !== originalOperator.checkoutDir
+    || value.previousBaseCommit !== originalOperator.baseCommit) {
+    fail('operator-repin-previous-binding-mismatch', 'operator repin previous binding does not match the original operator');
+  }
+  if (value.publishConfigPresent !== true) {
+    fail('operator-repin-policy-required', 'operator repin requires publish.yml at the replacement pin');
+  }
+  if (replacementOperator.baseCommit === originalOperator.baseCommit) {
+    fail('operator-repin-base-unchanged', 'operator repin must select a different base commit');
+  }
+  const {
+    checkoutDir: originalCheckout,
+    baseCommit: originalBase,
+    ...originalFixed
+  } = originalOperator;
+  const {
+    checkoutDir: replacementCheckout,
+    baseCommit: replacementBase,
+    ...replacementFixed
+  } = replacementOperator;
+  if (stableStringify(originalFixed) !== stableStringify(replacementFixed)) {
+    fail('operator-repin-binding-changed', 'operator repin may change only checkoutDir and baseCommit');
+  }
+  return deepFreeze({
+    schemaVersion: 1,
+    artifactType: 'private-owner-self-dogfood-operator-repin',
+    attemptId,
+    reason: exactNonBlankString(value.reason, 'operator-repin.reason'),
+    repinnedAt: exactIsoDate(value.repinnedAt, 'operator-repin.repinnedAt'),
+    previousCheckoutDir: originalCheckout,
+    previousBaseCommit: originalBase,
+    publishConfigPresent: true,
+    replacementOperator,
   });
 }
 

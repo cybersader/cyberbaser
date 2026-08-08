@@ -151,6 +151,49 @@ describe('private pilot owner review card', () => {
     expect(missing).toContain('rendering.preparedSnapshots');
   });
 
+  test('requires exact select-project-verify evidence for the Cyberbaser boundary', () => {
+    const cyberOperator = {
+      ...operator,
+      profile: 'owner-self-dogfood',
+      independentOwnerAttested: false,
+      publicationBoundary: 'cyberbaser',
+    };
+    const lane = {
+      mode: 'cyberbaser-select-project-verify',
+      selection: { sourcePublished: true },
+      projection: { ok: true, verification: { ok: true } },
+    };
+    const renderEvidence = {
+      artifactType: 'private-local-rendered-correction-run',
+      sourceCheckout: { publishConfigPresent: true },
+      projection: { baseline: lane, candidate: lane },
+      renderedTarget: {
+        comparable: { sameRenderedPage: true },
+        baseline: { observedExactText: 'Old exact text.', byteLength: 100 },
+        candidate: { observedExactText: 'New exact text.', byteLength: 100 },
+      },
+      siteChecks: {
+        baseline: { broken: 0 },
+        candidate: { broken: 0 },
+        linkDelta: { counts: { candidateOnly: 0 } },
+      },
+    };
+
+    expect(reviewCardContractMissing({
+      operator: cyberOperator,
+      evaluation,
+      renderEvidence,
+    })).not.toContain('projection.cyberbaserBoundary');
+
+    const legacy = structuredClone(renderEvidence);
+    legacy.projection.baseline.mode = 'verbatim-without-publish-config';
+    expect(reviewCardContractMissing({
+      operator: cyberOperator,
+      evaluation,
+      renderEvidence: legacy,
+    })).toContain('projection.cyberbaserBoundary');
+  });
+
   test('identical inputs produce byte-identical private JSON and HTML', () => {
     const first = buildPilotOwnerReview({ submission, operator, evaluation, status });
     const second = buildPilotOwnerReview({ submission, operator, evaluation, status });

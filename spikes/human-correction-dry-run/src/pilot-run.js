@@ -1,4 +1,4 @@
-import { lstat, readFile, realpath, stat } from 'node:fs/promises';
+import { lstat, readFile, readdir, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { applyCorrection, prepareCorrection } from '@cyberbaser/correction';
 import { checkSite } from '@cyberbaser/linkcheck';
@@ -9,6 +9,7 @@ import {
   candidateOnlyLinkDelta,
   captureRenderedTargetEvidence,
   inspectCheckout,
+  inspectPinnedPublicationPolicy,
   runLiveCorrection,
 } from './live-run.js';
 import {
@@ -19,11 +20,16 @@ import {
   renderAttestationTemplate,
   validateDogfoodObservationSeriesBinding,
   validateOperator,
+  validateOperatorRepin,
   validateOwnerDecision,
   validateRenderAttestation,
   validateSubmission,
 } from './pilot-input.js';
-import { buildPilotOwnerReview, reviewCardContractMissing } from './pilot-review-card.js';
+import {
+  buildPilotOwnerReview,
+  cyberbaserBoundaryEvidenceComplete,
+  reviewCardContractMissing,
+} from './pilot-review-card.js';
 import { buildReviewCard } from './review-card.js';
 import {
   atomicCreateArtifact,
@@ -31,9 +37,13 @@ import {
   attemptPaths,
   commitRunStaging,
   createRunStaging,
+  deriveCheckoutHead,
   loadAttemptJson,
+  loadAttemptOperator,
   loadOwnerDogfoodSeries,
+  matchReaderFormInstrumentVersion,
   verifyAttemptWorkspace,
+  withAttemptBindingLock,
   writeStagedArtifact,
 } from './pilot-workspace.js';
 
@@ -107,7 +117,7 @@ function renderedStatus({ operator, priorStatus, evaluation, renderEvidence }) {
   const linkDelta = renderEvidence.siteChecks.linkDelta;
   const candidateOnlyLinks = linkDelta.counts.candidateOnly;
   const publicationReady = operator.publicationBoundary === 'not-applicable'
-    || renderEvidence.artifactType === 'private-local-rendered-correction-run';
+    || cyberbaserBoundaryEvidenceComplete(renderEvidence);
   const renderingReady = candidateOnlyLinks === 0
     && Object.values(renderEvidence.renderedTarget.comparable).every(Boolean);
   const missingReviewEvidence = reviewCardContractMissing({ operator, evaluation, renderEvidence });
@@ -141,11 +151,32 @@ function renderedStatus({ operator, priorStatus, evaluation, renderEvidence }) {
 async function loadValidatedAttempt(paths) {
   await verifyAttemptWorkspace(paths);
   const submission = validateSubmission(await loadAttemptJson(paths.submission, 'submission', paths));
-  const operator = validateOperator(await loadAttemptJson(paths.operator, 'operator', paths));
+  const operator = await loadAttemptOperator(paths);
   if (submission.attemptId !== paths.attemptId || operator.attemptId !== paths.attemptId) {
     fail('attempt-id-mismatch', 'attempt files must match the requested attempt ID');
   }
+  const issuedInstrumentVersion = await matchReaderFormInstrumentVersion(
+    await readFile(paths.readerForm),
+    paths.attemptId,
+    operator.profile,
+  );
+  if (submission.instrumentVersion !== issuedInstrumentVersion) {
+    fail(
+      'submission-instrument-version-mismatch',
+      'submission instrument version does not match the issued reader form',
+    );
+  }
   return { submission, operator };
+}
+
+function assertPublicationPolicyAtPin(operator, checkout) {
+  if (operator.publicationBoundary === 'cyberbaser'
+    && checkout.publishConfigPresent !== true) {
+    fail(
+      'publication-boundary-policy-missing',
+      'Cyberbaser processing requires publish.yml at the pinned source revision',
+    );
+  }
 }
 
 async function inspectBeforeAndAfter({ operator, action, inspector = inspectCheckout }) {
@@ -228,6 +259,128 @@ function normalizeStoredStatus(statusInput, operator) {
   });
 }
 
+export async function repinOwnerDogfoodAttempt({
+  attemptId,
+  checkoutDir,
+  sourceAuthorization,
+  reason,
+  repinnedAt = new Date().toISOString(),
+  projectRoot,
+  workspaceRoot,
+} = {}) {
+  const paths = attemptPaths(attemptId, { projectRoot, workspaceRoot });
+  await verifyAttemptWorkspace(paths);
+  const series = await loadOwnerDogfoodSeries({ projectRoot, workspaceRoot });
+  if (!series.attemptIds.includes(paths.attemptId)) {
+    fail('dogfood-attempt-not-declared', `${paths.attemptId} is not declared in the owner self-dogfood series`);
+  }
+  if (sourceAuthorization !== 'yes') {
+    fail('source-authorization-required', 'authorize-source must be exactly yes');
+  }
+  const originalOperator = validateOperator(
+    await loadAttemptJson(paths.operator, 'operator', paths),
+  );
+  if (originalOperator.profile !== 'owner-self-dogfood') {
+    fail('operator-repin-profile-mismatch', 'only owner self-dogfood attempts may be repinned');
+  }
+  if (await artifactExists(paths.operatorRepin)) {
+    fail('operator-repin-already-exists', 'this attempt already has an immutable operator repin');
+  }
+  const submission = validateSubmission(
+    await loadAttemptJson(paths.submission, 'submission', paths),
+  );
+  return withAttemptBindingLock(paths, async () => {
+    if (await artifactExists(paths.operatorRepin)) {
+      fail('operator-repin-already-exists', 'this attempt already has an immutable operator repin');
+    }
+    const canonicalDecision = await loadAttemptJson(paths.ownerDecision, 'owner-decision', paths);
+    if (canonicalDecision?.decision !== ''
+      || canonicalDecision?.reason !== ''
+      || canonicalDecision?.reviewSeconds !== null
+      || canonicalDecision?.decidedAt !== '') {
+      fail('operator-repin-after-decision', 'a recorded owner decision prevents operator repinning');
+    }
+    const runs = await readdir(paths.runs, { withFileTypes: true });
+    for (const entry of runs) {
+      if (!entry.isDirectory()) continue;
+      const runDir = path.join(paths.runs, entry.name);
+      if (await artifactExists(path.join(runDir, 'wizard-owner-decision.json'))
+        || await artifactExists(path.join(runDir, 'validated-owner-decision.json'))) {
+        fail('operator-repin-after-decision', 'a recorded owner decision prevents operator repinning');
+      }
+    }
+    const originalPolicy = await inspectPinnedPublicationPolicy({
+      checkoutDir: originalOperator.checkoutDir,
+      pinnedCommit: originalOperator.baseCommit,
+      repository: originalOperator.repository,
+    });
+    if (originalPolicy.publishConfigPresent === true) {
+      fail(
+        'operator-repin-not-required',
+        'operator repin is limited to historical owner-dogfood pins that lack publish.yml',
+      );
+    }
+
+    const replacementHead = await deriveCheckoutHead(checkoutDir);
+    const replacementCheckout = await inspectCheckout({
+      checkoutDir,
+      pinnedCommit: replacementHead,
+      repository: originalOperator.repository,
+      sourcePath: originalOperator.sourcePath,
+    });
+    assertPublicationPolicyAtPin(originalOperator, replacementCheckout);
+    if (replacementCheckout.head === originalOperator.baseCommit) {
+      fail('operator-repin-base-unchanged', 'operator repin must select a different base commit');
+    }
+    const replacementOperator = validateOperator({
+      ...originalOperator,
+      checkoutDir: replacementCheckout.root,
+      baseCommit: replacementCheckout.head,
+    });
+    const originalCase = convertPilotSubmission(submission, originalOperator);
+    const replacementCase = convertPilotSubmission(submission, replacementOperator);
+    const originalCaseId = caseId(originalCase);
+    const replacementCaseId = caseId(replacementCase);
+    if (replacementCaseId === originalCaseId) {
+      fail('operator-repin-case-unchanged', 'operator repin must produce a new base-bound mechanical case');
+    }
+    await inspectBeforeAndAfter({
+      operator: replacementOperator,
+      action: (checkout) => {
+        assertPublicationPolicyAtPin(replacementOperator, checkout);
+        return evaluateCorrection({
+          caseData: replacementCase,
+          checkoutDir: checkout.root,
+          ownerPolicy: replacementOperator.ownerPolicy,
+          policyRevision: replacementOperator.ownerPolicyRevision,
+          trustSubject: { authorType: 'anonymous', author: '' },
+        });
+      },
+    });
+    const repin = validateOperatorRepin({
+      schemaVersion: 1,
+      artifactType: 'private-owner-self-dogfood-operator-repin',
+      attemptId: paths.attemptId,
+      reason,
+      repinnedAt,
+      previousCheckoutDir: originalOperator.checkoutDir,
+      previousBaseCommit: originalOperator.baseCommit,
+      publishConfigPresent: true,
+      replacementOperator,
+    }, originalOperator);
+    await atomicCreateArtifact(paths.operatorRepin, stableStringify(repin), paths);
+    return deepFreeze({
+      attemptId: paths.attemptId,
+      originalCaseId,
+      replacementCaseId,
+      previousBaseCommit: originalOperator.baseCommit,
+      baseCommit: replacementOperator.baseCommit,
+      checkoutDir: replacementOperator.checkoutDir,
+      publishConfigPresent: true,
+    });
+  });
+}
+
 export async function preparePilotAttempt({
   attemptId,
   projectRoot,
@@ -240,13 +393,16 @@ export async function preparePilotAttempt({
 
   const evaluation = await inspectBeforeAndAfter({
     operator,
-    action: (checkout) => evaluateCorrection({
-      caseData,
-      checkoutDir: checkout.root,
-      ownerPolicy: operator.ownerPolicy,
-      policyRevision: operator.ownerPolicyRevision,
-      trustSubject: { authorType: 'anonymous', author: '' },
-    }),
+    action: (checkout) => {
+      assertPublicationPolicyAtPin(operator, checkout);
+      return evaluateCorrection({
+        caseData,
+        checkoutDir: checkout.root,
+        ownerPolicy: operator.ownerPolicy,
+        policyRevision: operator.ownerPolicyRevision,
+        trustSubject: { authorType: 'anonymous', author: '' },
+      });
+    },
   });
   if (evaluation.caseId !== mechanicalCaseId) fail('mechanical-case-id-mismatch', 'deterministic case ID changed during preparation');
   if (evaluation.trust.authorType !== 'anonymous') {
@@ -327,13 +483,16 @@ async function revalidatePreparedRun({ paths, submission, operator, caseData, me
   assertStableEqual(storedCase, caseData, 'prepared-case-mismatch', 'stored case does not match the current submission and owner mapping');
   const freshEvaluation = await inspectBeforeAndAfter({
     operator,
-    action: (checkout) => evaluateCorrection({
-      caseData,
-      checkoutDir: checkout.root,
-      ownerPolicy: operator.ownerPolicy,
-      policyRevision: operator.ownerPolicyRevision,
-      trustSubject: { authorType: 'anonymous', author: '' },
-    }),
+    action: (checkout) => {
+      assertPublicationPolicyAtPin(operator, checkout);
+      return evaluateCorrection({
+        caseData,
+        checkoutDir: checkout.root,
+        ownerPolicy: operator.ownerPolicy,
+        policyRevision: operator.ownerPolicyRevision,
+        trustSubject: { authorType: 'anonymous', author: '' },
+      });
+    },
   });
   assertStableEqual(storedEvaluation, freshEvaluation, 'prepared-evaluation-mismatch', 'stored mechanical evidence does not match a fresh evaluation of the pinned source bytes');
   if (freshEvaluation.caseId !== mechanicalCaseId || storedStatus.mechanicalCaseId !== mechanicalCaseId) {
@@ -589,6 +748,34 @@ export async function renderPilotAttempt({
   });
 }
 
+export function validateEligibleOwnerDecisionBinding(decisionInput, {
+  attemptId,
+  mechanicalCaseId,
+  candidateDigest,
+  ownerDecisionEligible,
+  requiredDecision,
+} = {}) {
+  if (ownerDecisionEligible !== true) {
+    fail('owner-decision-not-eligible', 'owner decision binding requires an eligible candidate');
+  }
+  const decision = validateOwnerDecision(decisionInput);
+  if (decision.attemptId !== attemptId
+    || decision.mechanicalCaseId !== mechanicalCaseId
+    || decision.candidateDigest !== candidateDigest) {
+    fail(
+      'owner-decision-binding-mismatch',
+      'owner decision does not match the eligible attempt, mechanical case, and candidate digest',
+    );
+  }
+  if (requiredDecision !== undefined && decision.decision !== requiredDecision) {
+    fail(
+      'dogfood-owner-rejection-required',
+      'the required rejection path must use a reject decision',
+    );
+  }
+  return decision;
+}
+
 export async function validatePilotOwnerDecision({
   attemptId,
   projectRoot,
@@ -717,20 +904,15 @@ export async function validatePilotOwnerDecision({
       await loadAttemptJson(paths.ownerDecision, 'owner-decision', paths),
     );
   }
-  if (decision.attemptId !== paths.attemptId
-    || decision.mechanicalCaseId !== mechanicalCaseId
-    || decision.candidateDigest !== preparedRun.evaluation.candidate.digest) {
-    fail('owner-decision-binding-mismatch', 'owner decision does not match the eligible attempt, mechanical case, and candidate digest');
-  }
-  if (
-    dogfoodSeries?.obligationAssignments['owner-rejection'] === paths.attemptId
-    && decision.decision !== 'reject'
-  ) {
-    fail(
-      'dogfood-owner-rejection-required',
-      'the attempt precommitted for owner rejection must end with a reject decision',
-    );
-  }
+  decision = validateEligibleOwnerDecisionBinding(decision, {
+    attemptId: paths.attemptId,
+    mechanicalCaseId,
+    candidateDigest: preparedRun.evaluation.candidate.digest,
+    ownerDecisionEligible: expectedStatus.ownerDecisionEligible,
+    ...(dogfoodSeries?.obligationAssignments['owner-rejection'] === paths.attemptId
+      ? { requiredDecision: 'reject' }
+      : {}),
+  });
   const classification = evidenceClassification(operator);
   const validated = deepFreeze({
     artifactType: operator.profile === 'owner-self-dogfood'

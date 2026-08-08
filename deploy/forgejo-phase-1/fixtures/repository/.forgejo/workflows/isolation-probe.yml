@@ -1,0 +1,35 @@
+name: isolation-probe
+on:
+  push:
+    branches: [isolation-probe]
+
+jobs:
+  isolation-probe:
+    runs-on: ${{ vars.WP3_RUNNER_LABEL }}
+    steps:
+      - name: Prove workflow code cannot reach host authority
+        run: |
+          set -euo pipefail
+          fail=0
+          deny() { printf 'FORBIDDEN ACCESS AVAILABLE: %s\n' "$1" >&2; fail=1; }
+          test -n "${WP3_HOST_RUN_PARENT:-}"
+          test -n "${WP3_HOST_HOME:-}"
+          test -n "${WP3_PUBLICATION_ROOT:-}"
+          test -n "${CYBERBASER_TOOL_ROOT:-}"
+          for socket in /var/run/docker.sock /run/docker.sock /run/user/*/docker.sock /run/podman/podman.sock; do
+            if [ -e "$socket" ]; then deny "container engine socket $socket"; fi
+          done
+          if [ -e "${WP3_HOST_RUN_PARENT}" ]; then deny "host run parent ${WP3_HOST_RUN_PARENT}"; fi
+          if [ -e "${WP3_HOST_HOME}/.gitconfig" ]; then deny "host Git identity in ${WP3_HOST_HOME}"; fi
+          if [ -d "${WP3_HOST_HOME}/.local/share/docker" ]; then deny 'host engine data root'; fi
+          if [ -d "${WP3_HOST_HOME}/.ssh" ]; then deny 'host SSH directory'; fi
+          if bun -e 'const t=setTimeout(()=>process.exit(1),1500);await Bun.connect({hostname:"127.0.0.2",port:8443,socket:{open(){process.exit(0)},connectError(){process.exit(1)},error(){process.exit(1)}}}).catch(()=>process.exit(1))' 2>/dev/null; then
+            deny 'host loopback forge origin'
+          fi
+          if touch "${CYBERBASER_TOOL_ROOT}/write-probe" 2>/dev/null; then
+            rm -f -- "${CYBERBASER_TOOL_ROOT}/write-probe"
+            deny 'writable tool allowlist'
+          fi
+          test -w "${WP3_PUBLICATION_ROOT}"
+          test -r "${CYBERBASER_TOOL_ROOT}/private-checkout"
+          exit "$fail"

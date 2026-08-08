@@ -265,7 +265,7 @@ The reconciliation, stated once so it stops drifting: **compose where a commodit
 | A rendered preview before approving | Designed, priced at three days, not built | A second deploy target with origin isolation; the current host allows one environment per repository |
 | Approving from a phone | Not built | The preview above; it is the whole point of the phone case |
 | Auto-approval for trusted contributors on trivial changes | Classifier built, decision-only | The classifier labels a route; it does not merge. The gate workflow has never executed. |
-| Submitting a change with no account | Not built | A proposal-intake mechanism that cannot write source or authorize application; owner self-dogfooding runs first, while the independent human pilot remains deferred |
+| Submitting a change with no account | Not built | A proposal-intake mechanism that cannot write source or authorize application; one owner loop has run, while the independent human pilot remains deferred |
 | Contributor attribution on the page | Not built | A decision, first. See the ledger above. |
 | The maintainer never leaves their own editor | True today | Nothing. This one works. |
 
@@ -304,7 +304,7 @@ These are journeys, not features, and the examples deliberately vary. Swap in a 
 
 **The zero-git contributor.** An HR lead reads the onboarding page in their company handbook and spots an outdated reference. They fix it in place. What happens next is the maintainer's setting: on an open wiki it submits anonymously, on a tighter one they verify an email first. Either way it lands in a queue rather than going straight live. They never clone anything and never learn git. **Today this person's only route is the forge's web editor, which needs an account, so this journey is the vision rather than the present.**
 
-**The maintainer.** External proposals arrive through an owner-controlled review boundary. The trust curve they set when they stood the wiki up decides how much scrutiny each one gets: anonymous proposals queue heavily, verified contributors receive faster review, and long-trusted contributors may receive a lighter policy route. Every external spoke still submits a pinned, bounded proposal; none writes the authority directly. The maintainer keeps their own local editor as the primary direct-authoring surface, with no parallel content system to synchronize. **Measured, honestly: the current GitHub-backed loop takes three to five minutes, not the sixty to ninety seconds an earlier draft claimed.**
+**The maintainer.** External proposals arrive through an owner-controlled review boundary. The trust curve they set when they stood the wiki up decides how much scrutiny each one gets: anonymous proposals queue heavily, verified contributors receive faster review, and long-trusted contributors may receive a lighter policy route. Every external spoke still submits a pinned, bounded proposal; none writes the authority directly. The maintainer keeps direct local authority: they may use their preferred Markdown editor or a private policy-bound owner tool such as the current owner-alpha wiki, with no parallel content database to synchronize. **Measured, honestly: the current GitHub-backed external loop takes three to five minutes, not the sixty to ninety seconds an earlier draft claimed.**
 
 </details>
 

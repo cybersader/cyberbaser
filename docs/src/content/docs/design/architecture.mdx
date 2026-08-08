@@ -1,6 +1,6 @@
 ---
 title: Architecture
-description: The owner-controlled hub as built — six boundary packages, replaceable authoring and rendering spokes, current GitHub/Quartz dogfood, and the interfaces still missing.
+description: "The owner-controlled hub as built: six no-authority boundary libraries, an append-only decision-ledger package, a private policy-bound owner writer, replaceable external authoring and rendering spokes, and the interfaces still missing."
 sidebar:
   order: 21
 status: research
@@ -25,9 +25,11 @@ tags: [design, architecture]
   SVG (it scales down to ~5px text on a phone).
 */}
 
-Cyberbaser, as built, is **six small packages and three vault-side dogfood CI jobs around an owner-controlled Markdown source**. The packages select what may publish, project disposable copies, prepare one exact candidate splice in memory, classify integrity and trust, and inspect rendered links. None writes the owner's authoritative source. The current GitHub and Quartz screens prove one arrangement; they are replaceable spokes, not the architecture's essence.
+Cyberbaser, as built, is **six no-authority boundary libraries, an append-only decision-ledger package, a private owner-alpha application with a mechanically accepted Linux/amd64 OCI deployment, two deployment-observation providers, and three installed vault-side dogfood CI jobs around an owner-controlled Markdown source**. The six libraries select what may publish, project disposable copies, prepare exact candidate splices in memory, classify integrity and trust, and inspect rendered links. The ledger now has an implemented and hermetically tested two-stage GitHub adapter: an unprivileged capture uploads only a routing hint, while a trusted `workflow_run` recorder reconstructs authority and may append only the governance JSONL record through exact non-force publication. Those workflows are not installed in the live vault, no real fork run has occurred, and there are zero live observations. The separately selected owner-alpha route may write one declared exact operation because the owner's Save activates a precise durable policy for that edit. WP2 gives that same route an owner-operated container home without changing its authority, exact-change, or recovery rules. WP3 phase one adds a strict Forgejo 16 Actions observation adapter and disposable acceptance fixture behind the same provider seam; its hermetic tests pass, but adversarial review showed that the planned same-UID host runner lacks credential and container-socket isolation. The opt-in gate now fails before resource creation pending a reviewed runner boundary and later real-engine acceptance. The current GitHub, Actions, Pages, and Quartz arrangement is dogfood infrastructure, not the architecture's essence.
 
-The stable model is broader than today's interfaces. Local editors, forge editors, reader-correction controls, rich browser or CMS-like tools, and agents may all be authoring spokes. External spokes must emit bounded proposals against a pinned source base and converge on owner review. The owner continues to author the source directly in their preferred local tool. Renderers remain independently replaceable output spokes.
+The stable model is broader than today's interfaces. Local editors, forge editors, reader-correction controls, rich browser or CMS-like tools, and agents may all be authoring spokes. External spokes must emit bounded proposals against a pinned source base and converge on owner-controlled review or delegated policy; they cannot write canonical source directly. The owner may continue authoring in a preferred local tool or use the private owner-alpha wiki as a direct-authority lane. Renderers remain independently replaceable output spokes.
+
+Deployment observation is now explicitly provider-shaped without becoming a generalized deployment receipt. Owner-alpha dispatches on one strict provider field. GitHub retains its exact Actions/Pages/environment contract. Forgejo binds an exact 16.x instance, repository, run, job attempts, handles, and terminal deployment-job dependencies, then leaves publication proof to the existing live witness. Both providers remain opaque evidence to the unchanged durable pipeline. See [Forgejo Actions phase one](/cyberbaser/development/forgejo-phase-1/).
 
 ## What an external proposal looks like today
 
@@ -120,7 +122,7 @@ The step-3 card is the interesting one because most of its evidence already exis
 
 <p class="cb-fig-cap">The same two decisions, on a phone. This is what the computed data would look like if anything rendered it.</p>
 
-<p class="cb-fig-note"><span class="cb-chip cb-chip-stop">not built</span>No queue, no auth, no server. Whether this should ever be a hosted screen or a static page generated in CI is the <a href="#open-the-console-fork">console fork</a>, still open and costed below.</p>
+<p class="cb-fig-note"><span class="cb-chip cb-chip-stop">not built</span>No external queue, public auth, or hosted moderation server. The private owner-alpha process is a separate owner-only authority route on a private network address. Whether the external review surface should ever be hosted or generated statically in CI is the <a href="#open-the-console-fork">console fork</a>, still open and costed below.</p>
 
 ## What owner-local direct authoring looks like
 
@@ -183,6 +185,18 @@ The step-3 card is the interesting one because most of its evidence already exis
 
 </div>
 
+### The private owner-alpha lane
+
+The owner now has a second direct-authority route for dogfood: **their machine runs the wiki as a small personal server, and every device they trust is just a browser**. Spot a typo while reading on the phone, tap Edit, fix it, tap Save once; the server machine (which alone holds the vault, Git, and credentials) verifies, applies, publishes, and confirms the change live. Both origins bind one owner-chosen private numeric IPv4 address: loopback by default for single-machine use, or an RFC 1918 / RFC 6598 address so an encrypted overlay or trusted LAN carries the wiki to the owner's other devices (the app is transport-neutral and never coupled to one overlay vendor). Pinned Quartz runs on the unprivileged reader origin. Its absolute Edit links cross to the separate privileged origin, where a one-time bootstrap establishes a per-device owner session; the server console can mint a fresh one-time sign-in link for each additional device. One **Save and publish** action durably records the source session, exact UTF-8 operation, pinned base, policy revision, and live target before the browser receives acceptance.
+
+After acceptance, the policy runs the bounded mechanics without routine approval screens: pre-apply source, OFM, trust, publication, projection, render, and link checks; exact atomic source application; one-parent, one-path commit; normal non-force push to the bound destination; exact Actions run and Pages deployment monitoring; visible live-text verification; and local Quartz rebuild. Startup recovery resumes only states whose durable classification is safe. Ambiguous application state stops for manual intervention rather than replaying an effect.
+
+This does not make an external proposal adapter a writer. It is the owner's own local authority route, restricted to existing tracked UTF-8 LF Markdown body edits and one contiguous exact operation. The hermetic browser acceptance test proves the composition with a temporary checkout and local bare remote; it is mechanical evidence, not unfamiliar-reader or independent-owner usability evidence. The first real policy-activated Cyberbase Save completed on 2026-08-02 through the bare-metal route.
+
+WP2 packages the same server as one Linux/amd64 OCI image with two explicit Docker Engine profiles. Rootless mode runs container `0:0` inside the user namespace that maps to the unprivileged vault owner; rootful mode runs the main process as the vault owner's exact nonzero UID/GID. Linux host networking is mandatory, no `ports:` bridge exists, and the configured numeric private address must be assigned in the Linux namespace Bun joins. The image root is read-only, `/vault` is the only writable host bind, config is staged into private tmpfs, durable state lives in a profile-bound named volume, and HTTPS credentials cross only an operator-supplied Unix socket. The image contains a verified offline Quartz seed, but production Git, deployment observation, and live verification still require outbound access.
+
+Deployment shape: the server machine holds the vault, credentials, and policy; trusted devices hold only a browser session; the public site still changes only through the pushed commit and the vault's own CI. The full operator path, including bootstrap attachment, restart recovery, upgrades, evidence, and deliberate limits, is on [Owner-alpha container deployment](/cyberbaser/development/owner-alpha-container-deployment/). The user journey remains on [Contribution workflows](/cyberbaser/design/contribution-workflows/#the-deployment-story-what-runs-where).
+
 <div class="cb-glance" role="img" aria-label="On the left, the vault as a folder of markdown files with two config files. On the right, the same note published as a page. The connector is labelled verbatim paths.">
   <figure class="cb-glance-panel">
     <div class="cb-tree cb-tree-mini">
@@ -211,51 +225,51 @@ The step-3 card is the interesting one because most of its evidence already exis
 
 <p class="cb-fig-cap">One file, two surfaces. Delete the right-hand side and nothing is lost; delete the left and everything is.</p>
 
-:::danger[The maintainer's own path has fewer checks than a stranger's]
-An honest typo that deletes a callout is caught in the contribution journey and missed in the authoring one. Both validators are wired to `pull_request` only, and direct pushes to `main` are not merely allowed, they are the maintainer's daily authoring path. That constraint is real (requiring PRs for everything would break Obsidian Git authoring), so the fix is not "turn on branch protection", it is **a `push`-triggered validation job that reports rather than blocks**. It has not been built.
+:::danger[Direct Obsidian pushes still have fewer checks]
+The private owner-alpha route now validates and verifies its own exact source-to-live job. Direct Obsidian or terminal pushes remain a separate owner lane: both vault validators are wired to `pull_request` only, so an honest direct push that deletes a callout is still missed before publication. Requiring PRs for everything would break that local workflow. The unbuilt mitigation remains **a `push`-triggered validation job that reports rather than blocks**.
 :::
 
 ## The verdict
 
-**Cyberbaser, as built, is six small packages and three vault-side dogfood CI jobs that govern parts of a Markdown knowledge base:** what may publish, how disposable copies are projected, whether a proposed change damaged the content, which review route applies, whether links resolve, and how one exact candidate splice can be prepared in memory. None writes the owner's authoritative source.
+**Cyberbaser, as built, is six no-authority boundary libraries, an append-only decision-ledger package, a private owner-alpha application with a mechanically accepted OCI deployment, and three installed vault-side dogfood CI jobs that govern parts of a Markdown knowledge base:** what may publish, how disposable copies are projected, whether a change damaged the content, which trust route applies, whether links resolve, how governance outcomes are recorded, and how one exact operation reaches a verified live page under owner authority. The six libraries do not write authoritative source. The ledger CLI writes only its governance JSONL record; its two-stage capture/record adapter is implemented and hermetically tested but not installed in the live vault. The owner-alpha application writes source only as a direct owner-local route after one Save activates a precise durable policy. Its Linux/amd64 image changes deployment mechanics, not authority.
 
-The broader architecture is a stable owner-controlled hub between replaceable authoring and rendering spokes. A conforming rich editor or CMS-like surface may model content however it chooses, but its durable output is a bounded proposal against a pinned base. It cannot directly regenerate the source, become a second authority, or bypass owner review. This adapter contract is an architectural invariant, not a shipped generalized API.
+The broader architecture is a stable owner-controlled hub between replaceable authoring and rendering spokes. A conforming external rich editor or CMS-like surface may model content however it chooses, but its durable output is a bounded proposal against a pinned base. It cannot directly regenerate the source, become a second authority, or bypass owner-controlled review or delegated policy. This external adapter contract is an architectural invariant, not a shipped generalized API.
 
-The current interfaces remain much narrower. GitHub and Quartz own nearly every shipped screen. The private pilot kit renders one local exact-correction review artifact, while the GitHub path still scatters governance evidence across a raw diff, labels, and logs.
+The current interfaces remain narrower than the vision. The private owner-alpha source editor and job page are built for owner dogfood, while GitHub still owns the external contribution editor, identity, PR review, and merge surfaces. The private correction pilot remains a study instrument, and the GitHub path still scatters governance evidence across a raw diff, labels, and logs.
 
 :::caution[What this page does not claim]
-No browser/CMS authoring spoke, auth component, product moderation UI, preview deployment, generalized adapter API, or Cyberbaser server is shipped. A serializer-backed CMS writer is architecturally inadmissible; rich presentation itself is not. `main` on the vault repo has **no branch protection and no rulesets** (verified 2026-07-26: `branches/main/protection` returns 404, `rulesets` returns `[]`), `ofm-check.yml` is `continue-on-error: true`, and the auto-merge step in `trust-gate.yml` is commented out behind six named preconditions. **Nothing in this system can currently block a merge.**
+No account-free external browser/CMS authoring spoke, public auth service, product moderation UI, preview deployment, generalized adapter API, or hosted Cyberbaser server is shipped. The private owner-alpha server binds only an owner-chosen private network address and is not an intake product. Its OCI image is local-only and mechanically accepted; Docker Desktop, bridge publishing, a physical-device Save through the container, an external-forge/live-site container Save, and registry publication remain unclaimed. A serializer-backed CMS writer is architecturally inadmissible; rich presentation itself is not. `main` on the vault repo has **no branch protection and no rulesets** (verified 2026-07-26: `branches/main/protection` returns 404, `rulesets` returns `[]`), `ofm-check.yml` is `continue-on-error: true`, and the auto-merge step in `trust-gate.yml` is commented out behind six named preconditions. The owner-alpha route can stop its own job before source application, but **nothing in the external GitHub contribution path can currently block a merge**.
 :::
 
-| As built (current-repo inventory 2026-07-29; dated vault observations retained) | |
+| As built (aligned 2026-08-03; dated vault observations retained) | |
 |---|---|
-| Packages | 6 (`correction`, `ofm`, `publish`, `projection`, `linkcheck`, `trust`) |
-| Tests green | 187 across the six packages in fresh package-scoped runs on 2026-07-29 |
-| CI workflows | 3 on the vault repo, 2 on this repo (`deploy.yml`, `federation-fixture.yml`) |
-| Renderer spokes | 1 (Quartz v4.5.2, pinned, unforked), 0 tests |
+| Packages | 7: six no-authority boundary libraries (`correction`, `ofm`, `publish`, `projection`, `linkcheck`, `trust`) plus `ledger` (built, not installed in the vault) |
+| Owner application | 1 private app (`owner-alpha`) on an owner-chosen private address, with dual origins, durable jobs, automatic exact source-to-live execution, and one mechanically accepted local-only Linux/amd64 OCI package |
+| CI workflows | 3 on the vault repo, 4 on this repo (`deploy.yml`, `federation-fixture.yml`, read-only `ledger.yml`, and local-build-only `owner-alpha-container.yml`) |
+| Renderer spokes | 1 (Quartz v4.5.2 at immutable commit `4923affa…`, pinned and unforked), with wrapper and owner-link checks |
 | Public corpus | 933 Markdown sources selected and projected; 931 page URLs in the live sitemap at [cybersader.github.io/cyberbase](https://cybersader.github.io/cyberbase/) |
-| Servers cyberbaser operates | 0 |
-| Human interfaces that are ours | 4 of 17 interaction points: one anchor tag, two CLIs, and this docs site |
+| Hosted Cyberbaser servers | 0. The only runtime server is private, bound to one owner-chosen private numeric IPv4 address, and owner-operated |
+| Browser interfaces that are ours | Public/owner edit links, private exact-source editor, private job status page, and this docs site. GitHub still owns external intake and review |
 
-**Where each part executes.** Four sites, and the fourth is empty.
+**Where each part executes.** Four sites, including the private owner machine but no hosted Cyberbaser runtime.
 
 | Execution site | What runs there |
 |---|---|
-| Reader's browser | Quartz's emitted HTML and JS. Nothing of ours runs client-side; our one component rendered to a static `<a>` at build time |
-| CI runner (GitHub-hosted Ubuntu) | `publish`, `projection`, `ofm`, `trust`, Quartz, the Pages deploy |
-| Developer machine | `linkcheck`, the four CLIs, this docs site |
-| A cyberbaser-operated server | Nothing. There is no server |
+| Reader's browser | Public Quartz HTML and JS, or the private owner-mode Quartz reader on its unprivileged private origin |
+| CI runner (GitHub-hosted Ubuntu) | `publish`, `projection`, `ofm`, `trust`, Quartz, and the Pages deploy |
+| Owner/developer machine | `owner-alpha` bare-metal or in the owner-operated Linux container, `linkcheck`, the CLIs, this docs site, and the privileged editor/API origin |
+| A hosted Cyberbaser server | Nothing. Account-free external intake still has no selected runtime |
 
 The two lanes that run alongside the build are deliberately decoupled: `ofm-check` asks "is this change safe for Obsidian syntax", `trust-gate` asks "who has to look at it", and neither knows about the other. That decoupling is correct engineering and it is also why there is no single place a maintainer can look.
 
 ## Component reference
 
-Two things worth knowing before the table. The renderer spoke has **zero tests** while the six packages have 187, and `encodeRepoPath` in `EditThisPage.tsx` is exported specifically to be testable and has no test. And `agents: []` means the entire agent branch of the trust classifier, the most elaborate logic in that package, is unreachable in production today: every real PR takes the trusted-human branch or the terminal fallback.
+Two things worth knowing before the table. The renderer wrapper and owner-link modes now have deterministic checks, owner-alpha has package-scoped security, state, publication, site-identity, and gated browser acceptance coverage, and the decision-ledger package now covers schema, parsing, derivation, exact-run artifact binding, bounded GitHub reads, authority reconstruction, inert Git-object inspection, safe publication, workflow structure, and hermetic end-to-end acceptance. That still does not turn either hermetic rehearsal into independent-human or live-production evidence. Separately, `agents: []` means the agent branch of the trust classifier remains unreachable in production today: every real external PR takes the trusted-human branch or the terminal fallback.
 
 <details>
-<summary>Every package, deployable and config artifact — what it holds, where it runs, who owns it (15 rows)</summary>
+<summary>Every package, deployable and config artifact: what it holds, where it runs, who owns it</summary>
 
-Package test counts were reconfirmed with package-scoped `bun test` runs on 2026-07-29. Historical workflow and interface measurements retain their original dates.
+The original six-library measurements retain their 2026-07-29 basis; owner-alpha and renderer coverage were added on 2026-07-31, the decision-ledger domain package was added on 2026-08-02, and its two-stage GitHub adapter and hermetic acceptance evidence were aligned on 2026-08-03. Historical workflow and interface measurements retain their original dates.
 
 | Component | What it does | Executes | State it holds | Tests | Ownership |
 |---|---|---|---|---|---|
@@ -264,9 +278,11 @@ Package test counts were reconfirmed with package-scoped `bun test` runs on 2026
 | [`@cyberbaser/projection`](https://github.com/cybersader/cyberbaser/tree/main/packages/projection) | Runs the selector, pre-flights frontmatter, guards case collisions, lints path safety over the published set, copies to an output tree, then re-verifies the boundary against what landed. Writes `projection-report.json` | CI (`publish-site.yml`) | A disposable content tree plus the report | 28 | **Ours.** The post-hoc leak test (verify the copy, do not trust the plan) is the non-obvious part |
 | [`@cyberbaser/linkcheck`](https://github.com/cybersader/cyberbaser/tree/main/packages/linkcheck) | Reads emitted HTML from any renderer, resolves every internal href against disk, sorts breaks into 4 classes with budgets. Zero dependencies | Dev machine only | None | 9 | **Ours, but replaceable.** This is `lychee --offline` with a per-class budget. First package to swap if maintenance gets tight |
 | [`@cyberbaser/trust`](https://github.com/cybersader/cyberbaser/tree/main/packages/trust) | Reads `.cyberbaser/trust.yml`, derives a tier from author and author type, runs 9 mechanical checks, emits a route. Fails closed on a missing config | CI (`trust-gate.yml`) | None. Reads two files, prints a verdict | 18 | **Ours.** The individual checks are ordinary; the fail-closed tiering and the base-ref read are not |
-| [`@cyberbaser/correction`](https://github.com/cybersader/cyberbaser/tree/main/packages/correction) | Resolves one exact UTF-8 quote and prepares/applies one base-bound candidate splice in memory. Fails closed on ambiguity, stale bytes, invalid UTF-8, or tampering | Library + private pilot harness | None. Pure byte inputs and outputs; no file I/O or editorial decision | 22 | **Ours.** A narrow exact-change primitive, not the generalized authoring-adapter contract |
-| [`renderers/quartz-cyberbase`](https://github.com/cybersader/cyberbaser/tree/main/renderers/quartz-cyberbase) | `setup.sh` clones Quartz at the pinned tag and verifies it; `build.sh` symlinks a projected tree and builds. Config, layout and theme fill in Quartz's schema | CI + dev | None | **0** | **Ours (glue) over borrowed schema.** `EditThisPage.tsx` is the only UI element in the system we wrote; `RelativeFolderLinks.ts` fixes a real Quartz v4.5.2 link bug (248 broken attachment links to 7, measured) |
-| Quartz v4.5.2 | The renderer: markdown to a static site, search, graph, explorer, backlinks | CI | The emitted site | n/a | **Commodity.** Pinned by tag, unforked, adopted on measurement ([R14](/cyberbaser/research/quartz-spike-results/)) |
+| [`@cyberbaser/correction`](https://github.com/cybersader/cyberbaser/tree/main/packages/correction) | Resolves one exact UTF-8 quote or derives one minimal contiguous editor operation, then prepares/applies it in memory. Fails closed on ambiguity, stale bytes, invalid UTF-8, limits, or tampering | Library + private pilot + owner-alpha | None. Pure byte inputs and outputs; no file I/O or editorial decision | Package-scoped | **Ours.** A narrow exact-change primitive, not the generalized authoring-adapter contract |
+| [`@cyberbaser/ledger`](https://github.com/cybersader/cyberbaser/tree/main/packages/ledger) | Validates and canonicalizes one append-only decision observation per pull request; binds an inert capture artifact to the exact source run; reconstructs authority from GitHub APIs and exact Git objects; publishes one ledger-only non-force commit; deduplicates first closure; reports the 20-observation precondition | Domain CLI + two workflow templates; implemented and hermetically tested, live installation pending behind an immutable tooling placeholder | `.cyberbaser/decision-ledger.jsonl` when installed; no live file or observations yet | Package-scoped unit, workflow-structure, publication, and hermetic acceptance suites | **Ours.** Governance evidence in the owner's commit history, not content source, identity state, or a hosted moderation database |
+| [`@cyberbaser/owner-alpha`](https://github.com/cybersader/cyberbaser/tree/main/apps/owner-alpha) | Serves separate reader and owner origins on one private address; binds one Save to immutable inputs; checks, applies, commits, pushes, monitors, verifies live text, rebuilds locally, and recovers classified-safe durable jobs | Owner machine, bare-metal or through the Linux/amd64 OCI deployment | Profile-bound ignored state, local rendered site/cache, process-only bootstrap/session/CSRF secrets; OCI image contains no vault or credentials | Package, gated browser, pinned-render, deployment-structure, runtime-script, and image-level acceptance suites | **Ours.** Selected owner-local policy-bound writer, not an external intake or hosted product |
+| [`renderers/quartz-cyberbase`](https://github.com/cybersader/cyberbaser/tree/main/renderers/quartz-cyberbase) | Verifies the exact Quartz repository, tag, and immutable commit; builds public or owner mode; owner links target the exact privileged private-address origin | CI + owner/dev machine | Rebuildable cache and emitted site | Unit and build-mode guard checks, plus pinned-render coverage | **Ours (glue) over borrowed schema.** `EditThisPage.tsx` and its public/owner link modes are ours; `RelativeFolderLinks.ts` fixes a real Quartz v4.5.2 link bug (248 broken attachment links to 7, measured) |
+| Quartz v4.5.2 | The renderer: markdown to a static site, search, graph, explorer, backlinks | CI + owner machine | The emitted site | n/a | **Commodity.** Pinned to repository, tag, and commit `4923affa…`, unforked, adopted on measurement ([R14](/cyberbaser/research/quartz-spike-results/)) |
 | `publish-site.yml` (268 lines) | Checks out vault plus cyberbaser, projects, uploads the report, builds Quartz, runs two custom gates, deploys Pages. Refuses `pull_request_target` on purpose | GitHub Actions | The Pages deployment plus a 30-day report artifact | 0 | **Ours** (the job graph and the two gates) on **borrowed** actions |
 | `ofm-check.yml` (70 lines) | Diffs changed markdown against the base blob and runs `ofm-check diff` per file; damage emits a warning annotation | GitHub Actions | PR annotations | 0 | **Ours.** `continue-on-error: true` |
 | `trust-gate.yml` (208 lines) | Reads the policy from the base ref, builds a change description from the PR diff, runs `cb-trust`, writes a step summary and applies a label | GitHub Actions | A PR label plus a step summary | 0 | **Ours.** The forge adapter is a 60-line program inlined in a YAML heredoc, where it cannot be tested or reused |
@@ -329,24 +345,25 @@ The separations that keep the system honest, with how each one is currently held
 |---|---|---|
 | **Vault (source of truth)** | hold build artifacts · depend on cyberbaser plugins to open in Obsidian · let its file layout be dictated by the URL scheme | **Convention.** R16 shipped verbatim paths partly to keep this true |
 | **Publish boundary** | publish by default · trust the plan instead of the result · let a published page inline a private one | **Code.** Fail-closed config, post-hoc leak test, cross-boundary embed check, all fail the build |
-| **Hub (the packages)** | apply lossy transforms · regenerate untouched source · be coupled to one renderer or authoring UI · take the owner's editorial authority | **Code and decision.** [R12](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25) removed whole-file re-serialization after measuring 4.6% byte identity over 1,430 real files. Packages may select, project disposable copies, classify, inspect, or prepare candidate bytes; none writes the owner's authoritative source |
-| **Authoring adapter** | write canonical files directly · become a second content authority · authorize itself · hide stale or ambiguous source mapping | **Architectural contract, generalized adapter unbuilt.** A conforming local, browser, CMS-like, forge, or agent spoke binds to a pinned base and emits a bounded proposal. Its UI and internal model are replaceable; its source application rules are not |
-| **Spoke renderer** | be treated as permanent or unique · hold contribution or auth state · be forked | **Convention, with one crack.** Quartz is pinned and unforked, but the folder-link fix landed as a Quartz plugin rather than in the projection. Worth watching |
+| **Hub packages** | apply lossy transforms · regenerate untouched source · be coupled to one renderer or authoring UI · take the owner's editorial authority | **Code and decision.** [R12](/cyberbaser/research/v1-build-plan/#gate-result-run-2026-07-25) removed whole-file re-serialization after measuring 4.6% byte identity over 1,430 real files. Packages may select, project disposable copies, classify, inspect, or prepare candidate bytes; none performs source file I/O |
+| **External authoring adapter** | write canonical files directly · become a second content authority · authorize itself · hide stale or ambiguous source mapping | **Architectural contract, generalized adapter unbuilt.** A conforming reader, browser, CMS-like, forge, or agent spoke binds to a pinned base and emits a bounded proposal. Its UI and internal model are replaceable; its source application rules are not |
+| **Owner-alpha application** | accept browser-chosen roots, remotes, commands, URLs, or refspecs · acknowledge an edit before exact inputs are durable · replay ambiguous effects · reserialize untouched source | **Code and selected product decision.** One Save is owner authority; the durable policy permits only exact base-bound application and exact non-force publication. Dual private-address origins isolate rendered content from privileged APIs |
+| **Spoke renderer** | be treated as permanent or unique · hold contribution or auth state · become source authority | **Code and convention.** Quartz is pinned by exact repository, tag, and immutable commit. Owner mode emits links but holds no privileged session; the folder-link fix remains a plugin rather than projection logic |
 | **Federation spokes** | become naming, merge, moderation or navigation authority · flatten conflicting issuers · hold the only copy of knowledge | **Research invariant, not built.** Every crawler, graph store, cache, search provider and ranking model is replaceable, exportable and rebuildable from peer publications and chosen seeds |
-| **Owner-local editor** | be replaced or required to act as a client of an external contribution surface | **Principle and current practice.** The owner edits the authoritative source directly in their preferred tool; external proposal rules do not force the owner through a Cyberbaser editor |
+| **Owner-local authoring** | be replaced or required to act as a client of an external contribution surface | **Principle and current practice.** The owner may edit directly in a preferred tool or use owner-alpha as a separate direct-authority route. External proposal rules do not force either lane through a public moderation surface |
 | **Governance** | let a change promote its own author · decide from a policy the change itself supplied | **Code.** The policy is read from the base ref, and the classifier fails closed on unknown author types |
 
 ## Open architectural questions
 
 The full list lives in [Open Questions](/cyberbaser/reference/open-questions/). These are the architecturally significant ones, with what is now settled marked as settled.
 
-### Answered: where does the hub runtime live?
+### Partly answered: where does the hub runtime live?
 
-**It does not. The hub is libraries plus CI jobs.** Every capability runs either on a GitHub-hosted runner (`publish`, `projection`, `ofm`, `trust`, Quartz) or on a developer's machine (`linkcheck`, the CLIs). Nothing of ours runs in a reader's browser and nothing of ours runs on a server, because there is no server.
+**The owner dogfood runtime lives on the owner's machine; the external product runtime is still unselected.** The six no-authority libraries and the decision-ledger package run in CI, CLIs, or the private owner-alpha process. Owner-alpha now has two owner-operated packaging shapes: the established bare-metal launcher and WP2's Linux/amd64 OCI image. Both bind two origins on one owner-chosen private numeric IPv4 address (loopback default): an unprivileged Quartz reader and a privileged editor/API protected by one-time bootstraps, per-device sessions and CSRF tokens, and exact Host/Origin policy. The container requires Linux host networking so Bun still owns the exact bind decision; it does not add bridge publishing or a wildcard. On a non-loopback address, transport confidentiality comes from the chosen network (an encrypted private overlay or trusted LAN), not from the app. Durable runtime state remains owner-operated and derivative, not a second content authority.
 
-Any public account-free intake needs a trusted execution point for credentials, abuse controls, and durable intake state. That could be hosted, self-hosted, or part of another explicitly chosen operating model; none is built. A trusted rich editor used inside an owner's existing environment may have a different deployment shape, but it still cannot bypass the exact-proposal and owner-review boundary.
+Any public account-free intake still needs a trusted execution point for credentials, abuse controls, and durable intake state. That could be hosted, self-hosted, local-first, or part of another explicitly chosen operating model; none is built. A trusted rich editor used inside an owner's existing environment may have a different deployment shape, but an external spoke still cannot bypass the exact-proposal and owner-controlled application boundary.
 
-This replaces the question that stood on this page from 2026-06-21 to 2026-07-26, when the honest answer was that nobody had checked.
+The private owner-alpha decision answers where **this dogfood writer** runs. It does not choose the general maintainer or outside-contributor operating model.
 
 ### Open: the console fork
 
@@ -359,7 +376,7 @@ The system computes decisions no human sees — the step-3 card at the top of th
 
 The hosted option costs about three months of everything and then takes a permanent 21% of annual capacity. The static option is 2 to 3 times cheaper to build and has no maintenance tail. **Neither pass recommended a hosted application**, and the anti-console argument is strongest on the narrow claim: never ship a thing that holds moderation, identity or session state, because that is content state outside the commit it produces, which the boundaries table forbids.
 
-The genuinely open part is the **decision ledger**: a `pull_request: closed` job appending one line per PR (route, verdict, checks, the maintainer's actual outcome) to a file in the vault. It is a day of work, it lives in a commit so it breaks no boundary, and it is the only path to the first of the six auto-merge preconditions ("at least 20 PRs classified with the maintainer's own decision recorded"). Nobody is keeping that record, so the agent lane can never be enabled on the project's own terms.
+The [decision ledger](/cyberbaser/design/decision-ledger/) package and selected two-stage adapter are implemented and hermetically tested. An unprivileged `pull_request: closed` capture uploads only a non-authoritative routing hint; a privileged `workflow_run` recorder binds the exact run and artifact, reconstructs every authority field from GitHub APIs and exact inert Git objects, then publishes one ledger-only commit through bounded normal-push checks. GitHub's [`workflow_run` documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_run) is the governing trust boundary. The record template contains a deliberate non-runnable immutable-tooling placeholder, so live installation remains a separate explicit authorization step. No real fork run or live append has occurred. The ledger still belongs in commits rather than a hosted database, and it remains the only path to the first of the six auto-merge preconditions ("at least 20 PRs classified with the maintainer's own decision recorded"). Zero live entries have been recorded.
 
 ### Open: the missing enforcement
 
@@ -412,7 +429,7 @@ Federation does not turn that pipeline into one multi-vault build or shared data
   </div>
 </div>
 
-<p class="cb-fig-note"><span class="cb-chip cb-chip-mute">level zero</span>The direct owner link is the architecture's failure floor. Optional Webmention can notify the target, but neither navigation nor authority depends on it. The active <a href="/cyberbaser/research/federation/#active-local-prototype-prove-the-shape-with-fixtures">fixture prototype</a> expands this to three subject bases and two competing meta-wikis with peer-published descriptors, inventories and Linksets.</p>
+<p class="cb-fig-note"><span class="cb-chip cb-chip-mute">level zero</span>The direct owner link is the architecture's failure floor. Optional Webmention can notify the target, but neither navigation nor authority depends on it. The active <a href="/cyberbaser/research/federation/#measured-local-fixture-the-narrow-claim-passed">fixture prototype</a> expands this to three subject bases and two competing meta-wikis with peer-published descriptors, inventories and Linksets.</p>
 
 A meta-wiki is an ordinary base, not a central graph service. It publishes its own collections, mappings, annotations, mirrors and indexes as source-qualified claims. Many can disagree or fork. None can overwrite the owner records of another base.
 
@@ -422,7 +439,8 @@ The bounded test runs with controlled local origins instead of waiting for an ou
 
 ## Related
 
-- [Contribution workflows](/cyberbaser/design/contribution-workflows/) — the same two journeys from the contributor's side, and the moderation policy
+- [Contribution workflows](/cyberbaser/design/contribution-workflows/) — the same journeys from the contributor and owner sides, and the moderation policy
+- [Owner-alpha container deployment](/cyberbaser/development/owner-alpha-container-deployment/) — the exact Linux host, identity, mount, bootstrap, recovery, and evidence contract
 - [Principles](/cyberbaser/getting-started/principles/) — the six constraints every choice above is checked against
 - [Translation layer](/cyberbaser/design/translation-layer/) — the tier system and what the OFM validator is protecting
 - [Contribution on your terms](/cyberbaser/concepts/problem/#contribution-on-your-terms) — the trust dial that `.cyberbaser/trust.yml` implements

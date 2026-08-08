@@ -9,6 +9,7 @@ import {
   discoverTailscaleSelf,
   loadDogfoodReaderSnapshot,
   parseExpiresMinutes,
+  readerServerDisplayUrls,
   runTailscaleStatusCommand,
   startDogfoodReaderServer,
 } from '../src/dogfood-reader-server.js';
@@ -81,6 +82,7 @@ async function cyberbaseCheckout() {
   cleanup.push(root);
   await mkdir(path.join(root, 'docs'), { recursive: true });
   await writeFile(path.join(root, 'docs', 'guide.md'), '# Guide\n\nOwner-selected sentence.\n', 'utf8');
+  await writeFile(path.join(root, 'publish.yml'), 'allow:\n  - "docs/**"\n', 'utf8');
   for (const args of [
     ['git', 'init', '-q'],
     ['git', 'config', 'user.email', 'test@example.org'],
@@ -169,6 +171,49 @@ describe('owner dogfood reader snapshot', () => {
       projectRoot: PROJECT_ROOT,
       workspaceRoot: fixture.workspaceRoot,
     })).rejects.toMatchObject({ code: 'reader-form-integrity-mismatch' });
+  });
+
+  test('safe-opens an effective repin and rejects oversized or symlinked repin evidence', async () => {
+    const fixture = await initializedDogfood();
+    const original = JSON.parse(await readFile(fixture.paths.operator, 'utf8'));
+    const repin = {
+      schemaVersion: 1,
+      artifactType: 'private-owner-self-dogfood-operator-repin',
+      attemptId: 'OD-01',
+      reason: 'Synthetic effective-operator reader test.',
+      repinnedAt: '2026-07-31T13:00:00.000Z',
+      previousCheckoutDir: original.checkoutDir,
+      previousBaseCommit: original.baseCommit,
+      publishConfigPresent: true,
+      replacementOperator: {
+        ...original,
+        checkoutDir: `${original.checkoutDir}-replacement`,
+        baseCommit: 'abcdef1234567890abcdef1234567890abcdef12',
+      },
+    };
+    await writeFile(fixture.paths.operatorRepin, `${JSON.stringify(repin, null, 2)}\n`, 'utf8');
+    expect((await loadDogfoodReaderSnapshot('OD-01', {
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: fixture.workspaceRoot,
+    })).attemptId).toBe('OD-01');
+
+    await rm(fixture.paths.operatorRepin);
+    await writeFile(fixture.paths.operatorRepin, 'x'.repeat(128 * 1024 + 1), 'utf8');
+    await expect(loadDogfoodReaderSnapshot('OD-01', {
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: fixture.workspaceRoot,
+    })).rejects.toMatchObject({ code: 'dogfood-operator-repin-too-large' });
+
+    await rm(fixture.paths.operatorRepin);
+    const outsideRoot = await mkdtemp(path.join(os.tmpdir(), 'dogfood-repin-outside-'));
+    cleanup.push(outsideRoot);
+    const outside = path.join(outsideRoot, 'repin.json');
+    await writeFile(outside, `${JSON.stringify(repin)}\n`, 'utf8');
+    await symlink(outside, fixture.paths.operatorRepin, 'file');
+    await expect(loadDogfoodReaderSnapshot('OD-01', {
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: fixture.workspaceRoot,
+    })).rejects.toMatchObject({ code: 'workspace-symlink-rejected' });
   });
 
   test('rejects non-dogfood and undeclared attempt IDs before serving', async () => {
@@ -389,6 +434,16 @@ describe('Tailscale discovery', () => {
 });
 
 describe('one-shot lifecycle and CLI', () => {
+  test('advertises only the numeric HTTP Tailscale URL', () => {
+    expect(readerServerDisplayUrls({
+      ipUrl: 'http://100.64.0.42:48731/secret',
+      dnsUrl: 'http://node.example.ts.net:48731/secret',
+    })).toEqual({
+      url: 'http://100.64.0.42:48731/secret',
+      fallbackUrl: null,
+    });
+  });
+
   test('stops exactly once after the first GET, expiry, or signals race', async () => {
     const signalSource = new EventEmitter();
     const timers = [];
@@ -474,5 +529,5 @@ describe('one-shot lifecycle and CLI', () => {
       expect(result.exitCode).toBe(1);
       expect(result.stderr).not.toContain('http://');
     }
-  });
+  }, 30_000);
 });

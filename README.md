@@ -39,16 +39,17 @@ reader · rich/CMS-like editor · forge · agent
         → authoritative source
 ```
 
-Two contribution mechanisms exist in the dogfood stack today:
+Three source-change mechanisms exist in the dogfood stack today:
 
 - The maintainer edits the authoritative source locally in Obsidian and pushes with git.
+- The private owner-alpha wiki provides an exact-Markdown editor on one owner-chosen private network address (loopback by default); one **Save and publish** action authorizes a strict durable local policy to run the exact source-to-live pipeline.
 - An outside contributor uses GitHub's account-required web editor and pull-request flow.
 
 The evaluated serializer-backed CMS writers are rejected because they regenerated complete files. That does **not** ban rich browser or CMS-shaped authoring. A conforming tool can be swapped in through a deliberate adapter that emits bounded source proposals and never becomes a second authority. The account-free product path and trusted rich-authoring product surface have not shipped.
 
 ## Current phase: v1 Build
 
-Research & Foundations closed on 2026-07-25. The immediate milestone is [owner self-dogfooding](https://cybersader.github.io/cyberbaser/research/owner-self-dogfood/): one maintainer switches between reader and owner contexts across three to five normal and adversarial Cyberbase corrections, including mobile handoff, stale and ambiguous proposals, and owner rejection. This produces operational and mechanical evidence only, not independent human validation. The preserved [five-reader protocol](https://cybersader.github.io/cyberbaser/research/concierge-human-correction-pilot/) remains optional before stronger usability claims. The seven local fields are temporary observation inputs, not the eventual reader interface or generalized proposal schema.
+Research & Foundations closed on 2026-07-25. [`OD-01`](https://cybersader.github.io/cyberbaser/research/owner-self-dogfood/) completed the sole real owner loop required in this phase: signed-out mobile handoff, exact proposal, owner acceptance, separate application, deployment, and live verification. The immutable charter remains historical evidence; `OD-02` and `OD-03` are **Not run — superseded**. Stale-source, ambiguous-quote, and rejection-path obligations now run as deterministic synthetic mechanical checks, and no human owner rejection occurred. The private owner-alpha app and automatic exact-change pipeline are implemented, and the first real policy-activated Cyberbase Save/push completed on 2026-08-02 with a verified commit, normal push, successful deployment, and confirmed live transition; routine owner use is current. This remains maintainer operational evidence only, not independent human validation. The preserved [five-reader protocol](https://cybersader.github.io/cyberbaser/research/concierge-human-correction-pilot/) remains optional before stronger usability claims. The seven local fields are temporary observation inputs, not the eventual reader interface or generalized proposal schema, and Q09 remains open.
 
 [`@cyberbaser/correction`](packages/correction/) supplies exact UTF-8 quote anchoring and fail-closed single-splice preparation/application for the pilot. It is a no-I/O primitive, **not** a shipped editor, generalized authoring-adapter API, intake endpoint, automatic writer, hosted console, forge integration, or account-free product.
 
@@ -60,6 +61,7 @@ Research & Foundations closed on 2026-07-25. The immediate milestone is [owner s
 - `@cyberbaser/trust`, which computes an owner-configured review route
 - `@cyberbaser/linkcheck`, which ratschets internal-link quality
 - `@cyberbaser/correction`, the exact single-splice primitive used by the pilot
+- `@cyberbaser/owner-alpha`, the private owner wiki/editor and durable automatic source-to-live pipeline, bound to one owner-chosen private network address
 - A live dogfood vault with 933 Markdown sources selected and projected into 931 public page URLs, rendered by pinned Quartz and deployed to GitHub Pages
 - The Astro + Starlight docs site, which is the canonical project knowledge base rather than the product surface
 
@@ -68,7 +70,7 @@ Research & Foundations closed on 2026-07-25. The immediate milestone is [owner s
 - An account-free contribution endpoint or product editor
 - A generalized authoring-adapter API or selected trusted-contributor rich editor
 - A serializer-backed CMS writer, direct external source writer, or second authoritative content database
-- An automatic source writer
+- An automatic writer for external proposals or a writer that can bypass the owner-controlled policy boundary
 - A hosted moderation console or per-change rendered preview
 - Required merge enforcement across the current workflows
 - A production federation protocol or independently interoperable implementation

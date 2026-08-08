@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'">
+<title>__ATTEMPT_ID__ correction study form</title>
+<style>
+:root{color-scheme:light dark;font-family:ui-sans-serif,system-ui,sans-serif;background:#111827;color:#e5e7eb}body{margin:0;padding:1rem}.card{max-width:760px;margin:auto;padding:1.25rem;border:1px solid #475569;border-radius:14px;background:#0f172a}h1{font-size:1.35rem}.notice,.rehearsal{padding:.8rem;border-radius:8px;background:#3f2d0b;color:#fde68a}.rehearsal{background:#3b1721;color:#fecdd3}label{display:block;margin-top:1rem;font-weight:700}.instruction{display:block;margin:.3rem 0;color:#cbd5e1;font-weight:400}input,textarea,select,button{box-sizing:border-box;width:100%;font:inherit;padding:.7rem;border:1px solid #64748b;border-radius:7px;background:#111827;color:#f8fafc}textarea{min-height:7rem;white-space:pre-wrap}button{margin-top:1.25rem;background:#1d4ed8;border-color:#60a5fa;font-weight:700;cursor:pointer}.error{min-height:1.4rem;color:#fca5a5;font-weight:700}.meta{color:#94a3b8;font-size:.9rem}
+</style>
+</head>
+<body>
+<main class="card">
+<h1>Correction study form</h1>
+<p class="notice"><strong>Study instrument, not a product endpoint.</strong> This local file sends nothing anywhere. Download the JSON response, then return it to the concierge through the study's agreed handoff.</p>
+__PROFILE_NOTICE__
+<p class="meta">Attempt __ATTEMPT_ID__ · profile __PROFILE__</p>
+<form id="reader-form" novalidate>
+<label>Page URL
+<span class="instruction">Paste the URL of the page you want to correct.</span>
+<input name="pageUrl" type="url" autocomplete="off" required>
+</label>
+<label>Exact quote
+<span class="instruction">Copy one exact line that should change. Browser textareas normalize pasted line endings, so this pilot form rejects multiline quotes.</span>
+<textarea name="exactQuote" required></textarea>
+</label>
+<label>Replacement
+<span class="instruction">Write one replacement line. Leave this empty only if the quoted text should be deleted; multiline replacements are outside this pilot form.</span>
+<textarea name="replacement"></textarea>
+</label>
+<label>Rationale
+<span class="instruction">In one or two sentences, explain why this change improves the page.</span>
+<textarea name="rationale" required></textarea>
+</label>
+<label>Factual source
+<span class="instruction">If this changes a fact, paste the best source you used. Otherwise write ‘not applicable’.</span>
+<input name="factualSource" type="text" autocomplete="off" required>
+</label>
+<label>Public credit name
+<span class="instruction">If the correction is accepted, what name may be shown publicly? Leave blank for no public credit.</span>
+<input name="publicCreditName" type="text" autocomplete="off">
+</label>
+<label>Credit consent
+<span class="instruction">May the public results page use the credit name above if the correction is accepted? Choose yes or no.</span>
+<select name="creditConsent" required><option value="">Choose</option><option value="yes">yes</option><option value="no">no</option></select>
+</label>
+<p id="error" class="error" role="alert"></p>
+<button type="submit">Download submission.json</button>
+</form>
+</main>
+<script>
+(() => {
+  'use strict';
+  const attemptId = '__ATTEMPT_ID__';
+  const openedAt = new Date().toISOString();
+  const openedAtMs = Date.now();
+  const form = document.getElementById('reader-form');
+  const error = document.getElementById('error');
+
+  function httpsUrl(value, label) {
+    let parsed;
+    try { parsed = new URL(value); } catch { throw new Error(label + ' must be an absolute HTTPS URL.'); }
+    if (parsed.protocol !== 'https:' || parsed.username || parsed.password) {
+      throw new Error(label + ' must be a credential-free HTTPS URL.');
+    }
+    return parsed.href;
+  }
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    error.textContent = '';
+    try {
+      const values = Object.fromEntries(new FormData(form).entries());
+      if (values.exactQuote.length === 0) throw new Error('Exact quote is required.');
+      if (/[\r\n]/u.test(values.exactQuote)) {
+        throw new Error('Multiline exact quotes are not supported because browsers normalize textarea line endings.');
+      }
+      if (/[\r\n]/u.test(values.replacement)) {
+        throw new Error('Multiline replacements are not supported because browsers normalize textarea line endings.');
+      }
+      if (values.rationale.length === 0) throw new Error('Rationale is required.');
+      const pageUrl = httpsUrl(values.pageUrl, 'Page URL');
+      const factualSource = values.factualSource === 'not applicable'
+        ? values.factualSource
+        : httpsUrl(values.factualSource, 'Factual source');
+      if (values.creditConsent !== 'yes' && values.creditConsent !== 'no') {
+        throw new Error('Credit consent must be yes or no.');
+      }
+      if (values.creditConsent === 'yes' && values.publicCreditName.length === 0) {
+        throw new Error('A public credit name is required when credit consent is yes.');
+      }
+      if (values.replacement.length === 0
+        && !window.confirm('Confirm deletion: the exact quote will be replaced with an empty string.')) return;
+
+      const submittedAt = new Date().toISOString();
+      const submission = {
+        schemaVersion: 1,
+        instrumentVersion: 'reader-form-v1',
+        attemptId,
+        openedAt,
+        submittedAt,
+        elapsedMs: Math.max(0, Date.now() - openedAtMs),
+        pageUrl,
+        exactQuote: values.exactQuote,
+        replacement: values.replacement,
+        rationale: values.rationale,
+        factualSource,
+        publicCreditName: values.publicCreditName,
+        creditConsent: values.creditConsent,
+      };
+      const blob = new Blob([JSON.stringify(submission, null, 2) + '\n'], { type: 'application/json' });
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = 'submission.json';
+      link.click();
+      URL.revokeObjectURL(objectUrl);
+    } catch (problem) {
+      error.textContent = problem.message;
+    }
+  });
+})();
+</script>
+</body>
+</html>

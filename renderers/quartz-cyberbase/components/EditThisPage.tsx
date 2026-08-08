@@ -1,10 +1,13 @@
 import { QuartzComponentConstructor, QuartzComponentProps } from "./types"
 import { classNames } from "../util/lang"
+import { editLinkForPage } from "./editLink"
+import type { EditThisPageOptions } from "./editLink"
+export { encodeRepoPath } from "./editLink"
 
 /**
- * "Edit this page" link — the entry point for contribution Path C (direct
- * GitHub web editor). Rendered next to ContentMeta on every page that has a
- * real source file behind it.
+ * "Edit this page" link for either the public GitHub editor or the local owner
+ * route. Rendered next to ContentMeta on every page that has a real source file
+ * behind it.
  *
  * This file lives in the cyberbaser repo at
  * `renderers/quartz-cyberbase/components/EditThisPage.tsx` and is copied into
@@ -18,47 +21,25 @@ import { classNames } from "../util/lang"
  * Do NOT use `fileData.filePath`: that one is absolute (content dir prefix
  * included), and the content dir is a symlink in the bench setup.
  *
- * The repo URL is intentionally NOT hardcoded here. It is required as an
- * option so `quartz.layout.ts` declares it in exactly one place.
+ * Public mode keeps the existing GitHub editor behavior. Owner mode points to
+ * the separately-originated privileged owner route and carries the exact source
+ * path and page slug. The mode is selected once in `quartz.layout.ts` at build time.
  */
-interface EditThisPageOptions {
-  /** Repo base URL, no trailing slash, e.g. `https://github.com/cybersader/cyberbase`. */
-  repoUrl: string
-  /** Branch the web editor should open against. */
-  branch?: string
-  /** Link text. */
-  text?: string
-}
-
-/**
- * Percent-encode a repo-relative path, one segment at a time so `/` survives.
- * Vault paths contain emoji, spaces, commas and `&`; all of those need encoding
- * for the resulting URL to resolve.
- */
-export function encodeRepoPath(relativePath: string): string {
-  return relativePath
-    .split("/")
-    .filter((segment) => segment.length > 0)
-    .map(encodeURIComponent)
-    .join("/")
-}
 
 export default ((opts: EditThisPageOptions) => {
-  const branch = opts.branch ?? "main"
   const label = opts.text ?? "Edit this page"
 
   function EditThisPage({ fileData, displayClass }: QuartzComponentProps) {
     const relativePath = fileData.relativePath
-    // Synthetic pages (folder indexes with no folder note, 404, tag rollups)
-    // carry no source file, so there is nothing to edit.
-    if (!relativePath) return null
-    // Tag pages are generated from frontmatter; editing them is meaningless.
-    if (fileData.slug?.startsWith("tags/")) return null
+    const link = editLinkForPage(relativePath, fileData.slug, opts)
+    if (!link) return null
 
-    const href = `${opts.repoUrl}/edit/${branch}/${encodeRepoPath(relativePath)}`
+    const externalProps = link.external
+      ? { target: "_blank", rel: "noopener noreferrer" }
+      : undefined
     return (
       <p class={classNames(displayClass, "edit-this-page")}>
-        <a href={href} target="_blank" rel="noopener noreferrer" title={relativePath}>
+        <a href={link.href} {...externalProps} title={relativePath}>
           <span aria-hidden="true">&#9998;</span> {label}
         </a>
       </p>

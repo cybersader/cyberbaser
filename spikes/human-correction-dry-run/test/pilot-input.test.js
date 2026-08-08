@@ -11,12 +11,14 @@ import {
   validateDogfoodObservation,
   validateDogfoodObservationSeriesBinding,
   validateOperator,
+  validateOperatorRepin,
   validateOwnerDogfoodSeriesCharter,
   validateOwnerDecision,
   validateSubmission,
 } from '../src/pilot-input.js';
 
 const TEMPLATE = path.resolve(import.meta.dir, '../templates/reader-form.html');
+const V1_TEMPLATE = path.resolve(import.meta.dir, '../templates/reader-form-v1.html');
 const FORM_FIELDS = Object.freeze({
   pageUrl: 'https://example.org/kb/guide',
   exactQuote: '  Exact line with é and emoji ✅  ',
@@ -123,6 +125,17 @@ describe('reader form contract', () => {
     expect(html).toContain('__PROFILE_NOTICE__');
   });
 
+  test('defaults to reader-form-v2 while preserving the historical v1 template', async () => {
+    const [current, historical] = await Promise.all([
+      readFile(TEMPLATE, 'utf8'),
+      readFile(V1_TEMPLATE, 'utf8'),
+    ]);
+    expect(current).toContain("instrumentVersion: 'reader-form-v2'");
+    expect(current).toContain('Replacement must differ from the exact quote.');
+    expect(historical).toContain("instrumentVersion: 'reader-form-v1'");
+    expect(historical).not.toContain('Replacement must differ from the exact quote.');
+  });
+
   test('has no network target, remote resource, storage call, account field, or contact collector', async () => {
     const html = await readFile(TEMPLATE, 'utf8');
     expect(html).not.toMatch(/<form[^>]+(?:action|method)=/iu);
@@ -140,6 +153,7 @@ describe('reader form contract', () => {
       elapsedMs: 5000,
       fields: { ...FORM_FIELDS, replacement: '' },
     });
+    expect(submission.instrumentVersion).toBe('reader-form-v2');
     expect(submission.exactQuote).toBe(FORM_FIELDS.exactQuote);
     expect(submission.replacement).toBe('');
     expect(submission.rationale).toBe(FORM_FIELDS.rationale);
@@ -159,6 +173,23 @@ describe('reader form contract', () => {
       elapsedMs: 5000,
       fields: { ...FORM_FIELDS, replacement: 'line 1\r\nline 2' },
     })).toThrow(/must be one line/u);
+    expect(() => createSubmissionRecord({
+      attemptId: 'HC-01',
+      openedAt: '2026-07-28T12:00:00.000Z',
+      submittedAt: '2026-07-28T12:00:05.000Z',
+      elapsedMs: 5000,
+      fields: { ...FORM_FIELDS, replacement: FORM_FIELDS.exactQuote },
+    })).toThrow(/replacement must differ/u);
+    const historical = createSubmissionRecord({
+      attemptId: 'HC-01',
+      openedAt: '2026-07-28T12:00:00.000Z',
+      submittedAt: '2026-07-28T12:00:05.000Z',
+      elapsedMs: 5000,
+      instrumentVersion: 'reader-form-v1',
+      fields: { ...FORM_FIELDS, replacement: FORM_FIELDS.exactQuote },
+    });
+    expect(historical.instrumentVersion).toBe('reader-form-v1');
+    expect(historical.replacement).toBe(historical.exactQuote);
   });
 });
 
@@ -238,6 +269,47 @@ describe('strict pilot schemas and deterministic conversion', () => {
       .toThrow(/must use an HC-01 through HC-99 attempt ID/u);
     expect(() => validateOperator(validDogfoodOperator({ independentOwnerAttested: true })))
       .toThrow(/cannot claim independent-owner evidence/u);
+  });
+
+  test('operator repin changes only checkout and base while preserving the original binding', () => {
+    const original = validDogfoodOperator();
+    const replacement = {
+      ...original,
+      checkoutDir: '/owner/cyberbase-policy-bearing',
+      baseCommit: 'abcdef1234567890abcdef1234567890abcdef12',
+    };
+    const artifact = {
+      schemaVersion: 1,
+      artifactType: 'private-owner-self-dogfood-operator-repin',
+      attemptId: 'OD-01',
+      reason: 'The original source pin predates publish.yml.',
+      repinnedAt: '2026-07-31T13:00:00.000Z',
+      previousCheckoutDir: original.checkoutDir,
+      previousBaseCommit: original.baseCommit,
+      publishConfigPresent: true,
+      replacementOperator: replacement,
+    };
+
+    expect(validateOperatorRepin(artifact, original)).toMatchObject({
+      previousBaseCommit: original.baseCommit,
+      replacementOperator: { baseCommit: replacement.baseCommit },
+    });
+    expect(() => validateOperatorRepin({
+      ...artifact,
+      replacementOperator: { ...replacement, publicUrl: 'https://example.org/changed' },
+    }, original)).toThrow(/may change only checkoutDir and baseCommit/u);
+    expect(() => validateOperatorRepin({
+      ...artifact,
+      publishConfigPresent: false,
+    }, original)).toThrow(/requires publish.yml/u);
+    expect(() => validateOperatorRepin({
+      ...artifact,
+      replacementOperator: original,
+    }, original)).toThrow(/different base commit/u);
+    expect(() => validateOperatorRepin({
+      ...artifact,
+      extra: 'not allowed',
+    }, original)).toThrow(/unknown field: extra/u);
   });
 
   test('owner self-dogfood observation keeps reader and owner contexts separate', () => {

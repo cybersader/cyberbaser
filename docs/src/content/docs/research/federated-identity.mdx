@@ -1,0 +1,228 @@
+---
+title: "Federated identity: portable proof without a central account"
+description: "Exploratory scenarios and candidate technologies for carrying identity evidence between independently owned knowledge bases without making identity a central service or a safety gate."
+sidebar:
+  label: "Federated identity"
+  order: 21
+status: research
+tags: [research, federation, identity]
+---
+
+## TL;DR
+
+**A future contributor could prove control of a home forge account, wiki domain, signing key, ActivityPub actor, personal URL, or credential issued by another organization. Cyberbaser would carry that evidence with the proposal, then let the receiving maintainer decide what it is worth.**
+
+The durable separation is:
+
+1. **Authentication evidence:** what account, URL, actor, organization, or key produced this proposal?
+2. **Local trust policy:** what review route does this maintainer assign to that evidence here?
+3. **Safety:** does the exact proposal bind to the right source, preserve untouched bytes, pass integrity checks, and stay inside the owner's publication policy?
+
+Identity can improve attribution and reduce repeated review. It never replaces step 3, never grants remote write authority, and never becomes a network-wide trust score. An anonymous contributor must still have a viable full-review lane, as required by [Principle 3](/cyberbaser/getting-started/principles/) and tracked by [Q09](/cyberbaser/reference/open-questions/#q09--what-is-the-contribution-path-for-someone-with-no-account).
+
+:::caution[Exploratory imagination, not a selected direction]
+Nothing on this page is a roadmap item, protocol commitment, product selection, or new R-number. The project has no demonstrated independent-peer need for portable identity. Per the [federation research](/cyberbaser/research/federation/#what-remains-open), protocol work waits until independently operated bases prove they need it. The current product remains an owner-controlled change boundary, and Cyberbaser must never ship a component that holds identity or session state ([architecture boundaries](/cyberbaser/design/architecture/#boundaries-what-each-part-must-not-do)).
+:::
+
+## The shape to preserve
+
+Federated identity here does **not** mean one Cyberbaser login that follows a person across every wiki. It means a receiver can evaluate evidence issued somewhere else without surrendering local authority.
+
+| Layer | Possible evidence | Who decides | Failure behavior |
+|---|---|---|---|
+| Proposal provenance | OIDC issuer and subject, signing key, actor URL, personal URL, credential issuer | The receiving base verifies the evidence mechanically | Invalid or missing evidence becomes unverified, not accepted |
+| Trust routing | “partner member,” “known peer maintainer,” “three accepted edits,” or no recognized claim | Each receiving maintainer's own policy | Unknown evidence takes the anonymous/full-review route |
+| Change safety | Pinned source base, exact operation, OFM result, publication boundary, rendered candidate | The owner-controlled boundary | Stale, ambiguous, damaged, or out-of-policy proposals fail closed |
+| Editorial authority | Accept, request changes, reject, or delegate a narrow policy route | The receiving owner | The sender cannot authorize itself |
+
+This follows the existing [trust-curve position](/cyberbaser/design/contribution-workflows/#review-model): identity is one signal in moderation, not the safety mechanism. It also follows [federation by publication](/cyberbaser/research/federation/): bases publish owner-controlled state, discovery starts from chosen links and seeds, indexes are disposable, and no central registry decides who anyone is.
+
+## Four concrete futures
+
+### 1. Another wiki maintainer proposes a correction
+
+Nora maintains `fieldnotes.example`, an independently owned base. While reading `fungi.example`, she notices that a species page cites an obsolete regional rule.
+
+Nora submits a bounded correction against the exact published revision. The proposal says, in effect: “this came from the identity that controls `fieldnotes.example`.” It could demonstrate that claim in several ways:
+
+- authenticate through the Forgejo instance linked from `fieldnotes.example`;
+- sign the proposal digest with a key published by that base;
+- use an IndieAuth identity rooted at `https://fieldnotes.example/`; or
+- send an ActivityPub activity from the base's published actor, with independent origin or signature verification.
+
+The receiving base verifies the evidence, fetches any referenced public descriptor directly from Nora's origin, and records the exact issuer and method used. Its local policy recognizes Nora as a peer maintainer and routes the change to quick review. The proposal still binds to exact target bytes, still runs the same integrity checks, and still cannot write `fungi.example` directly.
+
+If Nora's key is rotated, her forge is offline, or the verification method is unsupported, the correction is not lost. It falls back to the unverified full-review lane with the claimed identity shown as unverified context.
+
+### 2. A pseudonymous contributor carries reputation without carrying an account
+
+A contributor known as **Mica** has made careful corrections to several gardening and food-safety bases for years. Mica does not want a legal-name account, and no single forge hosts all participating wikis.
+
+Mica uses a stable personal URL or key-controlled identifier. After accepted contributions, individual maintainers may issue narrowly worded credentials such as:
+
+- “this identifier submitted three proposals that we accepted between these dates”;
+- “this key controls the public contributor page at this URL”; or
+- “this contributor may enter our quick-review route until this credential expires.”
+
+A new base may choose to trust credentials from two known maintainers, ignore credentials from unknown issuers, or require local history before changing Mica's route. The credentials remain separate source-qualified statements. They are not combined into a universal reputation number, and no Cyberbaser service keeps a master profile.
+
+Mica can also decline every portable credential and contribute anonymously. The cost is more review, not exclusion.
+
+### 3. A team wiki recognizes members of a partner organization
+
+A standards team runs a private or public knowledge base. It often receives proposals from a partner research institute, whose members already authenticate through the institute's Forgejo or OIDC provider.
+
+The team configures a rule: a currently valid assertion from `id.partner.example`, with the agreed organization or group claim, may establish “partner member” for routing. That route might allow larger proposals or faster review, but it still does not grant canonical write access. The partner remains responsible for its accounts, MFA, offboarding, and sessions. The receiving base stores only the policy that names the accepted issuer, audience, claims, and route.
+
+When a researcher leaves the partner, the partner's identity system stops issuing a valid assertion. When the partner identity provider is unavailable, proposals can still enter the ordinary queue as unverified. Cyberbaser does not mirror the partner directory or keep shadow accounts.
+
+### 4. An anonymous reader corrects one sentence
+
+A reader with no forge account, personal domain, signing key, or reusable identifier spots a typo. They submit the exact quote, replacement, rationale, and optional public credit name through a maintainer-enabled account-free surface.
+
+The proposal is rate-limited and abuse-filtered at the intake boundary, then routed to full review. Source binding and integrity checks do the safety work. If the reader later chooses to attach a forge login, URL, or credential, that may enrich attribution or future routing, but it is never required to make the first correction possible.
+
+This is the failure floor every identity option must preserve. Identity systems that turn “better evidence” into “mandatory admission ticket” would contradict the [contribution principles](/cyberbaser/getting-started/principles/#3-contributors-shouldnt-need-git-or-a-forced-account).
+
+## Candidate technologies
+
+No one technology covers all four scenarios. They prove different things and impose different operating costs.
+
+### Forge-delegated OAuth or OIDC
+
+A contribution surface can redirect a contributor to their home forge, then validate an OAuth authorization response or an OpenID Connect ID token. OIDC can establish that a particular issuer authenticated a particular issuer-local subject for this audience at a stated time. It does not establish a global person, ownership of an unrelated domain, editorial reliability, or permission to write another base.
+
+**Best fit:** peer maintainers with forge accounts and partner-organization members. **Maintainer cost:** register or allow a client, configure trusted issuers and redirect URIs, validate issuer/audience/nonce/expiry, handle provider outages, and understand claim semantics. [Forgejo's provider](https://forgejo.org/docs/latest/user/oauth2-provider/) supports Authorization Code, PKCE, and OIDC, which makes it the first forge to evaluate under [RA-01](/cyberbaser/design/reference-architectures/self-hosted-forgejo-auth/). Its current broad OAuth token authority is a reason to prefer an identity-only OIDC assertion or a narrowly isolated adapter rather than handing a public contribution surface a powerful forge access token.
+
+**Anonymous degradation:** skip the redirect or treat a failed assertion as unverified. The proposal remains eligible for the full-review lane.
+
+### Signed commits, SSH signatures, and key challenges
+
+A proposal, commit, or detached digest can be signed with an SSH, OpenPGP, or X.509 key. Verification proves that the signed bytes are unchanged and that the signer possessed the matching private key. The receiver still needs a local or owner-published binding from that key to “Nora,” `fieldnotes.example`, or an allowed partner role. Git supports SSH commit signing with an `allowedSignersFile`; forge “verified” badges add the forge's account-to-key binding, not universal identity.
+
+**Best fit:** a peer base signing proposal envelopes, technical contributors signing commits, and long-lived pseudonyms that can manage key rotation. **Maintainer cost:** publish and discover accepted keys, bind keys to scopes, handle revocation and rotation, retain the exact signed payload, and avoid assuming that a valid signature means an authorized or good change.
+
+An **age key is different**. [age](https://github.com/C2SP/C2SP/blob/main/age.md) is an encryption format, not a signature or attestation standard. An encrypted challenge-response could prove possession of a decryption key, but it would be interactive, would not itself sign the proposal, and would require a separate durable binding and lifecycle protocol. Reusing an age identity as if it were a signing key is not part of the standard; a distinct signing key is clearer.
+
+**Anonymous degradation:** accept an unsigned proposal as unverified. A bad signature must not silently become a good identity claim, but it may be stripped down to an anonymous submission if the maintainer's policy allows that.
+
+### DIDs and Verifiable Credentials
+
+A [Decentralized Identifier](https://www.w3.org/TR/did-core/) can resolve to verification methods and service endpoints under a chosen DID method. A [Verifiable Credential](https://www.w3.org/TR/vc-data-model-2.0/) lets an issuer make a tamper-evident statement that a holder can present elsewhere. Together they could support Mica's pseudonymous continuity or a maintainer-issued “accepted contributor” credential without asking every receiver to query one account provider.
+
+What they prove is deliberately narrow: the presentation is an authentic, current statement from the identified issuer or presenter, assuming the verifier supports the DID method and proof suite. They do **not** prove that the claims are true, that the issuer is worth trusting, or that the holder should receive a particular review route. Validation remains local.
+
+**Best fit:** portable, source-qualified credentials across several independently operated bases. **Maintainer cost:** choose supported DID methods and proof formats, resolve keys safely, process status or revocation, protect holder privacy, define credential schemas, and decide which issuers are trusted for which claims. Method fragmentation and verifier complexity make this a poor first protocol unless real peers ask for credential portability.
+
+**Anonymous degradation:** ignore an unsupported, expired, or untrusted credential and retain the underlying proposal as unverified. Never require a DID wallet to correct a typo.
+
+### ActivityPub actors
+
+[ActivityPub](https://www.w3.org/TR/activitypub/) gives an actor a dereferenceable URL plus inbox and outbox endpoints. It could transport an `Offer`-like correction from Nora's wiki actor to another base, or announce that Mica published a proposal at a stable URL. Actor origin, object origin, and any deployed HTTP-signature mechanism can provide provenance evidence.
+
+ActivityPub itself does not standardize a complete cross-server authentication scheme, prove that an actor represents a particular human, or grant authorization at the receiver. Delivery to an inbox proves only that bytes arrived. The receiver must verify origin or signatures and apply its own moderation policy. Pulling the source proposal from the actor's owner URL is still a useful independent check.
+
+**Best fit:** optional notification and transport between bases that already operate fediverse-compatible actors. **Maintainer cost:** actor hosting, inbox hardening, signature-profile compatibility, replay and deduplication handling, delivery retries, content sanitization, moderation, and protection against server-to-server request abuse. That is much heavier than publishing a signed proposal over ordinary HTTPS.
+
+**Anonymous degradation:** ActivityPub is never the only intake route. A missing actor or failed delivery leaves direct HTTPS submission, Webmention-style notification, or anonymous intake available.
+
+### IndieAuth and RelMeAuth
+
+[IndieAuth](https://indieauth.spec.indieweb.org/) treats a personal HTTPS URL as the user's identifier and discovers the authorization service from that page. It can prove that an authorization service accepted the person as controller of the returned `me` URL for this client. The URL can delegate authentication without moving the public identity away from the contributor's own domain.
+
+[RelMeAuth](https://microformats.org/wiki/RelMeAuth) is a lighter historical pattern: reciprocal `rel="me"` links connect a personal site to profiles on OAuth providers, then provider authentication helps demonstrate control of the linked profile. It is useful as linkage evidence, but depends on third-party profile behavior and manual provider integration. Reciprocal links show a claimed relationship between URLs; they do not prove editorial reliability or durable real-world identity.
+
+**Best fit:** Nora proving control of her wiki domain and Mica keeping a pseudonymous identity rooted in a personal site. **Maintainer cost:** safe URL and metadata fetching, redirect and SSRF defenses, IndieAuth token validation, provider compatibility, and account-link maintenance. A contributor can delegate to a hosted IndieAuth service, while a fully self-hosted authorization server is a real security-sensitive deployment.
+
+**Anonymous degradation:** a URL is optional. If discovery fails or the contributor has no domain, the same proposal proceeds without verified URL control.
+
+## Comparison by scenario
+
+| Candidate | Peer wiki maintainer | Portable pseudonym | Partner organization | Anonymous reader | Operational weight |
+|---|---|---|---|---|---|
+| Forge OAuth/OIDC | Strong when the home forge is already authoritative | Medium; portable only while receivers trust that issuer | Strong for managed membership claims | Optional bypass required | Medium |
+| SSH or other signatures | Strong with a key published by the base | Strong continuity, weak human binding by itself | Medium with managed key directories or a CA | Unsigned fallback | Low to medium |
+| DID + Verifiable Credentials | Strong but usually more machinery than needed | Strongest portability story | Strong when the partner issues credentials | Wallet must never be required | High |
+| ActivityPub actor | Useful for actor-origin transport and notification | Medium; tied to actor/server continuity unless migration is handled | Medium | Separate intake required | High |
+| IndieAuth / RelMeAuth | Strong for domain control | Strong for URL-rooted pseudonyms | Weak to medium | URL-free fallback | Medium |
+
+“Strong” means the technology can express the scenario's identity evidence. It does not mean Cyberbaser has selected it, that implementations interoperate, or that the evidence deserves trust.
+
+## What the self-host management console would do
+
+A future management console may make these choices understandable without becoming an identity provider. Its job is to **configure delegation and local policy**, not host accounts.
+
+| Option | The console may configure | The external surface or provider must retain | The console must never become |
+|---|---|---|---|
+| Forge OAuth/OIDC | Trusted issuer URL, client/audience, allowed claims, route mapping, test-login diagnostics | Accounts, MFA, credentials, access tokens, login sessions, offboarding | A shadow forge directory or token vault |
+| Signed keys | Trusted key URLs, allowed scopes, rotation grace rules, route mapping, verification status | Private keys and signer identity lifecycle | A network key registry or certificate authority by default |
+| DID + credentials | Supported methods/proof suites, issuer allowlists, credential-purpose rules, expiry/status requirements | Wallets, holder secrets, issuer records, presentation sessions | A universal credential wallet, issuer, or reputation database |
+| ActivityPub | Actor/capability URLs, accepted activity types, verification profile, inbox adapter policy | Actor accounts, followers, delivery queues, server sessions | A mandatory relay or fediverse account host |
+| IndieAuth / RelMeAuth | Accepted URL schemes, discovery budgets, provider adapters, route mapping | Personal sites, linked profiles, authorization sessions | A hosted identity namespace or profile database |
+
+A practical console could offer:
+
+- a **provider test** that checks discovery metadata, keys, redirect URIs, and claim examples without retaining a contributor session;
+- a **policy preview** that runs sample evidence through the local trust classifier and shows the resulting review route;
+- a **proof inspector** on each proposal showing issuer, subject or key, verification time, method, expiry, and why the local policy did or did not recognize it;
+- **configuration export** as owner-controlled files, so replacing the console does not erase policy; and
+- a visible **anonymous floor** showing what happens when every identity provider is unavailable.
+
+The console may need an owner-authenticated administrative surface, but Cyberbaser must delegate that authentication to the surface carrying it. It must not maintain contributor accounts, password hashes, identity profiles, refresh tokens, or a durable session database. Proposal evidence should be normalized for review and audit, while secrets and login state remain with the forge, organization, wallet, personal authorization service, or other selected surface.
+
+## A possible evidence envelope, not a protocol
+
+If several adapters eventually need a common hand-off, the smallest useful shape may be an evidence list attached to the exact proposal rather than a universal identity object:
+
+```json
+{
+  "proposalDigest": "sha256:…",
+  "targetRevision": "…",
+  "evidence": [
+    {
+      "type": "oidc-assertion",
+      "issuer": "https://forge.fieldnotes.example",
+      "subject": "issuer-local-subject",
+      "audience": "fungi.example",
+      "verifiedAt": "…"
+    },
+    {
+      "type": "detached-signature",
+      "key": "https://fieldnotes.example/keys/proposals.pub",
+      "covers": "proposalDigest"
+    }
+  ]
+}
+```
+
+This is illustrative only. A real design would need replay rules, expiry, proof retention, privacy limits, key rotation, issuer migration, selective disclosure, canonicalization, downgrade behavior, and conformance tests. Most importantly, the envelope would carry evidence without deciding trust. The receiving base's policy would still map recognized evidence to a route.
+
+## Questions that real peer use would have to answer
+
+1. Which scenario appears in practice: peer-base control, organization membership, pseudonymous continuity, attribution, or something else?
+2. Is ordinary HTTPS publication plus one signing key enough, or is interactive authentication actually needed?
+3. Who operates the contributor-facing surface that carries login and session state?
+4. How does a base rotate domains, forge issuers, actors, or keys without silently transferring historical trust?
+5. What evidence must be retained with an accepted commit for later attribution and audit, and what should be discarded for privacy?
+6. Can every authenticated route demonstrably degrade to an anonymous full-review route during provider failure?
+7. Which claims are local observations (“three accepted here”) versus portable issuer statements (“member of partner organization”)?
+8. What independent implementation or operator would test the chosen proof before Cyberbaser calls it interoperable?
+
+## Explicit non-decisions
+
+- **No identity technology is selected.** Forgejo-first means evaluate the self-hosted forge path first when the need appears, not preselect OIDC as the federation protocol.
+- **No Cyberbaser identity provider, account system, registry, resolver, wallet, directory, relay, or global contributor profile is proposed.**
+- **No portable reputation score is proposed.** Source-qualified credentials and local contribution history may inform local policy; they do not collapse into network truth.
+- **No authenticated identity receives direct source authority.** External actors still submit exact, base-bound proposals through the owner-controlled boundary.
+- **No identity proof replaces abuse controls, integrity checks, moderation, or editorial judgment.**
+- **No wallet, domain, forge account, or fediverse account may become the admission price for a basic correction.**
+- **No protocol work starts from this page.** The next trigger is demonstrated need from an independently operated peer, followed by a bounded fixture and conformance test, not implementation by momentum.
+
+## Related
+
+- [Federation: a web of webs you control](/cyberbaser/research/federation/) — owner publications, disposable indexes, direct links, and local authority
+- [Architecture](/cyberbaser/design/architecture/) — the boundary against Cyberbaser-held identity or session state
+- [Contribution workflows](/cyberbaser/design/contribution-workflows/) — the trust curve, exact proposals, and the anonymous gap
+- [Open question Q09](/cyberbaser/reference/open-questions/#q09--what-is-the-contribution-path-for-someone-with-no-account) — the still-open account-free contribution question
+- [RA-01: self-hosted Forgejo + PKCE auth](/cyberbaser/design/reference-architectures/self-hosted-forgejo-auth/) — the Forgejo-first delegated-auth reference architecture
+- [Translation layer](/cyberbaser/design/translation-layer/) — why identity never relaxes source binding or byte-preservation rules

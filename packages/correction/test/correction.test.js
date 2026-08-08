@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto';
 import {
   resolveQuoteAnchor,
   prepareCorrection,
+  prepareOffsetCorrection,
+  deriveContiguousCorrection,
   applyCorrection,
   CorrectionError,
 } from '../src/index.js';
@@ -306,5 +308,359 @@ describe('applyCorrection', () => {
     expect(result.subarray(0, correction.start).equals(base.subarray(0, correction.start))).toBe(true);
     const resultSuffix = result.subarray(correction.start + correction.replacementBytes.length);
     expect(resultSuffix.equals(base.subarray(correction.end))).toBe(true);
+  });
+
+  test('applies offset-bound operations without weakening quote-bound selector checks', () => {
+    const base = bytes('left old right');
+    const offsetCorrection = prepareOffsetCorrection(base, {
+      start: 5,
+      end: 8,
+      replacement: 'new',
+    });
+    expect(Object.hasOwn(offsetCorrection, 'selector')).toBe(false);
+    expect(applyCorrection(base, offsetCorrection).equals(bytes('left new right'))).toBe(true);
+
+    const quoteCorrection = prepareCorrection(base, {
+      selector: { quote: 'old', prefix: 'left ', suffix: ' right' },
+      replacement: 'new',
+    });
+    expectCorrectionError(
+      () => applyCorrection(base, {
+        ...quoteCorrection,
+        selector: { ...quoteCorrection.selector, prefix: 'wrong ' },
+      }),
+      'selector-prefix-mismatch',
+    );
+    const { selector: _selector, ...selectorRemoved } = quoteCorrection;
+    expectCorrectionError(() => applyCorrection(base, selectorRemoved), 'missing-selector');
+    expectCorrectionError(
+      () => applyCorrection(base, { ...quoteCorrection, operationType: 'offset' }),
+      'unexpected-operation-type',
+    );
+  });
+
+  test('rejects stale and tampered offset-bound operations', () => {
+    const base = bytes('left old right');
+    const correction = prepareOffsetCorrection(base, {
+      start: 5,
+      end: 8,
+      replacement: 'new',
+    });
+
+    expectCorrectionError(
+      () => applyCorrection(bytes('LEFT old right'), correction),
+      'base-digest-mismatch',
+    );
+    expectCorrectionError(
+      () => applyCorrection(base, { ...correction, expectedOldBytes: bytes('OLD') }),
+      'old-bytes-mismatch',
+    );
+    expectCorrectionError(
+      () => applyCorrection(base, { ...correction, replacementBytes: bytes('NEW') }),
+      'candidate-digest-mismatch',
+    );
+    expectCorrectionError(
+      () => applyCorrection(base, { ...correction, candidateDigest: digest(bytes('wrong')) }),
+      'candidate-digest-mismatch',
+    );
+    const { operationType: _operationType, ...typeRemoved } = correction;
+    expectCorrectionError(() => applyCorrection(base, typeRemoved), 'missing-selector');
+    expectCorrectionError(
+      () => applyCorrection(base, { ...correction, operationType: 'other' }),
+      'missing-selector',
+    );
+  });
+
+  test('rejects even a no-op offset that is inside a UTF-8 sequence', () => {
+    const base = bytes('é');
+    const correction = prepareOffsetCorrection(base, { start: 0, end: 0, replacement: '' });
+    expectCorrectionError(
+      () => applyCorrection(base, { ...correction, start: 1, end: 1 }),
+      'offset-not-utf8-boundary',
+    );
+  });
+});
+
+describe('prepareOffsetCorrection', () => {
+  test.each([
+    ['insertion', 'alpha omega', 6, 6, 'middle ', 'alpha middle omega'],
+    ['deletion', 'alpha DELETE omega', 6, 13, '', 'alpha omega'],
+    ['replacement', 'alpha old omega', 6, 9, 'new', 'alpha new omega'],
+    ['empty-file insertion', '', 0, 0, 'new', 'new'],
+    ['whole-file deletion', 'old', 0, 3, '', ''],
+    ['no-op', 'unchanged', 9, 9, '', 'unchanged'],
+  ])('prepares and applies an exact %s', (_, source, start, end, replacement, expected) => {
+    const base = bytes(source);
+    const correction = prepareOffsetCorrection(base, { start, end, replacement });
+
+    expect(correction.operationType).toBe('offset');
+    expect(correction.start).toBe(start);
+    expect(correction.end).toBe(end);
+    expect(correction.expectedOldBytes.equals(base.subarray(start, end))).toBe(true);
+    expect(correction.replacementBytes.equals(bytes(replacement))).toBe(true);
+    expect(correction.baseDigest).toBe(digest(base));
+    expect(correction.candidateDigest).toBe(digest(bytes(expected)));
+    expect(applyCorrection(base, correction).equals(bytes(expected))).toBe(true);
+  });
+
+  test('uses UTF-8 byte offsets for emoji and combining marks', () => {
+    const prefix = bytes('A👩🏽‍💻 ');
+    const old = bytes('é');
+    const base = Buffer.concat([prefix, old, bytes(' Z')]);
+    const correction = prepareOffsetCorrection(base, {
+      start: prefix.length,
+      end: prefix.length + old.length,
+      replacement: 'é漢字',
+    });
+
+    expect(correction.expectedOldBytes.equals(old)).toBe(true);
+    expect(applyCorrection(base, correction).equals(bytes('A👩🏽‍💻 é漢字 Z'))).toBe(true);
+  });
+
+  test('preserves CRLF bytes and permits primitive CRLF edits without normalization', () => {
+    const base = bytes('first\r\nsecond\r\n');
+    const crOffset = bytes('first').length;
+    const correction = prepareOffsetCorrection(base, {
+      start: crOffset,
+      end: crOffset + 1,
+      replacement: '',
+    });
+    const result = applyCorrection(base, correction);
+
+    expect(result.equals(bytes('first\nsecond\r\n'))).toBe(true);
+    expect(result.includes(bytes('\r\nsecond\r\n'))).toBe(false);
+    expect(result.subarray(crOffset).equals(base.subarray(crOffset + 1))).toBe(true);
+  });
+
+  test('rejects offsets inside UTF-8 code units', () => {
+    const base = bytes('Aé👩‍💻Z');
+    const eStart = bytes('A').length;
+    const emojiStart = bytes('Aé').length;
+
+    expectCorrectionError(
+      () => prepareOffsetCorrection(base, { start: eStart + 1, end: eStart + 1, replacement: '' }),
+      'offset-not-utf8-boundary',
+    );
+    expectCorrectionError(
+      () => prepareOffsetCorrection(base, { start: emojiStart, end: emojiStart + 1, replacement: '' }),
+      'offset-not-utf8-boundary',
+    );
+  });
+
+  test('rejects invalid ranges, replacement values, base bytes, and Unicode', () => {
+    const base = bytes('abc');
+    for (const request of [
+      { start: -1, end: 0, replacement: '' },
+      { start: 2, end: 1, replacement: '' },
+      { start: 0, end: 4, replacement: '' },
+    ]) {
+      expectCorrectionError(() => prepareOffsetCorrection(base, request), 'splice-out-of-bounds');
+    }
+    expectCorrectionError(
+      () => prepareOffsetCorrection(base, { start: 0.5, end: 1, replacement: '' }),
+      'invalid-offset',
+    );
+    expectCorrectionError(
+      () => prepareOffsetCorrection(base, { start: 0, end: 1 }),
+      'missing-replacement',
+    );
+    expectCorrectionError(
+      () => prepareOffsetCorrection(base, { start: 0, end: 1, replacement: bytes('x') }),
+      'invalid-string',
+    );
+    expectCorrectionError(
+      () => prepareOffsetCorrection(base, { start: 0, end: 1, replacement: '\ud800' }),
+      'invalid-utf8',
+    );
+    expectCorrectionError(
+      () => prepareOffsetCorrection(Buffer.from([0xff]), { start: 0, end: 0, replacement: '' }),
+      'invalid-utf8',
+    );
+  });
+});
+
+describe('deriveContiguousCorrection', () => {
+  test.each([
+    ['middle insertion', 'alpha omega', 'alpha middle omega'],
+    ['middle deletion', 'alpha DELETE omega', 'alpha omega'],
+    ['middle replacement', 'alpha old omega', 'alpha new omega'],
+    ['leading insertion', 'omega', 'alpha omega'],
+    ['trailing insertion', 'alpha', 'alpha omega'],
+    ['leading deletion', 'alpha omega', 'omega'],
+    ['trailing deletion', 'alpha omega', 'alpha'],
+    ['empty-file insertion', '', 'new'],
+    ['whole-file deletion', 'old', ''],
+    ['whole-file replacement', 'old', 'new'],
+  ])('derives one exact %s', (_, source, edited) => {
+    const base = bytes(source);
+    const correction = deriveContiguousCorrection(base, edited);
+    expect(applyCorrection(base, correction).equals(bytes(edited))).toBe(true);
+  });
+
+  test('derives minimal boundary-safe Unicode, emoji, and combining-mark changes', () => {
+    const cases = [
+      ['café', 'cafê'],
+      ['A👩🏽‍💻Z', 'A🧑🏽‍🔬Z'],
+      ['café noir', 'café noir'],
+      ['é', 'ê'],
+      ['é', 'A©'],
+    ];
+
+    for (const [source, edited] of cases) {
+      const base = bytes(source);
+      const correction = deriveContiguousCorrection(base, edited);
+      expect(applyCorrection(base, correction).equals(bytes(edited))).toBe(true);
+      expect(correction.start === 0 || (base[correction.start] & 0xc0) !== 0x80).toBe(true);
+      expect(
+        correction.end === base.length || (base[correction.end] & 0xc0) !== 0x80,
+      ).toBe(true);
+    }
+  });
+
+  test('derives CRLF changes as primitive byte edits and never normalizes other lines', () => {
+    const base = bytes('one\r\ntwo\r\nthree\r\n');
+    const edited = 'one\r\ntwo\nthree\r\n';
+    const correction = deriveContiguousCorrection(base, edited);
+
+    expect(correction.expectedOldBytes.equals(bytes('\r'))).toBe(true);
+    expect(correction.replacementBytes.length).toBe(0);
+    expect(applyCorrection(base, correction).equals(bytes(edited))).toBe(true);
+  });
+
+  test('rejects an unchanged editor value', () => {
+    expectCorrectionError(
+      () => deriveContiguousCorrection(bytes('unchanged 👩‍💻'), 'unchanged 👩‍💻'),
+      'no-op-edit',
+    );
+  });
+
+  test('preserves every byte outside the derived contiguous operation', () => {
+    const prefix = bytes('---\r\ntitle: café\r\n---\r\n👩🏽‍💻 ');
+    const old = bytes('old é text');
+    const suffix = bytes('\r\n\t[[Exact Link|alias]]  \r\n');
+    const base = Buffer.concat([prefix, old, suffix]);
+    const edited = `${prefix.toString('utf8')}replacement 漢字${suffix.toString('utf8')}`;
+    const correction = deriveContiguousCorrection(base, edited);
+    const result = applyCorrection(base, correction);
+
+    expect(result.subarray(0, correction.start).equals(base.subarray(0, correction.start))).toBe(true);
+    expect(
+      result.subarray(correction.start + correction.replacementBytes.length)
+        .equals(base.subarray(correction.end)),
+    ).toBe(true);
+    expect(result.equals(bytes(edited))).toBe(true);
+  });
+
+  test('enforces base, edited, old, replacement, and aggregate changed-byte limits', () => {
+    const base = bytes('alpha old omega');
+    const edited = 'alpha replacement omega';
+    const passing = deriveContiguousCorrection(base, edited, {
+      maxBaseBytes: base.length,
+      maxEditedBytes: bytes(edited).length,
+      maxOldBytes: bytes('old').length,
+      maxReplacementBytes: bytes('replacement').length,
+      maxChangedBytes: bytes('replacement').length,
+      maxChangedLines: 1,
+    });
+    expect(applyCorrection(base, passing).equals(bytes(edited))).toBe(true);
+
+    const failures = [
+      [{ maxBaseBytes: base.length - 1 }, 'maxBaseBytes'],
+      [{ maxEditedBytes: bytes(edited).length - 1 }, 'maxEditedBytes'],
+      [{ maxOldBytes: bytes('old').length - 1 }, 'maxOldBytes'],
+      [{ maxReplacementBytes: bytes('replacement').length - 1 }, 'maxReplacementBytes'],
+      [{ maxChangedBytes: bytes('replacement').length - 1 }, 'maxChangedBytes'],
+      [{ maxChangedLines: 0 }, 'maxChangedLines'],
+    ];
+    for (const [limits, limit] of failures) {
+      const error = expectCorrectionError(
+        () => deriveContiguousCorrection(base, edited, limits),
+        'limit-exceeded',
+      );
+      expect(error.phase).toBe('derive');
+      expect(error.details.limit).toBe(limit);
+    }
+  });
+
+  test('enforces changed-line limits on the larger old or replacement span', () => {
+    const base = bytes('before\none\ntwo\nafter');
+    expectCorrectionError(
+      () => deriveContiguousCorrection(base, 'before\nreplacement\nafter', {
+        maxChangedLines: 1,
+      }),
+      'limit-exceeded',
+    );
+    const correction = deriveContiguousCorrection(base, 'before\nreplacement\nafter', {
+      maxChangedLines: 3,
+    });
+    expect(applyCorrection(base, correction).equals(bytes('before\nreplacement\nafter'))).toBe(true);
+  });
+
+  test('counts UTF-8 bytes rather than JavaScript code units for limits', () => {
+    const base = bytes('A👩‍💻Z');
+    const replacement = '🧑‍🔬';
+    const edited = `A${replacement}Z`;
+
+    expectCorrectionError(
+      () => deriveContiguousCorrection(base, edited, {
+        maxReplacementBytes: bytes(replacement).length - 1,
+      }),
+      'limit-exceeded',
+    );
+    const correction = deriveContiguousCorrection(base, edited, {
+      maxReplacementBytes: bytes(replacement).length,
+    });
+    expect(applyCorrection(base, correction).equals(bytes(edited))).toBe(true);
+  });
+
+  test('rejects no-op edits and actual changes that exceed a zero limit', () => {
+    const base = bytes('same');
+    expectCorrectionError(
+      () => deriveContiguousCorrection(base, 'same', {
+        maxOldBytes: 0,
+        maxReplacementBytes: 0,
+        maxChangedBytes: 0,
+      }),
+      'no-op-edit',
+    );
+    expectCorrectionError(
+      () => deriveContiguousCorrection(base, 'same!', { maxChangedBytes: 0 }),
+      'limit-exceeded',
+    );
+  });
+
+  test('rejects invalid limits, invalid edited text, and invalid base UTF-8', () => {
+    const base = bytes('base');
+    for (const limits of [null, [], { maxBaseBytes: -1 }, { maxEditedBytes: 1.5 }]) {
+      const code = limits === null || Array.isArray(limits) ? 'invalid-record' : 'invalid-limit';
+      expectCorrectionError(() => deriveContiguousCorrection(base, 'edit', limits), code);
+    }
+    expectCorrectionError(
+      () => deriveContiguousCorrection(base, 'edit', { maxChangeBytes: 1 }),
+      'unknown-limit',
+    );
+    expectCorrectionError(
+      () => deriveContiguousCorrection(base, '\ud800'),
+      'invalid-utf8',
+    );
+    expectCorrectionError(
+      () => deriveContiguousCorrection(Buffer.from([0xff]), 'edit'),
+      'invalid-utf8',
+    );
+  });
+
+  test('does not mutate the base and returns independent operation buffers', () => {
+    const base = bytes('before old after');
+    const snapshot = Buffer.from(base);
+    const correction = deriveContiguousCorrection(base, 'before new after');
+    const expectedSnapshot = Buffer.from(correction.expectedOldBytes);
+    const replacementSnapshot = Buffer.from(correction.replacementBytes);
+
+    applyCorrection(base, correction);
+
+    expect(base.equals(snapshot)).toBe(true);
+    expect(correction.expectedOldBytes.equals(expectedSnapshot)).toBe(true);
+    expect(correction.replacementBytes.equals(replacementSnapshot)).toBe(true);
+    expect(correction.expectedOldBytes.buffer).not.toBe(base.buffer);
   });
 });

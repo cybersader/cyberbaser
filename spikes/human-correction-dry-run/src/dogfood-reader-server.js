@@ -6,10 +6,10 @@ import {
   assertIgnoredPath,
   attemptPaths,
   loadOwnerDogfoodSeries,
-  renderExpectedReaderForm,
+  matchReaderFormInstrumentVersion,
   verifyAttemptWorkspace,
 } from './pilot-workspace.js';
-import { validateAttemptId, validateOperator } from './pilot-input.js';
+import { validateAttemptId, validateOperator, validateOperatorRepin } from './pilot-input.js';
 
 const DEFAULT_EXPIRES_MINUTES = 15;
 const MAX_EXPIRES_MINUTES = 60;
@@ -40,7 +40,7 @@ function sameOpenedFile(before, after) {
     && before.ctimeNs === after.ctimeNs;
 }
 
-async function readNoFollowRegularFile(file, { label, maxBytes }) {
+async function readNoFollowRegularFile(file, { label, maxBytes, optional = false }) {
   let handle;
   try {
     handle = await open(
@@ -59,6 +59,7 @@ async function readNoFollowRegularFile(file, { label, maxBytes }) {
     return bytes;
   } catch (error) {
     if (error instanceof DogfoodReaderServerError) throw error;
+    if (optional && error?.code === 'ENOENT') return null;
     if (error?.code === 'ELOOP') {
       fail('workspace-symlink-rejected', 'pilot workspace components must not be symbolic links');
     }
@@ -103,13 +104,28 @@ export async function loadDogfoodReaderSnapshot(attemptIdInput, {
     label: 'dogfood-operator',
     maxBytes: OPERATOR_MAX_BYTES,
   });
-  let operatorInput;
+  let originalOperator;
   try {
-    operatorInput = JSON.parse(operatorBytes.toString('utf8'));
+    originalOperator = validateOperator(JSON.parse(operatorBytes.toString('utf8')));
   } catch {
-    fail('invalid-dogfood-operator', 'dogfood operator must contain readable JSON');
+    fail('invalid-dogfood-operator', 'dogfood operator must contain valid JSON');
   }
-  const operator = validateOperator(operatorInput);
+  const repinBytes = await readNoFollowRegularFile(paths.operatorRepin, {
+    label: 'dogfood-operator-repin',
+    maxBytes: OPERATOR_MAX_BYTES,
+    optional: true,
+  });
+  let operator = originalOperator;
+  if (repinBytes) {
+    try {
+      operator = validateOperatorRepin(
+        JSON.parse(repinBytes.toString('utf8')),
+        originalOperator,
+      ).replacementOperator;
+    } catch {
+      fail('invalid-dogfood-operator-repin', 'dogfood operator repin must contain valid JSON');
+    }
+  }
   if (operator.attemptId !== attemptId || operator.profile !== 'owner-self-dogfood') {
     fail('dogfood-operator-mismatch', 'dogfood operator must match the requested owner-self-dogfood attempt');
   }
@@ -118,18 +134,22 @@ export async function loadDogfoodReaderSnapshot(attemptIdInput, {
     label: 'reader-form',
     maxBytes: FORM_MAX_BYTES,
   });
-  const expectedBytes = Buffer.from(
-    await renderExpectedReaderForm(attemptId, operator.profile),
-    'utf8',
-  );
-  if (!bytes.equals(expectedBytes)) {
+  let instrumentVersion;
+  try {
+    instrumentVersion = await matchReaderFormInstrumentVersion(
+      bytes,
+      attemptId,
+      operator.profile,
+    );
+  } catch (error) {
     fail(
-      'reader-form-integrity-mismatch',
-      'reader form bytes no longer match the canonical generated instrument',
+      error?.code ?? 'reader-form-integrity-mismatch',
+      error?.message ?? 'reader form bytes no longer match a canonical generated instrument',
     );
   }
   return Object.freeze({
     attemptId,
+    instrumentVersion,
     bytes,
     byteLength: bytes.byteLength,
     sha256: createHash('sha256').update(bytes).digest('hex'),
@@ -286,6 +306,13 @@ export function createDogfoodReaderHandler({
     queueMicrotask(onServed);
     return new Response(snapshot, { status: 200, headers });
   };
+}
+
+export function readerServerDisplayUrls(running) {
+  return Object.freeze({
+    url: running.ipUrl,
+    fallbackUrl: null,
+  });
 }
 
 export function createRouteToken() {

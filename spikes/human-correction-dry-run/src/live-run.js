@@ -93,6 +93,47 @@ function normalizeRepositoryIdentity(value) {
     .toLowerCase();
 }
 
+export async function inspectPinnedPublicationPolicy({ checkoutDir, pinnedCommit, repository }) {
+  if (typeof checkoutDir !== 'string' || !path.isAbsolute(checkoutDir)) {
+    fail('invalid-checkout-dir', 'checkoutDir must be an explicit absolute path');
+  }
+  if (typeof pinnedCommit !== 'string' || !COMMIT_RE.test(pinnedCommit)) {
+    fail('invalid-pinned-commit', 'pinnedCommit must be a lowercase 40-character Git object ID');
+  }
+
+  let checkoutReal;
+  try {
+    checkoutReal = await realpath(checkoutDir);
+    if (!(await stat(checkoutReal)).isDirectory()) fail('checkout-not-directory', 'checkoutDir is not a directory');
+  } catch (error) {
+    if (error instanceof LiveRunError) throw error;
+    fail('checkout-unavailable', 'the supplied checkout could not be resolved', { cause: error?.code });
+  }
+  const root = await realpath(await git(checkoutReal, ['rev-parse', '--show-toplevel']));
+  if (root !== checkoutReal) {
+    fail('checkout-not-repository-root', 'checkoutDir must identify the Git worktree root');
+  }
+  const origin = await git(checkoutReal, ['remote', 'get-url', 'origin']);
+  const repositoryMatches = normalizeRepositoryIdentity(origin) === normalizeRepositoryIdentity(repository);
+  if (!repositoryMatches) {
+    fail('checkout-repository-mismatch', 'checkout origin does not match case.repository', { origin, repository });
+  }
+  await git(checkoutReal, ['cat-file', '-e', `${pinnedCommit}^{commit}`]);
+  const publishConfigAtPin = await git(checkoutReal, [
+    'ls-tree',
+    '--name-only',
+    pinnedCommit,
+    '--',
+    'publish.yml',
+  ]);
+  return deepFreeze({
+    root: checkoutReal,
+    origin,
+    repositoryMatches: true,
+    publishConfigPresent: publishConfigAtPin === 'publish.yml',
+  });
+}
+
 async function git(checkoutDir, args) {
   try {
     const { stdout } = await execFileAsync('git', ['-C', checkoutDir, ...args], {
@@ -184,6 +225,32 @@ export async function inspectCheckout({ checkoutDir, pinnedCommit, repository, s
     };
   }
 
+  const publishConfigPath = path.join(checkoutReal, 'publish.yml');
+  const publishConfigAtPin = await git(checkoutReal, [
+    'ls-tree',
+    '--name-only',
+    pinnedCommit,
+    '--',
+    'publish.yml',
+  ]);
+  const publishConfigPresent = publishConfigAtPin === 'publish.yml';
+  if (publishConfigPresent) {
+    const [workingPolicy, committedPolicy] = await Promise.all([
+      readFile(publishConfigPath),
+      gitBytes(
+        checkoutReal,
+        ['show', `${pinnedCommit}:publish.yml`],
+        'publication-policy-not-at-pinned-commit',
+      ),
+    ]);
+    if (!workingPolicy.equals(committedPolicy)) {
+      fail(
+        'publication-policy-not-at-pinned-commit',
+        'publish.yml bytes must exactly match the pinned Git revision',
+      );
+    }
+  }
+
   return deepFreeze({
     root: checkoutReal,
     head,
@@ -191,7 +258,7 @@ export async function inspectCheckout({ checkoutDir, pinnedCommit, repository, s
     origin,
     repositoryMatches,
     sourceBinding,
-    publishConfigPresent: await exists(path.join(checkoutReal, 'publish.yml')),
+    publishConfigPresent,
   });
 }
 
@@ -254,6 +321,18 @@ function summarizeProjection(projectionResult, verification) {
   };
 }
 
+function assertCyberbaserProjectionBoundary(result, lane) {
+  if (result?.mode !== 'cyberbaser-select-project-verify'
+    || result?.selection?.sourcePublished !== true
+    || result?.projection?.ok !== true
+    || result?.projection?.verification?.ok !== true) {
+    fail(
+      'publication-boundary-evidence-invalid',
+      `${lane} projection did not prove the Cyberbaser publication boundary`,
+    );
+  }
+}
+
 export async function buildProjection({
   vaultDir,
   outputDir,
@@ -262,18 +341,10 @@ export async function buildProjection({
 }) {
   const publishConfigPresent = await exists(path.join(vaultDir, 'publish.yml'));
   if (!publishConfigPresent) {
-    await copyVaultTree(vaultDir, outputDir);
-    return {
-      mode: 'verbatim-without-publish-config',
-      selection: null,
-      projection: {
-        ok: true,
-        counts: null,
-        failureCount: 0,
-        warningCount: 0,
-        verification: null,
-      },
-    };
+    fail(
+      'publication-boundary-policy-missing',
+      'Cyberbaser projection requires publish.yml at the pinned source revision',
+    );
   }
 
   const selection = select(vaultDir, { audience: 'public' });
@@ -581,6 +652,12 @@ export async function runLiveCorrection({
       repository: value.repository,
       sourcePath: value.sourcePath,
     });
+    if (initialCheckout.publishConfigPresent !== true) {
+      fail(
+        'publication-boundary-policy-missing',
+        'Cyberbaser live rendering requires publish.yml at the pinned source revision',
+      );
+    }
 
     const evaluation = await evaluateCorrection({
       caseData: value,
@@ -637,6 +714,8 @@ export async function runLiveCorrection({
       repositoryRelativePath: evaluation.source.repositoryRelativePath,
       copyVaultTree: deps.copyVault,
     });
+    assertCyberbaserProjectionBoundary(baselineProjectionResult, 'baseline');
+    assertCyberbaserProjectionBoundary(candidateProjectionResult, 'candidate');
 
     const baselineRenderer = await deps.setupRenderer({
       lane: 'baseline',

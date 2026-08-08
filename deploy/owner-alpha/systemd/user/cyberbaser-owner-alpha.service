@@ -1,0 +1,27 @@
+[Unit]
+Description=Cyberbaser owner-alpha container (rootless Docker example)
+Documentation=file:%h/.local/lib/cyberbaser/owner-alpha/compose.yaml
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+UMask=0077
+# Install owner-alpha-compose.sh and compose.yaml together at the path below.
+# The helper starts detached Compose with engine logging disabled. Container
+# stdout/stderr and bootstrap capabilities therefore never enter the user journal.
+ExecStart=/usr/bin/env OWNER_ALPHA_EXPECTED_PROFILE=rootless OWNER_ALPHA_ENV_FILE=%h/.config/cyberbaser/owner-alpha.env %h/.local/lib/cyberbaser/owner-alpha/owner-alpha-compose.sh start
+ExecReload=/usr/bin/env OWNER_ALPHA_EXPECTED_PROFILE=rootless OWNER_ALPHA_ENV_FILE=%h/.config/cyberbaser/owner-alpha.env %h/.local/lib/cyberbaser/owner-alpha/owner-alpha-compose.sh restart
+ExecStop=/usr/bin/env OWNER_ALPHA_EXPECTED_PROFILE=rootless OWNER_ALPHA_ENV_FILE=%h/.config/cyberbaser/owner-alpha.env %h/.local/lib/cyberbaser/owner-alpha/owner-alpha-compose.sh stop
+StandardInput=null
+TimeoutStartSec=20min
+TimeoutStopSec=2min
+
+# The container retries process failures at most three times. This enabled user
+# unit starts detached operation again after boot; enable user lingering if the
+# service must start before login and remain active after logout.
+
+[Install]
+WantedBy=default.target

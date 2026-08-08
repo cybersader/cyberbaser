@@ -4,6 +4,7 @@ import { parseStrictArgs } from '../src/cli.js';
 import {
   parseExpiresMinutes,
   prepareDogfoodReaderServer,
+  readerServerDisplayUrls,
 } from '../src/dogfood-reader-server.js';
 import { validateAttemptId } from '../src/pilot-input.js';
 
@@ -18,15 +19,14 @@ try {
   running = await prepareDogfoodReaderServer({ attemptId, expiresMinutes });
   process.stdout.write(`${JSON.stringify({
     status: 'ready',
-    url: running.dnsUrl ?? running.ipUrl,
-    fallbackUrl: running.dnsUrl ? running.ipUrl : null,
+    ...readerServerDisplayUrls(running),
     expiresAt: new Date(running.expiresAt).toISOString(),
     oneShot: true,
     methods: ['GET', 'HEAD'],
     acceptsSubmissions: false,
     byteLength: running.snapshot.byteLength,
     sha256: running.snapshot.sha256,
-    warning: 'Treat the random URL as an expiring secret. HTTP is carried inside Tailscale, not browser TLS.',
+    warning: 'Treat the random URL as an expiring secret. Use the numeric HTTP URL exactly as printed; Tailscale carries it inside the encrypted tunnel.',
   })}\n`);
   const outcome = await running.completion;
   process.stdout.write(`${JSON.stringify({ status: 'stopped', reason: outcome.reason })}\n`);

@@ -1,0 +1,26 @@
+[Unit]
+Description=Cyberbaser owner-alpha container (rootful Docker example)
+Documentation=file:/usr/local/lib/cyberbaser/owner-alpha/compose.yaml
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+UMask=0077
+# Install owner-alpha-compose.sh and compose.yaml together at the path below.
+# The helper starts detached Compose with engine logging disabled. Container
+# stdout/stderr and bootstrap capabilities therefore never enter journald.
+ExecStart=/usr/bin/env OWNER_ALPHA_EXPECTED_PROFILE=rootful OWNER_ALPHA_ENV_FILE=/etc/cyberbaser/owner-alpha.env /usr/local/lib/cyberbaser/owner-alpha/owner-alpha-compose.sh start
+ExecReload=/usr/bin/env OWNER_ALPHA_EXPECTED_PROFILE=rootful OWNER_ALPHA_ENV_FILE=/etc/cyberbaser/owner-alpha.env /usr/local/lib/cyberbaser/owner-alpha/owner-alpha-compose.sh restart
+ExecStop=/usr/bin/env OWNER_ALPHA_EXPECTED_PROFILE=rootful OWNER_ALPHA_ENV_FILE=/etc/cyberbaser/owner-alpha.env /usr/local/lib/cyberbaser/owner-alpha/owner-alpha-compose.sh stop
+StandardInput=null
+TimeoutStartSec=20min
+TimeoutStopSec=2min
+
+# The container retries process failures at most three times. This enabled
+# system unit re-establishes detached operation after the Linux host boots.
+
+[Install]
+WantedBy=multi-user.target

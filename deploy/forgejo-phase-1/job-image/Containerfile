@@ -1,0 +1,14 @@
+# WP3 fixture job-container image. Workflow jobs execute inside containers built
+# from this file, never as host processes. The base digest is the exact Bun base
+# already reviewed for the WP2 owner-alpha image. This is a disposable fixture
+# image rebuilt per run, not a shipped artifact, so git and ca-certificates are
+# installed from the base image's own apt rather than pinned to exact versions.
+# The build context must be an empty directory: nothing is copied in.
+FROM oven/bun:1.3.11@sha256:38919894db4e117a37f74e3dca503e84f24d97f19cabc5f499a289c2a5d0db7c
+
+RUN set -eux; \
+    apt-get -o Acquire::Retries=3 update; \
+    apt-get install -y --no-install-recommends ca-certificates git; \
+    rm -rf /var/lib/apt/lists/*; \
+    find / -xdev -type f -perm /6000 -exec chmod a-s {} +; \
+    test -z "$(find / -xdev -type f -perm /6000 -print -quit)"

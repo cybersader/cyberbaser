@@ -1,12 +1,21 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { preparePilotAttempt, renderPilotAttempt, validatePilotOwnerDecision } from '../src/pilot-run.js';
+import { caseId, stableStringify } from '../src/case.js';
+import { recordWizardOwnerDecision } from '../src/dogfood-wizard.js';
+import { convertPilotSubmission, ownerDecisionTemplate } from '../src/pilot-input.js';
+import {
+  preparePilotAttempt,
+  repinOwnerDogfoodAttempt,
+  renderPilotAttempt,
+  validatePilotOwnerDecision,
+} from '../src/pilot-run.js';
 import {
   attemptPaths,
   initializeAttempt,
   initializeOwnerDogfoodSeries,
+  loadAttemptOperator,
 } from '../src/pilot-workspace.js';
 
 const PROJECT_ROOT = path.resolve(import.meta.dir, '../../..');
@@ -27,11 +36,15 @@ async function createCheckout({
   repository = 'https://example.org/owner/kb',
   sourcePath = 'docs/guide.md',
   source,
+  publishConfig = repository === 'https://github.com/cybersader/cyberbase',
 } = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'pilot-checkout-'));
   cleanup.push(root);
   await mkdir(path.dirname(path.join(root, sourcePath)), { recursive: true });
   await writeFile(path.join(root, sourcePath), source, 'utf8');
+  if (publishConfig) {
+    await writeFile(path.join(root, 'publish.yml'), 'allow:\n  - "docs/**"\n', 'utf8');
+  }
   await command(['git', 'init', '-q'], root);
   await command(['git', 'config', 'user.email', 'test@example.org'], root);
   await command(['git', 'config', 'user.name', 'Test User'], root);
@@ -61,7 +74,7 @@ function submission({
 }) {
   return {
     schemaVersion: 1,
-    instrumentVersion: 'reader-form-v1',
+    instrumentVersion: 'reader-form-v2',
     attemptId,
     openedAt: '2026-07-28T12:00:00.000Z',
     submittedAt: '2026-07-28T12:00:04.000Z',
@@ -106,6 +119,25 @@ function operator({ attemptId = 'HC-01', checkout, correctionKind = 'typo', over
     },
     ...overrides,
   };
+}
+
+function ownerDogfoodOperator({ attemptId = 'OD-01', checkout, pageUrl }) {
+  return operator({
+    attemptId,
+    checkout,
+    correctionKind: 'wording',
+    overrides: {
+      profile: 'owner-self-dogfood',
+      publicUrl: pageUrl,
+      independentOwnerAttested: false,
+      publicationBoundary: 'cyberbaser',
+      renderer: {
+        profile: 'cyberbase-quartz-v4.5.2',
+        basePath: 'cyberbase',
+        buildCommand: 'renderers/quartz-cyberbase/build.sh <content-dir> <quartz-dir>',
+      },
+    },
+  });
 }
 
 async function writeAttempt({ workspace, attemptId = 'HC-01', submissionData, operatorData }) {
@@ -254,6 +286,56 @@ afterEach(async () => {
 });
 
 describe('pilot preparation', () => {
+  test('policy-free Cyberbaser preparation fails before creating a run', async () => {
+    const attemptId = 'OD-01';
+    const quote = 'Old policy-free sentence.';
+    const replacement = 'New policy-free sentence.';
+    const pageUrl = 'https://example.org/cyberbase/guide';
+    const checkout = await createCheckout({
+      repository: 'https://github.com/cybersader/cyberbase',
+      source: `# Guide\n\n${quote}\n`,
+      publishConfig: false,
+    });
+    const workspace = await createWorkspace();
+    const paths = await writeAttempt({
+      workspace,
+      attemptId,
+      submissionData: submission({ attemptId, quote, replacement, pageUrl }),
+      operatorData: ownerDogfoodOperator({ attemptId, checkout, pageUrl }),
+    });
+    const sourceBefore = await readFile(path.join(checkout.root, checkout.sourcePath));
+
+    await expect(preparePilotAttempt({
+      attemptId,
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: workspace,
+    })).rejects.toMatchObject({ code: 'publication-boundary-policy-missing' });
+
+    expect(await readdir(paths.runs)).toEqual([]);
+    expect((await readFile(path.join(checkout.root, checkout.sourcePath))).equals(sourceBefore)).toBe(true);
+    expect(await command(['git', 'status', '--porcelain=v1', '--untracked-files=all'], checkout.root)).toBe('');
+  });
+
+  test('rejects a submission version forged away from the issued reader form', async () => {
+    const quote = 'The routre forwards the packet.';
+    const checkout = await createCheckout({ source: `# Guide\n\n${quote}\n` });
+    const workspace = await createWorkspace();
+    const paths = await writeAttempt({
+      workspace,
+      submissionData: {
+        ...submission({ quote, replacement: 'The router forwards the packet.' }),
+        instrumentVersion: 'reader-form-v1',
+      },
+      operatorData: operator({ checkout }),
+    });
+
+    await expect(preparePilotAttempt({
+      attemptId: 'HC-01', projectRoot: PROJECT_ROOT, workspaceRoot: workspace,
+    })).rejects.toMatchObject({ code: 'submission-instrument-version-mismatch' });
+
+    expect(await readdir(paths.runs)).toEqual([]);
+  });
+
   test('creates deterministic no-write evidence but remains ineligible without rendering', async () => {
     const quote = 'The routre forwards the packet.';
     const replacement = 'The router forwards the packet.';
@@ -382,6 +464,321 @@ describe('pilot preparation', () => {
     })).rejects.toMatchObject({ code: 'quote-ambiguous' });
     expect((await readFile(sourceFile)).equals(before)).toBe(true);
   });
+});
+
+describe('owner self-dogfood operator repin', () => {
+  test('preserves the original binding and run while deriving a new preparable case', async () => {
+    const attemptId = 'OD-01';
+    const quote = 'Old dogfood sentence.';
+    const replacement = 'New dogfood sentence.';
+    const pageUrl = 'https://example.org/cyberbase/guide';
+    const checkout = await createCheckout({
+      repository: 'https://github.com/cybersader/cyberbase',
+      source: `# Guide\n\n${quote}\n`,
+      publishConfig: false,
+    });
+    const originalCommit = checkout.commit;
+    const workspace = await createWorkspace();
+    const paths = await writeAttempt({
+      workspace,
+      attemptId,
+      submissionData: submission({ attemptId, quote, replacement, pageUrl }),
+      operatorData: ownerDogfoodOperator({ attemptId, checkout, pageUrl }),
+    });
+    const originalOperatorBytes = await readFile(paths.operator);
+    const oldRun = path.join(paths.runs, 'DRY-111111111111');
+    await mkdir(oldRun);
+    await writeFile(path.join(oldRun, 'historical-failure.json'), '{"preserved":true}\n', 'utf8');
+
+    await writeFile(path.join(checkout.root, 'publish.yml'), 'allow:\n  - "docs/**"\n', 'utf8');
+    await command(['git', 'add', 'publish.yml'], checkout.root);
+    await command(['git', 'commit', '-q', '-m', 'add publication policy'], checkout.root);
+    const replacementCommit = await command(['git', 'rev-parse', 'HEAD'], checkout.root);
+    const sourceBefore = await readFile(path.join(checkout.root, checkout.sourcePath));
+
+    const repinned = await repinOwnerDogfoodAttempt({
+      attemptId,
+      checkoutDir: checkout.root,
+      sourceAuthorization: 'yes',
+      reason: 'The original source pin predates the publication policy.',
+      repinnedAt: '2026-07-31T13:00:00.000Z',
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: workspace,
+    });
+
+    expect(repinned.previousBaseCommit).toBe(originalCommit);
+    expect(repinned.baseCommit).toBe(replacementCommit);
+    expect(repinned.replacementCaseId).not.toBe(repinned.originalCaseId);
+    expect(await readFile(paths.operator)).toEqual(originalOperatorBytes);
+    expect(JSON.parse(await readFile(paths.operatorRepin, 'utf8'))).toMatchObject({
+      artifactType: 'private-owner-self-dogfood-operator-repin',
+      previousBaseCommit: originalCommit,
+      publishConfigPresent: true,
+      replacementOperator: { baseCommit: replacementCommit },
+    });
+    expect((await loadAttemptOperator(paths)).baseCommit).toBe(replacementCommit);
+    expect(await pathExists(path.join(oldRun, 'historical-failure.json'))).toBe(true);
+
+    const prepared = await preparePilotAttempt({
+      attemptId,
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: workspace,
+    });
+    expect(prepared.mechanicalCaseId).toBe(repinned.replacementCaseId);
+    expect(await pathExists(path.join(paths.runs, repinned.replacementCaseId, 'status.json'))).toBe(true);
+    expect((await readFile(path.join(checkout.root, checkout.sourcePath))).equals(sourceBefore)).toBe(true);
+    expect(await command(['git', 'status', '--porcelain=v1', '--untracked-files=all'], checkout.root)).toBe('');
+
+    await expect(repinOwnerDogfoodAttempt({
+      attemptId,
+      checkoutDir: checkout.root,
+      sourceAuthorization: 'yes',
+      reason: 'A second repin must not replace immutable evidence.',
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: workspace,
+    })).rejects.toMatchObject({ code: 'operator-repin-already-exists' });
+  });
+
+  test('allows either repin or owner decision to win, never both', async () => {
+    const attemptId = 'OD-01';
+    const quote = 'Concurrent old sentence.';
+    const replacement = 'Concurrent new sentence.';
+    const pageUrl = 'https://example.org/cyberbase/guide';
+    const checkout = await createCheckout({
+      repository: 'https://github.com/cybersader/cyberbase',
+      source: `# Guide\n\n${quote}\n`,
+      publishConfig: false,
+    });
+    const workspace = await createWorkspace();
+    const submissionData = submission({ attemptId, quote, replacement, pageUrl });
+    const operatorData = ownerDogfoodOperator({ attemptId, checkout, pageUrl });
+    const paths = await writeAttempt({
+      workspace,
+      attemptId,
+      submissionData,
+      operatorData,
+    });
+    const mechanicalCaseId = caseId(convertPilotSubmission(submissionData, operatorData));
+    const runDir = path.join(paths.runs, mechanicalCaseId);
+    await mkdir(runDir);
+    const template = ownerDecisionTemplate(attemptId, {
+      mechanicalCaseId,
+      candidateDigest: 'sha-256=:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=:',
+    });
+    await writeFile(path.join(runDir, 'owner-decision-template.json'), stableStringify(template), 'utf8');
+    await writeFile(paths.ownerDecision, stableStringify(template), 'utf8');
+    const attempt = {
+      attemptId,
+      stage: 'awaiting-decision',
+      paths,
+      runDir,
+      mechanicalCaseId,
+      template,
+    };
+
+    await writeFile(path.join(checkout.root, 'publish.yml'), 'allow:\n  - "docs/**"\n', 'utf8');
+    await command(['git', 'add', 'publish.yml'], checkout.root);
+    await command(['git', 'commit', '-q', '-m', 'add policy for concurrent repin'], checkout.root);
+
+    const outcomes = await Promise.allSettled([
+      repinOwnerDogfoodAttempt({
+        attemptId,
+        checkoutDir: checkout.root,
+        sourceAuthorization: 'yes',
+        reason: 'Concurrent recovery attempt.',
+        projectRoot: PROJECT_ROOT,
+        workspaceRoot: workspace,
+      }),
+      recordWizardOwnerDecision({
+        attempt,
+        decision: 'reject',
+        reason: 'Concurrent owner decision.',
+        reviewSeconds: 1,
+        decidedAt: '2026-07-31T13:15:00.000Z',
+      }),
+    ]);
+
+    expect(outcomes.filter((outcome) => outcome.status === 'fulfilled')).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome.status === 'rejected')).toHaveLength(1);
+    const repinExists = await pathExists(paths.operatorRepin);
+    const decisionExists = await pathExists(path.join(runDir, 'wizard-owner-decision.json'));
+    expect([repinExists, decisionExists].filter(Boolean)).toHaveLength(1);
+  });
+
+  test('fails closed on missing policy, unnecessary recovery, dirty checkout, or stale quote', async () => {
+    const attemptId = 'OD-01';
+    const quote = 'Exact legacy sentence.';
+    const replacement = 'Exact replacement sentence.';
+    const pageUrl = 'https://example.org/cyberbase/guide';
+
+    async function legacyAttempt(checkout) {
+      const workspace = await createWorkspace();
+      const paths = await writeAttempt({
+        workspace,
+        attemptId,
+        submissionData: submission({ attemptId, quote, replacement, pageUrl }),
+        operatorData: ownerDogfoodOperator({ attemptId, checkout, pageUrl }),
+      });
+      return { workspace, paths };
+    }
+
+    const policyFree = await createCheckout({
+      repository: 'https://github.com/cybersader/cyberbase',
+      source: `# Guide\n\n${quote}\n`,
+      publishConfig: false,
+    });
+    const missingPolicy = await legacyAttempt(policyFree);
+    await writeFile(path.join(policyFree.root, 'revision.txt'), 'new base without policy\n', 'utf8');
+    await command(['git', 'add', 'revision.txt'], policyFree.root);
+    await command(['git', 'commit', '-q', '-m', 'advance without policy'], policyFree.root);
+    await expect(repinOwnerDogfoodAttempt({
+      attemptId,
+      checkoutDir: policyFree.root,
+      sourceAuthorization: 'yes',
+      reason: 'Missing policy must fail.',
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: missingPolicy.workspace,
+    })).rejects.toMatchObject({ code: 'publication-boundary-policy-missing' });
+    expect(await pathExists(missingPolicy.paths.operatorRepin)).toBe(false);
+
+    const policyBearingOriginal = await createCheckout({
+      repository: 'https://github.com/cybersader/cyberbase',
+      source: `# Guide\n\n${quote}\n`,
+      publishConfig: true,
+    });
+    const unnecessaryAttempt = await legacyAttempt(policyBearingOriginal);
+    await expect(repinOwnerDogfoodAttempt({
+      attemptId,
+      checkoutDir: policyBearingOriginal.root,
+      sourceAuthorization: 'yes',
+      reason: 'A policy-bearing original pin must not be repinned.',
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: unnecessaryAttempt.workspace,
+    })).rejects.toMatchObject({ code: 'operator-repin-not-required' });
+    expect(await pathExists(unnecessaryAttempt.paths.operatorRepin)).toBe(false);
+
+    const dirty = await createCheckout({
+      repository: 'https://github.com/cybersader/cyberbase',
+      source: `# Guide\n\n${quote}\n`,
+      publishConfig: false,
+    });
+    const dirtyAttempt = await legacyAttempt(dirty);
+    await writeFile(path.join(dirty.root, 'publish.yml'), 'allow:\n  - "docs/**"\n', 'utf8');
+    await writeFile(path.join(dirty.root, 'revision.txt'), 'new clean base\n', 'utf8');
+    await command(['git', 'add', 'publish.yml', 'revision.txt'], dirty.root);
+    await command(['git', 'commit', '-q', '-m', 'advance policy-bearing base'], dirty.root);
+    await writeFile(path.join(dirty.root, 'dirty.txt'), 'uncommitted\n', 'utf8');
+    await expect(repinOwnerDogfoodAttempt({
+      attemptId,
+      checkoutDir: dirty.root,
+      sourceAuthorization: 'yes',
+      reason: 'A dirty checkout must fail.',
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: dirtyAttempt.workspace,
+    })).rejects.toMatchObject({ code: 'checkout-not-clean' });
+    expect(await pathExists(dirtyAttempt.paths.operatorRepin)).toBe(false);
+
+    const stale = await createCheckout({
+      repository: 'https://github.com/cybersader/cyberbase',
+      source: `# Guide\n\n${quote}\n`,
+      publishConfig: false,
+    });
+    const staleAttempt = await legacyAttempt(stale);
+    await writeFile(path.join(stale.root, stale.sourcePath), '# Guide\n\nDifferent source text.\n', 'utf8');
+    await writeFile(path.join(stale.root, 'publish.yml'), 'allow:\n  - "docs/**"\n', 'utf8');
+    await command(['git', 'add', '.'], stale.root);
+    await command(['git', 'commit', '-q', '-m', 'advance beyond exact quote'], stale.root);
+    await expect(repinOwnerDogfoodAttempt({
+      attemptId,
+      checkoutDir: stale.root,
+      sourceAuthorization: 'yes',
+      reason: 'A stale quote must fail.',
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: staleAttempt.workspace,
+    })).rejects.toMatchObject({ code: 'quote-not-found' });
+    expect(await pathExists(staleAttempt.paths.operatorRepin)).toBe(false);
+
+    const originalForWrongOrigin = await createCheckout({
+      repository: 'https://github.com/cybersader/cyberbase',
+      source: `# Guide\n\n${quote}\n`,
+      publishConfig: false,
+    });
+    const wrongOriginAttempt = await legacyAttempt(originalForWrongOrigin);
+    const wrongOrigin = await createCheckout({
+      repository: 'https://example.org/not-cyberbase',
+      source: `# Guide\n\n${quote}\n`,
+      publishConfig: true,
+    });
+    await expect(repinOwnerDogfoodAttempt({
+      attemptId,
+      checkoutDir: wrongOrigin.root,
+      sourceAuthorization: 'yes',
+      reason: 'A different repository must fail.',
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: wrongOriginAttempt.workspace,
+    })).rejects.toMatchObject({ code: 'checkout-repository-mismatch' });
+    expect(await pathExists(wrongOriginAttempt.paths.operatorRepin)).toBe(false);
+
+    const canonicalRecorded = await createCheckout({
+      repository: 'https://github.com/cybersader/cyberbase',
+      source: `# Guide\n\n${quote}\n`,
+      publishConfig: false,
+    });
+    const canonicalRecordedAttempt = await legacyAttempt(canonicalRecorded);
+    const decision = JSON.parse(await readFile(canonicalRecordedAttempt.paths.ownerDecision, 'utf8'));
+    await writeFile(canonicalRecordedAttempt.paths.ownerDecision, `${JSON.stringify({
+      ...decision,
+      decision: 'reject',
+      reason: 'The owner already recorded a decision.',
+      reviewSeconds: 3,
+      decidedAt: '2026-07-31T13:05:00.000Z',
+    }, null, 2)}\n`, 'utf8');
+    await expect(repinOwnerDogfoodAttempt({
+      attemptId,
+      checkoutDir: canonicalRecorded.root,
+      sourceAuthorization: 'yes',
+      reason: 'A recorded canonical decision must freeze the binding.',
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: canonicalRecordedAttempt.workspace,
+    })).rejects.toMatchObject({ code: 'operator-repin-after-decision' });
+
+    const wizardRecorded = await createCheckout({
+      repository: 'https://github.com/cybersader/cyberbase',
+      source: `# Guide\n\n${quote}\n`,
+      publishConfig: false,
+    });
+    const wizardRecordedAttempt = await legacyAttempt(wizardRecorded);
+    const wizardRun = path.join(wizardRecordedAttempt.paths.runs, 'DRY-333333333333');
+    await mkdir(wizardRun);
+    await writeFile(path.join(wizardRun, 'wizard-owner-decision.json'), '{}\n', 'utf8');
+    await expect(repinOwnerDogfoodAttempt({
+      attemptId,
+      checkoutDir: wizardRecorded.root,
+      sourceAuthorization: 'yes',
+      reason: 'A recorded wizard decision must freeze the binding.',
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: wizardRecordedAttempt.workspace,
+    })).rejects.toMatchObject({ code: 'operator-repin-after-decision' });
+
+    const completed = await createCheckout({
+      repository: 'https://github.com/cybersader/cyberbase',
+      source: `# Guide\n\n${quote}\n`,
+      publishConfig: false,
+    });
+    const completedAttempt = await legacyAttempt(completed);
+    const completedRun = path.join(completedAttempt.paths.runs, 'DRY-222222222222');
+    await mkdir(completedRun);
+    await writeFile(path.join(completedRun, 'validated-owner-decision.json'), '{}\n', 'utf8');
+    await expect(repinOwnerDogfoodAttempt({
+      attemptId,
+      checkoutDir: completed.root,
+      sourceAuthorization: 'yes',
+      reason: 'A completed decision must freeze the binding.',
+      projectRoot: PROJECT_ROOT,
+      workspaceRoot: completedAttempt.workspace,
+    })).rejects.toMatchObject({ code: 'operator-repin-after-decision' });
+    expect(await pathExists(completedAttempt.paths.operatorRepin)).toBe(false);
+  }, 60_000);
 });
 
 describe('independent static-output rendering', () => {
@@ -761,7 +1158,7 @@ describe('independent static-output rendering', () => {
     ));
     expect(retained.decision).toBe('reject');
     expect(await command(['git', 'status', '--porcelain=v1', '--untracked-files=all'], checkout.root)).toBe('');
-  });
+  }, 60_000);
 
   test('rejects a Cyberbase decision after blocked render evidence and status are tampered eligible', async () => {
     const quote = 'Old blocked Cyberbase sentence.';

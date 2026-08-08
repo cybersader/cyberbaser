@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "listen": {
+    "host": "127.0.0.1",
+    "port": 4317
+  },
+  "repository": {
+    "checkout": "/absolute/path/to/cyberbase",
+    "remote": {
+      "name": "origin",
+      "url": "https://github.com/cybersader/cyberbase.git"
+    },
+    "branch": "main"
+  },
+  "owner": {
+    "identity": "cybersader",
+    "allowedTrustRoutes": [
+      "auto-merge",
+      "quick-review"
+    ]
+  },
+  "live": {
+    "baseUrl": "https://cybersader.github.io/cyberbase/"
+  },
+  "workflow": {
+    "provider": "github-actions",
+    "repository": "cybersader/cyberbase",
+    "name": "Publish vault site",
+    "path": ".github/workflows/publish-site.yml",
+    "event": "push",
+    "branch": "main",
+    "jobs": [
+      "build",
+      "deploy"
+    ],
+    "environment": "github-pages"
+  },
+  "workspace": {
+    "root": ".workspace/owner-alpha",
+    "store": ".workspace/owner-alpha/store",
+    "site": ".workspace/owner-alpha/site",
+    "cache": ".workspace/owner-alpha/cache"
+  },
+  "paths": {
+    "include": [
+      "**/*.md"
+    ],
+    "exclude": [
+      ".git/**",
+      ".workspace/**"
+    ]
+  },
+  "limits": {
+    "maxSourceBytes": 2097152,
+    "maxReplacementBytes": 65536,
+    "maxChangedBytes": 65536,
+    "maxChangedLines": 60,
+    "maxArtifactBytes": 8388608,
+    "requestTimeoutMs": 30000,
+    "networkTimeoutMs": 900000
+  },
+  "checks": {
+    "allowedOfmVerdicts": [
+      "clean"
+    ],
+    "requirePublishedSource": true,
+    "requireProjectionVerification": true,
+    "requireNoNewBrokenLinks": true,
+    "requireRenderedWitness": true
+  },
+  "git": {
+    "autoCommit": true,
+    "autoPush": true,
+    "useHooks": true,
+    "commitMessagePrefix": "owner-alpha:"
+  }
+}

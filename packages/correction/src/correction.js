@@ -164,17 +164,30 @@ function splice(base, start, end, replacementBytes) {
   ]);
 }
 
-/** Bind an exact quote selection and replacement to one immutable base representation. */
-export function prepareCorrection(baseBytes, request) {
-  const base = validateUtf8Bytes(baseBytes, 'baseBytes', 'prepare');
-  requireRecord(request, 'request', 'prepare');
-  if (!Object.hasOwn(request, 'selector')) {
-    fail('missing-selector', 'request.selector is required', 'prepare');
+function requireSafeOffset(value, label, phase) {
+  if (!Number.isSafeInteger(value)) {
+    fail('invalid-offset', `${label} must be a safe integer`, phase);
   }
+  return value;
+}
 
-  const normalized = normalizeSelector(request.selector, 'prepare');
-  const { start, end } = resolveNormalized(base, normalized);
-  const replacementBytes = replacementBytesFromRequest(request);
+function isUtf8Boundary(bytes, offset) {
+  return offset === 0 || offset === bytes.length || (bytes[offset] & 0xc0) !== 0x80;
+}
+
+function validateSpliceOffsets(base, startValue, endValue, phase, labelPrefix) {
+  const start = requireSafeOffset(startValue, `${labelPrefix}.start`, phase);
+  const end = requireSafeOffset(endValue, `${labelPrefix}.end`, phase);
+  if (start < 0 || end < start || end > base.length) {
+    fail('splice-out-of-bounds', `${labelPrefix} offsets are outside the base byte range`, phase);
+  }
+  if (!isUtf8Boundary(base, start) || !isUtf8Boundary(base, end)) {
+    fail('offset-not-utf8-boundary', `${labelPrefix} offsets must be UTF-8 byte boundaries`, phase);
+  }
+  return { start, end };
+}
+
+function prepareBoundCorrection(base, start, end, replacementBytes, extra = {}) {
   const expectedOldBytes = Buffer.from(base.subarray(start, end));
   const candidate = splice(base, start, end, replacementBytes);
   decodeUtf8(candidate, 'candidateBytes', 'prepare');
@@ -186,17 +199,167 @@ export function prepareCorrection(baseBytes, request) {
     end,
     expectedOldBytes,
     replacementBytes: Buffer.from(replacementBytes),
-    selector: { ...normalized.selector },
+    ...extra,
     candidateByteLength: candidate.length,
     candidateDigest: sha256Digest(candidate),
   };
 }
 
-function requireSafeOffset(value, label) {
-  if (!Number.isSafeInteger(value)) {
-    fail('invalid-offset', `${label} must be a safe integer`, 'apply');
+/** Bind an exact quote selection and replacement to one immutable base representation. */
+export function prepareCorrection(baseBytes, request) {
+  const base = validateUtf8Bytes(baseBytes, 'baseBytes', 'prepare');
+  requireRecord(request, 'request', 'prepare');
+  if (!Object.hasOwn(request, 'selector')) {
+    fail('missing-selector', 'request.selector is required', 'prepare');
   }
-  return value;
+
+  const normalized = normalizeSelector(request.selector, 'prepare');
+  const { start, end } = resolveNormalized(base, normalized);
+  const replacementBytes = replacementBytesFromRequest(request);
+  return prepareBoundCorrection(base, start, end, replacementBytes, {
+    selector: { ...normalized.selector },
+  });
+}
+
+/** Bind one half-open UTF-8 byte range and replacement to an immutable base. */
+export function prepareOffsetCorrection(baseBytes, request) {
+  const base = validateUtf8Bytes(baseBytes, 'baseBytes', 'prepare');
+  requireRecord(request, 'request', 'prepare');
+  const { start, end } = validateSpliceOffsets(
+    base,
+    request.start,
+    request.end,
+    'prepare',
+    'request',
+  );
+  const replacementBytes = replacementBytesFromRequest(request);
+  return prepareBoundCorrection(base, start, end, replacementBytes, {
+    operationType: 'offset',
+  });
+}
+
+const LIMIT_NAMES = [
+  'maxBaseBytes',
+  'maxEditedBytes',
+  'maxOldBytes',
+  'maxReplacementBytes',
+  'maxChangedBytes',
+  'maxChangedLines',
+];
+
+function normalizeLimits(limits) {
+  if (limits === undefined) return {};
+  requireRecord(limits, 'limits', 'derive');
+
+  for (const name of Object.keys(limits)) {
+    if (!LIMIT_NAMES.includes(name)) {
+      fail('unknown-limit', `limits.${name} is not supported`, 'derive');
+    }
+  }
+
+  const normalized = {};
+  for (const name of LIMIT_NAMES) {
+    if (!Object.hasOwn(limits, name)) continue;
+    const value = limits[name];
+    if (!Number.isSafeInteger(value) || value < 0) {
+      fail('invalid-limit', `limits.${name} must be a non-negative safe integer`, 'derive');
+    }
+    normalized[name] = value;
+  }
+  return normalized;
+}
+
+function enforceLimit(actual, maximum, name) {
+  if (maximum !== undefined && actual > maximum) {
+    fail('limit-exceeded', `${name} exceeds limits.${name}`, 'derive', {
+      limit: name,
+      maximum,
+      actual,
+    });
+  }
+}
+
+function commonPrefixLength(left, right) {
+  const maximum = Math.min(left.length, right.length);
+  let offset = 0;
+  while (offset < maximum && left[offset] === right[offset]) offset += 1;
+  while (offset > 0 && (!isUtf8Boundary(left, offset) || !isUtf8Boundary(right, offset))) {
+    offset -= 1;
+  }
+  return offset;
+}
+
+function changedLineCount(bytes) {
+  if (bytes.length === 0) return 0;
+  let lines = 1;
+  for (const byte of bytes) {
+    if (byte === 0x0a) lines += 1;
+  }
+  return lines;
+}
+
+function contiguousDifference(base, edited) {
+  const start = commonPrefixLength(base, edited);
+  let end = base.length;
+  let editedEnd = edited.length;
+
+  while (end > start && editedEnd > start && base[end - 1] === edited[editedEnd - 1]) {
+    end -= 1;
+    editedEnd -= 1;
+  }
+  while (
+    end < base.length
+    && editedEnd < edited.length
+    && (!isUtf8Boundary(base, end) || !isUtf8Boundary(edited, editedEnd))
+  ) {
+    end += 1;
+    editedEnd += 1;
+  }
+
+  return { start, end, editedEnd };
+}
+
+/** Derive the smallest boundary-safe contiguous byte splice for an edited text value. */
+export function deriveContiguousCorrection(baseBytes, editedText, limits) {
+  const base = validateUtf8Bytes(baseBytes, 'baseBytes', 'derive');
+  const edited = encodeUtf8(editedText, 'editedText', 'derive');
+  const normalizedLimits = normalizeLimits(limits);
+
+  enforceLimit(base.length, normalizedLimits.maxBaseBytes, 'maxBaseBytes');
+  enforceLimit(edited.length, normalizedLimits.maxEditedBytes, 'maxEditedBytes');
+  if (base.equals(edited)) {
+    fail('no-op-edit', 'editedText must differ from the base representation', 'derive');
+  }
+
+  const { start, end, editedEnd } = contiguousDifference(base, edited);
+  const oldByteLength = end - start;
+  const oldBytes = Buffer.from(base.subarray(start, end));
+  const replacementBytes = Buffer.from(edited.subarray(start, editedEnd));
+  const changedByteLength = Math.max(oldByteLength, replacementBytes.length);
+  const changedLines = Math.max(
+    changedLineCount(oldBytes),
+    changedLineCount(replacementBytes),
+  );
+
+  enforceLimit(oldByteLength, normalizedLimits.maxOldBytes, 'maxOldBytes');
+  enforceLimit(
+    replacementBytes.length,
+    normalizedLimits.maxReplacementBytes,
+    'maxReplacementBytes',
+  );
+  enforceLimit(changedByteLength, normalizedLimits.maxChangedBytes, 'maxChangedBytes');
+  enforceLimit(changedLines, normalizedLimits.maxChangedLines, 'maxChangedLines');
+
+  const correction = prepareOffsetCorrection(base, {
+    start,
+    end,
+    replacement: decodeUtf8(replacementBytes, 'replacementBytes', 'derive'),
+  });
+  const candidate = splice(base, start, end, replacementBytes);
+  if (!candidate.equals(edited)) {
+    fail('derived-candidate-mismatch', 'derived correction does not reproduce editedText', 'derive');
+  }
+  return correction;
 }
 
 function validateBoundSelector(base, correction, expectedOldBytes) {
@@ -230,11 +393,13 @@ export function applyCorrection(baseBytes, correction) {
     fail('base-digest-mismatch', 'baseBytes have changed since the correction was prepared', 'apply');
   }
 
-  const start = requireSafeOffset(correction.start, 'correction.start');
-  const end = requireSafeOffset(correction.end, 'correction.end');
-  if (start < 0 || end < start || end > base.length) {
-    fail('splice-out-of-bounds', 'correction offsets are outside the base byte range', 'apply');
-  }
+  const { start, end } = validateSpliceOffsets(
+    base,
+    correction.start,
+    correction.end,
+    'apply',
+    'correction',
+  );
 
   const expectedOldBytes = validateUtf8Bytes(
     correction.expectedOldBytes,
@@ -248,7 +413,18 @@ export function applyCorrection(baseBytes, correction) {
     fail('old-bytes-mismatch', 'baseBytes do not contain expectedOldBytes at the prepared offsets', 'apply');
   }
 
-  validateBoundSelector(base, correction, expectedOldBytes);
+  if (Object.hasOwn(correction, 'selector')) {
+    if (Object.hasOwn(correction, 'operationType')) {
+      fail('unexpected-operation-type', 'quote-bound corrections must not declare operationType', 'apply');
+    }
+    validateBoundSelector(base, correction, expectedOldBytes);
+  } else if (correction.operationType !== 'offset') {
+    fail(
+      'missing-selector',
+      'correction must contain a bound selector or declare operationType offset',
+      'apply',
+    );
+  }
   const replacementBytes = validateUtf8Bytes(
     correction.replacementBytes,
     'correction.replacementBytes',

@@ -1,0 +1,104 @@
+---
+title: "Architecture plan: governance, identity, deployment"
+description: "The architect-level plan for the next build arc: trusted ledger trigger, container packaging, Forgejo migration, intake lanes for Q09, the management console, and the identity seam — as ordered work packages with locked constraints."
+sidebar:
+  label: "Architecture plan (next arc)"
+  order: 25
+status: research
+tags: [design, architecture, planning, governance, contribution]
+---
+
+**Status: active architecture plan, written 2026-08-02 and aligned 2026-08-03.** WP1 is implemented and hermetically tested; its separate live-vault installation is not authorized or complete, no real fork run has occurred, and the ledger has zero live observations. WP2 is implemented and mechanically accepted on Linux/amd64 within its documented evidence boundary. **WP3 phase 1's adapter and fixture implementation are hermetically tested, but its same-UID host-runner plan failed adversarial isolation review; authority has not moved.** WP3 is next at a reviewed runner-isolation boundary, followed by the opt-in Forgejo 16 engine gate. WP4 proposal-contract work remains blocked until that acceptance status is honest. This is the architect's plan for governance instrumentation, deployment packaging, forge migration, external intake (Q09), and the identity seam. Each work package is scoped for execution without re-deriving the reasoning. Nothing here overrides a locked decision; where a package needs a new lock, that is called out explicitly.
+
+## The one-sentence architecture
+
+Cyberbaser stays a **hub of no-authority libraries around an owner-controlled source**, and everything in this arc is about giving that hub **operational homes** (a container, a forge, a console) without ever letting a home become an authority: identity is always delegated to the surface that carried the proposal, state that matters lives in commits, and every intake lane converges on the same trust-curve-plus-owner-review boundary.
+
+## Standing constraints (locked, non-negotiable in this arc)
+
+1. No whole-file re-serialization in any source-application path (R12). External spokes emit exact base-bound proposals; only the owner-alpha route writes, under one-Save policy.
+2. No Cyberbaser component holds identity, session, or moderation state as its source of record. Configure and delegate; never store. (Architecture boundaries table.)
+3. Accounts are never the safety mechanism. Trust curve + moderation queue + owner review are. Anonymous is a supported trust-floor, not an error.
+4. Renderer-, forge-, and transport-agnostic. GitHub, Quartz, and any overlay network are swappable dogfood infrastructure. No hyperscalers; numeric private addresses; no overlay-vendor coupling in product code.
+5. The maintainer runs no hosted infrastructure for others. Deployable shapes are Forgejo-native and one-click container self-host. Docs are a first-class deliverable of every package.
+6. Evidence before product claims; peer need before protocol work. The five-reader pilot and federation profile stay parked.
+
+## Work packages, in dependency order
+
+### WP1 — Trusted ledger trigger (implementation complete; live installation pending)
+
+**Problem addressed.** Public-fork `pull_request` runs get a read-only token, so a one-stage closed-PR job cannot push ledger entries for exactly the external-contributor case the ledger exists to record.
+
+**Implemented design: two-stage `workflow_run`.** Stage A (`pull_request: closed`, `permissions: {}`) checks out nothing and uploads one small routing hint containing only repository identity, source run identity/attempt, and PR number. It carries no route, actor, decision, SHA, timestamp, check, OFM result, URL, path, command, ref, or refspec. Stage B (`workflow_run`, trusted base-repository code, narrow read scopes plus `contents: write`) binds that hint to the exact refetched source run and its single bounded artifact, then reconstructs every authority field from the pull-request, issue-label, timeline, collaborator-permission, and check-runs APIs plus exact inert Git objects. The artifact is non-authoritative.
+
+Stage B records the first successfully published observation. Labels, checks, and current actor permission are observed during Stage B, not claimed as perfect closure-instant snapshots. Safe publication uses a fresh detached worktree, permits only `.cyberbaser/decision-ledger.jsonl`, creates one single-parent factual commit, verifies the exact destination and branch before and after a normal non-force push, and retries only a classified fast-forward branch-advance race. See [Decision Ledger](/cyberbaser/design/decision-ledger/) and GitHub's [`workflow_run` security guidance](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_run).
+
+**Package acceptance passed.** Hermetic tests cover a maintainer PR, fork PR with contributor code kept inert, closed-unmerged actor reconstruction, duplicate delivery with no second mutation, and tampered artifact rejection before Git mutation. The record template deliberately contains a non-runnable all-zero Cyberbaser tooling placeholder so installation must substitute one reviewed immutable commit.
+
+**Live acceptance remains separate and pending.** Installing the two workflows in the external Cyberbase vault requires explicit authorization. No installation, real fork run, or live ledger append occurred in this implementation wave, so ledger `stats` still has zero real observations. After authorization, live acceptance remains: maintainer PR, fork PR, closed-unmerged PR, duplicate redelivery, tamper rejection, and real counts.
+
+### WP2 — Container packaging (implementation and mechanical acceptance complete)
+
+**Problem addressed.** Owner-alpha needed an always-on owner-operated home and Q09's later self-host shape needed a reproducible package. The package had to preserve the exact private-address, source-authority, credential, bootstrap, and restart boundaries rather than hiding them behind a permissive container default.
+
+**Implemented design.** One Linux/amd64 OCI image contains Bun, Node, Git, the six owner-alpha package dependencies, the renderer wrapper, and a verified read-only Quartz v4.5.2 seed. Two explicit Compose profiles avoid an ambiguous portable-identity claim: rootless Docker runs container `0:0`, mapped to the ordinary daemon user who owns the vault; rootful Docker runs the main process as the vault owner's exact nonzero UID/GID. A networkless one-shot initializer prepares only the profile-bound named state volume.
+
+Linux host networking is mandatory for v1. Compose defines no `ports:` and no bridge alternative. The configured private numeric IPv4 address must exist in the Linux namespace Bun joins, and the app binds that exact address on the owner port and adjacent reader port. Docker Desktop is outside the supported contract. The image runs the existing server directly, never a bare-metal launcher, and does not execute WSL mirroring code.
+
+The mount contract is explicit: `/vault` is the read-write exact worktree root and only writable host bind; the credential-free config is a read-only bind copied without symlink following into private `/run/owner-alpha` tmpfs; durable state lives in one profile-bound named volume; render scratch uses a size-bounded executable `/tmp` tmpfs; and an operator-supplied HTTPS credential broker is exposed through a read-only directory containing only `helper.sock`. SSH remotes and SSH-agent-only authentication are unsupported because schema version 1 requires the exact HTTPS remote. Credentials never enter config, environment, image layers, named state, or retained logs.
+
+Detached startup allocates stdin and a TTY but disables engine logging. The operator explicitly attaches and enters `b` to mint a replacement one-time capability, then detaches without stopping the service. Startup waits for durable recovery before readiness; recovery failure stops both listeners and exits nonzero. The health check requires both the ready marker and an exact-Host reader response. Replacement revokes process-memory sessions while durable jobs survive according to the existing recovery classes. Ambiguous `applying` work still requires manual intervention.
+
+**Acceptance passed.** Static structure, shell behavior, Compose expansion, both systemd examples, owner-alpha package tests, the two-browser local-bare-remote Save fixture, restart/replacement recovery, rootless runtime identity, numeric nonzero identity mechanics, image contents, offline Quartz materialization, exact mounts, bootstrap non-retention, and negative security cases passed. The final review used a real rootless Linux Docker Engine on native ext4-backed storage. An actual rootful-daemon run remains pending, although nonzero UID/GID, state ownership, marker mismatch, and replacement behavior passed inside the available user namespace.
+
+**Evidence boundary.** The real 2026-08-02 Cyberbase Save used the bare-metal route, not the image. WP2 did not perform a physical-device Save, external-forge/live-site Save from the container, external-vault action, registry publication, service installation, Docker Desktop run, bridge publish, private-repository deployment observation, or public exposure. The image remains local-only. See [Owner-alpha container deployment](/cyberbaser/development/owner-alpha-container-deployment/) for the operator story and exact limits.
+
+### WP3 — Forgejo migration (phase-one implementation complete; real-engine acceptance pending)
+
+**Problem addressed.** GitHub was the only deployment-observation provider. The pipeline seam existed, but its default imported GitHub functions directly and configuration treated GitHub-only remote, Pages, workflow, environment, and ordered-job rules as universal.
+
+**Implemented phase-one design.** Schema version 1 is now a strict provider-discriminated union. The GitHub branch is regression-pinned to the unchanged normalized policy JSON and revision. The Forgejo branch binds a canonical standard-port HTTPS remote, exact same-origin `/api/v1`, repository/owner/branch identity, `.forgejo/workflows/*.yml`, a job set, one terminal deployment job, and an independent owner-policy live URL. A narrow dispatcher selects GitHub or Forgejo only from `workflow.provider` and rejects unsupported providers before fetch.
+
+The Forgejo 16 adapter uses sequential read-only `GET` requests, one deadline, a 2 MiB streaming JSON ceiling, version preflight, exact one-run cardinality, candidate fixation, bounded `event_payload` parsing, and exact job ID/attempt/handle/dependency binding before durable `run-bound`. Monitoring validates stored evidence before network access and never rediscovers or adopts a rerun. Publication evidence explicitly distinguishes the owner-policy destination from absent Forgejo environment attestation. The existing job graph, source application, Git publication, and live witness remain unchanged.
+
+A separate disposable package implements the acceptance lifecycle around one unchanged authoritative bare repository, one private Forgejo fixture repository seeded once without mirror service, controlled PR checks using tracked shell-only workflows and copied Cyberbaser tools, one owner-alpha Save, standard-port loopback TLS, checksum-bound runner bytes, a 4 GiB combined storage ceiling, credential-file boundaries, and manifest-scoped cleanup. Private checkout now uses Forgejo's automatic repository token through a temporary helper that disables ambient Git credential sources. Cleanup authorizes resource creation before Compose, reconciles interrupted double-labelled resources into the atomic manifest before removal, handles termination signals, and recovers stale locks only after the recorded owner is dead. Static, adapter, dispatcher, configuration, recovery, response-limit, authentication, storage, workflow, and cleanup fault tests pass. See [Forgejo Actions phase one](/cyberbaser/development/forgejo-phase-1/).
+
+**Honest acceptance status.** Adversarial review confirmed that the planned same-UID host runner could read run-root credentials and reach an ambient same-user Docker socket even though no socket was mounted into Compose. Treating the workflows as trusted does not satisfy the written isolation contract. The harness now fails before lock acquisition, run-root creation, or Docker work instead of running an unsafe gate. WP3 phase one is implemented but not complete. WP4 remains blocked until a separately reviewed runner boundary exists and the real gate obtains complete storage measurements and proves the controlled PR checks, exact Save/push/run/job binding, live witness, storage ceiling, unchanged authoritative repository, and scoped cleanup.
+
+**Later phasing remains unchanged:**
+1. pass phase-one real-engine acceptance;
+2. separately decide whether to run a persistent mirror/burn-in while edit links and PR authority remain elsewhere;
+3. treat any authority cutover as its own explicit decision, including the render-hosting spoke.
+
+**What this may buy later:** forge-delegated identity on an owner-controlled instance. Phase one proves only the deployment adapter and disposable hosted-Save path; it does not select production identity, mirror, hosting, or authority.
+
+### WP4 — Q09 intake lanes (the product fork, entered honestly)
+
+**Decision inherited (2026-08-02 direction):** support all lanes, each "super easy"; no maintainer-hosted relay. Two lanes, one contract.
+
+**The shared contract first (this is the real architecture):** every intake lane produces the same thing — a **bounded proposal object** (pinned base identity, exact quote-or-offset operation via `@cyberbaser/correction`, submitter identity *if any*, submission metadata) entering the same trust classification and the same owner queue. Lanes differ only in transport and identity signal. Write this contract down as a schema in a package (`@cyberbaser/proposal`) before building either lane, so lanes cannot drift into bespoke shapes.
+
+- **Lane A, Forgejo-native (after WP3 phase 1):** the edit link targets the owner's Forgejo; a forge account (self-registered under owner policy) is the identity signal; the PR is the proposal carrier. Cheapest lane — it is the current GitHub lane with the account wall moved in-house.
+- **Lane B, account-free intake (the genuine Q09 answer):** a small intake endpoint in the WP2 container (same process family as owner-alpha or a sibling service): a rendered page's "suggest a fix" form posts the bounded proposal; the endpoint validates shape and size, rate-limits at the edge, holds a queue directory (or opens a bot PR — decide by whichever keeps state in commits), and the owner reviews in the WP5 console. Anonymous enters at trust-floor by construction. This is the first component that accepts unauthenticated public input: it must be optional, off by default, and its exposure model (public reverse proxy in front of only this endpoint, never the owner origins) documented with the same honesty as the plain-HTTP warning.
+
+**Acceptance:** one real correction traverses each lane into the same queue and the same classifier output. Q09 closes only when Lane B has independent-human evidence, per the evidence rules — building it does not close it.
+
+### WP5 — Management console (configure and delegate; the owner's one place)
+
+**Vision (2026-08-02):** one place to configure authentication integrations and network setup and to work the review queue. **Constraint:** it configures and delegates; it never stores identity. Concretely: the console is a privileged-origin UI in the owner-alpha family that (a) edits policy files that live in the vault (`trust.yml`, publish policy, intake toggles) through the same exact-change boundary as any edit, (b) surfaces the proposal queue from WP4's contract objects, (c) shows deployment/job status it already has, and (d) links out to the delegated systems (Forgejo admin, overlay admin) rather than reimplementing them. Session model stays the bootstrap-per-device pattern. Build it after WP4's contract exists, or its queue view has nothing real to render.
+
+### WP6 — Identity seam (kept explicitly open)
+
+The [federated identity](/cyberbaser/research/federated-identity/) research page holds the imagination: forge OIDC, signed commits/keys, DID/VCs, ActivityPub actors, IndieAuth — all optional trust *signals* above the anonymous floor. Architecture work in this arc is limited to keeping the seam clean: the WP4 proposal contract carries an extensible identity-attestation field that lanes may fill and the classifier may weigh, and nothing else in the system may branch on identity kind. No technology is selected; selection waits for a real peer need per the standing rule.
+
+## Sequence and rationale
+
+**WP1 → WP2 → WP3-phase-1 → WP4-contract → (WP4 lanes ∥ WP5) → WP6 stays open.**
+
+WP1's package implementation is complete, but its governance evidence clock starts only after a separately authorized live installation and the first successfully published observation. No live time has accumulated yet. WP2's package implementation and mechanical acceptance are complete within the evidence boundary above. **WP3 phase 1 is implemented but blocked before real-engine acceptance:** the adapter, dispatcher, strict config branch, fixture, and hermetic tests exist; the same-UID host-runner plan failed isolation review, and the harness now refuses resource creation. Do not start WP4 merely because the code exists. After a reviewed runner boundary and the real gate pass, write the WP4 contract before either lane so the lanes cannot fork the shape. WP5 waits for real queue objects. WP6 does not schedule.
+
+Not in this arc: authority cutover to Forgejo (own decision), federation profile work, rich/WYSIWYG trusted authoring, the five-reader pilot, TLS/IPv6/hostname support in owner-alpha, and any hosted multi-tenant anything.
+
+## Cross-cutting deliverables every package owes
+
+Amazing docs (operator story first, spec second), same-session `.claude/` alignment, honest status lines (built ≠ installed ≠ validated), tests at the package's own layer, and no new component that holds identity/session/moderation state as its source of record.

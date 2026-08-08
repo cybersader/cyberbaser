@@ -1,14 +1,17 @@
 import { lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { caseId, stableStringify } from './case.js';
+import { inspectCheckout, inspectPinnedPublicationPolicy } from './live-run.js';
 import {
   parseExpiresMinutes,
   prepareDogfoodReaderServer,
   loadDogfoodReaderSnapshot,
+  readerServerDisplayUrls,
 } from './dogfood-reader-server.js';
 import {
   convertPilotSubmission,
   evidenceClassification,
+  isSupersededOwnerDogfoodAttempt,
   ownerDecisionTemplate,
   validateDogfoodObservationSeriesBinding,
   validateOperator,
@@ -18,20 +21,26 @@ import {
 import {
   atomicCreateArtifact,
   attemptPaths,
+  deriveCheckoutHead,
   initializeAttempt,
   loadAttemptJson,
+  loadAttemptOperator,
   loadOwnerDogfoodSeries,
   recordPilotError,
   verifyAttemptWorkspace,
+  withAttemptBindingLock,
 } from './pilot-workspace.js';
+import { cyberbaserBoundaryEvidenceComplete } from './pilot-review-card.js';
 import {
   preparePilotAttempt,
+  repinOwnerDogfoodAttempt,
   renderPilotAttempt,
   validatePilotOwnerDecision,
 } from './pilot-run.js';
 
 const STAGE_LABELS = Object.freeze({
   'not-initialized': 'not initialized',
+  superseded: 'Not run — superseded',
   'awaiting-submission': 'awaiting reader submission',
   submitted: 'submission ready to prepare',
   prepared: 'prepared; rendering required',
@@ -177,6 +186,39 @@ function obligationsForAttempt(series, attemptId) {
     .map(([obligation]) => obligation);
 }
 
+async function currentCheckoutBlockingReason(operator) {
+  try {
+    await inspectCheckout({
+      checkoutDir: operator.checkoutDir,
+      pinnedCommit: operator.baseCommit,
+      repository: operator.repository,
+      sourcePath: operator.sourcePath,
+    });
+    return null;
+  } catch (error) {
+    if (!error?.code) throw error;
+    return error.code;
+  }
+}
+
+async function pinnedPublicationBlockingReason(operator) {
+  try {
+    const pinnedPolicy = await inspectPinnedPublicationPolicy({
+      checkoutDir: operator.checkoutDir,
+      pinnedCommit: operator.baseCommit,
+      repository: operator.repository,
+    });
+    if (operator.publicationBoundary === 'cyberbaser'
+      && pinnedPolicy.publishConfigPresent !== true) {
+      return 'publication-boundary-policy-missing';
+    }
+    return null;
+  } catch (error) {
+    if (!error?.code) throw error;
+    return error.code;
+  }
+}
+
 export async function inspectDogfoodAttempt(attemptId, series, {
   projectRoot,
   workspaceRoot,
@@ -194,11 +236,25 @@ export async function inspectDogfoodAttempt(attemptId, series, {
     stageLabel: STAGE_LABELS['not-initialized'],
     blockingReasons: [],
   };
+  if (isSupersededOwnerDogfoodAttempt(attemptId)) {
+    if (await exists(paths.root)) {
+      fail(
+        'superseded-dogfood-attempt-artifacts-present',
+        `${attemptId} is Not run — superseded but an attempt directory exists`,
+      );
+    }
+    return Object.freeze({
+      ...base,
+      stage: 'superseded',
+      stageLabel: STAGE_LABELS.superseded,
+      blockingReasons: ['dogfood-attempt-superseded'],
+    });
+  }
   if (!(await exists(paths.root))) return Object.freeze(base);
 
   await verifyAttemptWorkspace(paths);
   await loadDogfoodReaderSnapshot(attemptId, workspaceOptions);
-  const operator = validateOperator(await loadAttemptJson(paths.operator, 'operator', paths));
+  const operator = await loadAttemptOperator(paths);
   const observation = validateDogfoodObservationSeriesBinding(
     await loadAttemptJson(paths.dogfoodObservation, 'dogfood-observation', paths),
     series,
@@ -233,7 +289,30 @@ export async function inspectDogfoodAttempt(attemptId, series, {
     stage: 'submitted',
     stageLabel: STAGE_LABELS.submitted,
   };
-  if (!(await exists(runDir))) return Object.freeze(submitted);
+  if (!(await exists(runDir))) {
+    const policyBlock = await pinnedPublicationBlockingReason(operator);
+    if (policyBlock) {
+      return Object.freeze({
+        ...submitted,
+        stage: 'blocked',
+        stageLabel: STAGE_LABELS.blocked,
+        blockingReasons: [policyBlock],
+        canRepin: policyBlock === 'publication-boundary-policy-missing'
+          && !(await exists(paths.operatorRepin)),
+      });
+    }
+    const checkoutBlock = await currentCheckoutBlockingReason(operator);
+    if (checkoutBlock) {
+      return Object.freeze({
+        ...submitted,
+        stage: 'blocked',
+        stageLabel: STAGE_LABELS.blocked,
+        blockingReasons: [checkoutBlock],
+        canRepin: false,
+      });
+    }
+    return Object.freeze(submitted);
+  }
 
   const status = validateWizardStatus(
     await loadAttemptJson(path.join(runDir, 'status.json'), 'wizard-status', paths),
@@ -277,8 +356,11 @@ export async function inspectDogfoodAttempt(attemptId, series, {
       await loadAttemptJson(renderEvidencePath, 'render-evidence', paths),
       'render-evidence',
     );
-    if (renderEvidence.artifactType !== 'private-local-rendered-correction-run') {
-      fail('wizard-render-evidence-invalid', 'stored render evidence is not a Cyberbase live-lane record');
+    if (!cyberbaserBoundaryEvidenceComplete(renderEvidence)) {
+      fail(
+        'wizard-render-evidence-invalid',
+        'stored render evidence does not prove the pinned Cyberbaser publication boundary',
+      );
     }
   }
   if (hasValidatedDecision) {
@@ -297,6 +379,39 @@ export async function inspectDogfoodAttempt(attemptId, series, {
       stage: 'decision-validated',
       stageLabel: STAGE_LABELS['decision-validated'],
       blockingReasons: [],
+    });
+  }
+  const policyBlock = await pinnedPublicationBlockingReason(operator);
+  if (policyBlock) {
+    return Object.freeze({
+      ...submitted,
+      status,
+      template,
+      recordedDecision,
+      renderEvidencePath,
+      reviewPath,
+      validatedDecisionPath,
+      stage: 'blocked',
+      stageLabel: STAGE_LABELS.blocked,
+      blockingReasons: [policyBlock],
+      canRepin: policyBlock === 'publication-boundary-policy-missing'
+        && !(await exists(paths.operatorRepin)),
+    });
+  }
+  const checkoutBlock = await currentCheckoutBlockingReason(operator);
+  if (checkoutBlock) {
+    return Object.freeze({
+      ...submitted,
+      status,
+      template,
+      recordedDecision,
+      renderEvidencePath,
+      reviewPath,
+      validatedDecisionPath,
+      stage: 'blocked',
+      stageLabel: STAGE_LABELS.blocked,
+      blockingReasons: [checkoutBlock],
+      canRepin: false,
     });
   }
   if (!hasRenderEvidence) {
@@ -353,7 +468,8 @@ export async function inspectDogfoodSeries({ projectRoot, workspaceRoot } = {}) 
   for (const attemptId of series.attemptIds) {
     attempts.push(await inspectDogfoodAttempt(attemptId, series, workspaceOptions));
   }
-  const suggested = attempts.find((attempt) => ACTIONABLE_STAGES.has(attempt.stage)) ?? null;
+  const suggested = attempts.find((attempt) => ACTIONABLE_STAGES.has(attempt.stage)
+    || (attempt.stage === 'blocked' && attempt.canRepin === true)) ?? null;
   return Object.freeze({ series, attempts: Object.freeze(attempts), suggestedAttemptId: suggested?.attemptId ?? null });
 }
 
@@ -368,31 +484,41 @@ export async function recordWizardOwnerDecision({
     fail('wizard-decision-not-ready', 'the selected attempt is not ready for an owner decision');
   }
   const paths = attempt.paths;
-  const current = await loadAttemptJson(paths.ownerDecision, 'owner-decision', paths);
-  const runTemplate = validateDecisionTemplate(
-    await loadAttemptJson(
-      path.join(attempt.runDir, 'owner-decision-template.json'),
-      'owner-decision-template',
+  return withAttemptBindingLock(paths, async () => {
+      const currentOperator = await loadAttemptOperator(paths);
+      const currentSubmission = validateSubmission(
+        await loadAttemptJson(paths.submission, 'submission', paths),
+      );
+      const currentCaseId = caseId(convertPilotSubmission(currentSubmission, currentOperator));
+      if (currentCaseId !== attempt.mechanicalCaseId) {
+        fail('wizard-decision-binding-stale', 'owner decision no longer matches the effective source binding');
+      }
+    const current = await loadAttemptJson(paths.ownerDecision, 'owner-decision', paths);
+    const runTemplate = validateDecisionTemplate(
+      await loadAttemptJson(
+        path.join(attempt.runDir, 'owner-decision-template.json'),
+        'owner-decision-template',
+        paths,
+      ),
+      { attemptId: attempt.attemptId, mechanicalCaseId: attempt.mechanicalCaseId },
+    );
+    if (stableStringify(current) !== stableStringify(runTemplate)) {
+      fail('wizard-decision-already-recorded', 'owner decision is no longer a blank bound scaffold');
+    }
+    const normalized = validateOwnerDecision({
+      ...runTemplate,
+      decision,
+      reason,
+      reviewSeconds,
+      decidedAt,
+    });
+    await atomicCreateArtifact(
+      path.join(attempt.runDir, 'wizard-owner-decision.json'),
+      stableStringify(normalized),
       paths,
-    ),
-    { attemptId: attempt.attemptId, mechanicalCaseId: attempt.mechanicalCaseId },
-  );
-  if (stableStringify(current) !== stableStringify(runTemplate)) {
-    fail('wizard-decision-already-recorded', 'owner decision is no longer a blank bound scaffold');
-  }
-  const normalized = validateOwnerDecision({
-    ...runTemplate,
-    decision,
-    reason,
-    reviewSeconds,
-    decidedAt,
+    );
+    return normalized;
   });
-  await atomicCreateArtifact(
-    path.join(attempt.runDir, 'wizard-owner-decision.json'),
-    stableStringify(normalized),
-    paths,
-  );
-  return normalized;
 }
 
 function defaultActions() {
@@ -400,6 +526,7 @@ function defaultActions() {
     initializeAttempt,
     serve: prepareDogfoodReaderServer,
     prepare: preparePilotAttempt,
+    repin: repinOwnerDogfoodAttempt,
     render: renderPilotAttempt,
     recordDecision: recordWizardOwnerDecision,
     validateDecision: validatePilotOwnerDecision,
@@ -489,6 +616,61 @@ async function initializeAttemptFlow({ ui, actions, attempt, projectRoot, worksp
   if (result) ui.write(`${attempt.attemptId} initialized. No listener was started.`);
 }
 
+async function repinAttemptFlow({ ui, actions, attempt, clock, projectRoot, workspaceRoot }) {
+  const checkoutDir = await nonBlank(ui, 'Absolute clean Cyberbase checkout path containing publish.yml');
+  const reason = await nonBlank(ui, 'Reason for replacing the pinned source base');
+  if (!(await ui.confirm('Authorize local processing of the same source at this replacement pin?'))) return;
+  let preview;
+  try {
+    const head = await deriveCheckoutHead(checkoutDir);
+    preview = await inspectCheckout({
+      checkoutDir,
+      pinnedCommit: head,
+      repository: attempt.operator.repository,
+      sourcePath: attempt.operator.sourcePath,
+    });
+    if (preview.publishConfigPresent !== true) {
+      fail(
+        'publication-boundary-policy-missing',
+        'the replacement pin must contain tracked publish.yml',
+      );
+    }
+  } catch (error) {
+    ui.write(`Stopped: ${error?.code ?? 'operator-repin-preview-failed'} — ${error?.message ?? 'repin preview failed'}`);
+    return;
+  }
+  ui.write([
+    'Review immutable repin:',
+    `  attempt: ${attempt.attemptId}`,
+    `  previous base: ${attempt.operator.baseCommit}`,
+    `  replacement base: ${preview.head}`,
+    `  replacement checkout: ${preview.root}`,
+    `  source: ${attempt.operator.sourcePath}`,
+    `  public URL: ${attempt.operator.publicUrl}`,
+    `  reason: ${reason}`,
+  ].join('\n'));
+  if (!(await ui.confirm('Record this one-time repin exactly as shown?'))) return;
+  const result = await executeAction({
+    ui,
+    actions,
+    attemptId: attempt.attemptId,
+    projectRoot,
+    workspaceRoot,
+    action: () => actions.repin({
+      attemptId: attempt.attemptId,
+      checkoutDir: preview.root,
+      sourceAuthorization: 'yes',
+      reason,
+      repinnedAt: new Date(clock()).toISOString(),
+      projectRoot,
+      workspaceRoot,
+    }),
+  });
+  if (result) {
+    ui.write(`Repinned ${attempt.attemptId} to ${result.baseCommit}. Old runs remain unchanged.`);
+  }
+}
+
 async function expiryChoice(ui) {
   const selected = await ui.select('How long may the one-shot link remain available?', [
     choice('15', '15 minutes', 'recommended'),
@@ -523,10 +705,9 @@ async function serveFlow({ ui, actions, attempt, projectRoot, workspaceRoot }) {
     });
     ui.write(JSON.stringify({
       status: 'ready',
-      url: running.dnsUrl ?? running.ipUrl,
-      fallbackUrl: running.dnsUrl ? running.ipUrl : null,
+      ...readerServerDisplayUrls(running),
       expiresAt: new Date(running.expiresAt).toISOString(),
-      warning: 'Treat this one-shot URL as an expiring secret.',
+      warning: 'Treat this one-shot URL as an expiring secret. Use the numeric HTTP URL exactly as printed.',
     }));
     const outcome = await running.completion;
     ui.write(`Tailscale handoff stopped: ${outcome.reason}.`);
@@ -643,6 +824,13 @@ async function validateDecisionFlow({ ui, actions, attempt, projectRoot, workspa
 }
 
 function attemptMenuChoices(attempt) {
+  if (attempt.stage === 'blocked' && attempt.canRepin) {
+    return [
+      choice('repin', 'Repin to a policy-bearing checkout', 'recommended'),
+      choice('paths', 'Show blocked run and private paths'),
+      choice('back', 'Back'),
+    ];
+  }
   if (attempt.stage === 'not-initialized') {
     return [
       choice('initialize', 'Initialize this declared attempt'),
@@ -729,6 +917,10 @@ async function runAttemptMenu(context, attemptId) {
     if (selected === 'serve') {
       const reason = await serveFlow({ ...context, attempt });
       if (reason === 'sigterm') return 'exit';
+      continue;
+    }
+    if (selected === 'repin') {
+      await repinAttemptFlow({ ...context, attempt });
       continue;
     }
     if (selected === 'prepare') {

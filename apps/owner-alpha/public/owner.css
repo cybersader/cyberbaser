@@ -1,0 +1,73 @@
+:root {
+  color-scheme: light dark;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #f4f5f7;
+  color: #18202a;
+}
+
+* { box-sizing: border-box; }
+
+body { margin: 0; min-height: 100vh; }
+
+.owner-shell {
+  width: min(72rem, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 2rem 0 4rem;
+}
+
+.owner-header { margin-bottom: 1.5rem; }
+.eyebrow { margin: 0 0 0.35rem; color: #4b5f78; font-size: 0.78rem; font-weight: 750; letter-spacing: 0.12em; text-transform: uppercase; }
+h1 { margin: 0; font-size: clamp(1.8rem, 4vw, 3rem); }
+.lede { max-width: 55rem; color: #4b5664; }
+
+form, .job-card {
+  padding: 1rem;
+  border: 1px solid #cbd2da;
+  border-radius: 0.75rem;
+  background: #fff;
+  box-shadow: 0 0.5rem 1.5rem rgb(24 32 42 / 8%);
+}
+
+label { display: block; margin-bottom: 0.5rem; font-weight: 700; }
+textarea {
+  display: block;
+  width: 100%;
+  min-height: 68vh;
+  resize: vertical;
+  border: 1px solid #9ca8b6;
+  border-radius: 0.45rem;
+  padding: 0.9rem;
+  background: #fbfcfd;
+  color: #18202a;
+  font: 0.95rem/1.55 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  tab-size: 2;
+}
+textarea:focus, button:focus-visible, a:focus-visible { outline: 3px solid #4c7dff; outline-offset: 2px; }
+.actions { display: flex; justify-content: flex-end; margin-top: 1rem; }
+button {
+  border: 0;
+  border-radius: 0.45rem;
+  padding: 0.75rem 1rem;
+  background: #1f5bd7;
+  color: #fff;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+button:disabled { cursor: wait; opacity: 0.65; }
+.status { min-height: 1.5em; color: #4b5664; }
+.error { color: #a32121; }
+.job-card dl { display: grid; gap: 0.75rem; margin: 0; }
+.job-card dl > div { display: grid; grid-template-columns: minmax(7rem, 0.25fr) 1fr; gap: 1rem; }
+dt { color: #4b5664; font-weight: 700; }
+dd { min-width: 0; margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+a { color: #174fbf; }
+
+@media (prefers-color-scheme: dark) {
+  :root { background: #10151c; color: #e9edf2; }
+  .eyebrow, .lede, .status, dt { color: #aeb9c6; }
+  form, .job-card { border-color: #394654; background: #18212b; box-shadow: none; }
+  textarea { border-color: #526172; background: #101820; color: #edf2f7; }
+  a { color: #8aadff; }
+  .error { color: #ff9d9d; }
+}
