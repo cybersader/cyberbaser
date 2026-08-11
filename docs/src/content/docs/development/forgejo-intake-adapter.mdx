@@ -1,0 +1,139 @@
+---
+title: Forgejo intake adapter
+description: The read-only Forgejo pull-request adapter that reconstructs one canonical Cyberbaser proposal from authoritative metadata and exact Git objects.
+sidebar:
+  order: 14
+status: research
+tags: [architecture, contribution, governance, testing]
+---
+
+**Forgejo Lane A adapter implemented and hermetically tested against injected Forgejo metadata and real local Git objects. Not validated against a live Forgejo instance, not installed, not linked from rendered pages, not an offered contributor path, and not production authority.**
+
+`@cyberbaser/forgejo-intake` is an effectful but no-authority adapter around the pure [`@cyberbaser/proposal`](/cyberbaser/design/proposal-contract/) contract. It treats one Forgejo pull request as a carrier, binds the request to exact API metadata and inert Git objects, and emits one canonical proposal plus a separately verified Forgejo-local trust subject. It does not create, update, merge, label, or comment on the pull request. It never writes canonical source.
+
+## Integration story
+
+A deploying owner may later choose to use their Forgejo account and pull-request surface as one external contribution lane. The adapter layer for that shape now exists:
+
+```text
+one open Forgejo pull request
+  → four authoritative read-only API responses
+  → exact base and pull-request-head Git commits
+  → one modified existing Markdown file
+  → one Git diff hunk
+  → one contiguous exact UTF-8 splice
+  → one canonical @cyberbaser/proposal
+  → base-policy trust classification
+```
+
+This is not an installation guide because no rendered page links to it and no live Forgejo instance has been validated. GitHub's web editor remains the only shipped outside-contributor surface. The [contribution-workflows page](/cyberbaser/design/contribution-workflows/) keeps the product and evidence distinctions.
+
+## Owner-controlled configuration
+
+The durable configuration contains repository identity, never credentials or authority:
+
+```js
+{
+  schemaVersion: 1,
+  forgejo: {
+    apiBaseUrl: 'https://forge.example:8443/api/v1',
+  },
+  repository: {
+    url: 'https://forge.example:8443/owner/wiki.git',
+    owner: 'owner',
+    name: 'wiki',
+    baseBranch: 'main',
+  },
+}
+```
+
+The API and repository must use canonical credential-free HTTPS URLs on the same origin. An explicit non-default port is allowed. Subpath installs, default-port aliases, trailing-dot hostnames, credentials, query or fragment delimiters, encoded path separators, unsafe identifiers, and unsafe branch names fail closed.
+
+Credentials enter only through an injected `getToken()` callback. The adapter asks for a token per request and does not retain it in configuration, returned values, URLs, or error details.
+
+## Exact read-only flow
+
+### Forgejo metadata
+
+The injected API client makes exactly four sequential same-origin `GET` requests under one deadline:
+
+1. `/api/v1/version`
+2. `/api/v1/repos/{owner}/{name}`
+3. `/api/v1/repos/{owner}/{name}/pulls/{number}`
+4. `/api/v1/users/{author-login}`
+
+Version 1 requires Forgejo major 16, one exact open non-draft pull request, the configured base repository and branch, distinct lowercase base and head commit IDs, and one active human account. The separately refetched user ID and login must match the pull-request author. Explicitly flagged bots, inactive users, and prohibited-login users are rejected.
+
+Every request uses `redirect: 'error'`, fatal UTF-8, strict JSON, a 2 MiB declared and streamed body ceiling, and the same 15-second overall deadline. There are no retries or mutation methods.
+
+### Inert Git objects
+
+The Git reader uses an injected `execFile`-style seam and never invokes a shell. It verifies the configured remote URL, fetches the exact base commit and `refs/pull/{number}/head` into private temporary refs, verifies both refs against the API-authoritative commit IDs, requires the pull-request head to descend from that exact base, and reads only Git objects. A stale or diverged pull request fails closed instead of turning later owner changes into a proposed deletion.
+
+It does not checkout, switch, merge, reset, stage, run hooks, initialize submodules, execute contributor files, push, or publish a ref. Temporary refs are removed on success and failure.
+
+Version 1 accepts exactly one `M` record for one existing repository-relative `.md` path. Base and head must be regular blobs with the same `100644` or `100755` mode. Adds, deletes, renames, copies, mode changes, symlinks, submodules, non-Markdown paths, multiple files, and multiple diff hunks fail closed.
+
+## Proposal and trust binding
+
+The adapter derives one minimal contiguous correction and prepares an offset proposal. Before returning it, the adapter proves:
+
+```js
+applyProposal(baseBytes, proposal).equals(headBytes)
+```
+
+The proposal ID is stable for one pull-request head:
+
+```text
+forgejo-pr:<repository-id>:<pull-request-number>:<head-sha>
+```
+
+The source repository comes from owner configuration, the source revision is the exact pull-request base commit, and the source path is the sole changed Markdown file. The pull-request title and body become rationale; evidence is empty in version 1.
+
+The serialized identity claim is inert:
+
+```js
+{
+  type: 'human',
+  issuer: 'https://forge.example:8443/',
+  subject: 'user:123',
+}
+```
+
+Trust receives a separate verified subject:
+
+```js
+{
+  author: 'forgejo:https://forge.example:8443#user=123',
+  authorType: 'human',
+}
+```
+
+The origin plus numeric Forgejo user ID prevents login-renames and same-login collisions across forges. It is a Forgejo-local trust namespace, not a portable identity protocol and not a WP6 technology selection.
+
+The reader loads `.cyberbaser/trust.yml` only from the exact base commit. A missing or malformed policy uses the existing fail-closed full-review route. Pull-request-head policy bytes never classify that same pull request, so a change cannot promote itself.
+
+## Version 1 limits
+
+- Forgejo major 16.
+- One open, non-draft pull request from one active human account.
+- One modified existing Markdown file and one Git diff hunk.
+- One exact contiguous splice.
+- 15-second total API deadline.
+- 2 MiB per API response.
+- 4 MiB per base or head Markdown blob.
+- 64 KiB old, replacement, and changed spans.
+- Base-bound trust policy only.
+- No queue, retention, mutation, source application, or publication authority.
+
+## Evidence
+
+The package suite covers strict configuration, exact four-request API behavior, deadlines and aborts, response and credential boundaries, repository/PR/user contradictions, exact Git refs and objects, change-shape rejection, temporary-ref cleanup, proposal metadata, exact candidate equality, base-only trust, identity namespacing, deep immutability, and a combined fake-API plus real-local-Git acceptance case.
+
+`.github/workflows/forgejo-intake.yml` runs only the package tests with `contents: read`, pinned actions, disabled checkout credential persistence, and no secrets, publication, artifact upload, comment, label, deployment, release, or write step.
+
+This evidence is deliberately narrower than the real Forgejo 16.0.2 fixture used by [WP3 phase one](/cyberbaser/development/forgejo-phase-1/). WP3 proved a controlled deployment-observation and hosted-Save fixture. Lane A currently proves injected Forgejo metadata plus real local Git-object reconstruction. The claims do not transfer between them.
+
+## What remains open
+
+There is no live Forgejo compatibility result, installation, rendered edit link, contributor-usability result, owner review product, external source writer, merge action, deployment action, or production authority. A separate carrier-neutral local queue and account-free Lane B mechanics now exist, but Lane A is not connected to that queue and neither lane is offered. [Q09](/cyberbaser/reference/open-questions/#q09--what-is-the-contribution-path-for-someone-with-no-account) remains open. The ordered context is recorded in the [next-arc architecture plan](/cyberbaser/design/v2-architecture-plan/).

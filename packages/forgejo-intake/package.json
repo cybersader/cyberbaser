@@ -1,0 +1,19 @@
+{
+  "name": "@cyberbaser/forgejo-intake",
+  "version": "0.1.0",
+  "description": "Read-only Forgejo pull-request adapter for canonical Cyberbaser proposals.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "test": "bun test test"
+  },
+  "dependencies": {
+    "@cyberbaser/correction": "file:../correction",
+    "@cyberbaser/proposal": "file:../proposal",
+    "@cyberbaser/trust": "file:../trust"
+  }
+}
