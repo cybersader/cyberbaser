@@ -497,6 +497,19 @@ describe('deriveContiguousCorrection', () => {
     expect(applyCorrection(base, correction).equals(bytes(edited))).toBe(true);
   });
 
+  test('preserves a leading UTF-8 BOM as exact replacement bytes', () => {
+    const base = bytes('alpha');
+    const snapshot = Buffer.from(base);
+    const edited = `${String.fromCodePoint(0xfeff)}alpha`;
+    const correction = deriveContiguousCorrection(base, edited);
+
+    expect(correction.start).toBe(0);
+    expect(correction.end).toBe(0);
+    expect(correction.replacementBytes.equals(Buffer.from([0xef, 0xbb, 0xbf]))).toBe(true);
+    expect(applyCorrection(base, correction).equals(bytes(edited))).toBe(true);
+    expect(base.equals(snapshot)).toBe(true);
+  });
+
   test('derives minimal boundary-safe Unicode, emoji, and combining-mark changes', () => {
     const cases = [
       ['café', 'cafê'],

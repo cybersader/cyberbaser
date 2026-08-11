@@ -1,7 +1,10 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { TextDecoder } from 'node:util';
 
-const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
+const UTF8_DECODER = new TextDecoder('utf-8', {
+  fatal: true,
+  ignoreBOM: true,
+});
 const SHA256_DIGEST_RE = /^sha-256=:([A-Za-z0-9+/]{43}=):$/;
 
 export class CorrectionError extends Error {
