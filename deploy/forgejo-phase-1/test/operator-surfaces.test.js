@@ -7,6 +7,7 @@ import {
   cleanupFromManifest,
   createRunRoot,
   dockerRecordMatches,
+  forgejoRunOutcome,
   pidRecordMatches,
   privateCheckoutToolSource,
   readManifest,
@@ -216,6 +217,7 @@ describe('tracked fixture workflow constraints', () => {
     const ofm = await text('fixtures/repository/.forgejo/workflows/ofm-check.yml');
     const trust = await text('fixtures/repository/.forgejo/workflows/trust-gate.yml');
     const publish = await text('fixtures/repository/.forgejo/workflows/publish-site.yml');
+    const ignore = await text('fixtures/repository/.gitignore');
     for (const workflow of [ofm, trust]) {
       expect(workflow).toContain('^(\\.forgejo/workflows/|fixture-tools/)');
       expect(workflow).toContain('refs/remotes/origin/main');
@@ -223,6 +225,10 @@ describe('tracked fixture workflow constraints', () => {
     expect(publish).toContain('deploy:\n    needs: [build]');
     expect(publish).toContain('mv -Tf');
     expect(publish).toContain('${WP3_PUBLICATION_ROOT}/${GITHUB_RUN_ID}');
+    expect(trust).toContain('process.argv.slice(1)');
+    expect(trust).not.toContain('process.argv.slice(2)');
+    expect(publish).not.toContain('process.argv[3]');
+    expect(ignore).toBe('.workspace/\n');
   });
 });
 
@@ -238,6 +244,16 @@ describe('harness preflight, storage, evidence, and cleanup guards', () => {
     expect(WP3_STORAGE_LIMIT_BYTES).toBe(4_294_967_296);
   });
 
+  test('accepts Forgejo native terminal statuses and the GitHub-compatible completed form', () => {
+    expect(forgejoRunOutcome({ status: 'waiting' })).toBeNull();
+    expect(forgejoRunOutcome({ status: 'running' })).toBeNull();
+    expect(forgejoRunOutcome({ status: 'success' })).toBe('success');
+    expect(forgejoRunOutcome({ status: 'failure' })).toBe('failure');
+    expect(forgejoRunOutcome({ status: 'completed', conclusion: 'success' })).toBe('success');
+    expect(forgejoRunOutcome({ status: 'completed' })).toBe('unknown');
+    expect(() => forgejoRunOutcome({ status: 'queued' })).toThrow('unsupported status');
+  });
+
   test('enforces container-mode job execution and rejects host authority before resource creation', async () => {
     const contract = assertRunnerIsolation(sampleContract());
     expect(contract.executionMode).toBe('container');
@@ -245,12 +261,17 @@ describe('harness preflight, storage, evidence, and cleanup guards', () => {
     expect(contract.network).toBe(`cyberbaser-wp3-${SAMPLE_UUID}_default`);
     expect(contract.options).toContain('/tools:/wp3/tools:ro');
     expect(contract.options).toContain('io.cyberbaser.wp3.role=job');
+    expect(contract.validVolumes).toEqual([
+      `/home/cybersader/.cache/cyberbaser/wp3/${SAMPLE_UUID}/tools`,
+      `/home/cybersader/.cache/cyberbaser/wp3/${SAMPLE_UUID}/publication`,
+    ]);
     expect(contract.privileged).toBe(false);
 
     // Every authority-granting mutation of the contract must fail closed.
     expect(() => assertRunnerIsolation({ ...contract, executionMode: 'host' })).toThrow('host-mode execution is permanently rejected');
     expect(() => assertRunnerIsolation({ ...contract, registrationLabel: `wp3-${SAMPLE_UUID}:host` })).toThrow('run-scoped job container image');
     expect(() => assertRunnerIsolation({ ...contract, privileged: true })).toThrow('unprivileged');
+    expect(() => assertRunnerIsolation({ ...contract, validVolumes: ['/var/run/docker.sock'] })).toThrow('two configured run-scoped sources');
     expect(() => assertRunnerIsolation({ ...contract, network: 'host' })).toThrow('run-scoped compose network');
     expect(() => assertRunnerIsolation({ ...contract, options: `${contract.options} --volume /var/run/docker.sock:/var/run/docker.sock` })).toThrow();
 
@@ -263,6 +284,16 @@ describe('harness preflight, storage, evidence, and cleanup guards', () => {
     expect(acceptance).toContain('assertRunnerIsolation(runnerExecutionContract(');
     expect(acceptance).not.toMatch(/:host\\n`\)/u);
     expect(acceptance).toContain('DOCKER_HOST: dockerHost');
+    expect(acceptance).toContain('run.commit_sha === headSha');
+    expect(acceptance).not.toContain('run.head_sha === headSha');
+    expect(acceptance).toContain("await symlink('../../../ofm', stagedTrustOfm, 'dir')");
+    expect(acceptance).toContain('actions/runs?head_sha=${commit}&limit=20');
+    expect(acceptance).toContain("['ofm-check.yml', 'trust-gate.yml']");
+    expect(acceptance).not.toContain('/commits/${commit}/status');
+    expect(acceptance).toContain('assertCheckoutReady: (configInput) => assertCheckoutReady(configInput, { git: inspectGit })');
+    expect(acceptance).toContain("const encoding = options.encoding ?? 'buffer'");
+    expect(acceptance).toContain("encoding: options.encoding ?? 'utf8'");
+    expect(acceptance).toContain('releaseLiveChildrenToHarness();');
   });
 
   test('executes a run-root copy bound to the verified runner bytes, not the mutable source pathname', async () => {

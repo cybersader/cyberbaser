@@ -50,7 +50,7 @@ describe('owner-alpha container structure', () => {
     }
 
     expect(plan).toContain('WP2 — Container packaging (implementation and mechanical acceptance complete)');
-    expect(plan).toContain('WP3 is next at a reviewed runner-isolation boundary');
+    expect(plan).toContain('WP3 phase one is complete');
   });
 
   test('pins both OCI bases, Debian packages, Bun closure, and Quartz closure', async () => {

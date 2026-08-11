@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { chmod, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const ROOT = path.resolve(import.meta.dir, '../../..');
@@ -34,16 +34,22 @@ describe('WP3 disposable Forgejo Actions acceptance', () => {
   });
 
   test('refuses a fully supplied opt-in gate before lock or run-root when the pinned image is not staged', async () => {
-    const runner = `/tmp/wp3-fake-runner-${process.pid}-${randomUUID()}`;
+    const fixture = `/tmp/wp3-fake-engine-${process.pid}-${randomUUID()}`;
+    const runner = path.join(fixture, 'runner');
+    const docker = path.join(fixture, 'docker');
     const bytes = '#!/usr/bin/env bash\nexit 0\n';
+    await mkdir(fixture, { mode: 0o700 });
     await writeFile(runner, bytes, { mode: 0o700, flag: 'wx' });
+    await writeFile(docker, `#!/usr/bin/env bash\nif [[ "\${1:-}" == "info" ]]; then printf '%s\\n' '["name=rootless"]'; exit 0; fi\nexit 1\n`, { mode: 0o700, flag: 'wx' });
     await chmod(runner, 0o700);
+    await chmod(docker, 0o700);
     try {
       const result = Bun.spawnSync({
         cmd: [process.execPath, HARNESS],
         cwd: ROOT,
         env: {
           ...process.env,
+          PATH: `${fixture}:${process.env.PATH ?? ''}`,
           OWNER_ALPHA_REAL_FORGEJO: '1',
           WP3_FORGEJO_IMAGE: `sha256:${'a'.repeat(64)}`,
           WP3_FORGEJO_RUNNER: runner,
@@ -58,7 +64,7 @@ describe('WP3 disposable Forgejo Actions acceptance', () => {
       expect(result.stderr.toString()).toContain('not present in the local engine');
       expect(result.stdout.toString()).toBe('');
     } finally {
-      await rm(runner, { force: true });
+      await rm(fixture, { recursive: true, force: true });
     }
   });
 
@@ -96,7 +102,7 @@ describe('WP3 disposable Forgejo Actions acceptance', () => {
     expect(evidence.cleanup).toMatchObject({
       complete: true,
       stoppedProcesses: 2,
-      removedResources: 3,
+      removedResources: 4,
       skippedProcesses: 0,
       skippedResources: 0,
     });

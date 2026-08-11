@@ -25,7 +25,7 @@ jobs:
           rm -rf -- "$stage"
           mkdir -p -- "$stage"
           "${CYBERBASER_TOOL_ROOT}/ofm-check" roundtrip workspace/content/page.md
-          bun -e 'const source=await Bun.file(process.argv[2]).text(); const escaped=source.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;"); await Bun.write(process.argv[3],`<!doctype html><meta charset="utf-8"><main><pre>${escaped}</pre></main>`);' workspace/content/page.md "$stage/index.html"
+          bun -e 'const source=await Bun.file(process.argv[1]).text(); const escaped=source.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;"); await Bun.write(process.argv[2],`<!doctype html><meta charset="utf-8"><main><pre>${escaped}</pre></main>`);' workspace/content/page.md "$stage/index.html"
           printf '%s\n' "${GITHUB_SHA}" > "$stage/commit"
           chmod -R a-w "$stage"
 

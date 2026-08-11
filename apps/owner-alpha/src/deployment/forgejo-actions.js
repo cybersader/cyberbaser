@@ -465,7 +465,9 @@ function normalizeJobs(value, expected, runId, { allowInitializingIdentity = fal
       attempt,
       handle,
       identityReady: attemptReady && handleReady,
-      needs: Array.isArray(job?.needs) ? [...job.needs].sort() : job?.needs,
+      // Forgejo 16 returns null for a job with no dependencies. Normalize only
+      // that explicit empty form; non-empty dependency graphs must stay arrays.
+      needs: job?.needs == null ? [] : Array.isArray(job.needs) ? [...job.needs].sort() : job.needs,
       status: job?.status,
     };
     if (normalized.runId !== runId

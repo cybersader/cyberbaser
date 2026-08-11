@@ -8,6 +8,7 @@ import {
   realpath,
   rm,
   stat,
+  symlink,
   writeFile,
 } from 'node:fs/promises';
 import https from 'node:https';
@@ -16,6 +17,7 @@ import { promisify } from 'node:util';
 import {
   assertCredentialFree,
   assertRunnerIsolation,
+  forgejoRunOutcome,
   measureStorage,
   readManifest,
   runnerExecutionContract,
@@ -25,6 +27,7 @@ import {
   writePrivateCheckoutTool,
 } from './harness.js';
 import {
+  assertCheckoutReady,
   computePolicyRevision,
   defineStoreContext,
   deriveEditorOperation,
@@ -80,6 +83,10 @@ async function stopLiveChildren() {
       await child.exited.catch(() => null);
     }
   }));
+}
+
+function releaseLiveChildrenToHarness() {
+  for (const child of liveChildren) child.unref();
 }
 
 for (const [signal, exitCode] of [['SIGINT', 130], ['SIGTERM', 143], ['SIGHUP', 129]]) {
@@ -369,6 +376,12 @@ async function createToolAllowlist(caCert) {
   await mkdir(root, { mode: 0o700 });
   await cp(path.join(ROOT, 'packages', 'ofm'), path.join(root, 'ofm'), { recursive: true });
   await cp(path.join(ROOT, 'packages', 'trust'), path.join(root, 'trust'), { recursive: true });
+  // Bun's file dependency install uses absolute links back to the source package.
+  // Replace only that copied dependency with a relative link inside the allowlist
+  // so the trust package resolves the exact staged OFM bytes in the container.
+  const stagedTrustOfm = path.join(root, 'trust', 'node_modules', '@cyberbaser', 'ofm');
+  await rm(stagedTrustOfm, { recursive: true, force: true });
+  await symlink('../../../ofm', stagedTrustOfm, 'dir');
   // The job container mounts this allowlist read-only, so the CA it needs to
   // trust the in-network Forgejo TLS endpoint travels with the tools.
   await cp(caCert, path.join(root, 'ca.crt'));
@@ -396,7 +409,7 @@ async function buildJobImage(jobImageTag) {
     context,
   ]);
   const imageId = (await command(['docker', 'image', 'inspect', '--format', '{{.Id}}', jobImageTag])).stdout.trim();
-  manifest.docker.images = [{ id: jobImageTag }, { id: imageId }];
+  manifest.docker.images = [{ id: imageId }];
   await persistManifest();
   return jobImageTag;
 }
@@ -418,31 +431,45 @@ async function startStaticServer() {
   throw new Error('static server readiness timed out');
 }
 
-async function waitForCommitChecks({ ca, adminTokenFile, commit }) {
+async function waitForPullRequestRuns({ ca, adminTokenFile, commit }) {
+  const expectedWorkflows = ['ofm-check.yml', 'trust-gate.yml'];
   const deadline = Date.now() + 180_000;
   while (Date.now() < deadline) {
-    const status = await requireApi({ pathname: `/api/v1/repos/${slug}/commits/${commit}/status`, tokenFile: adminTokenFile, ca });
-    const contexts = new Map((status?.statuses ?? []).map((entry) => [entry.context, entry.state]));
-    if (['success', 'failure', 'error'].includes(contexts.get('ofm-check'))
-      && ['success', 'failure', 'error'].includes(contexts.get('trust-gate'))) {
-      if (contexts.get('ofm-check') !== 'success' || contexts.get('trust-gate') !== 'success') {
-        throw new Error('controlled PR checks did not succeed');
-      }
-      return;
+    const runs = await requireApi({ pathname: `/api/v1/repos/${slug}/actions/runs?head_sha=${commit}&limit=20`, tokenFile: adminTokenFile, ca });
+    const matching = (runs?.workflow_runs ?? []).filter((run) => (
+      run.commit_sha === commit
+      && run.event === 'pull_request'
+      && run.trigger_event === 'pull_request'
+      && run.repository?.full_name === slug
+      && expectedWorkflows.includes(run.workflow_id)
+    ));
+    if (new Set(matching.map((run) => run.workflow_id)).size !== matching.length) {
+      throw new Error('controlled PR produced duplicate workflow runs');
     }
+    const outcomes = new Map(matching.map((run) => [run.workflow_id, forgejoRunOutcome(run)]));
+    for (const workflow of expectedWorkflows) {
+      const outcome = outcomes.get(workflow);
+      if (outcome !== undefined && outcome !== null && outcome !== 'success') {
+        throw new Error(`controlled PR workflow ${workflow} concluded ${outcome}`);
+      }
+    }
+    if (expectedWorkflows.every((workflow) => outcomes.get(workflow) === 'success')) return;
     await Bun.sleep(500);
   }
-  throw new Error('controlled PR checks timed out');
+  throw new Error('controlled PR workflows timed out');
 }
 
 async function waitForBranchRun({ ca, adminTokenFile, branch, headSha }) {
   const deadline = Date.now() + 180_000;
   while (Date.now() < deadline) {
     const runs = await requireApi({ pathname: `/api/v1/repos/${slug}/actions/runs?branch=${encodeURIComponent(branch)}&limit=20`, tokenFile: adminTokenFile, ca });
-    const match = (runs?.workflow_runs ?? []).find((run) => run.head_sha === headSha);
-    if (match && match.status === 'completed') {
-      if (match.conclusion !== 'success') throw new Error(`${branch} run concluded ${match.conclusion}`);
-      return match;
+    const match = (runs?.workflow_runs ?? []).find((run) => run.commit_sha === headSha);
+    if (match) {
+      const outcome = forgejoRunOutcome(match);
+      if (outcome !== null) {
+        if (outcome !== 'success') throw new Error(`${branch} run concluded ${outcome}`);
+        return match;
+      }
     }
     await Bun.sleep(500);
   }
@@ -534,8 +561,13 @@ async function ownerAlphaSave({ checkout, observerTokenFile, helper, caCert }) {
   const gitEnv = gitCredentialEnvironment(helper, caCert);
   const git = async (directory, args, options = {}) => {
     const result = await command(['git', '-C', directory, ...args], { env: { ...gitEnv, ...(options.env ?? {}) } });
-    return options.encoding === 'buffer' ? Buffer.from(result.stdout) : result.stdout.trim();
+    const encoding = options.encoding ?? 'buffer';
+    return encoding === 'buffer' ? Buffer.from(result.stdout) : result.stdout.trim();
   };
+  const inspectGit = (directory, args, options = {}) => git(directory, args, {
+    ...options,
+    encoding: options.encoding ?? 'utf8',
+  });
   const jobId = `WP3-${runUuid}`;
   const observerCa = await readFile(caCert);
   const result = await runOwnerAlphaPipeline({
@@ -546,6 +578,7 @@ async function ownerAlphaSave({ checkout, observerTokenFile, helper, caCert }) {
       getForgejoObserverToken: async () => readSecret(observerTokenFile),
     },
   }, {
+    assertCheckoutReady: (configInput) => assertCheckoutReady(configInput, { git: inspectGit }),
     runPreApplyChecks: async () => ({ ok: true, rendered: { witnesses: { old: prWitness, new: saveWitness } } }),
     confirmLivePage: async () => {
       await waitForLive(await readFile(caCert), prWitness, saveWitness);
@@ -681,8 +714,9 @@ async function main() {
   if (await register.exited !== 0) throw new Error('Forgejo Runner registration failed');
   const runnerConfig = path.join(runnerRoot, 'config.yml');
   const runnerEnvYaml = Object.entries(contract.envs).map(([name, value]) => `    ${name}: ${JSON.stringify(value)}`).join('\n');
+  const runnerVolumeYaml = contract.validVolumes.map((source) => `    - ${JSON.stringify(source)}`).join('\n');
   const runnerLogLevel = process.env.WP3_DIAG === '1' ? 'debug' : 'warn';
-  await writeFile(runnerConfig, `log:\n  level: ${runnerLogLevel}\nrunner:\n  file: ${JSON.stringify(path.join(runnerRoot, '.runner'))}\n  capacity: 1\n  timeout: 3h\n  fetch_timeout: 5s\n  fetch_interval: 2s\n  envs:\n${runnerEnvYaml}\ncache:\n  enabled: false\ncontainer:\n  network: ${JSON.stringify(contract.network)}\n  privileged: false\n  force_pull: false\n  options: ${JSON.stringify(contract.options)}\n  valid_volumes: []\nhost:\n  workdir_parent: ${JSON.stringify(path.join(runnerRoot, 'work'))}\n`, { mode: 0o600 });
+  await writeFile(runnerConfig, `log:\n  level: ${runnerLogLevel}\nrunner:\n  file: ${JSON.stringify(path.join(runnerRoot, '.runner'))}\n  capacity: 1\n  timeout: 3h\n  fetch_timeout: 5s\n  fetch_interval: 2s\n  envs:\n${runnerEnvYaml}\ncache:\n  enabled: false\ncontainer:\n  network: ${JSON.stringify(contract.network)}\n  privileged: false\n  force_pull: false\n  options: ${JSON.stringify(contract.options)}\n  valid_volumes:\n${runnerVolumeYaml}\nhost:\n  workdir_parent: ${JSON.stringify(path.join(runnerRoot, 'work'))}\n`, { mode: 0o600 });
   // Forgejo takes the variable name in the path; the body carries only value.
   await requireApi({ method: 'POST', pathname: `/api/v1/repos/${slug}/actions/variables/WP3_RUNNER_LABEL`, tokenFile: adminTokenFile, body: { value: label }, ca }, [201, 204]);
   // Runner daemon logs are captured to a private run-root file so job-dispatch
@@ -713,7 +747,7 @@ async function main() {
   }
   await command(['git', 'push', '--quiet', '--set-upstream', 'origin', 'controlled-pr'], { cwd: prCheckout, env: gitEnv });
   const pull = await requireApi({ method: 'POST', pathname: `/api/v1/repos/${slug}/pulls`, tokenFile: adminTokenFile, body: { title: 'Controlled WP3 PR', head: 'controlled-pr', base: 'main', body: 'Hermetic WP3 acceptance.' }, ca });
-  await waitForCommitChecks({ ca, adminTokenFile, commit: prCommit });
+  await waitForPullRequestRuns({ ca, adminTokenFile, commit: prCommit });
   await measure('after-pr-checks', dockerRoot);
   await requireApi({ method: 'POST', pathname: `/api/v1/repos/${slug}/pulls/${pull.number}/merge`, tokenFile: adminTokenFile, body: { Do: 'merge', merge_message_field: 'Controlled WP3 merge' }, ca }, [200]);
   await waitForLive(ca, oldWitness, prWitness);
@@ -746,9 +780,15 @@ async function main() {
     cleanup: { pending: true },
   });
   await writeFile(path.join(runRoot, 'result.json'), `${JSON.stringify(result, null, 2)}\n`, { mode: 0o600 });
+  // The harness owns final PID verification and teardown. Release the child
+  // handles so this process can exit while those exact recorded processes stay
+  // alive for manifest-bound cleanup.
+  releaseLiveChildrenToHarness();
 }
 
-await main().catch(async (error) => {
+try {
+  await main();
+} catch (error) {
   await stopLiveChildren().catch(() => {});
   if (process.env.WP3_DIAG === '1') {
     process.stderr.write(`WP3 child failure: ${error.stack ?? error.message}\n`);
@@ -760,4 +800,4 @@ await main().catch(async (error) => {
   const result = safeResult({ status: 'failed', reason: error.message, storage: { peakBytes: manifest.storage.peak } });
   await writeFile(path.join(runRoot, 'result.json'), `${JSON.stringify(result, null, 2)}\n`, { mode: 0o600 }).catch(() => {});
   process.exitCode = 1;
-});
+}

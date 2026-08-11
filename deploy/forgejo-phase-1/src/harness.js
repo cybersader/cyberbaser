@@ -20,7 +20,10 @@ export const WP3_STORAGE_STOP_BYTES = 3_758_096_384;
 export const WP3_RESULT_MAX_BYTES = 8 * 1024 * 1024;
 export const WP3_FIXTURE_LABEL = 'io.cyberbaser.fixture=wp3';
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
-const EXT4_MAGIC = 0xEF53;
+const NATIVE_RUN_ROOT_FILESYSTEMS = new Set([
+  0xEF53, // ext4
+  0x9123683E, // btrfs
+]);
 const CREDENTIAL_RE = /(?:authorization|bearer|password|private.?key|secret|token|bootstrap|credential)/iu;
 
 function exact(value, name) {
@@ -28,6 +31,14 @@ function exact(value, name) {
     throw new Error(`${name} must be one exact non-empty string`);
   }
   return value;
+}
+
+export function forgejoRunOutcome(run) {
+  const status = run?.status;
+  if (['unknown', 'waiting', 'running', 'blocked'].includes(status)) return null;
+  if (status === 'completed') return typeof run.conclusion === 'string' ? run.conclusion : 'unknown';
+  if (['success', 'failure', 'cancelled', 'skipped'].includes(status)) return status;
+  throw new Error('Forgejo fixture run returned an unsupported status');
 }
 
 function spawn(command, { cwd, env, stdin = 'ignore' } = {}) {
@@ -95,7 +106,10 @@ export async function validateRunRoot(input) {
     throw new Error('WP3 run root must be a mode-0700 directory owned by the current user');
   }
   const filesystem = await statfs(candidate);
-  if (Number(filesystem.type) !== EXT4_MAGIC) throw new Error('WP3 run root must use ext4');
+  const filesystemMagic = Number(filesystem.type) >>> 0;
+  if (!NATIVE_RUN_ROOT_FILESYSTEMS.has(filesystemMagic)) {
+    throw new Error('WP3 run root must use native ext4 or btrfs storage');
+  }
   const marker = path.join(candidate, '.wp3-run-uuid');
   const markerMetadata = await lstat(marker);
   if (!markerMetadata.isFile()
@@ -224,7 +238,10 @@ export function runnerExecutionContract({
     registrationLabel: `${labelName}:docker://${jobImageTag}`,
     network: `${composeProject}_default`,
     privileged: false,
-    validVolumes: [],
+    validVolumes: Object.freeze([
+      toolRoot,
+      publicationRoot,
+    ]),
     forcePull: false,
     options: [
       `--volume ${toolRoot}:${WP3_JOB_TOOL_MOUNT}:ro`,
@@ -255,8 +272,8 @@ export function assertRunnerIsolation(contract) {
     throw new Error('WP3 runner registration must bind the label to the run-scoped job container image');
   }
   if (contract.privileged !== false || contract.forcePull !== false
-    || !Array.isArray(contract.validVolumes) || contract.validVolumes.length !== 0) {
-    throw new Error('WP3 job containers must be unprivileged with no workflow-requestable volumes');
+    || !Array.isArray(contract.validVolumes)) {
+    throw new Error('WP3 job containers must be unprivileged with an exact run-scoped volume allowlist');
   }
   if (typeof contract.network !== 'string'
     || !contract.network.endsWith('_default')
@@ -269,6 +286,13 @@ export function assertRunnerIsolation(contract) {
     || !volumeMounts[0].endsWith(`:${WP3_JOB_TOOL_MOUNT}:ro`)
     || !volumeMounts[1].endsWith(`:${WP3_JOB_PUBLICATION_MOUNT}`)) {
     throw new Error('WP3 job containers may mount exactly the read-only tools and the publication handoff');
+  }
+  const configuredSources = volumeMounts.map((mount) => (
+    mount.replace(/^--volume[= ]/u, '').split(':', 1)[0]
+  ));
+  if (contract.validVolumes.length !== 2
+    || contract.validVolumes.some((source, index) => source !== configuredSources[index])) {
+    throw new Error('WP3 runner volume allowlist must contain only the two configured run-scoped sources');
   }
   if (/docker\.sock|podman\.sock|--privileged|--pid[= ]host|--network[= ]host|--cap-add|--security-opt[= ]seccomp=unconfined/iu.test(options)) {
     throw new Error('WP3 job container options must not grant host or engine authority');

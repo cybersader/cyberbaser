@@ -66,7 +66,7 @@ function run(overrides = {}) {
 
 function jobs(status = 'running') {
   return [
-    { id: 701, run_id: 456, attempt: 1, handle: 'build-handle', name: 'build', needs: [], status },
+    { id: 701, run_id: 456, attempt: 1, handle: 'build-handle', name: 'build', needs: null, status },
     { id: 702, run_id: 456, attempt: 1, handle: 'deploy-handle', name: 'deploy', needs: ['build'], status },
   ];
 }
