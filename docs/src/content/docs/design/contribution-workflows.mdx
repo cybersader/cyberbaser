@@ -23,10 +23,12 @@ Every contribution path the product offers must still work **independently**; th
 | Maintainer local authoring · Obsidian + Git | **Built and in daily use.** Direct owner authoring, not an external proposal | `publish-site.yml` in the vault repo |
 | Private owner-alpha wiki · Quartz + exact Markdown editor | **Built and in real use** (first bare-metal live acceptance Save 2026-08-02). WP2's Linux/amd64 OCI package and operator surfaces are mechanically accepted; the image is local-only, and container physical-device/external-live evidence remains pending | `apps/owner-alpha/` · [container deployment](/cyberbaser/development/owner-alpha-container-deployment/) |
 | External proposal · GitHub web editor | **Built and borrowed.** The only shipped outside-contributor surface | `EditThisPage.tsx` → `github.com/.../edit/` |
+| Forgejo Lane A adapter | **Implemented and hermetically tested.** Not live-validated, installed, linked, offered, or production authority | [Forgejo intake adapter](/cyberbaser/development/forgejo-intake-adapter/) |
+| Account-free Lane B mechanics | **Implemented and mechanically tested, disabled by default.** Local queue, sibling intake app, optional Quartz form, and local-only deployment bundle; not publicly deployed, human-tested, offered, a source writer, or production authority | [Account-free intake Lane B](/cyberbaser/development/account-free-intake/) |
 | Reader inline correction | **Study instrument only.** No product surface or counted human result | [Pilot protocol](/cyberbaser/research/concierge-human-correction-pilot/) |
 | Trusted rich browser / WYSIWYG authoring | **Intended, unbuilt.** Editor and adapter contract are not selected | [Vision](/cyberbaser/getting-started/vision/) |
 | Common owner-controlled boundary | **Canonical requirement; two owner interfaces.** GitHub review remains borrowed for external proposals; the private owner-alpha app gives one-Save authority to a strict local policy | [Architecture](/cyberbaser/design/architecture/) |
-| Account-free contribution product | **Unshipped.** Q09 remains open | [Open question Q09](/cyberbaser/reference/open-questions/#q09--what-is-the-contribution-path-for-someone-with-no-account) |
+| Account-free contribution product | **Unshipped.** Lane B mechanics exist but are disabled, local-only, unexposed, and untested by humans; Q09 remains open | [Open question Q09](/cyberbaser/reference/open-questions/#q09--what-is-the-contribution-path-for-someone-with-no-account) |
 | Concierge human-correction pilot | **Human run not started.** Internal mechanical and operator rehearsals completed; neither counts | [Pilot protocol](/cyberbaser/research/concierge-human-correction-pilot/) |
 | OFM damage check on a PR | **Built, report-only.** `continue-on-error: true`, blocks nothing | `@cyberbaser/ofm` via `ofm-check.yml` |
 | Trust classification on a PR | **Built, decision-only.** Emits a label and a summary table | `@cyberbaser/trust` via `trust-gate.yml` |
@@ -52,7 +54,7 @@ That result closes arbitrary whole-file save adapters, not rich authoring as an 
 - the private owner-alpha wiki: browser editing from the owner's trusted devices, with one Save running the policy-bound exact pipeline;
 - an account-required external proposal through GitHub's web editor.
 
-**The persona Principle 3 exists for has no shipped path.** A domain expert with no GitHub account and no wish to make one cannot contribute today. [`OD-01`](/cyberbaser/research/owner-self-dogfood/) tested the same exact-proposal and local-review boundary once with the maintainer switching reader and owner contexts. The operator carried the submission through existing libraries by hand; it was not an anonymous endpoint, editor, automatic writer, forge integration, independent-reader result, or closure of Q09.
+**The persona Principle 3 exists for still has no offered path.** A domain expert with no GitHub account and no wish to make one cannot contribute to the live site today. WP4 Lane B now implements a disabled Quartz correction form, strict anonymous intake service, exact retained-source derivation, and local durable proposal queue, but none is publicly deployed or human-tested. [`OD-01`](/cyberbaser/research/owner-self-dogfood/) tested the same exact-proposal and local-review boundary once with the maintainer switching reader and owner contexts. It was not an independent-reader result or closure of Q09.
 
 ## Maintainer local path: Obsidian + Git
 
@@ -121,7 +123,7 @@ Clicking **Save and publish** is the edit-specific owner authority event. There 
 6. confirms the exact live page lost the old visible witness and gained the new witness once; and
 7. rebuilds the local Quartz owner site at the confirmed commit.
 
-This direct owner route is not an exception to the source-integrity rule. It is the owner's authority expressed through the same exact-change boundary. External tools still submit proposals and cannot acquire the owner policy, browser session, source path, Git command, remote, URL, or refspec from request data. The private app does not answer Q09 and does not select a generalized rich editor, hosted service, database, or adapter API.
+This direct owner route is not an exception to the source-integrity rule. It is the owner's authority expressed through the same exact-change boundary. External tools still submit proposals and cannot acquire the owner policy, browser session, source path, Git command, remote, URL, or refspec from request data. The private app does not answer Q09 and does not select a rich editor, hosted service, database, or external intake authority. WP4's separate local queue and sibling Lane B service exist independently of this direct-owner route.
 
 ## Shipped contributor path: Direct GitHub
 
@@ -149,24 +151,48 @@ This direct owner route is not an exception to the source-integrity rule. It is 
 - Do we surface a syntax hint for Obsidian-specific constructs in the raw view?
 - Should the PR template auto-fill with the page being edited?
 
-## Trusted-contributor rich authoring: intended, unbuilt
+## Forgejo Lane A: adapter built, contributor flow unbuilt
 
-**Status: architecturally allowed; no editor or adapter selected.** A trusted contributor may eventually use a browser WYSIWYG editor, hybrid Markdown/preview surface, CMS-like front end, or another specialized tool for larger section edits and new content. Cyberbaser should be able to replace that surface without replacing the source authority, review policy, renderer, or forge.
+**Status: implemented at the hermetic adapter layer only.** `@cyberbaser/forgejo-intake` treats one open Forgejo pull request as a carrier, binds it to four authoritative read-only API responses and exact inert Git objects, requires one modified existing Markdown file and one diff hunk, and proves that applying the emitted canonical proposal to the base bytes exactly reproduces the pull-request head bytes.
 
-The stable boundary is conceptual today, not a shipped API. A conforming authoring spoke must:
+The adapter separately supplies a Forgejo-local trust subject namespaced by canonical origin and numeric user ID, and reads `.cyberbaser/trust.yml` only from the exact base commit. It never writes source, merges, pushes, labels, comments, deploys, creates a queue, or authorizes acceptance.
+
+This does not add a fourth shipped source-change mechanism. No rendered page links to Forgejo, no live Forgejo instance has been validated, no contributor has used the path, and no installation or review product exists. GitHub's web editor remains the only shipped outside-contributor surface. See [Forgejo intake adapter](/cyberbaser/development/forgejo-intake-adapter/).
+
+## Account-free Lane B: mechanics built, contribution product unshipped
+
+**Status: implemented and mechanically tested, disabled by default, not publicly deployed or offered.** The implementation has five parts:
+
+1. `@cyberbaser/account-free-intake` validates one strict credential-free correction intent, resolves an opaque retained publication binding and exact historical Markdown blob from local read-only inputs, and emits the canonical anonymous proposal.
+2. `@cyberbaser/proposal-queue` stores exact proposal bytes plus bounded receipt, carrier, classification, and lifecycle evidence in one finite owner-local filesystem queue.
+3. `apps/account-free-intake` exposes the strict HTTP boundary and writes only that queue. It is a sibling service, not part of owner-alpha and not an owner-authority process.
+4. `renderers/quartz-cyberbase` contains a source-backed correction form, but normal builds omit it unless every required value and an explicit build-time enable token are supplied.
+5. `deploy/account-free-intake` packages the service behind an off-by-default Compose profile on a dedicated internal network, with no host port and no included reverse proxy.
+
+The no-R-number WP4 implementation amendment selects the local queue rather than bot pull requests for v1 and selects a sibling service rather than an owner-alpha in-process endpoint. Those are containment choices, not a permanent queue protocol or public deployment decision.
+
+The path ends at retained `pending-review` evidence and local inspection. It has no accept, reject, apply, merge, commit, push, deploy, or publication action. No public reverse proxy, TLS endpoint, edge DDoS control, service installation, image publication, ordinary-reader attempt, independent-owner result, or production authority exists. [Account-free intake Lane B](/cyberbaser/development/account-free-intake/) records the exact mechanics and evidence boundary. Q09 remains open.
+
+## Trusted-contributor rich authoring: contract built, editor unbuilt
+
+**Status: the shared one-file, one-splice adapter-output contract and narrow Forgejo PR adapter are implemented; no rich editor or contributor-facing product lane is selected.** A trusted contributor may eventually use a browser WYSIWYG editor, hybrid Markdown/preview surface, CMS-like front end, or another specialized tool. Cyberbaser should be able to replace that surface without replacing the source authority, review policy, renderer, or forge.
+
+A conforming authoring spoke must:
 
 1. read a known source path and pinned base representation;
-2. return a bounded, human-reviewable proposal rather than write the authoritative source directly;
-3. identify the intended old and new source content precisely enough to fail closed when the base is stale or mapping is ambiguous;
-4. preserve every byte outside the declared change by construction;
-5. carry rationale, source evidence, and author/trust claims without letting the spoke authorize itself; and
+2. return a canonical [`@cyberbaser/proposal`](/cyberbaser/design/proposal-contract/) rather than write the authoritative source directly;
+3. identify one intended old and new UTF-8 span precisely enough to fail closed when the base is stale or mapping is ambiguous;
+4. preserve every byte outside the declared splice by construction;
+5. carry rationale, evidence, and optional identity claims without letting the spoke authorize itself; and
 6. let the owner-controlled boundary run integrity, publication, link, trust, and rendered-candidate checks before application.
 
-The current `@cyberbaser/correction` package proves only one existing file, one exact quote, and one splice. It does not yet define multi-splice, structural, new-page, frontmatter, asset, or generalized rich-editor operations. [Translation Layer](/cyberbaser/design/translation-layer/) tracks the remaining source-mapping and unsupported-construct questions.
+The implemented contract composes `@cyberbaser/correction` with the existing trust classifier. It supports one existing Markdown file and one quote- or offset-bound splice. It does not define multi-splice, structural, new-page, frontmatter-policy, asset, or generalized rich-editor operations, and it contains no queue or source writer. [Translation Layer](/cyberbaser/design/translation-layer/) tracks the remaining source-mapping and unsupported-construct questions.
 
-## Account-free correction: one owner loop complete
+## Account-free correction evidence: mechanics now exist, human evidence does not
 
-**Status: bounded owner evidence complete, no product surface shipped.** The [owner self-dogfood result](/cyberbaser/research/owner-self-dogfood/) used the exact seven-field local instrument: page URL, exact quote, replacement, rationale, factual source, optional public credit name, and credit consent. Those fields are observation inputs. They are not the product form, a contribution API, the permanent minimum payload, or a decision about whether the eventual reader surface is inline, selection-based, raw, or rich.
+**Status: Lane B mechanics are implemented; bounded owner evidence remains the only human-adjacent result.** The disabled product form intentionally differs from the earlier seven-field study instrument: it posts an opaque publication binding, exact quote plus optional context, replacement, rationale, inert HTTPS evidence URLs, and an optional idempotency key. It asks for no account, identity, contact, or public credit. This contract is mechanically tested, not validated by an unfamiliar reader.
+
+The earlier [owner self-dogfood result](/cyberbaser/research/owner-self-dogfood/) used page URL, exact quote, replacement, rationale, factual source, optional public credit name, and credit consent. Those were observation inputs, not the permanent product payload or evidence that the implemented Lane B surface is usable.
 
 In `OD-01`, one maintainer switched between reader and owner contexts. The operator converted the submission into one exact UTF-8 byte splice, proved every byte outside it unchanged, ran OFM/trust/render/link checks, and assembled a local review card. The owner accepted the candidate, then separately authorized application and publication. The harness did not apply or publish the change itself.
 

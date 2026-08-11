@@ -49,9 +49,9 @@ The evaluated serializer-backed CMS writers are rejected because they regenerate
 
 ## Current phase: v1 Build
 
-Research & Foundations closed on 2026-07-25. [`OD-01`](https://cybersader.github.io/cyberbaser/research/owner-self-dogfood/) completed the sole real owner loop required in this phase: signed-out mobile handoff, exact proposal, owner acceptance, separate application, deployment, and live verification. The immutable charter remains historical evidence; `OD-02` and `OD-03` are **Not run — superseded**. Stale-source, ambiguous-quote, and rejection-path obligations now run as deterministic synthetic mechanical checks, and no human owner rejection occurred. The private owner-alpha app and automatic exact-change pipeline are implemented, and the first real policy-activated Cyberbase Save/push completed on 2026-08-02 with a verified commit, normal push, successful deployment, and confirmed live transition; routine owner use is current. This remains maintainer operational evidence only, not independent human validation. The preserved [five-reader protocol](https://cybersader.github.io/cyberbaser/research/concierge-human-correction-pilot/) remains optional before stronger usability claims. The seven local fields are temporary observation inputs, not the eventual reader interface or generalized proposal schema, and Q09 remains open.
+Research & Foundations closed on 2026-07-25. [`OD-01`](https://cybersader.github.io/cyberbaser/research/owner-self-dogfood/) completed the sole real owner loop required in this phase: signed-out mobile handoff, exact proposal, owner acceptance, separate application, deployment, and live verification. The immutable charter remains historical evidence; `OD-02` and `OD-03` are **Not run — superseded**. Stale-source, ambiguous-quote, and rejection-path obligations now run as deterministic synthetic mechanical checks, and no human owner rejection occurred. The private owner-alpha app and automatic exact-change pipeline are implemented, and the first real policy-activated Cyberbase Save/push completed on 2026-08-02 with a verified commit, normal push, successful deployment, and confirmed live transition; routine owner use is current. This remains maintainer operational evidence only, not independent human validation. The preserved [five-reader protocol](https://cybersader.github.io/cyberbaser/research/concierge-human-correction-pilot/) remains optional before stronger usability claims. WP4 now implements the shared proposal contract, Forgejo Lane A adapter, carrier-neutral local queue, account-free Lane B adapter/app, disabled Quartz form, and local-only sibling-service deployment bundle. Lane A is not live-validated, installed, linked, or offered. Lane B is disabled by default, not publicly deployed, human-tested, offered, a source writer, or production authority. Q09 remains open.
 
-[`@cyberbaser/correction`](packages/correction/) supplies exact UTF-8 quote anchoring and fail-closed single-splice preparation/application for the pilot. It is a no-I/O primitive, **not** a shipped editor, generalized authoring-adapter API, intake endpoint, automatic writer, hosted console, forge integration, or account-free product.
+[`@cyberbaser/correction`](packages/correction/) supplies exact UTF-8 quote anchoring and fail-closed single-splice preparation/application. [`@cyberbaser/proposal`](packages/proposal/) composes that primitive into the canonical external adapter-output contract and hands receiver-verified subjects to the existing trust classifier. Both are pure no-I/O packages. [`@cyberbaser/forgejo-intake`](packages/forgejo-intake/) is the read-only Lane A adapter. [`@cyberbaser/account-free-intake`](packages/account-free-intake/), [`@cyberbaser/proposal-queue`](packages/proposal-queue/), [`apps/account-free-intake`](apps/account-free-intake/), and [`deploy/account-free-intake`](deploy/account-free-intake/) implement Lane B through local `pending-review` evidence only. None is an automatic external source writer, hosted console, offered product, or production authority.
 
 **What exists:**
 
@@ -60,15 +60,19 @@ Research & Foundations closed on 2026-07-25. [`OD-01`](https://cybersader.github
 - `@cyberbaser/ofm`, which classifies Markdown changes as `clean`, `suspect`, or `damage`
 - `@cyberbaser/trust`, which computes an owner-configured review route
 - `@cyberbaser/linkcheck`, which ratschets internal-link quality
-- `@cyberbaser/correction`, the exact single-splice primitive used by the pilot
+- `@cyberbaser/correction`, the exact single-splice primitive used by direct-owner and external-proposal paths
+- `@cyberbaser/proposal`, the canonical one-file, one-splice external adapter-output contract with receiver-verified trust handoff
+- `@cyberbaser/forgejo-intake`, the read-only Forgejo pull-request adapter, hermetically tested against injected metadata and real local Git objects
+- `@cyberbaser/account-free-intake` and `@cyberbaser/proposal-queue`, the strict anonymous derivation and carrier-neutral local review-evidence store
+- `@cyberbaser/account-free-intake-app`, the optional sibling intake runtime, plus a disabled-by-default Quartz form and local-only internal-network OCI bundle
 - `@cyberbaser/owner-alpha`, the private owner wiki/editor and durable automatic source-to-live pipeline, bound to one owner-chosen private network address
 - A live dogfood vault with 933 Markdown sources selected and projected into 931 public page URLs, rendered by pinned Quartz and deployed to GitHub Pages
 - The Astro + Starlight docs site, which is the canonical project knowledge base rather than the product surface
 
 **What does not exist:**
 
-- An account-free contribution endpoint or product editor
-- A generalized authoring-adapter API or selected trusted-contributor rich editor
+- A publicly deployed, human-tested, or offered account-free contribution product
+- An offered or installed Forgejo contributor path, live Lane A compatibility evidence, production Lane B reverse proxy/TLS/edge-abuse boundary, owner decision UI, or selected trusted-contributor rich editor
 - A serializer-backed CMS writer, direct external source writer, or second authoritative content database
 - An automatic writer for external proposals or a writer that can bypass the owner-controlled policy boundary
 - A hosted moderation console or per-change rendered preview

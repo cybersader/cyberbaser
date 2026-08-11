@@ -112,13 +112,14 @@ Plugin execution is a closed question, not a pending one: Obsidian's CLI is real
 
 ## How the contract is enforced
 
-Three mechanical checks, all of them shipping code rather than intent:
+Four mechanical checks, all of them shipping code rather than intent:
 
 1. **[`@cyberbaser/ofm`](https://github.com/cybersader/cyberbaser/tree/main/packages/ofm)** classifies a change between two versions of a file: `clean`, `suspect` (re-serialization fingerprints — mass churn, list-marker normalization, injected escapes), or `damage` (constructs removed or degraded, exit 1). It also carries the collision-safe masking core, which is lossless by construction over 21 fixtures and 1430 real files with zero leaks.
 2. **`ofm-check.yml`** runs that classifier on every pull request against the vault.
 3. **The corpus runner** re-measures byte identity over the whole vault on demand, so the 4.6% number stays a measurement rather than a memory.
+4. **[`@cyberbaser/proposal`](/cyberbaser/design/proposal-contract/)** canonicalizes one pinned existing Markdown source and one fully prepared quote- or offset-bound splice. It rejects no-ops, complete-file replacement/deletion, stale or tampered bindings, and noncanonical wire bytes, then applies only in memory.
 
-The suite is 10 tests in `ofm`, part of 187 across the six current packages in fresh package-scoped runs. The classifier's first real verdict on a live contribution (PR #6, 2026-07-25) was `clean · churn 0.005 · escapes 0→0`.
+The original measured suite was 10 tests in `ofm`, part of 187 across the six pre-ledger/proposal packages in fresh package-scoped runs. The classifier's first real verdict on a live contribution (PR #6, 2026-07-25) was `clean · churn 0.005 · escapes 0→0`. Proposal and ledger now carry their own package-scoped suites.
 
 <details>
 <summary>The failure this design is aimed at, and the one caveat</summary>
