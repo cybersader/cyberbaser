@@ -1,6 +1,6 @@
 # 20 — Roadmap
 
-> **Status**: 🌳 Current (aligned 2026-08-10). The canonical public roadmap is `docs/src/content/docs/getting-started/roadmap.mdx` (`/cyberbaser/getting-started/roadmap/`); this file is the agent-side operating view.
+> **Status**: 🌳 Current (aligned 2026-08-11). The canonical public roadmap is `docs/src/content/docs/getting-started/roadmap.mdx` (`/cyberbaser/getting-started/roadmap/`); this file is the agent-side operating view.
 
 ## Current Phase: **v1 Build**
 
@@ -45,10 +45,11 @@ Ordered work packages, written 2026-08-02 and aligned 2026-08-10: **WP1** two-st
 - [ ] Separately decide and authorize outward lane work: live Lane A compatibility/installation, Lane B reverse proxy/TLS/edge-abuse boundary and exposure, human use, and owner decision UI. Do not turn intake into an automatic canonical writer or select a rich editor by momentum. Q09 remains open.
 - [ ] Make enforcement honest without breaking the maintainer's direct Obsidian+Git workflow (Q10).
 - [ ] Verify contributor attribution through the GitHub fork flow (Q08).
-- [ ] Freeze the live URL contract and add the slug-diff gate (Q06).
+- [x] Define and locally exercise the R23 emitted-site URL continuity contract: 24 package tests pass, all 931 public URLs were unchanged in a read-only pinned-Quartz local rehearsal, and one real alias stub covered one simulated removal.
+- [ ] Install the reviewed live baseline and required `cb-urlcheck` publication-workflow gate. No external workflow, repository, URL, redirect, or deployment was modified by the implementation or rehearsal.
 - [ ] Decide the operating model for a maintainer who does not use GitHub: hosted, one-click self-hosted, or local-first. Owner self-dogfooding tests one local workflow but does not choose the general product model.
 
-**Exit criteria for v1 Build** are canonical on the public roadmap. The owner dogfood result is one criterion; it does not by itself ship or settle an account-free product path.
+**Exit criteria for v1 Build** are canonical on the public roadmap. The owner dogfood result is one criterion; it does not by itself ship or settle an account-free product path. R23's URL decision, checker, and local live-contract evidence are complete, while required live enforcement installation remains an unmet exit item.
 
 ---
 

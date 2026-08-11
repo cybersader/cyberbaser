@@ -25,6 +25,18 @@ A log of significant design trade-offs and why each was decided the way it was. 
 
 ## Log
 
+### 2026-08-11 — Stable URLs are an emitted-site continuity invariant (R23)
+
+- **Context:** Q06 had conflated two decisions: how canonical URLs are named and whether already-published URLs remain usable.
+- **Options:** permanently select path slugs plus source aliases; require explicit permalinks; use content hashes; or enforce continuity over emitted canonical inventories independently of naming.
+- **Decision:** enforce continuity over the emitted site. Every reviewed previous canonical URL must remain canonical or directly redirect to one current canonical URL on the same HTTPS origin and under the same base path. New URLs are allowed. Redirect chains and uncovered removals fail closed.
+- **Rationale:** readers depend on address continuity, not the source naming mechanism. This keeps vault layout independent of renderer choice and preserves R16/R19's current exact-case verbatim paths and natural names.
+- **Trade-off accepted:** R23 does not create one globally permanent slug algorithm. A later naming migration remains possible, but it must carry direct redirect coverage for every previous URL.
+- **Evidence:** the package suite passes 24 tests. A read-only local pinned-Quartz rehearsal reproduced all 931 current public URLs with zero additions, removals, or failures; one real emitted Quartz alias stub covered one augmented-inventory removal.
+- **Revisit when:** only if direct static redirect stubs prove inadequate for a measured host, renderer, or domain migration. Live workflow installation is still pending; no deployment changed.
+
+---
+
 ### 2026-04-11 — Reinitialize to crosswalker/cyberchaste workspace convention
 
 - **Context:** cyberbaser had been dormant ~4 months. Sibling projects (crosswalker, cyberchaste) had converged on a `.claude/` numbered-file workspace convention that makes sprint-to-sprint continuity much easier. Cyberbaser's layout was different: PARA `docs/` + separate `site/` prototype + almost-empty `.claude/`.
@@ -87,5 +99,4 @@ These are decisions we know we'll need to make. When one gets decided, move it f
 - **Hosting: GitHub Pages (current target) vs. self-hosted (Forgejo)?** GitHub Pages is the current deploy target; the old "Cloudflare" inheritance is superseded. Cloudflare, if used, is edge-only (CDN/WAF/rate-limit), not the host.
 - **Backlinks: build-time compute vs. runtime?** Not yet made. See [Architecture](/cyberbaser/design/architecture/)
 - **Asset hosting: in-vault vs. CDN?** Not yet made
-- **Content addressability: slugs vs. hashes vs. titles?** See [Q06 in Open Questions](/cyberbaser/reference/open-questions/#q06--content-addressability-slugs-hashes-or-title-based-with-redirects)
 - **Tier 2/3 rendering strategy: fallback, hide, or render-as-error?** Not yet made; see [Translation Layer](/cyberbaser/design/translation-layer/)

@@ -52,7 +52,8 @@ Every entry links to evidence. The full log lives in `.claude/41-QUESTIONS-RESOL
 - [ ] **Turn neither Lane A nor Lane B into an offered path by implication.** Any live Lane A compatibility/installation step is separately authorized. Lane B still needs a deliberate reverse proxy/TLS/edge-abuse design, public deployment authorization, and human evidence. No owner decision UI or source-application product exists. Q09 remains open, owner-alpha remains the separate direct-authority writer, and the preserved five-reader protocol remains optional before any unfamiliar-reader or independent-owner usability claim.
 - [ ] **Make enforcement honest without breaking daily authoring.** `ofm-check` remains report-only, the trust route remains decision-only, and direct maintainer pushes need a compatible validation path. See [Q10](/cyberbaser/reference/open-questions/#q10--what-enforces-the-moderation-policy).
 - [ ] **Close the general-maintainer gap.** The dogfood stack still assumes GitHub and Actions. The pilot tests one local, non-GitHub review-and-apply workflow, but does not choose or ship the hosted, one-click self-hosted, or local-first operating model.
-- [ ] **Freeze stable URLs.** Q06 and the slug-diff gate remain open for the live corpus.
+- [x] **Define stable URL continuity (R23).** Public URL continuity is checked at the emitted-site boundary rather than by forcing one permanent source slug scheme. `@cyberbaser/linkcheck` compares previous and candidate sitemaps, verifies candidate routes, and requires direct same-origin redirect coverage for every removed canonical URL. A local comparison preserved all 931 current public URLs and exercised one real Quartz alias stub; no deployment or public URL changed.
+- [ ] **Install the live URL continuity gate.** Retain the reviewed live sitemap baseline as workflow input and require `cb-urlcheck` against each candidate build before publication. This separate live-vault installation remains pending authorization.
 
 The five-origin federation fixture remains **controlled local evidence only**. It does not create an interoperability claim or an immediate protocol workstream. Extracting and publishing a provisional profile waits until an independently operated peer demonstrates a concrete need to implement against it; the fixture can supply test material if that need appears. [Federation result and limits](/cyberbaser/research/federation/#measured-local-fixture-the-narrow-claim-passed).
 
@@ -73,7 +74,7 @@ A knowledge-ops commit removed these open research tasks with no decision record
 - [ ] The round-trip CI gate is a required check on the vault repo (report-only window running; its first rehearsal caught a masked crash on emoji paths, fixed — see R17)
 - [x] The maintainer completes one real [owner self-dogfood](/cyberbaser/research/owner-self-dogfood/) correction through decision, separate local application, deployment, and live verification; the remaining chartered attempts are Not run — superseded, with stale, ambiguous, and rejection-path safety covered mechanically.
 - [ ] Before Cyberbaser makes an unfamiliar-reader or independent-owner usability claim, the deferred human-correction pilot records five reader attempts and one independent owner's result against its preserved thresholds. It is not required for initial owner dogfooding.
-- [ ] URL contract frozen with the slug-diff gate on
+- [ ] R23 URL continuity gate installed as a required live publish check against the reviewed baseline. The contract, checker, 931-URL local rehearsal, and real-alias rehearsal are complete; installation remains pending.
 
 ---
 
@@ -98,7 +99,7 @@ Each gets a real outline only after the current phase's exit criteria are met. R
 :::
 
 ### Publish the real vault
-Point at [cybersader/cyberbase](https://github.com/cybersader/cyberbase) through the publish boundary and deploy to a real domain. Depends on the boundary + URL freeze above. (The old "translation layer spike" phase was deleted by R12: forward rendering is bought from the commodity renderer, and the reverse direction needs no serializer because nothing re-serializes.)
+The real vault is already live through the publish boundary. R23 now defines continuity for its current public addresses, and the local rehearsal preserved all 931 canonical URLs, but the required live baseline and publication-workflow gate remain uninstalled. No deployment changed while implementing or exercising the checker. (The old "translation layer spike" phase was deleted by R12: forward rendering is bought from the commodity renderer, and the reverse direction needs no serializer because nothing re-serializes.)
 
 ### Contribution beyond the maintainer
 Use the private owner-alpha wiki for real owner corrections and fix only friction or safety defects observed in use. It is a private owner-local source editor and policy-bound writer on an owner-chosen private network address, not an external contribution surface. WP4's account-free endpoint, local queue, and disabled renderer form are implemented only as off-by-default local mechanics; they are not publicly deployed, offered, human-tested, or authorized to write source. If Cyberbaser later needs to claim that unfamiliar readers can use a path unaided or that a separate owner can operate it, run the preserved [concierge correction pilot](/cyberbaser/research/concierge-human-correction-pilot/) before making that claim. No external rich editor, hosted moderation surface, owner decision UI, or generalized authoring-adapter product is shipped.

@@ -15,7 +15,7 @@ tags: [research, federation, architecture, governance, attribution]
 Many meta-wikis may coexist. They may specialize, disagree, fork, disappear, or be replaced. Their crawlers, graph databases, search rankings, and caches are useful views, but they have no merge authority, namespace authority, moderation authority, or privileged status. If every federation-specific service fails, ordinary direct links between owner pages must still work.
 
 :::caution[Measured research result, not a locked decision]
-This page records the corrected architecture and the completed local falsification fixture measured on 2026-07-27. It does not create an R-number, claim maintainer approval, or settle [Q06 stable addressing](/cyberbaser/reference/open-questions/#q06--content-addressability-slugs-hashes-or-title-based-with-redirects). Existing constraints still govern: the vault is primary, write paths use raw-text splices, renderers are swappable, moderation remains local, and every public artifact comes from the [fail-closed public projection](/cyberbaser/research/proposal-selective-publishing/#the-derived-index-rule). **Compatibility inside one controlled local fixture is not independent interoperability.**
+This page records the corrected architecture and the completed local falsification fixture measured on 2026-07-27. It did not create an R-number, claim maintainer approval, or settle [Q06 stable addressing](/cyberbaser/reference/open-questions/#q06--content-addressability-slugs-hashes-or-title-based-with-redirects). R23 later resolved live URL continuity independently; no fixture URL became a production baseline or authority. Existing constraints still govern: the vault is primary, write paths use raw-text splices, renderers are swappable, moderation remains local, and every public artifact comes from the [fail-closed public projection](/cyberbaser/research/proposal-selective-publishing/#the-derived-index-rule). **Compatibility inside one controlled local fixture is not independent interoperability.**
 :::
 
 ## What it should feel like
@@ -80,7 +80,7 @@ The baseline is static publication over ordinary HTTPS. The exact Cyberbaser pro
 
 Every reader-facing relationship has a normal absolute HTTPS link to the owner's page. Structured metadata can enrich that link, never replace it. Human-readable HTML may include [microformats2](https://microformats.org/wiki/microformats2) such as `h-entry`, but no parser is required to read the page.
 
-Public identities remain in owner-controlled HTTPS namespaces. Cyberbaser does not invent a global ID allocator, friendly-handle resolver, or registry. Paths, renderer slugs, git commits, content digests, forge accounts, and DIDs are not interchangeable identities. The controlled fixture freezes a small base-local URL map strictly as test scaffolding; enrolling the live corpus of 933 selected Markdown sources and 931 public page URLs still waits on Q06.
+Public identities remain in owner-controlled HTTPS namespaces. Cyberbaser does not invent a global ID allocator, friendly-handle resolver, or registry. Paths, renderer slugs, git commits, content digests, forge accounts, and DIDs are not interchangeable identities. The controlled fixture freezes a small base-local URL map strictly as test scaffolding; it is not R23's production baseline. R23's checker was exercised independently against the 931-URL public sitemap and reproduced every URL locally. Retaining that reviewed baseline and requiring the gate in the live publication workflow remain pending.
 
 ### A peer-published descriptor
 
@@ -318,11 +318,11 @@ git diff --check
 Both producers, the validator, the consumer, the logical-origin map, and all fixtures are controlled in one repository. The five servers are independently stoppable, but they are not independently operated implementations. The fixture did not exercise public DNS, real certificates, Internet routing, third-party deployment practices, or a separately written consumer. Do not describe this result as protocol interoperability.
 :::
 
-The spike also did **not** create a production package, root workspace, live Q06 URL contract, registry or resolver, global identity or trust, external service, durable Change List, remote write endpoint, private federation, actual TLS, public search service, or shared network runtime.
+The spike also did **not** create a production package, root workspace, live Q06 URL contract, registry or resolver, global identity or trust, external service, durable Change List, remote write endpoint, private federation, actual TLS, public search service, or shared network runtime. R23 later created the URL continuity rule independently of this fixture; it did not deploy anything or promote fixture identifiers into live authority.
 
 ## What remains open
 
-- Q06 still decides how the live corpus keeps page URLs stable across path, renderer, and domain changes. The fixture URL map is test scaffolding, not the production answer.
+- R23 now governs how the live corpus preserves page addresses across path and renderer changes. The fixture URL map remains test-only and cannot supply the reviewed live baseline. The checker and local 931-URL evidence exist; live workflow installation remains pending.
 - The smallest provisional profile must now be extracted from the fixture's descriptor, complete inventory, Linkset, record, and conformance behavior without promoting fixture URLs or its URN into live authority.
 - One independently operated producer or consumer must pass the published fixtures and conformance tests before Cyberbaser can claim interoperability.
 - Durable Change Lists and immutable revision URLs require retained publication history. A deterministic clean rebuild from a fixed snapshot does not provide that history.

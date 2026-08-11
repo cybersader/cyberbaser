@@ -4,7 +4,7 @@
 >
 > **Canonical**: `docs/src/content/docs/concepts/primitives.mdx` · published at `/cyberbaser/concepts/primitives/`
 
-## Current truth (summary, 2026-07-29)
+## Current truth (summary, 2026-08-11)
 
 Eight primitives, each with a visual + go-deeper link:
 1. **Vault** — a self-contained folder of Markdown; the durable unit.
@@ -14,4 +14,4 @@ Eight primitives, each with a visual + go-deeper link:
 5. **Translation layer** — renders authoring semantics through replaceable output spokes and maps accepted external intent back to exact source operations.
 6. **Exact-change editability** — the owner edits the authority directly; external spokes submit pinned, bounded proposals; every undeclared byte remains identical.
 7. **Open authoring** — an account-free, transport-independent proposal path under owner review, not necessarily fork-and-PR and never a direct external write.
-8. **Stable URLs** — links survive vault reorganization; the production mechanism remains Q06.
+8. **Stable URLs** — every reviewed previous canonical URL remains canonical or directly redirect-covered by one current canonical URL. R23 resolves the mechanism at emitted output; live workflow installation remains pending.
