@@ -1601,7 +1601,7 @@ main .content-panel:has(+ .content-panel .cb-hero) {
 @media (max-width: 640px) { .sl-markdown-content .cb-def > div { grid-template-columns: 1fr; gap: 0.3rem; } }
 
 /* nav map */
-.sl-markdown-content .cb-grid-nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.6rem; margin: 1.4rem 0 0.4rem; }
+.sl-markdown-content .cb-grid-nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 0.6rem; margin: 1.4rem 0 0.4rem; }
 @media (max-width: 860px) { .sl-markdown-content .cb-grid-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 460px) { .sl-markdown-content .cb-grid-nav { grid-template-columns: 1fr; } }
 .sl-markdown-content .cb-navchip { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; padding: 0.6rem 0.75rem; border: 1px solid var(--sl-color-gray-4); border-radius: 9px; background: var(--sl-color-gray-6); text-decoration: none; color: inherit; transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease; }
