@@ -1,0 +1,95 @@
+name: cyberbaser-account-free-intake
+
+x-account-free-intake-image: &account-free-intake-image
+  image: ${ACCOUNT_FREE_INTAKE_IMAGE:?set ACCOUNT_FREE_INTAKE_IMAGE to a local immutable image ID or repository digest}
+  pull_policy: never
+
+services:
+  account-free-intake-queue-init:
+    <<: *account-free-intake-image
+    profiles:
+      - account-free-intake
+    network_mode: none
+    read_only: true
+    user: "0:0"
+    entrypoint:
+      - /usr/local/bin/account-free-intake-queue-init
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+    volumes:
+      - type: volume
+        source: account-free-intake-queue
+        target: /var/lib/cyberbaser
+        volume:
+          nocopy: true
+
+  account-free-intake:
+    <<: *account-free-intake-image
+    profiles:
+      - account-free-intake
+    read_only: true
+    user: "65532:65532"
+    init: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+    stop_grace_period: 15s
+    depends_on:
+      account-free-intake-queue-init:
+        condition: service_completed_successfully
+    networks:
+      - account-free-intake-internal
+    volumes:
+      - type: bind
+        source: ${ACCOUNT_FREE_INTAKE_CONFIG_PATH:?set ACCOUNT_FREE_INTAKE_CONFIG_PATH}
+        target: /config/account-free-intake.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${ACCOUNT_FREE_INTAKE_BINDINGS_PATH:?set ACCOUNT_FREE_INTAKE_BINDINGS_PATH}
+        target: /srv/cyberbaser/source-bindings
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${ACCOUNT_FREE_INTAKE_GIT_DIR:?set ACCOUNT_FREE_INTAKE_GIT_DIR}
+        target: /srv/cyberbaser/source-objects.git
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: volume
+        source: account-free-intake-queue
+        target: /var/lib/cyberbaser
+        volume:
+          nocopy: true
+    tmpfs:
+      - /run/account-free-intake:rw,nosuid,nodev,noexec,mode=0700,uid=65532,gid=65532,size=8m
+      - /tmp:rw,nosuid,nodev,noexec,mode=0700,uid=65532,gid=65532,size=16m
+    healthcheck:
+      test:
+        - CMD
+        - bun
+        - /opt/cyberbaser/deploy/account-free-intake/healthcheck.js
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+
+networks:
+  account-free-intake-internal:
+    name: ${ACCOUNT_FREE_INTAKE_NETWORK:?set ACCOUNT_FREE_INTAKE_NETWORK to a dedicated internal network}
+    driver: bridge
+    internal: true
+    attachable: true
+
+volumes:
+  account-free-intake-queue:
+    name: ${ACCOUNT_FREE_INTAKE_QUEUE_VOLUME:?set ACCOUNT_FREE_INTAKE_QUEUE_VOLUME to a dedicated named volume}

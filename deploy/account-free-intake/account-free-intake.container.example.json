@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "enabled": true,
+  "publicOrigin": "https://intake.example.invalid",
+  "listen": {
+    "host": "0.0.0.0",
+    "port": 8080
+  },
+  "allowedFormOrigins": [
+    "https://wiki.example.invalid"
+  ],
+  "repository": "https://forge.example.invalid/owner/wiki.git",
+  "bindingsRoot": "/srv/cyberbaser/source-bindings",
+  "gitDir": "/srv/cyberbaser/source-objects.git",
+  "queue": {
+    "root": "/var/lib/cyberbaser/proposal-queue",
+    "maxPendingEntries": 1000,
+    "maxRetainedBytes": 268435456,
+    "maxPendingPerSource": 25,
+    "pendingRetentionMs": 2592000000,
+    "expiredGraceMs": 604800000
+  },
+  "limits": {
+    "maxBodyBytes": 98304,
+    "requestTimeoutMs": 5000,
+    "maxConcurrentRequests": 4,
+    "tokenBucketCapacity": 20,
+    "tokenBucketRefillPerSecond": 1
+  }
+}
