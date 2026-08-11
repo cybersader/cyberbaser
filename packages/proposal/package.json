@@ -1,0 +1,23 @@
+{
+  "name": "@cyberbaser/proposal",
+  "version": "0.1.0",
+  "description": "Canonical, source-bound proposal objects for Cyberbaser intake adapters.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./schema/v1": "./schema/proposal-v1.schema.json"
+  },
+  "scripts": {
+    "test": "bun test test"
+  },
+  "dependencies": {
+    "@cyberbaser/correction": "file:../correction",
+    "@cyberbaser/trust": "file:../trust"
+  },
+  "devDependencies": {
+    "ajv": "8.17.1",
+    "ajv-formats": "3.0.1"
+  }
+}

@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cyberbaser.dev/schema/proposal-v1.schema.json",
+  "title": "Cyberbaser source-bound proposal v1",
+  "description": "Structural schema for canonical Cyberbaser proposals. Runtime validation remains authoritative for UTF-8 byte limits, URL canonical spelling, digests, offsets, and cross-field relationships.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "artifactType",
+    "proposalId",
+    "source",
+    "operation",
+    "submission"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "artifactType": { "const": "cyberbaser-proposal" },
+    "proposalId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "revision", "path"],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048,
+          "pattern": "^https://[^/?#@]+/[^?#]*[^/?#]$"
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+        },
+        "path": {
+          "type": "string",
+          "maxLength": 4096,
+          "pattern": "^(?!.*[\\u0000-\\u001F\\u007F])(?!/)(?!.*\\\\)(?!.*//)(?!\\.?\\.?/)(?!.*\\/\\.\\.?\\/)(?!.*\\/\\.\\.?$)(?!\\.git/)(?!.*\\/\\.git(?:/|$)).+\\.md$"
+        }
+      }
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "selector",
+        "baseByteLength",
+        "baseDigest",
+        "start",
+        "end",
+        "expectedOldBytesBase64",
+        "replacementBytesBase64",
+        "candidateByteLength",
+        "candidateDigest"
+      ],
+      "properties": {
+        "type": { "enum": ["quote", "offset"] },
+        "selector": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["quote", "prefix", "suffix"],
+              "properties": {
+                "quote": { "type": "string", "minLength": 1, "maxLength": 65536 },
+                "prefix": { "type": ["string", "null"], "maxLength": 65536 },
+                "suffix": { "type": ["string", "null"], "maxLength": 65536 }
+              }
+            }
+          ]
+        },
+        "baseByteLength": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "baseDigest": {
+          "type": "string",
+          "pattern": "^sha-256=:[A-Za-z0-9+/]{43}=:$"
+        },
+        "start": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "end": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "expectedOldBytesBase64": {
+          "type": "string",
+          "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+        },
+        "replacementBytesBase64": {
+          "type": "string",
+          "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+        },
+        "candidateByteLength": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "candidateDigest": {
+          "type": "string",
+          "pattern": "^sha-256=:[A-Za-z0-9+/]{43}=:$"
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "quote" } } },
+          "then": { "properties": { "selector": { "type": "object" } } },
+          "else": { "properties": { "selector": { "type": "null" } } }
+        }
+      ]
+    },
+    "submission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["submittedAt", "rationale", "evidence", "identityClaim"],
+      "properties": {
+        "submittedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16384,
+          "pattern": "^(?=.*\\S)[^\\r]*$"
+        },
+        "evidence": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048,
+            "pattern": "^https://"
+          }
+        },
+        "identityClaim": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "issuer", "subject"],
+              "properties": {
+                "type": { "enum": ["human", "agent"] },
+                "issuer": {
+                  "type": "string",
+                  "format": "uri",
+                  "maxLength": 2048,
+                  "pattern": "^(?!(?:file|data|javascript):)(?![A-Za-z][A-Za-z0-9+.-]*://[^/?#]*@)[^?#]+$"
+                },
+                "subject": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024,
+                  "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

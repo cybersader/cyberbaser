@@ -1,0 +1,123 @@
+---
+title: Proposal Contract
+description: The canonical, source-bound object that every external Cyberbaser intake lane must produce before trust classification and owner review.
+sidebar:
+  order: 23.5
+status: research
+tags: [design, architecture, contribution, governance]
+---
+
+**Status: the shared WP4 contract is implemented and hermetically tested.** `@cyberbaser/proposal` defines one canonical object for external intake adapters and remains pure, forge-agnostic, and no-I/O. The separate [`@cyberbaser/forgejo-intake`](/cyberbaser/development/forgejo-intake-adapter/) package consumes the contract for one narrow Forgejo pull-request shape. [`@cyberbaser/account-free-intake`](/cyberbaser/development/account-free-intake/) plus the carrier-neutral local proposal queue consume it for one anonymous retained-publication shape. Neither lane is offered: Lane A is not live-validated or installed, and Lane B is disabled, local-only, unexposed, and human-untested. No rich editor, owner decision console, external source writer, or production authority exists. Q09 remains open.
+
+## What an intake lane produces
+
+A reader form, forge pull request, browser editor, or agent may offer a different experience. Before the change enters Cyberbaser's trust and review boundary, its adapter must produce the same value:
+
+```text
+lane-specific input
+  → one pinned existing Markdown source
+  → one exact quote- or offset-bound splice
+  → one canonical proposal artifact
+  → receiver-verified trust subject, if any
+  → existing trust classifier
+  → owner queue and decision (not built in this package)
+```
+
+The proposal is not permission to write. It contains no route, tier, checks, owner decision, command, refspec, credential, session, or source-application authority. The owner-local `owner-alpha` route remains separate: the owner's Save may authorize one direct exact-change job under a durable policy, while external spokes remain proposal-only.
+
+## Version 1 shape
+
+A version 1 proposal binds one existing Markdown file and one UTF-8 splice:
+
+```json
+{
+  "schemaVersion": 1,
+  "artifactType": "cyberbaser-proposal",
+  "proposalId": "lane-a:example-1",
+  "source": {
+    "repository": "https://forge.example:8443/owner/wiki.git",
+    "revision": "opaque-pinned-revision",
+    "path": "Knowledge/Example.md"
+  },
+  "operation": {
+    "type": "quote",
+    "selector": {
+      "quote": "teh",
+      "prefix": "A line about ",
+      "suffix": " process."
+    },
+    "baseByteLength": 412,
+    "baseDigest": "sha-256=:…:",
+    "start": 301,
+    "end": 304,
+    "expectedOldBytesBase64": "dGVo",
+    "replacementBytesBase64": "dGhl",
+    "candidateByteLength": 412,
+    "candidateDigest": "sha-256=:…:"
+  },
+  "submission": {
+    "submittedAt": "2026-08-10T12:34:56Z",
+    "rationale": "Correct the misspelling without changing meaning.",
+    "evidence": ["https://example.com/source"],
+    "identityClaim": null
+  }
+}
+```
+
+An offset proposal carries the same byte, length, and digest bindings with `type: "offset"` and `selector: null`. The opaque revision can be a Git commit today or another immutable revision identity later. The package does not fetch the repository or assume a particular forge.
+
+### Source identity
+
+`source.repository` is one canonical credential-free HTTPS repository URL. Non-default HTTPS ports are allowed for self-hosted forges. `source.revision` is required and opaque rather than restricted to a Git SHA. `source.path` is one repository-relative POSIX Markdown path, with traversal, backslashes, `.git` segments, absolute paths, and non-Markdown targets rejected.
+
+The adapter or owner boundary resolves that identity and supplies the exact base bytes. `applyProposal()` then independently verifies that those bytes match the prepared base length and digest.
+
+### Exact operation
+
+The package delegates preparation and application to [`@cyberbaser/correction`](/cyberbaser/design/translation-layer/). A prepared operation records:
+
+- the exact old UTF-8 bytes and replacement bytes;
+- half-open byte offsets on UTF-8 boundaries;
+- the base and candidate byte lengths;
+- RFC-9530-style SHA-256 digests for the base and candidate;
+- an exact quote plus optional immediate context, or an explicit offset operation.
+
+Application fails closed on stale source, quote ambiguity, changed old bytes, invalid UTF-8, offset drift, digest drift, or candidate mismatch. Quote uniqueness is rechecked against the pinned base during application, including for proposals produced outside the package. CRLF, tabs, trailing spaces, emoji, and combining characters survive exactly. The package rejects no-ops, spans larger than 64 KiB, and complete nonempty-file replacement or deletion; an existing empty Markdown file may receive one bounded insertion. Version 1 does not support multiple files, multiple splices, create, rename, assets, or structural operations.
+
+## Identity is evidence, not authority
+
+`submission.identityClaim` may be `null` or one bounded `{ type, issuer, subject }` claim. It carries no token, signature, credential blob, role, permission, or verification result. The contract intentionally does not select Forgejo OIDC, signing keys, DIDs, verifiable credentials, ActivityPub, IndieAuth, or another WP6 identity technology.
+
+A serialized claim never promotes itself into the trust policy. `proposalToTrustChange()` and `classifyProposal()` accept a separate receiver-verified `{ author, authorType }` value. If the receiving lane supplies none, the existing `@cyberbaser/trust` classifier sees an anonymous author and routes the proposal to full review. A stable leading UTF-8 BOM prefix is stripped from both decoded trust views so frontmatter controls still begin at `---`; changing that prefix fails closed before classification. A verified subject still cannot authorize source application or bypass owner policy.
+
+Public credit is a separate attribution question under Q08. It is not inferred from the identity claim.
+
+## Canonical bytes and limits
+
+The durable artifact is compact `JSON.stringify` output in fixed key order followed by exactly one LF. `parseProposal()` rejects a BOM, invalid UTF-8, pretty printing, changed key order, CRLF, missing or extra final lines, duplicate/noncanonical forms, and trailing material. The complete artifact is capped at 256 KiB. Rationale is capped at 16 KiB and evidence at eight canonical HTTPS URLs.
+
+`proposalDigest()` hashes the exact canonical bytes, including the final LF. The caller-supplied `proposalId` remains transport correlation metadata; it is not source authority or a substitute for the content digest.
+
+The structural schema is tracked at `packages/proposal/schema/proposal-v1.schema.json`. Runtime validation is authoritative for canonical byte encoding and relationships between offsets, decoded spans, lengths, and digests.
+
+## Package API
+
+```js
+import {
+  prepareProposal,
+  serializeProposal,
+  parseProposal,
+  proposalDigest,
+  applyProposal,
+  proposalToTrustChange,
+  classifyProposal,
+} from '@cyberbaser/proposal';
+```
+
+All functions are deterministic and operate in memory. The package performs no filesystem, Git, network, queue, clock, random-ID, or process work. `applyProposal()` returns candidate bytes; it never writes them.
+
+## Evidence boundary
+
+The package tests cover quote and offset preparation, insertions, replacements, deletions, exact CRLF and Unicode preservation, stale and tampered bindings, canonical JSON, source-path and URL safety, size limits, deep immutability, and receiver-verified trust handoff. This establishes a shared adapter-output contract.
+
+It does **not** establish an offered intake product, public edge abuse controls, review usability, identity verification, independent-human evidence, or permission to write canonical source. Separate [Forgejo Lane A](/cyberbaser/development/forgejo-intake-adapter/) and [account-free Lane B](/cyberbaser/development/account-free-intake/) mechanics now exist around this contract, including a finite local queue. Lane A is not live-validated or installed. Lane B is disabled, local-only, unexposed, and has no owner decision or source-application surface. WP5 remains later work. Q09 closes only after a real offered account-free path earns the required evidence.
