@@ -67,7 +67,7 @@ That result closes arbitrary whole-file save adapters, not rich authoring as an 
 1. **Clone**: clone `cybersader/cyberbase` as an Obsidian vault
 2. **Edit locally**: full Obsidian affordances (wikilinks, callouts, graph view, templates)
 3. **Commit & push**: either via obsidian-git or a terminal
-4. **Build trigger**: `publish-site.yml` fires on push to `main` and runs the publish boundary, the projection, and the Quartz build, then deploys to GitHub Pages
+4. **Build trigger**: `publish-site.yml` fires on push to `main`, runs the publish boundary, projection, pinned Quartz build, and cumulative URL-continuity gate, then deploys to GitHub Pages only if every gate passes
 5. **Live**: **3 to 5 minutes later** the change is on the published site
 
 > [!info] The build time, measured
@@ -81,7 +81,7 @@ That result closes arbitrary whole-file save adapters, not rich authoring as an 
 
 ### What is not enforced on this path
 
-The maintainer pushes to `main` directly, and `ofm-check` and `trust-gate` are both `pull_request`-triggered. **A direct push is validated by nothing.** The contributor path has more checks than the maintainer path, not fewer. That asymmetry is deliberate for now (requiring PRs for all changes would break daily authoring from Obsidian), but it is a gap, not a design.
+The maintainer pushes to `main` directly, and `ofm-check` and `trust-gate` are both `pull_request`-triggered. The publication workflow now validates projection safety, emitted-path safety, artifact size, and cumulative URL continuity, but it still does not run OFM damage classification or trust routing for direct pushes. The contributor path therefore retains moderation checks the maintainer path lacks. That asymmetry is deliberate for now (requiring PRs for all changes would break daily authoring from Obsidian), but Q10 remains a real gap.
 
 ## Private owner-alpha wiki: one Save, policy-bound publication
 

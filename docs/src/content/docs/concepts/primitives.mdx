@@ -345,7 +345,7 @@ Where it stands: R16's **verbatim path-derived URLs** remain the live convention
 
 R23 separates continuity from naming. A reviewed previous sitemap is the public-address baseline. Every candidate build must retain each baseline URL as canonical or emit a direct, same-origin redirect stub to one current canonical URL. The checker validates both inventories, every candidate route file, `noindex`, the canonical target, the zero-delay refresh target, and the absence of redirect chains.
 
-`@cyberbaser/linkcheck` implements and tests that check. The current public sitemap and a local candidate build each contained the same 931 canonical URLs, with zero failures; one real Quartz alias stub also passed separately. Live publication-workflow installation remains pending. No live URL or deployment changed when R23 was recorded.
+`@cyberbaser/linkcheck` implements and tests that check. The current public sitemap and a local candidate build each contained the same 931 canonical URLs, with zero failures; one real Quartz alias stub also passed separately. Cyberbase now retains that inventory as a cumulative baseline and requires pinned `cb-urlcheck` before Pages publication. The first required run preserved all 931 URLs and deployed successfully.
 
 </details>
 

@@ -20,7 +20,7 @@ tags: [research]
 | Q03 | Serializer-backed Web CMS: rendered preview or raw Markdown? | **Closed as framed** | R12 |
 | Q04 | How do we guarantee no lossy round-trip? | **Answered, unenforced** | R12 |
 | Q05 | Incremental builds at thousands of pages | **Closed on scale, residue named** | R12, R14, R16 |
-| Q06 | Content addressability: slugs, hashes, or titles? | **Closed — live enforcement pending** | R23 |
+| Q06 | Content addressability: slugs, hashes, or titles? | **Closed — enforced in dogfood** | R23 |
 | Q07 | Where does the Decap OAuth proxy live? | **Closed — moot**, superseded by Q09 | R12 |
 | Q08 | Does the fork flow actually attribute the contributor? | 🔴 **Open** (reopened) | — |
 | Q09 | What is the contribution path for someone with no account? | 🔴 **Open — both lane mechanics built; neither offered or human-tested** | — |
@@ -63,8 +63,8 @@ Three genuinely open: Q08, Q09, and Q10. Q06 closed through R23 without selectin
 
 **Asked:** 2026-04-11 · **Resolved:** 2026-08-11 by R23.
 **Answer:** stable URLs are an emitted-site continuity invariant, not a requirement to select one permanent slug algorithm. The current exact-case, verbatim path-derived public URLs are the baseline. A candidate publication may add URLs, but each previous canonical URL must remain canonical or have a direct same-origin redirect stub to one current canonical URL under the same base path. The stub must carry `noindex`, exactly one canonical link, and a zero-delay refresh to the same target. Redirect chains, candidate canonicals that are themselves redirects, and uncovered removals fail closed.
-**Implementation status:** `@cyberbaser/linkcheck` now provides the renderer-agnostic `cb-urlcheck` CLI and deterministic JSON report. The current public sitemap was fetched read-only and compared with a local case-preserving build from the current public vault and pinned Quartz v4.5.2: all 931 canonical URLs were unchanged, with no additions, removals, or failures. A real emitted Quartz alias stub also passed a separate removed-route check. No deployment or public URL changed.
-**Residue:** the separate live vault workflow does not yet retain the reviewed baseline or require the checker. Installing that enforcement requires separate repository authority. The canonical naming policy may evolve later; source `aliases` and `permalink` values are possible renderer inputs, not Cyberbaser's route authority, and lowercase projection remains disabled.
+**Implementation status:** `@cyberbaser/linkcheck` provides the renderer-agnostic `cb-urlcheck` CLI and deterministic JSON report. Cyberbase now retains the reviewed 931-URL inventory as a cumulative baseline and pins the checker before Pages artifact upload. Run `31540402789` reported 931 unchanged and zero failures, then completed deployment `5859387327`; the public exact-case URL inventory remained unchanged.
+**Residue:** the canonical naming policy may evolve later; source `aliases` and `permalink` values are possible renderer inputs, not Cyberbaser's route authority, and lowercase projection remains disabled. Future canonical additions must be appended to the cumulative baseline, while historical entries remain protected after they become redirect routes.
 
 ---
 

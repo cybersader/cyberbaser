@@ -173,14 +173,16 @@ Quartz exit code. Useful env vars:
 The deploy runs from the vault repo, which owns the Pages environment, but the
 renderer and the pipeline are cloned from cyberbaser (public):
 
-1. Check out `cybersader/cyberbase` (the content).
-2. Check out `cybersader/cyberbaser` (this directory + `packages/publish`).
+1. Check out `cybersader/cyberbase` (the content plus its cumulative URL baseline).
+2. Check out immutable Cyberbaser commit `eac9f1f` (renderer, projection, and checker).
 3. Run the projection: `publish.yml` boundary, frontmatter pre-flight,
    case-collision guard, verbatim path copy, post-hoc leak test. Output: a
    projected content tree.
 4. `renderers/quartz-cyberbase/setup.sh "$RUNNER_TEMP/quartz"`
 5. `renderers/quartz-cyberbase/build.sh "$PROJECTED" "$RUNNER_TEMP/quartz"`
-6. `actions/upload-pages-artifact` on `$RUNNER_TEMP/quartz/public`, then
+6. Run `cb-urlcheck` against `.cyberbaser/url-baseline.xml`; upload its
+   deterministic report and stop before Pages upload on any uncovered URL.
+7. `actions/upload-pages-artifact` on `$RUNNER_TEMP/quartz/public`, then
    `actions/deploy-pages@v4` (`build_type: workflow`).
 
 CI always builds public edit links. Public mode is the default, invalid modes

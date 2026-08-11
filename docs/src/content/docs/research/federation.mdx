@@ -80,7 +80,7 @@ The baseline is static publication over ordinary HTTPS. The exact Cyberbaser pro
 
 Every reader-facing relationship has a normal absolute HTTPS link to the owner's page. Structured metadata can enrich that link, never replace it. Human-readable HTML may include [microformats2](https://microformats.org/wiki/microformats2) such as `h-entry`, but no parser is required to read the page.
 
-Public identities remain in owner-controlled HTTPS namespaces. Cyberbaser does not invent a global ID allocator, friendly-handle resolver, or registry. Paths, renderer slugs, git commits, content digests, forge accounts, and DIDs are not interchangeable identities. The controlled fixture freezes a small base-local URL map strictly as test scaffolding; it is not R23's production baseline. R23's checker was exercised independently against the 931-URL public sitemap and reproduced every URL locally. Retaining that reviewed baseline and requiring the gate in the live publication workflow remain pending.
+Public identities remain in owner-controlled HTTPS namespaces. Cyberbaser does not invent a global ID allocator, friendly-handle resolver, or registry. Paths, renderer slugs, git commits, content digests, forge accounts, and DIDs are not interchangeable identities. The controlled fixture freezes a small base-local URL map strictly as test scaffolding; it is not R23's production baseline. Cyberbase now retains the independent 931-URL public inventory as a cumulative baseline and requires the pinned checker before Pages publication.
 
 ### A peer-published descriptor
 
@@ -322,7 +322,7 @@ The spike also did **not** create a production package, root workspace, live Q06
 
 ## What remains open
 
-- R23 now governs how the live corpus preserves page addresses across path and renderer changes. The fixture URL map remains test-only and cannot supply the reviewed live baseline. The checker and local 931-URL evidence exist; live workflow installation remains pending.
+- R23 governs how the live corpus preserves page addresses across path and renderer changes. The fixture URL map remains test-only and supplied none of the reviewed live baseline. Cyberbase now enforces its separate cumulative 931-URL inventory before publication.
 - The smallest provisional profile must now be extracted from the fixture's descriptor, complete inventory, Linkset, record, and conformance behavior without promoting fixture URLs or its URN into live authority.
 - One independently operated producer or consumer must pass the published fixtures and conformance tests before Cyberbaser can claim interoperability.
 - Durable Change Lists and immutable revision URLs require retained publication history. A deterministic clean rebuild from a fixed snapshot does not provide that history.

@@ -46,10 +46,10 @@ Ordered work packages, written 2026-08-02 and aligned 2026-08-10: **WP1** two-st
 - [ ] Make enforcement honest without breaking the maintainer's direct Obsidian+Git workflow (Q10).
 - [ ] Verify contributor attribution through the GitHub fork flow (Q08).
 - [x] Define and locally exercise the R23 emitted-site URL continuity contract: 24 package tests pass, all 931 public URLs were unchanged in a read-only pinned-Quartz local rehearsal, and one real alias stub covered one simulated removal.
-- [ ] Install the reviewed live baseline and required `cb-urlcheck` publication-workflow gate. No external workflow, repository, URL, redirect, or deployment was modified by the implementation or rehearsal.
+- [x] Install the reviewed 931-URL cumulative baseline and required `cb-urlcheck` publication-workflow gate. Cyberbase commit `dd576cd` pinned Cyberbaser `eac9f1f`; run `31540402789` passed the gate before a successful Pages deployment with all 931 URLs unchanged.
 - [ ] Decide the operating model for a maintainer who does not use GitHub: hosted, one-click self-hosted, or local-first. Owner self-dogfooding tests one local workflow but does not choose the general product model.
 
-**Exit criteria for v1 Build** are canonical on the public roadmap. The owner dogfood result is one criterion; it does not by itself ship or settle an account-free product path. R23's URL decision, checker, and local live-contract evidence are complete, while required live enforcement installation remains an unmet exit item.
+**Exit criteria for v1 Build** are canonical on the public roadmap. The owner dogfood result is one criterion; it does not by itself ship or settle an account-free product path. R23's URL decision, checker, reviewed cumulative baseline, and required live publication gate are complete.
 
 ---
 
