@@ -37,8 +37,8 @@ Consequences that are load-bearing, not stylistic:
 | `build.sh` | Point a projected content tree at that checkout and run `npx quartz build`. |
 | `quartz.config.ts` | Site config: `baseUrl`, plugin/emitter chain, theme. |
 | `quartz.layout.ts` | Component layout. Quartz imports this from the repo root, so it must be shipped even if it barely differs from upstream. Also holds `VAULT_REPO_URL`, the single declaration of the source repo. |
-| `components/*.{ts,tsx}` | Cyberbaser-local Quartz components and pure helpers, copied into `<quartz>/quartz/components/` by `setup.sh`. `EditThisPage.tsx` keeps the public GitHub editor link and can instead emit an absolute cross-origin link to the privileged owner origin (the reader and owner run on different ports of one private numeric IPv4 address). `editLink.ts` owns URL construction, source-page eligibility, exact private-origin validation, and fail-closed build-mode resolution. `validate-owner-origin.ts` is the CLI wrapper `build.sh` uses for the same validation. |
-| `tests/` | Focused Bun + shell assertions for public URL compatibility, exact owner query encoding, synthetic/tag-page exclusion, and build-mode guards. No added test framework. |
+| `components/*.{ts,tsx}` | Cyberbaser-local Quartz components and pure helpers, copied into `<quartz>/quartz/components/` by `setup.sh`. `EditThisPage.tsx` keeps the public GitHub editor link and can instead emit an absolute cross-origin link to the privileged owner origin. `SuggestCorrection.tsx` is a separate disabled-by-default account-free form: when explicitly enabled, it exposes only the public intake action, retained binding digest, and opaque page ID. The helpers own exact URL/source validation, page-ID derivation, strict browser payload construction, response bounds, and retry idempotency. `validate-owner-origin.ts` is the CLI wrapper `build.sh` uses for owner validation. |
+| `tests/` | Focused Bun + shell assertions for public URL compatibility, exact owner query encoding, synthetic/tag-page exclusion, build-mode guards, disabled account-free configuration, opaque page IDs, strict browser payloads, bounded responses, and retry behavior. No added test framework. |
 | `styles/custom.scss` | The theme stylesheet, copied to `<quartz>/quartz/styles/custom.scss` by `setup.sh`. See "Theme" below. |
 
 ## The pin
@@ -159,6 +159,13 @@ Quartz exit code. Useful env vars:
   time. `public` is the default and preserves the GitHub edit URL. `owner` emits
   `/owner/edit?relativePath=…&slug=…` with both exact values percent-encoded.
   Owner mode is same-origin, local-only, and rejected when `CI` is true.
+- `CYBERBASER_ACCOUNT_FREE_INTAKE=enabled` — explicit opt-in for the account-free
+  form. Unset is the fail-closed default. Enabling also requires one exact HTTPS
+  intake origin, retained binding digest, credential-free source repository,
+  and immutable source revision through the corresponding
+  `CYBERBASER_ACCOUNT_FREE_*` variables. The browser receives only the intake
+  action, binding digest, and opaque page ID. Current public builds leave this
+  unset; the form is not offered.
 - `QUARTZ_REF=…` — override the pin in `setup.sh` (for evaluating a bump only).
 
 ## How CI uses it

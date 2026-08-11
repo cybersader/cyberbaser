@@ -1,0 +1,122 @@
+---
+title: Account-free intake Lane B
+description: "The implemented WP4 Lane B boundary: disabled renderer form, strict sibling intake service, retained exact-source resolution, local durable proposal queue, isolated OCI packaging, and the evidence the implementation does and does not provide."
+sidebar:
+  order: 23
+status: research
+tags: [architecture, contribution, governance, testing]
+---
+
+**Status: implemented and mechanically tested, disabled by default, not offered.** WP4 Lane B now has a strict correction-intent contract, exact retained-source derivation, a local durable proposal queue, an optional HTTP intake app, a disabled-by-default Quartz form, and local-only OCI/Compose packaging. Repository CI is read-only and exercises the package, app, renderer, deployment-structure, image-build, and isolated runtime-acceptance paths.
+
+This is implementation evidence, not product or human evidence. No public endpoint is deployed. No ordinary reader or independent owner has used the path. No reverse proxy, TLS endpoint, edge DDoS control, service installation, image publication, hosted console, owner decision action, source writer, merge path, or production authority exists. Q09 remains open.
+
+## The implemented path
+
+```text
+published source-backed page
+  → optional Quartz correction form
+  → strict credential-free correction intent
+  → retained publication binding + exact historical Git objects
+  → canonical @cyberbaser/proposal
+  → anonymous / full-review classification
+  → owner-local durable proposal queue
+  → local inspection only
+```
+
+The path stops at retained review evidence. It cannot accept, reject, apply, commit, push, merge, deploy, or authorize publication.
+
+## WP4 implementation amendment: local queue and sibling service
+
+This is a **no-R-number implementation amendment** to the already ordered WP4 work. It records two version-1 choices without closing Q09 or selecting a permanent product surface.
+
+1. **Use a local filesystem proposal queue, not bot pull requests, for Lane B v1.** `@cyberbaser/proposal-queue` stores exact canonical proposal bytes plus bounded receipt, carrier, trust-classification, and lifecycle artifacts in one private owner-controlled directory. The queue has finite entry, byte, per-source, and retention bounds. Its only lifecycle states are `pending-review` and `expired`. It has no accepted, rejected, merged, applied, or published state.
+2. **Run public intake as a sibling service, not inside owner-alpha.** `apps/account-free-intake` is a separate process and deployment image. Its container receives only credential-free config, retained source-binding manifests, a read-only bare Git object store, and one dedicated writable queue volume. It does not mount the owner-alpha app, vault worktree, owner state, credential socket, renderer output, or publication output.
+
+These choices keep unauthenticated traffic and queue writes outside the owner-authority process. They do not make the local filesystem queue a permanent cross-maintainer protocol, and they do not authorize public exposure. A later WP5 console may inspect the same canonical queue objects, but it must not turn them into a second source authority.
+
+## Components and boundaries
+
+### `@cyberbaser/account-free-intake`
+
+The package accepts a strict, credential-free correction intent containing only an opaque retained-publication binding digest, opaque page ID, exact quote plus optional context, replacement, rationale, inert HTTPS evidence URLs, and an optional high-entropy idempotency key.
+
+The receiver resolves the exact retained binding and historical Markdown blob from owner-controlled local inputs. It reads `.cyberbaser/trust.yml` from the same source revision, derives one canonical quote-bound `@cyberbaser/proposal`, reapplies it in memory, and requires anonymous `full-review` routing. It performs no HTTP, network fetch, queue write, checkout, ref mutation, source write, identity verification, owner decision, or publication action.
+
+### `@cyberbaser/proposal-queue`
+
+The carrier-neutral queue accepts canonical proposals from Lane A or Lane B. It retains exact proposal bytes, validates all metadata, uses a Linux kernel lock, writes through private staging plus `fsync` and atomic rename, and re-verifies retained source and trust-policy evidence on open and load.
+
+Lane B raw idempotency keys are never retained. Anonymous Lane B entries cannot supply a verified subject. Capacity and retention are finite, and recovery fails closed on substituted files, ambiguous locations, duplicate IDs or replay scopes, stale source, policy disagreement, proposal-application failure, or trust-classification disagreement.
+
+### `apps/account-free-intake`
+
+The optional Bun app refuses to start unless its exact configuration sets `enabled: true`. It exposes only:
+
+- `POST /v1/corrections` for the strict JSON intent;
+- `OPTIONS /v1/corrections` for non-credentialed CORS from exact configured form origins; and
+- loopback-only `GET /healthz` for the container health check.
+
+The app rejects credentials, treats forwarded headers as non-authoritative, enforces an exact public Host and Origin, bounds the body, shares one five-second deadline across body read and derivation, and applies process-wide token and concurrency limits. Those limits are origin protection only, not edge DDoS protection.
+
+The bundled `list` and `show` commands render bounded text or static escaped HTML. They use a nonmutating queue inspector that revalidates exact source and policy evidence but performs no recovery, retention, expiry, purge, temporary cleanup, or state write. The service must be stopped because the inspector's shared lock conflicts with the service's lifetime exclusive lock; a queue that requires recovery fails inspection until normal service startup repairs it. The commands expose no accept, reject, apply, write, or publication operation. They are a pre-WP5 local inspection instrument, not an owner decision surface or hosted review product.
+
+### Quartz renderer integration
+
+`renderers/quartz-cyberbase` contains a source-backed **Suggest a correction** component and browser client. The component is absent unless build-time configuration explicitly sets `CYBERBASER_ACCOUNT_FREE_INTAKE=enabled` and supplies every retained-publication input. Normal and current public builds leave it disabled.
+
+When enabled, the browser receives only the public intake action, retained binding digest, and opaque page ID. Repository identity, source revision, source path, owner origin, private-network details, identity, contact, and account fields are not rendered into the form or posted by the client.
+
+### Local-only OCI deployment
+
+`deploy/account-free-intake` packages the sibling service as one Linux/amd64 image and an off-by-default Compose profile. A plain `docker compose up` starts nothing. The service has a read-only image root, runs as `65532:65532`, drops all capabilities, uses `no-new-privileges`, publishes no host port, joins only a dedicated internal bridge, mounts source evidence read-only, and writes only one dedicated proposal-queue volume.
+
+The repository provides no reverse proxy. Joining one to the internal network, terminating TLS, exposing `/v1/corrections`, preserving the exact Host, and adding edge DDoS controls are separate design and authorization steps.
+
+## Mechanical evidence
+
+Focused deterministic suites cover:
+
+- strict correction-intent and retained-binding contracts;
+- real local historical Git object resolution without fetch or mutation;
+- canonical proposal derivation and anonymous trust routing;
+- durable queue writes, locking, crash recovery, capacity, retention, idempotency, and evidence revalidation;
+- exact HTTP Host, Origin, CORS, credential, body, deadline, rate, concurrency, and receipt behavior;
+- safe text and static-HTML inspection rendering;
+- disabled-by-default Quartz configuration, opaque page IDs, strict browser payloads, response bounds, and retry idempotency;
+- local OCI allowlists, pinned bases and packages, off-by-default Compose, internal-only networking, read-only inputs, dedicated queue storage, and explicit owner-authority exclusions; and
+- an opt-in Docker runtime acceptance that builds one local image, starts one isolated internal-only service, enqueues one real anonymous proposal, verifies durable queue artifacts and unchanged inputs, and cleans up its temporary resources.
+
+`.github/workflows/proposal-queue.yml`, `.github/workflows/account-free-intake.yml`, and `.github/workflows/account-free-intake-container.yml` have only `contents: read`, immutable action pins, credential-free checkout, no secrets, and no artifact publication, deployment, release, registry push, or repository mutation step. The first two run package/app/renderer checks; the container workflow builds only a local image and runs isolated acceptance. Structural tests fail if those properties regress.
+
+## Evidence boundary
+
+The implemented mechanics support these claims only:
+
+- the package, app, queue, and disabled renderer integration exist;
+- deterministic local tests exercise their stated contracts;
+- the deployment bundle is structurally tested and has an opt-in isolated Docker acceptance path; and
+- CI is designed to run that complete acceptance without publishing or modifying the repository.
+
+They do **not** support these claims:
+
+- publicly deployed or reachable;
+- human-tested or usable by an unfamiliar reader;
+- offered as a contribution path;
+- protected by a production reverse proxy, TLS, WAF, or DDoS service;
+- an identity verifier or anything above the anonymous trust floor;
+- an owner acceptance/rejection product;
+- a source writer, merge mechanism, or publication authority; or
+- closure of Q09.
+
+## Run the focused checks
+
+```bash
+bun test packages/proposal-queue/test
+bun test packages/account-free-intake/test
+bun test apps/account-free-intake/test
+bash renderers/quartz-cyberbase/tests/run.sh
+bun test deploy/account-free-intake/test
+```
+
+The final deployment command reports the Docker runtime acceptance as skipped unless Docker is available and `ACCOUNT_FREE_INTAKE_CONTAINER_IMAGE` names an immutable local image ID. See `deploy/account-free-intake/README.md` for the local-only build and acceptance procedure.

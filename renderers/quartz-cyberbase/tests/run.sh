@@ -5,6 +5,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WRAPPER_DIR="$(cd "$HERE/.." && pwd)"
 
 bun "$HERE/edit-links.test.ts"
+bun "$HERE/suggest-correction.test.ts"
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT

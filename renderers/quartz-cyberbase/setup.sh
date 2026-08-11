@@ -144,6 +144,14 @@ if [ -d "$HERE/components" ]; then
     echo "    + $(basename "$f")"
     cp "$f" "$QUARTZ_DIR/quartz/components/"
   done
+  if [ -d "$HERE/components/scripts" ]; then
+    mkdir -p "$QUARTZ_DIR/quartz/components/scripts"
+    for f in "$HERE"/components/scripts/*.inline.ts; do
+      [ -e "$f" ] || continue
+      echo "    + scripts/$(basename "$f")"
+      cp "$f" "$QUARTZ_DIR/quartz/components/scripts/"
+    done
+  fi
 fi
 
 # Quartz ships a sample content/ dir; build.sh replaces it with the projection.
