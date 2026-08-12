@@ -90,7 +90,7 @@ Application fails closed on stale source, quote ambiguity, changed old bytes, in
 
 A serialized claim never promotes itself into the trust policy. `proposalToTrustChange()` and `classifyProposal()` accept a separate receiver-verified `{ author, authorType }` value. If the receiving lane supplies none, the existing `@cyberbaser/trust` classifier sees an anonymous author and routes the proposal to full review. A stable leading UTF-8 BOM prefix is stripped from both decoded trust views so frontmatter controls still begin at `---`; changing that prefix fails closed before classification. A verified subject still cannot authorize source application or bypass owner policy.
 
-Public credit is a separate attribution question under Q08. It is not inferred from the identity claim.
+Public credit is a separate attribution problem and is not inferred from the identity claim. R24 closed Q08 only for the measured one-commit GitHub fork-and-squash history path; proposal-lane, anonymous, pseudonymous, and visible page credit remain open under challenge 07.
 
 ## Canonical bytes and limits
 

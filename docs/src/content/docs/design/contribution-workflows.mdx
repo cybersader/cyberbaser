@@ -261,20 +261,16 @@ A quarter-day interim exists too: have the PR job run the same projection and Qu
 
 ### Attribution
 
-> [!warning] Unverified, and three pages depend on it
-> The claim that "contributor names appear in git history automatically, so attribution is preserved without any special handling" has **never been observed working**. It was written about Decap's fork flow, which no longer exists in the write path.
+> [!note] Verified for the current one-commit GitHub fork-and-squash path
+> R24 tested a genuine cross-repository PR from a second account. The contributor's fork commit used their GitHub-mapped noreply address. After the owner performed a normal squash merge, authoritative `main` commit `4a40055` retained the contributor as both Git author and mapped GitHub author; GitHub `web-flow` was the committer, and the owner was recorded separately as the PR merger. The resulting publication also passed the live build and URL-continuity gate.
 >
-> The mechanism today is GitHub's own edit-and-fork flow, and the expectation is that the fork's commit author is the contributor's account and survives the merge. That is an expectation, not a measurement. The two live contribution PRs run during [R17](/cyberbaser/getting-started/roadmap/) were both authored by the maintainer's own account, so they could not have tested it.
->
-> This matters beyond UX: [Legal & Governance](/cyberbaser/design/legal-and-governance/) makes commit history the attribution record the content license points at. An untested claim is currently load-bearing for a licensing obligation.
->
-> Tracked as an open question — see [Q08 · Does the fork flow actually attribute the contributor?](/cyberbaser/reference/open-questions/#q08--does-the-fork-flow-actually-attribute-the-contributor) and the reopened brief [07 · Contributor attribution](/cyberbaser/agent-context/zz-challenges/07-contributor-attribution/). The check is roughly ten minutes of work: one `git log --format='%an %ae'` over the merged contribution PRs, plus one PR opened from a second account.
+> This closes [Q08](/cyberbaser/reference/open-questions/#q08--does-the-fork-flow-actually-attribute-the-contributor) narrowly. It does not prove multi-commit squash behavior, another forge, anonymous or pseudonymous lanes, visible page credit, contributor profiles, or trust-history computation. The second account was controlled by the maintainer, so the run is operational evidence rather than independent-contributor usability evidence. Those broader questions remain in [brief 07](/cyberbaser/agent-context/zz-challenges/07-contributor-attribution/).
 
 **What a reader sees today: nothing.** The published site's page layout is breadcrumbs, title, date and reading time, tags, and the edit link. There is no author line, no contributor list, no avatar, and no contributors page. The vault vision's "show contributors at the top of each page with pic and contributors page" has not been designed, costed, scheduled, or explicitly declined.
 
 ### Licensing
 
-Contribution only works legally if the vault has a content license with a contributor clause; without one, every accepted edit is owned by its contributor and readers can't reuse anything. The full treatment (license choice, mixed-vault carve-outs, the contributor clause) lives at [Legal & Governance](/cyberbaser/design/legal-and-governance/). Note the dependency flagged above: that page's attribution argument rests on the unverified claim.
+Contribution only works legally if the vault has a content license with a contributor clause; without one, every accepted edit is owned by its contributor and readers can't reuse anything. The full treatment (license choice, mixed-vault carve-outs, the contributor clause) lives at [Legal & Governance](/cyberbaser/design/legal-and-governance/). R24 verifies the current one-commit GitHub fork-and-squash history path; other contribution paths still need path-specific attribution evidence.
 
 ### Abuse / spam
 

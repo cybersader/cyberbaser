@@ -22,22 +22,13 @@ tags: [research]
 | Q05 | Incremental builds at thousands of pages | **Closed on scale, residue named** | R12, R14, R16 |
 | Q06 | Content addressability: slugs, hashes, or titles? | **Closed — enforced in dogfood** | R23 |
 | Q07 | Where does the Decap OAuth proxy live? | **Closed — moot**, superseded by Q09 | R12 |
-| Q08 | Does the fork flow actually attribute the contributor? | 🔴 **Open** (reopened) | — |
+| Q08 | Does the fork flow actually attribute the contributor? | **Closed — verified in dogfood** | R24 |
 | Q09 | What is the contribution path for someone with no account? | 🔴 **Open — both lane mechanics built; neither offered or human-tested** | — |
 | Q10 | What enforces the moderation policy? | 🔴 **Open** | — |
 
-Three genuinely open: Q08, Q09, and Q10. Q06 closed through R23 without selecting a permanent source slug scheme.
+Two questions are genuinely open: Q09 and Q10. Q06 closed through R23 without selecting a permanent source slug scheme; Q08 closed through R24 after a real cross-repository fork PR and squash merge.
 
 ## Open
-
-### Q08 — Does the fork flow actually attribute the contributor?
-
-**Asked:** 2026-04-11 as [challenge brief 07](/cyberbaser/agent-context/zz-challenges/07-contributor-attribution/); reopened as a numbered question 2026-07-26.
-**Why it matters:** [Legal & Governance](/cyberbaser/design/legal-and-governance/) makes commit history the attribution record the content license points at. If the merge commit, rather than the contributor's account, ends up as the author on a fork-and-PR contribution, that record does not say what the license needs it to say.
-**Blocks:** the licensing argument, and any contributor-facing credit UI.
-**Status:** 🔴 **unverified.** [Contribution Workflows](/cyberbaser/design/contribution-workflows/#attribution) asserted it works "without any special handling" from 2026-04 until this rewrite; nobody ever checked. The two live contribution PRs in R17 were authored by the maintainer's own account and so could not test it. The check is about ten minutes: `git log --format='%an %ae'` over the merged contribution PRs, plus one PR opened from a second account.
-
----
 
 ### Q09 — What is the contribution path for someone with no account?
 
@@ -65,6 +56,14 @@ Three genuinely open: Q08, Q09, and Q10. Q06 closed through R23 without selectin
 **Answer:** stable URLs are an emitted-site continuity invariant, not a requirement to select one permanent slug algorithm. The current exact-case, verbatim path-derived public URLs are the baseline. A candidate publication may add URLs, but each previous canonical URL must remain canonical or have a direct same-origin redirect stub to one current canonical URL under the same base path. The stub must carry `noindex`, exactly one canonical link, and a zero-delay refresh to the same target. Redirect chains, candidate canonicals that are themselves redirects, and uncovered removals fail closed.
 **Implementation status:** `@cyberbaser/linkcheck` provides the renderer-agnostic `cb-urlcheck` CLI and deterministic JSON report. Cyberbase now retains the reviewed 931-URL inventory as a cumulative baseline and pins the checker before Pages artifact upload. Run `31540402789` reported 931 unchanged and zero failures, then completed deployment `5859387327`; the public exact-case URL inventory remained unchanged.
 **Residue:** the canonical naming policy may evolve later; source `aliases` and `permalink` values are possible renderer inputs, not Cyberbaser's route authority, and lowercase projection remains disabled. Future canonical additions must be appended to the cumulative baseline, while historical entries remain protected after they become redirect routes.
+
+---
+
+### Q08 — Does the fork flow actually attribute the contributor?
+
+**Asked:** 2026-04-11 as [challenge brief 07](/cyberbaser/agent-context/zz-challenges/07-contributor-attribution/); reopened as a numbered question 2026-07-26; **resolved:** 2026-08-11 by R24.
+**Answer:** yes, for the tested GitHub path. A genuine cross-repository PR from `Benthediver99/cyberbase` carried one commit authored with that account's GitHub-mapped noreply address. The owner squash-merged PR [#7](https://github.com/cybersader/cyberbase/pull/7) normally. Authoritative `main` commit `4a40055` has one parent, retains `Benthediver99` as its Git author and mapped GitHub author account, records GitHub `web-flow` as committer, and records `cybersader` separately as the PR merger. Publication run `31551432560` and Pages deployment `5861172637` succeeded, and the corrected text was present live.
+**Residue:** this verifies one-commit squash behavior on the current GitHub dogfood path. It does not verify multi-commit squashes, another forge, anonymous or pseudonymous attribution, visible page-level credit, contributor profiles, or trust-history computation. The second account was controlled by the maintainer, so this is operational evidence rather than independent-contributor usability evidence. Those broader items remain in [challenge brief 07](/cyberbaser/agent-context/zz-challenges/07-contributor-attribution/).
 
 ---
 
