@@ -250,7 +250,7 @@ export function validateCaptureRunBinding(value, sourceRun, expectedRepository) 
   if (repositoryId !== expected.repositoryId || repositoryName !== expected.repository) {
     fail('expected-repository-mismatch', 'source run repository does not match the recorder repository');
   }
-  if (run.name !== CAPTURE_WORKFLOW_NAME || run.path !== CAPTURE_WORKFLOW_PATH) {
+  if (run.path !== CAPTURE_WORKFLOW_PATH) {
     fail('untrusted-source-workflow', 'source run does not identify the trusted capture workflow');
   }
   if (run.event !== 'pull_request') fail('invalid-source-event', 'source run event must be pull_request');
@@ -259,6 +259,9 @@ export function validateCaptureRunBinding(value, sourceRun, expectedRepository) 
   }
 
   const runName = parseCaptureRunName(run.display_title);
+  if (run.name !== run.display_title) {
+    fail('untrusted-source-workflow', 'source run name must match the trusted capture display title');
+  }
   if (runName.prNumber !== hint.prNumber) {
     fail('source-run-pr-mismatch', 'capture hint prNumber does not match the source run display title');
   }
