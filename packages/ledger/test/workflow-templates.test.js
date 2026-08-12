@@ -158,7 +158,8 @@ describe('decision-ledger workflow templates', () => {
     for (const condition of [
       "github.event.workflow_run.conclusion == 'success'",
       "github.event.workflow_run.event == 'pull_request'",
-      "github.event.workflow_run.name == 'Decision Ledger Capture'",
+      "startsWith(github.event.workflow_run.name, 'Decision Ledger Capture / PR #')",
+      'github.event.workflow_run.name == github.event.workflow_run.display_title',
       "github.event.workflow_run.path == '.github/workflows/decision-ledger-capture.yml'",
       'github.event.workflow_run.repository.id == github.event.repository.id',
       'github.event.workflow_run.repository.full_name == github.repository',

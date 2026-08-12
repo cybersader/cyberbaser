@@ -7,7 +7,6 @@ import {
   CAPTURE_HINT_FILENAME,
   CAPTURE_HINT_MAX_BYTES,
   CAPTURE_HINT_SCHEMA_VERSION,
-  CAPTURE_WORKFLOW_NAME,
   CAPTURE_WORKFLOW_PATH,
   LedgerGithubError,
   bindCaptureHint,
@@ -44,7 +43,7 @@ function sourceRun(overrides = {}) {
   const base = {
     id: 987654321,
     run_attempt: 2,
-    name: CAPTURE_WORKFLOW_NAME,
+    name: captureRunName(42),
     path: CAPTURE_WORKFLOW_PATH,
     display_title: captureRunName(42),
     event: 'pull_request',
@@ -246,9 +245,10 @@ describe('trusted run and artifact metadata binding', () => {
     ['run repository name', sourceRun({ repository: { full_name: 'example/other' } }), 'source-run-repository-mismatch'],
     ['workflow name', sourceRun({ name: 'Other Workflow' }), 'untrusted-source-workflow'],
     ['workflow path', sourceRun({ path: '.github/workflows/other.yml' }), 'untrusted-source-workflow'],
+    ['display title format', sourceRun({ name: 'Decision Ledger Capture', display_title: 'Decision Ledger Capture' }), 'invalid-run-name'],
     ['event', sourceRun({ event: 'workflow_dispatch' }), 'invalid-source-event'],
     ['conclusion', sourceRun({ conclusion: 'failure' }), 'unsuccessful-source-run'],
-    ['run-name PR', sourceRun({ display_title: captureRunName(43) }), 'source-run-pr-mismatch'],
+    ['run-name PR', sourceRun({ name: captureRunName(43), display_title: captureRunName(43) }), 'source-run-pr-mismatch'],
     ['conflicting PR', sourceRun({ pull_requests: [{ number: 43 }] }), 'source-run-pull-request-mismatch'],
     ['ambiguous PRs', sourceRun({ pull_requests: [{ number: 42 }, { number: 42 }] }), 'ambiguous-source-pull-requests'],
   ])('rejects mismatched source-run metadata: %s', (_, run, code) => {

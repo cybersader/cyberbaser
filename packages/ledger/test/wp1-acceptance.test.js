@@ -12,7 +12,6 @@ import { join } from 'node:path';
 import {
   CAPTURE_HINT_FILENAME,
   CAPTURE_HINT_SCHEMA_VERSION,
-  CAPTURE_WORKFLOW_NAME,
   CAPTURE_WORKFLOW_PATH,
   DECISION_LEDGER_PATH,
   captureArtifactName,
@@ -175,7 +174,7 @@ function workflowRun(fixture) {
   return {
     id: Number(hint.sourceRunId),
     run_attempt: hint.sourceRunAttempt,
-    name: CAPTURE_WORKFLOW_NAME,
+    name: captureRunName(fixture.prNumber),
     path: CAPTURE_WORKFLOW_PATH,
     display_title: captureRunName(fixture.prNumber),
     event: 'pull_request',

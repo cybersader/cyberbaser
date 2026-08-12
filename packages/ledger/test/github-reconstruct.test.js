@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test';
 import {
   CAPTURE_HINT_FILENAME,
   CAPTURE_HINT_SCHEMA_VERSION,
-  CAPTURE_WORKFLOW_NAME,
   CAPTURE_WORKFLOW_PATH,
   LedgerError,
   LedgerGithubError,
@@ -36,7 +35,7 @@ function sourceRun(overrides = {}) {
   const base = {
     id: 987654321,
     run_attempt: 2,
-    name: CAPTURE_WORKFLOW_NAME,
+    name: captureRunName(42),
     path: CAPTURE_WORKFLOW_PATH,
     display_title: captureRunName(42),
     event: 'pull_request',
