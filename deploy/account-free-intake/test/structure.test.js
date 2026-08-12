@@ -158,7 +158,14 @@ describe('account-free intake deployment structure', () => {
     expect(workflow).toContain('permissions:\n  contents: read');
     expect(workflow).toContain("bun-version: '1.3.11'");
     expect(workflow).toContain('persist-credentials: false');
-    expect(workflow).toContain('bun install --cwd apps/account-free-intake --frozen-lockfile');
+    for (const packagePath of [
+      'packages/ofm',
+      'packages/trust',
+      'packages/proposal',
+      'packages/proposal-queue',
+      'packages/account-free-intake',
+      'apps/account-free-intake',
+    ]) expect(workflow).toContain(`bun install --cwd ${packagePath} --frozen-lockfile`);
     expect(workflow).toContain('bun test deploy/account-free-intake/test');
     expect(workflow).toContain('docker build --progress=plain --file deploy/account-free-intake/Containerfile');
     expect(workflow).toContain("image_id=\"$(docker image inspect --format '{{.Id}}' cyberbaser-account-free-intake:ci)\"");

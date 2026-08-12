@@ -48,8 +48,13 @@ jobs:
         with:
           toolchain: '1.97.1'
 
-      - name: Install locked Bun dependencies
-        run: bun install --cwd spikes/iroh-proposal-transfer --frozen-lockfile
+      - name: Install locked Bun dependency closure
+        run: |
+          bun install --cwd packages/ofm --frozen-lockfile
+          bun install --cwd packages/trust --frozen-lockfile
+          bun install --cwd packages/proposal --frozen-lockfile
+          bun install --cwd packages/proposal-queue --frozen-lockfile
+          bun install --cwd spikes/iroh-proposal-transfer --frozen-lockfile
 
       - name: Run locked Rust tests
         run: cargo test --locked --manifest-path spikes/iroh-proposal-transfer/Cargo.toml

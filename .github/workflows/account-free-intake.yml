@@ -50,14 +50,14 @@ jobs:
         with:
           bun-version: '1.3.11'
 
-      - name: Install locked proposal queue dependencies
-        run: bun install --cwd packages/proposal-queue --frozen-lockfile
-
-      - name: Install locked account-free adapter dependencies
-        run: bun install --cwd packages/account-free-intake --frozen-lockfile
-
-      - name: Install locked account-free app dependencies
-        run: bun install --cwd apps/account-free-intake --frozen-lockfile
+      - name: Install locked account-free dependency closure
+        run: |
+          bun install --cwd packages/ofm --frozen-lockfile
+          bun install --cwd packages/trust --frozen-lockfile
+          bun install --cwd packages/proposal --frozen-lockfile
+          bun install --cwd packages/proposal-queue --frozen-lockfile
+          bun install --cwd packages/account-free-intake --frozen-lockfile
+          bun install --cwd apps/account-free-intake --frozen-lockfile
 
       - name: Run proposal queue package tests
         run: bun test packages/proposal-queue/test

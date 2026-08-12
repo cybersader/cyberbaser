@@ -41,7 +41,12 @@ test('Forgejo intake CI remains one read-only pinned package test', async () => 
   expect(job.steps[0].with['persist-credentials']).toBe(false);
   expect(job.steps[1].uses).toBe('oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76');
   expect(job.steps[1].with['bun-version']).toBe('1.3.11');
-  expect(job.steps[2].run).toBe('bun install --cwd packages/forgejo-intake --frozen-lockfile');
+  expect(job.steps[2].run.trim().split('\n')).toEqual([
+    'bun install --cwd packages/ofm --frozen-lockfile',
+    'bun install --cwd packages/trust --frozen-lockfile',
+    'bun install --cwd packages/proposal --frozen-lockfile',
+    'bun install --cwd packages/forgejo-intake --frozen-lockfile',
+  ]);
   expect(job.steps[3].run).toBe('bun test packages/forgejo-intake/test');
   expect(source).not.toMatch(/secrets\./u);
   expect(source).not.toMatch(PUBLICATION_RE);

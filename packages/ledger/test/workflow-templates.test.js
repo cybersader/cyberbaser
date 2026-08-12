@@ -193,6 +193,13 @@ describe('decision-ledger workflow templates', () => {
     expect(bun.uses).toBe(`oven-sh/setup-bun@${SETUP_BUN_SHA}`);
     expect(bun.with['bun-version']).toBe('1.3.11');
 
+    const install = job.steps.find((step) => step.name === 'Install locked ledger dependency closure');
+    expect(install.run.trim().split('\n')).toEqual([
+      'bun install --cwd cyberbaser/packages/ofm --frozen-lockfile',
+      'bun install --cwd cyberbaser/packages/trust --frozen-lockfile',
+      'bun install --cwd cyberbaser/packages/ledger --frozen-lockfile',
+    ]);
+
     const record = job.steps.find((step) => step.run?.includes('cb-decision-ledger-github.js record'));
     expect(record).toBeDefined();
     expect(record.env.SOURCE_RUN_ID).toBe('${{ github.event.workflow_run.id }}');
@@ -282,6 +289,11 @@ jobs:
     expect(workflow.jobs.test.steps[0].with['persist-credentials']).toBe(false);
     expect(workflow.jobs.test.steps[1].uses).toBe(`oven-sh/setup-bun@${SETUP_BUN_SHA}`);
     expect(workflow.jobs.test.steps[1].with['bun-version']).toBe('1.3.11');
+    expect(workflow.jobs.test.steps[2].run.trim().split('\n')).toEqual([
+      'bun install --cwd packages/ofm --frozen-lockfile',
+      'bun install --cwd packages/trust --frozen-lockfile',
+      'bun install --cwd packages/ledger --frozen-lockfile',
+    ]);
     expect(workflow.jobs.test.steps.at(-1).run).toBe('bun test packages/ledger/test');
     expect(collectSafetyViolations(workflow, { allowPullRequestCheckout: true })).toEqual([]);
   });

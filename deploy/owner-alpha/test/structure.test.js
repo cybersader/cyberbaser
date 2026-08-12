@@ -206,7 +206,13 @@ describe('owner-alpha container structure', () => {
     expect(workflow).toContain('runs-on: ubuntu-24.04');
     expect(workflow).toContain('permissions:\n  contents: read');
     expect(workflow).toContain('bun-version: \'1.3.11\'');
-    expect(workflow).toContain('working-directory: apps/owner-alpha\n        run: bun install --frozen-lockfile');
+    for (const packagePath of [
+      'packages/ofm',
+      'packages/publish',
+      'packages/trust',
+      'packages/projection',
+      'apps/owner-alpha',
+    ]) expect(workflow).toContain(`bun install --cwd ${packagePath} --frozen-lockfile`);
     expect(workflow).toContain('bunx playwright install --with-deps chromium');
     expect(workflow).toContain('OWNER_ALPHA_ACCEPTANCE=1 bun test apps/owner-alpha/test/acceptance.test.js');
     expect(workflow).toContain('docker build --progress=plain --file deploy/owner-alpha/Containerfile');

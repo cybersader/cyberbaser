@@ -51,8 +51,12 @@ jobs:
           bun-version: '1.3.11'
 
       - name: Install the locked owner-alpha dependency closure
-        working-directory: apps/owner-alpha
-        run: bun install --frozen-lockfile
+        run: |
+          bun install --cwd packages/ofm --frozen-lockfile
+          bun install --cwd packages/publish --frozen-lockfile
+          bun install --cwd packages/trust --frozen-lockfile
+          bun install --cwd packages/projection --frozen-lockfile
+          bun install --cwd apps/owner-alpha --frozen-lockfile
 
       - name: Install the locked browser fixture dependencies
         working-directory: docs

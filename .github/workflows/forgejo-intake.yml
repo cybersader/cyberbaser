@@ -42,8 +42,12 @@ jobs:
         with:
           bun-version: '1.3.11'
 
-      - name: Install locked Forgejo intake dependencies
-        run: bun install --cwd packages/forgejo-intake --frozen-lockfile
+      - name: Install locked Forgejo intake dependency closure
+        run: |
+          bun install --cwd packages/ofm --frozen-lockfile
+          bun install --cwd packages/trust --frozen-lockfile
+          bun install --cwd packages/proposal --frozen-lockfile
+          bun install --cwd packages/forgejo-intake --frozen-lockfile
 
       - name: Run Forgejo intake package tests
         run: bun test packages/forgejo-intake/test

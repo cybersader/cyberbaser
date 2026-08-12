@@ -45,6 +45,12 @@ function expectReadOnlyWorkflow(source, workflow) {
   }
 }
 
+function expectInstallClosure(step, packages) {
+  expect(step.run.trim().split('\n')).toEqual(packages.map(
+    (name) => `bun install --cwd ${name} --frozen-lockfile`,
+  ));
+}
+
 function expectPinnedBootstrap(job) {
   expect(job.steps[0].uses).toBe(`actions/checkout@${CHECKOUT_SHA}`);
   expect(job.steps[0].with['persist-credentials']).toBe(false);
@@ -62,7 +68,12 @@ describe('WP4 read-only CI structure', () => {
     expect(job['timeout-minutes']).toBe(10);
     expect(job.steps).toHaveLength(4);
     expectPinnedBootstrap(job);
-    expect(job.steps[2].run).toBe('bun install --cwd packages/proposal-queue --frozen-lockfile');
+    expectInstallClosure(job.steps[2], [
+      'packages/ofm',
+      'packages/trust',
+      'packages/proposal',
+      'packages/proposal-queue',
+    ]);
     expect(job.steps[3].run).toBe('bun test packages/proposal-queue/test');
   });
 
@@ -74,14 +85,19 @@ describe('WP4 read-only CI structure', () => {
     const job = workflow.jobs.test;
     expect(job['runs-on']).toBe('ubuntu-latest');
     expect(job['timeout-minutes']).toBe(15);
-    expect(job.steps).toHaveLength(9);
+    expect(job.steps).toHaveLength(7);
     expectPinnedBootstrap(job);
+    expectInstallClosure(job.steps[2], [
+      'packages/ofm',
+      'packages/trust',
+      'packages/proposal',
+      'packages/proposal-queue',
+      'packages/account-free-intake',
+      'apps/account-free-intake',
+    ]);
 
     const runs = job.steps.map((step) => step.run).filter(Boolean);
     for (const command of [
-      'bun install --cwd packages/proposal-queue --frozen-lockfile',
-      'bun install --cwd packages/account-free-intake --frozen-lockfile',
-      'bun install --cwd apps/account-free-intake --frozen-lockfile',
       'bun test packages/proposal-queue/test',
       'bun test packages/account-free-intake/test',
       'bun test apps/account-free-intake/test',
@@ -103,9 +119,15 @@ describe('WP4 read-only CI structure', () => {
     expect(job.steps[2].uses).toBe(`dtolnay/rust-toolchain@${RUST_TOOLCHAIN_SHA}`);
     expect(job.steps[2].with.toolchain).toBe('1.97.1');
 
+    expectInstallClosure(job.steps[3], [
+      'packages/ofm',
+      'packages/trust',
+      'packages/proposal',
+      'packages/proposal-queue',
+      'spikes/iroh-proposal-transfer',
+    ]);
     const runs = job.steps.map((step) => step.run).filter(Boolean);
     for (const command of [
-      'bun install --cwd spikes/iroh-proposal-transfer --frozen-lockfile',
       'cargo test --locked --manifest-path spikes/iroh-proposal-transfer/Cargo.toml',
       'bun test spikes/iroh-proposal-transfer/test',
       'bun test packages/proposal-queue/test/ci-structure.test.js',
@@ -125,8 +147,15 @@ describe('WP4 read-only CI structure', () => {
     expect(job.steps).toHaveLength(7);
     expectPinnedBootstrap(job);
 
+    expectInstallClosure(job.steps[2], [
+      'packages/ofm',
+      'packages/trust',
+      'packages/proposal',
+      'packages/proposal-queue',
+      'packages/account-free-intake',
+      'apps/account-free-intake',
+    ]);
     const runs = job.steps.map((step) => step.run).filter(Boolean);
-    expect(runs).toContain('bun install --cwd apps/account-free-intake --frozen-lockfile');
     expect(runs).toContain('bun test deploy/account-free-intake/test');
     expect(runs).toContain('docker build --progress=plain --file deploy/account-free-intake/Containerfile --tag cyberbaser-account-free-intake:ci .');
     expect(runs).toContain('bun test deploy/account-free-intake/test/runtime-acceptance.test.js');
