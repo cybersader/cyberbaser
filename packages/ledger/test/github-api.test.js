@@ -48,6 +48,44 @@ describe('bounded injected GitHub API reads', () => {
     expect(calls[0].options.redirect).toBe('error');
   });
 
+  test('follows bounded HTTPS redirects only when explicitly requested', async () => {
+    const calls = [];
+    const client = createGithubApi({
+      fetch: async (url, options) => {
+        calls.push({ url, options });
+        return Object.defineProperty(new Response('zip'), 'url', {
+          value: 'https://artifacts.example.test/capture.zip',
+        });
+      },
+      token: 'test-token',
+      apiBaseUrl: 'https://api.example.test',
+    });
+    expect(await client.getBytes('/artifact', { redirect: 'follow' })).toEqual(Buffer.from('zip'));
+    expect(calls[0].options.redirect).toBe('follow');
+  });
+
+  test('rejects unsafe or invalid redirect behavior', async () => {
+    const unsafe = createGithubApi({
+      fetch: async () => Object.defineProperty(new Response('zip'), 'url', {
+        value: 'http://artifacts.example.test/capture.zip',
+      }),
+      token: 'test-token',
+      apiBaseUrl: 'https://api.example.test',
+    });
+    try {
+      await unsafe.getBytes('/artifact', { redirect: 'follow' });
+    } catch (error) {
+      expectGithubError(error, 'unsafe-github-redirect');
+    }
+
+    const client = api(new Map());
+    try {
+      await client.getBytes('/artifact', { redirect: 'manual' });
+    } catch (error) {
+      expectGithubError(error, 'invalid-redirect-mode');
+    }
+  });
+
   test('preserves a GitHub Enterprise API path prefix', async () => {
     let requestedUrl = null;
     const client = createGithubApi({

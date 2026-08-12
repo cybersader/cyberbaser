@@ -222,8 +222,8 @@ async function readAndBindCapture({
     fail('invalid-artifact-extractor', 'extractArtifactEntries must be an injected function');
   }
   const archive = await api.getBytes(`/repos/${repoPath}/actions/artifacts/${artifactId(metadata)}/zip`, {
-    accept: 'application/octet-stream',
     maxBytes: CAPTURE_ARTIFACT_MAX_BYTES,
+    redirect: 'follow',
   });
   if (archive.length !== metadata.size_in_bytes) {
     fail('artifact-size-mismatch', 'downloaded artifact size does not match GitHub artifact metadata', {
