@@ -2,7 +2,7 @@
 
 `@cyberbaser/ledger` records one immutable, canonical JSONL observation for each pull request's first maintainer closure. It is the evidence source for deciding whether a maintainer's trust routes agree with real merge outcomes, including the requirement for at least 20 classified PRs and zero `auto-merge` disagreements before automatic merging can be activated.
 
-**Status: implemented and hermetically tested, not installed.** The package now includes a two-stage GitHub adapter that supports the public-fork case without giving the fork-triggered job write authority. Its acceptance suite covers a maintainer PR, a fork PR, a closed-unmerged PR, duplicate delivery, and a tampered artifact using fake GitHub API responses and local bare Git remotes. That is mechanical evidence only: the templates have not been installed in the live Cyberbase vault, no real GitHub fork run has exercised them, and the canonical ledger still has zero live observations.
+**Status: installed and live in Cyberbase, with one unclassified maintainer observation.** The two-stage workflows were installed through Cyberbase PR #8. The first live runs exposed two GitHub integration mismatches and failed closed before publication: custom `run-name` appears in `workflow_run.name`, and the artifact ZIP endpoint rejects `application/octet-stream` while redirecting a normal API request to bounded HTTPS object storage. Cyberbaser PRs #4 and #5 repaired those assumptions; Cyberbase PRs #9 and #10 advanced the immutable tooling pin. Capture run `31648052403` and Record run `31648065388` then published the first valid row through ledger-only commit `4994bb6ce40a8f2dfb06f979ec8b49bb6ed63560`. The ledger validates with one entry, but its route is `null`, so the classified-observation count remains zero. A real fork run, closed-unmerged run, and duplicate rerun remain pending.
 
 ## What the package enforces
 
@@ -117,18 +117,20 @@ The narrow GitHub CLI has two commands used by the templates:
 
 Every successful command writes one compact JSON object to stdout. Diagnostics go to stderr. The domain CLI's exit codes remain `0` for success or an idempotent no-op, `2` for invalid arguments/input/history, `3` for unsupported schemas or contradictory duplicate history, and `4` for filesystem or publication failures.
 
-## Live installation is a separate authorization boundary
+## Live installation and current evidence
 
-The supplied record template is intentionally **non-runnable**: its Cyberbaser checkout uses the all-zero immutable tooling placeholder. Installation requires a maintainer to review the implementation commit and replace that placeholder with the exact 40-character Cyberbaser commit SHA. The template never falls back to `main`, `latest`, a tag, or another mutable tooling ref. GitHub actions and Bun are also pinned to reviewed versions.
+The supplied record template remains intentionally **non-runnable**: its Cyberbaser checkout uses the all-zero immutable tooling placeholder. Each installation or repair must replace that placeholder with one reviewed 40-character Cyberbaser commit. The template never falls back to `main`, `latest`, a tag, or another mutable tooling ref. GitHub actions and Bun are also pinned to reviewed versions.
 
-Do not treat package completion as permission to install or activate it. A live install changes the external vault and creates a write-capable default-branch workflow, so it requires separate explicit authorization. That outward step must copy both reviewed templates to the vault's `.github/workflows/`, substitute the reviewed tooling commit, review `.cyberbaser/trust.yml`, and activate them through the vault's normal maintainer-controlled path. Only a separately authorized real maintainer PR, fork PR, and closed-unmerged PR can establish live-operating evidence and start the 20-observation clock.
+Cyberbase PR #8 installed both workflows. PRs #9 and #10 advanced the installed recorder after the first two live attempts exposed measured GitHub behavior. Both attempts failed closed before any ledger or content write. The third sequence succeeded:
 
-Until that happens:
+- Capture run `31648052403` emitted the inert hint for Cyberbase PR #10;
+- Record run `31648065388` reconstructed authority and published one row;
+- commit `4994bb6ce40a8f2dfb06f979ec8b49bb6ed63560` is single-parent and changes only `.cyberbaser/decision-ledger.jsonl`;
+- the complete ledger validates with one entry;
+- the row is an unclassified maintainer merge (`trustRoute: null`, `ofmVerdict: not-applicable`), so progress remains `0 / 20`; and
+- the ledger-only push triggered no site-publication workflow.
 
-- the live Cyberbase vault is untouched by WP1;
-- no real fork-token or `workflow_run` execution has been observed;
-- `.cyberbaser/decision-ledger.jsonl` is absent from the live default branch; and
-- the live observation count is zero.
+This is real GitHub and default-branch publication evidence for one maintainer-authored workflow-only PR. It is not yet live fork-token, closed-unmerged, duplicate-delivery, classifier-agreement, or independent-human evidence.
 
 ## Development and acceptance evidence
 
