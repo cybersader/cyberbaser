@@ -248,7 +248,7 @@ describe('trusted workflow-run and artifact reconstruction', () => {
     expect(fixture.calls).toContainEqual([
       'getBytes',
       '/repos/example/example-wiki/actions/artifacts/222/zip',
-      { accept: 'application/octet-stream', maxBytes: 16384 },
+      { maxBytes: 16384, redirect: 'follow' },
     ]);
     expect(fixture.calls.some(([, endpoint]) => endpoint.endsWith(`/commits/${RUN_SHA}/pulls`))).toBe(false);
     expect(fixture.calls).toContainEqual([

@@ -146,9 +146,16 @@ export function createGithubApi({
   const requestTimeout = requirePositiveInteger(timeoutMs, 'timeoutMs');
   if (pageSize > 100) fail('invalid-api-bound', 'perPage must not exceed GitHub maximum 100');
 
-  async function request(endpoint, { accept = 'application/vnd.github+json', maxBytes = bodyLimit } = {}) {
+  async function request(endpoint, {
+    accept = 'application/vnd.github+json',
+    maxBytes = bodyLimit,
+    redirect = 'error',
+  } = {}) {
     const url = endpointUrl(baseUrl, endpoint);
     const byteLimit = requirePositiveInteger(maxBytes, 'maxBytes');
+    if (!['error', 'follow'].includes(redirect)) {
+      fail('invalid-redirect-mode', 'redirect must be error or follow');
+    }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), requestTimeout);
     try {
@@ -160,11 +167,17 @@ export function createGithubApi({
           'X-GitHub-Api-Version': GITHUB_API_VERSION,
           'User-Agent': '@cyberbaser/ledger',
         },
-        redirect: 'error',
+        redirect,
         signal: controller.signal,
       });
       if (!response || typeof response.ok !== 'boolean' || !response.headers) {
         fail('invalid-fetch-response', 'injected fetch returned an invalid response');
+      }
+      if (redirect === 'follow' && response.url !== '') {
+        const finalUrl = new URL(response.url);
+        if (finalUrl.protocol !== 'https:') {
+          fail('unsafe-github-redirect', 'GitHub download redirect must end at an HTTPS URL');
+        }
       }
       const bytes = await readBoundedBody(response, byteLimit);
       if (!response.ok) {
