@@ -187,7 +187,8 @@ Pull from owner publications is the recovery path. Optional transports may reduc
 - WebSub can accelerate feed delivery, but leases expire and replay is not guaranteed.
 - Webmention can notify a target about a public link.
 - ActivityPub can carry an Offer, Accept, Reject, Update, or Delete notification.
-- Nostr, AT-style relays, gossip, DHTs, Secure Scuttlebutt, or Hypercore can carry source-qualified announcements.
+- AT Protocol can carry public account-authored records, exact record references, and source-qualified announcements. Jetstream can provide filtered hints and Tap can verify selected repositories, but useful discovery still requires application indexing. A PDS, Relay, AppView, DID, or AT account never becomes necessary for direct links, publication, or anonymous contribution.
+- Iroh, p2panda, Willow, Nostr, gossip, DHTs, Secure Scuttlebutt, or Hypercore can carry source-qualified announcements or immutable proposal artifacts. Their transport, storage, reconciliation, and account models remain outside source authority.
 - IPFS or other content-addressed systems can distribute licensed immutable copies.
 - Signatures can authenticate covered bytes from a key delegated by the owner publication.
 
@@ -326,7 +327,7 @@ The spike also did **not** create a production package, root workspace, live Q06
 - The smallest provisional profile must now be extracted from the fixture's descriptor, complete inventory, Linkset, record, and conformance behavior without promoting fixture URLs or its URN into live authority.
 - One independently operated producer or consumer must pass the published fixtures and conformance tests before Cyberbaser can claim interoperability.
 - Durable Change Lists and immutable revision URLs require retained publication history. A deterministic clean rebuild from a fixed snapshot does not provide that history.
-- Webmention, WebSub, ActivityPub, signatures, relays, DHTs, Memento history, remote proposal intake, public global search, and production licensed mirroring remain optional follow-ons.
+- Webmention, WebSub, ActivityPub, signatures, AT Protocol, Iroh and other peer transports, relays, DHTs, Memento history, remote proposal intake, public global search, and production licensed mirroring remain optional follow-ons. The [local-first protocol review](/cyberbaser/research/local-first-protocol-options/) preserves Iroh as the strongest transport-fixture candidate and AT Protocol as an optional public identity, signed-record, proposal-carrier, and discovery spoke; neither is selected.
 - No direct remote writes, private crawling, portable global trust, or multi-master synchronization are proposed.
 
 The architecture survived its bounded local falsification test. The next research item is **publish the smallest provisional profile, fixtures, and conformance tests, then recruit an independently operated implementation**. Until that succeeds, the honest result is local fixture compatibility, not interoperability.
@@ -354,6 +355,8 @@ The architecture survived its bounded local falsification test. The next researc
 - [Federated Wiki: Chorus of Voices](https://federated.wiki/chorus-of-voices.html)
 - [The Sybil Attack](https://www.microsoft.com/en-us/research/publication/the-sybil-attack/)
 - [Principles of Open Scholarly Infrastructure](https://openscholarlyinfrastructure.org/)
+- [AT Protocol overview](https://atproto.com/guides/overview), [repository specification](https://atproto.com/specs/repository), [sync specification](https://atproto.com/specs/sync), and [Tap](https://atproto.com/blog/introducing-tap)
+- [Iroh](https://github.com/n0-computer/iroh), [p2panda](https://github.com/p2panda/p2panda), and [Willow](https://willowprotocol.org/)
 
 </details>
 
@@ -366,3 +369,4 @@ The architecture survived its bounded local falsification test. The next researc
 - [Selective publishing](/cyberbaser/research/proposal-selective-publishing/) — the public projection every federation artifact inherits
 - [Is git the right source of truth?](/cyberbaser/research/source-of-truth/) — the earlier survey whose federation remedy this page corrects
 - [Challenge 09 · Source of truth alternatives](/cyberbaser/agent-context/zz-challenges/09-source-of-truth-alternatives/) — the historical brief, preserved as context rather than current architecture
+- [Local-first protocol options](/cyberbaser/research/local-first-protocol-options/) — Iroh, AT Protocol, capabilities, reconciliation, and bounded experiments around this static-publication foundation

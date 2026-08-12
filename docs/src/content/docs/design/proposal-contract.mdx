@@ -92,6 +92,8 @@ A serialized claim never promotes itself into the trust policy. `proposalToTrust
 
 Public credit is a separate attribution problem and is not inferred from the identity claim. R24 closed Q08 only for the measured one-commit GitHub fork-and-squash history path; proposal-lane, anonymous, pseudonymous, and visible page credit remain open under challenge 07.
 
+The contract is also transport-neutral. A future Iroh, AT Protocol, filesystem-drop, Forgejo, HTTPS, or removable-media adapter must carry the unchanged canonical proposal bytes or reconstruct exactly the same validated object. Transport identifiers, endpoint keys, DIDs, record CIDs, capabilities, and signatures remain external evidence or receipt metadata; they do not become proposal source authority or new required fields. The [local-first protocol review](/cyberbaser/research/local-first-protocol-options/) records the candidate seams and bounded experiments.
+
 ## Canonical bytes and limits
 
 The durable artifact is compact `JSON.stringify` output in fixed key order followed by exactly one LF. `parseProposal()` rejects a BOM, invalid UTF-8, pretty printing, changed key order, CRLF, missing or extra final lines, duplicate/noncanonical forms, and trailing material. The complete artifact is capped at 256 KiB. Rationale is capped at 16 KiB and evidence at eight canonical HTTPS URLs.

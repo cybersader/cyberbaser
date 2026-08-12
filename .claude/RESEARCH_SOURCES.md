@@ -166,6 +166,19 @@
 - **CouchDB** — [Conflict resolution with Svelte](https://neighbourhood.ie/blog/2024/12/11/automatic-conflict-resolution/)
 - **RethinkDB** — https://rethinkdb.com/
 
+### 2026 local-first and protocol option pass
+
+Canonical synthesis: [Local-first protocol options](/cyberbaser/research/local-first-protocol-options/). The pass inspected the maintainer account's 200 most recent GitHub stars through 2026-08-11 and separately reviewed AT Protocol primary sources. Stars are directional evidence, not technology approval.
+
+- **Iroh** — https://github.com/n0-computer/iroh · [blobs](https://github.com/n0-computer/iroh-blobs) · [gossip](https://github.com/n0-computer/iroh-gossip) · [docs](https://github.com/n0-computer/iroh-docs)
+- **p2panda** — https://github.com/p2panda/p2panda
+- **Willow** — https://willowprotocol.org/ · https://github.com/earthstar-project/willow-js
+- **ReflectSync** — https://github.com/sagemathinc/reflect-sync
+- **UCAN** — https://github.com/ucan-wg/spec · **Biscuit** — https://github.com/eclipse-biscuit/biscuit · **Keyhive** — https://github.com/inkandswitch/keyhive
+- **TinyBase** — https://github.com/tinyplex/tinybase · **Automerge** — https://github.com/automerge/automerge · **Loro** — https://github.com/loro-dev/loro
+- **remoteStorage** — https://github.com/remotestorage/spec · **Spacedrive** — https://github.com/spacedriveapp/spacedrive · **Rayfish** — https://github.com/rayfish/rayfish
+- **AT Protocol** — [overview](https://atproto.com/guides/overview) · [repository](https://atproto.com/specs/repository) · [sync](https://atproto.com/specs/sync) · [DIDs](https://atproto.com/specs/did) · [OAuth](https://atproto.com/specs/oauth) · [permissions](https://atproto.com/specs/permission) · [Lexicons](https://atproto.com/specs/lexicon) · [Tap](https://atproto.com/blog/introducing-tap) · [PDS](https://github.com/bluesky-social/pds) · [Indigo](https://github.com/bluesky-social/indigo)
+
 ---
 
 ## R06 · Translation Layer

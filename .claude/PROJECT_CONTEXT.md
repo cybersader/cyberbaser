@@ -1,6 +1,6 @@
 # Cyberbaser Project Context
 
-> Last aligned: 2026-08-11 (WP1 implemented and hermetically tested; live installation pending. WP2 implemented and mechanically accepted. WP3 phase one completed its container-isolated real Forgejo 16.0.2 gate. WP4's mechanics are implemented at their stated layers. R23 URL continuity is installed and enforced in Cyberbase. R24 verified contributor authorship for the measured one-commit GitHub fork-and-squash path). If this file disagrees with the docs site, the docs site wins, and this file should be fixed in the same session.
+> Last aligned: 2026-08-11 (WP1 implemented and hermetically tested; live installation pending. WP2 implemented and mechanically accepted. WP3 phase one completed its container-isolated real Forgejo 16.0.2 gate. WP4's mechanics are implemented at their stated layers. R23 URL continuity is installed and enforced in Cyberbase. R24 verified contributor authorship for the measured one-commit GitHub fork-and-squash path. A local-first/AT Protocol option pass preserved candidates without selecting a new substrate or work package). If this file disagrees with the docs site, the docs site wins, and this file should be fixed in the same session.
 
 ## What This Project Is
 
@@ -29,6 +29,8 @@ There are two repos to keep straight:
 **R23 URL continuity status:** Q06 is resolved and enforced at the emitted-site boundary. Every reviewed previous canonical URL must remain canonical or have a direct same-origin, same-base-path redirect stub to one current canonical URL; naming and renderer metadata remain implementation choices. Cyberbase commit `dd576cd` installed the cumulative 931-URL baseline and pinned Cyberbaser `eac9f1f`. Run `31540402789` passed the required check with 931 unchanged and zero failures before successful Pages deployment `5859387327`. The exact-case public inventory remained unchanged.
 
 **R24 contributor-attribution status:** Q08 is resolved for the measured one-commit GitHub fork-and-squash path. Cross-repository Cyberbase PR #7 was authored from `Benthediver99/cyberbase`; authoritative squash commit `4a40055` retained the contributor's mapped account, name, and noreply address as author, while GitHub remained committer and `cybersader` remained PR merger. Run `31551432560` and Pages deployment `5861172637` succeeded, and the correction appeared live. This is maintainer-controlled operational evidence, not independent-contributor usability evidence. Multi-commit behavior, other forges, anonymous or pseudonymous credit, visible page credit, and trust-history computation remain open under challenge 07. Q09 remains open.
+
+**Local-first protocol options:** a review of the maintainer's recent GitHub stars plus AT Protocol primary sources found strong alignment with local authority, immutable/content-addressed artifacts, replaceable transports, public-key addressing, optional synchronization, and inspectable local state. Iroh is the strongest bounded proposal-transport fixture candidate. AT Protocol is compatible only as an optional public identity, signed-record, proposal-carrier, or discovery spoke. Neither is selected, no experiment is authorized, and no transport, account, DID, PDS, relay, CRDT, capability, or sidecar becomes source authority or product essence.
 
 ## The Architecture in One Line
 

@@ -96,6 +96,24 @@ A contribution surface can redirect a contributor to their home forge, then vali
 
 **Anonymous degradation:** skip the redirect or treat a failed assertion as unverified. The proposal remains eligible for the full-review lane.
 
+### AT Protocol identity and signed repository records
+
+An AT Protocol contribution surface can run an identity-only OAuth flow using only the mandatory `atproto` scope and obtain a verified account DID. That is useful optional evidence: it establishes control of one AT account for the session. It does not establish a legal person, control of an unrelated knowledge base, editorial reliability, or authority to write source.
+
+AT identity has several moving parts that a receiver must not flatten:
+
+- a **DID** is the durable account identifier;
+- a **handle** is a mutable DNS name and domain-control signal;
+- a **PDS** hosts the account's public repository and commonly holds its repository signing key;
+- a **repository commit** signs a Merkle state, while an ordinary `getRecord` response is not by itself a standalone signed receipt; and
+- an exact record reference needs its DID-based AT URI plus record CID because the value at one AT URI can change or disappear.
+
+`did:plc` supports updates and PDS migration but retains a central write and ordering dependency on the PLC directory. `did:web` binds the identity directly to a domain and offers no intrinsic continuity after domain loss. Identity-only OAuth is also operationally heavier than a simple redirect: Authorization Code, PKCE, PAR, DPoP, discovery, nonce handling, and public HTTPS client metadata are part of the protocol.
+
+**Best fit:** optional account identity evidence or an account-authored public proposal reference. **Maintainer cost:** operate an isolated OAuth adapter or contributor-facing spoke, verify the DID and repository evidence, avoid retaining refresh tokens in the Cyberbaser core, and treat PDS, PLC, and hosted providers as replaceable dependencies.
+
+**Anonymous degradation:** skip AT authentication or treat failure as unverified. AT cannot close Q09 because an AT account is still an account. See the [local-first protocol review](/cyberbaser/research/local-first-protocol-options/#at-protocol-strong-optional-spoke-weak-substrate) for the broader storage, transport, privacy, and federation fit.
+
 ### Signed commits, SSH signatures, and key challenges
 
 A proposal, commit, or detached digest can be signed with an SSH, OpenPGP, or X.509 key. Verification proves that the signed bytes are unchanged and that the signer possessed the matching private key. The receiver still needs a local or owner-published binding from that key to “Nora,” `fieldnotes.example`, or an allowed partner role. Git supports SSH commit signing with an `allowedSignersFile`; forge “verified” badges add the forge's account-to-key binding, not universal identity.
@@ -141,6 +159,7 @@ ActivityPub itself does not standardize a complete cross-server authentication s
 | Candidate | Peer wiki maintainer | Portable pseudonym | Partner organization | Anonymous reader | Operational weight |
 |---|---|---|---|---|---|
 | Forge OAuth/OIDC | Strong when the home forge is already authoritative | Medium; portable only while receivers trust that issuer | Strong for managed membership claims | Optional bypass required | Medium |
+| AT Protocol OAuth/repository | Medium; proves an AT account, not base control without another binding | Strong account continuity with DID-method and PDS dependencies | Medium if the organization intentionally issues or binds accounts | Separate anonymous route required | Medium to high |
 | SSH or other signatures | Strong with a key published by the base | Strong continuity, weak human binding by itself | Medium with managed key directories or a CA | Unsigned fallback | Low to medium |
 | DID + Verifiable Credentials | Strong but usually more machinery than needed | Strongest portability story | Strong when the partner issues credentials | Wallet must never be required | High |
 | ActivityPub actor | Useful for actor-origin transport and notification | Medium; tied to actor/server continuity unless migration is handled | Medium | Separate intake required | High |
@@ -216,7 +235,8 @@ This is illustrative only. A real design would need replay rules, expiry, proof 
 - **No authenticated identity receives direct source authority.** External actors still submit exact, base-bound proposals through the owner-controlled boundary.
 - **No identity proof replaces abuse controls, integrity checks, moderation, or editorial judgment.**
 - **No wallet, domain, forge account, or fediverse account may become the admission price for a basic correction.**
-- **No protocol work starts from this page.** The next trigger is demonstrated need from an independently operated peer, followed by a bounded fixture and conformance test, not implementation by momentum.
+- **AT Protocol is not selected.** It remains an optional public identity, signed-record, proposal-carrier, or discovery spoke. No AT account, DID, PDS, Relay, AppView, PLC directory, or Lexicon may become necessary to publish, read, link, or submit anonymously.
+- **No protocol work starts from this page.** The next trigger is demonstrated need from an independently operated peer, followed by a bounded fixture and conformance test, not implementation by momentum. A separately authorized local transport fixture may test carrier properties without claiming peer interoperability.
 
 ## Related
 
@@ -226,3 +246,4 @@ This is illustrative only. A real design would need replay rules, expiry, proof 
 - [Open question Q09](/cyberbaser/reference/open-questions/#q09--what-is-the-contribution-path-for-someone-with-no-account) — the still-open account-free contribution question
 - [RA-01: self-hosted Forgejo + PKCE auth](/cyberbaser/design/reference-architectures/self-hosted-forgejo-auth/) — the Forgejo-first delegated-auth reference architecture
 - [Translation layer](/cyberbaser/design/translation-layer/) — why identity never relaxes source binding or byte-preservation rules
+- [Local-first protocol options](/cyberbaser/research/local-first-protocol-options/) — Iroh and AT Protocol evaluated as removable transport, identity-evidence, and signed-publication spokes

@@ -1,0 +1,307 @@
+---
+title: "Local-first protocol options: Iroh, AT Protocol, and adjacent patterns"
+description: "What recent local-first, peer-networking, capability, and signed-publication technologies suggest for Cyberbaser, with bounded experiments that preserve owner authority."
+sidebar:
+  label: "Local-first protocol options"
+  order: 23
+status: research
+tags: [research, architecture, federation, identity, collaboration]
+---
+
+## Executive result
+
+**The useful pattern is not to replace Cyberbaser with a peer network, CRDT, or social protocol. It is to keep the exact proposal and owner-controlled Markdown boundary stable while letting several inexpensive, removable transports and evidence systems carry data into it.**
+
+Two candidates stand out for different jobs:
+
+- **[Iroh](https://github.com/n0-computer/iroh)** is the strongest near-term transport experiment. It can move immutable proposal bytes between public-key-addressed endpoints over QUIC, using direct NAT traversal when possible and encrypted relay fallback when necessary.
+- **[AT Protocol](https://atproto.com/)** is a credible optional public identity, signed-record, announcement, and proposal-carrier spoke. It is not a good canonical store, anonymous intake path, private-correction channel, or complete Cyberbaser federation substrate.
+
+The practical sequence is therefore:
+
+1. make proposal artifacts portable and content-addressed without selecting a network;
+2. test Iroh as one replaceable carrier for those exact bytes;
+3. add a queryable owner-local intake journal for explanation and recovery;
+4. test optional capability evidence only after the anonymous path remains identical;
+5. test AT Protocol only as a bounded public carrier or signed announcement, not as infrastructure Cyberbaser requires.
+
+:::caution[Research result, not a technology selection]
+This page records a 2026-08-11 review of the 200 most recent stars on the maintainer's GitHub account and a separate primary-source AT Protocol review. Stars are directional evidence, not product approval. No library, protocol, custom Lexicon, PDS, relay, AppView, CRDT, capability format, or experiment is selected by this page. The existing product boundary remains unchanged.
+:::
+
+## What the recent stars suggest
+
+The inspected star window covered 2026-04-03 through 2026-08-11. The project the maintainer referred to approximately as “IRO” is very likely **Iroh**: it was starred directly, and the later-starred [Rayfish](https://github.com/rayfish/rayfish) builds a mesh VPN on Iroh. That identification is a strong contextual inference, not a statement from the maintainer.
+
+Recurring preferences visible in the window:
+
+1. **Local authority with optional synchronization.** The useful state exists and remains usable locally; networking improves availability or collaboration rather than owning the application.
+2. **Identity-addressed networking.** Public keys and content hashes survive IP changes, NAT, relay changes, and hosting moves.
+3. **Small composable primitives.** Transport, storage, authorization, synchronization, and application policy remain replaceable rather than arriving as one platform.
+4. **Immutable transfer artifacts.** BLAKE3 hashes, blobs, append-only logs, Merkle structures, fingerprints, and signed records recur.
+5. **No mandatory account or always-online control plane.** Keys, invitations, direct exchange, offline sideloading, and self-selected providers are preferred to one application-owned account database.
+6. **Inspectable automation.** SQLite state, structured decisions, preview-before-execute, durable jobs, and replayable outcomes are favored over opaque background behavior.
+7. **Protocol-level interoperability.** Defined records and wire contracts matter more than one application database or hosted product.
+8. **Practical infrastructure economy.** Embedded libraries, local files, SQLite, direct connections, and relay fallback are more attractive than clustered services.
+
+These preferences fit Cyberbaser's existing owner-controlled boundary well, provided the project does not confuse transport innovation with source authority.
+
+## The strongest adjacent projects
+
+### Iroh: a replaceable proposal transport
+
+[Iroh](https://github.com/n0-computer/iroh) lets applications dial an endpoint's public key rather than a stable IP address. It composes protocols over QUIC and supplies direct connection establishment with relay fallback.
+
+Relevant pieces include:
+
+- [iroh-blobs](https://github.com/n0-computer/iroh-blobs) for BLAKE3-addressed blob transfer;
+- [iroh-gossip](https://github.com/n0-computer/iroh-gossip) for lightweight overlays; and
+- [iroh-docs](https://github.com/n0-computer/iroh-docs) for eventually consistent references to blobs.
+
+The narrow Cyberbaser fit is **transporting one already canonical proposal artifact and optional immutable attachments**. The receiver still parses the existing `@cyberbaser/proposal` bytes, verifies source binding, classifies trust, stores the queue artifact, and leaves application to owner authority.
+
+Iroh must not become:
+
+- the canonical content store;
+- a requirement for contribution;
+- an automatic source writer;
+- a global identity or discovery authority; or
+- a claim that no servers exist. Discovery and relays commonly help when direct connectivity fails, even though they can be replaced or self-hosted.
+
+### p2panda and Willow: proposal-set reconciliation and offline drops
+
+[p2panda](https://github.com/p2panda/p2panda) separates append-only application data, discovery, blobs, streams, storage, encryption, and authorization. Its broadcast-oriented core can operate over intermittent transports.
+
+[Willow](https://willowprotocol.org/) and [willow-js](https://github.com/earthstar-project/willow-js) separate namespaces, payload storage, range reconciliation, fingerprints, authorization, online synchronization, and offline sideloading.
+
+Their strongest lesson is not “replicate the Markdown vault.” It is:
+
+> A proposal set can have stable records and reconciliation semantics while transport remains a choice: network, filesystem queue, removable media, or an offline drop.
+
+Cyberbaser can borrow that separation without adopting either protocol or synchronizing canonical source between writers.
+
+### ReflectSync: queryable decisions and recovery
+
+[ReflectSync](https://github.com/sagemathinc/reflect-sync) uses persisted base state, content hashes, structured planning, SQLite inspection, filesystem capability probes, and explicit explanations for copy, skip, and conflict decisions.
+
+Its two-way filesystem and last-write behavior do not fit Cyberbaser's source boundary. Its **operational evidence model** does:
+
+- retain enough local state to explain every decision;
+- probe case, Unicode, and filesystem behavior rather than assuming it;
+- negotiate versions and fail clearly on drift;
+- make recovery state queryable; and
+- separate observed state from the authoritative files.
+
+A Cyberbaser intake journal could use those patterns without storing a second authoritative copy of Markdown.
+
+### UCAN and Biscuit: optional narrow capability evidence
+
+[UCAN](https://github.com/ucan-wg/spec) and [Biscuit](https://github.com/eclipse-biscuit/biscuit) express narrow, attenuable authority that can be verified locally. [Keyhive](https://github.com/inkandswitch/keyhive) explores capability-based authorization around collaborative local-first data, but remains pre-alpha and unaudited.
+
+A future adapter could present evidence approximating:
+
+> This key may submit a proposal against repository X, base revision Y, and path Z until time T.
+
+That evidence may improve local trust routing. It cannot establish that the proposed change is safe, correct, or authorized for application. An unsigned proposal must remain valid at the anonymous trust floor.
+
+Biscuit currently appears more practical for an implementation comparison; UCAN is valuable architectural prior art. Neither should be selected before comparing it against a smaller project-specific signed envelope.
+
+### TinyBase, Automerge, and Loro: local review state only
+
+[TinyBase](https://github.com/tinyplex/tinybase), [Automerge](https://github.com/automerge/automerge), and [Loro](https://github.com/loro-dev/loro) could support browser-local drafts, review comments, selections, presence, or queue UI state.
+
+They must not become the canonical representation of Markdown. Converting CRDT or rich-text state back into whole files would create a second authority and risk reserializing untouched source. The final output remains one exact source-bound proposal, and deleting the collaborative state must leave both proposal and vault intact.
+
+### remoteStorage and Spacedrive: user-selected state and durable actions
+
+[remoteStorage](https://github.com/remotestorage/spec) is durable prior art for separating an application from user-selected storage. It supports local browser operation and multiple compatible storage providers, but a storage account must not become mandatory for account-free contribution.
+
+[Spacedrive](https://github.com/spacedriveapp/spacedrive) combines BLAKE3 content identity, Iroh networking, local SQLite, adapter scripts, durable jobs, transactional previews, and files that remain on their original devices. Its integrated patterns are useful; its distributed virtual filesystem is far broader than Cyberbaser needs and would risk becoming a second namespace or authority.
+
+### Rayfish: invitation and approval UX
+
+[Rayfish](https://github.com/rayfish/rayfish) is experimental mesh-VPN prior art built on Iroh. Its relevant contribution is interaction design: exchange an invitation, show the peer and requested relationship, require owner approval, then establish connectivity without a permanent control server.
+
+It is experimental and unaudited, so it is UX evidence rather than production security infrastructure.
+
+## AT Protocol: strong optional spoke, weak substrate
+
+AT Protocol supplies public account repositories, DIDs, OAuth, schema-defined records, content-addressed Merkle structures, event streams, aggregation services, and portable PDS hosting. Those capabilities overlap several Cyberbaser seams, but the account-centric and public-repository model is heavier than Cyberbaser's static-publication failure floor.
+
+### Technology map
+
+- **Identity:** AT accounts use persistent DIDs. `did:plc` supports updates and migration but retains a central write and ordering dependency on the PLC directory. `did:web` binds identity to an HTTPS domain but cannot preserve the DID after domain loss.
+- **Handles:** mutable DNS names verified bidirectionally against the DID document. They are display and domain-control evidence, not durable record identifiers.
+- **OAuth:** identity-only OAuth can request only the mandatory `atproto` scope and return a verified account DID. Production OAuth still requires PKCE, PAR, DPoP, discovery, nonce handling, HTTPS client metadata, and session key management.
+- **Repositories:** every account has a public repository arranged as a Merkle Search Tree. Repository commits are signed. Records use `at://<DID>/<collection>/<record-key>` addresses.
+- **Exact references:** an AT URI is mutable. A stable reference to one value needs the DID-based URI plus the record CID, often represented with `com.atproto.repo.strongRef`.
+- **Records and blobs:** the recommended maximum record size is 1 MiB, while ordinary records should remain much smaller. Cyberbaser's 256 KiB maximum proposal could fit, but an unchanged canonical proposal blob referenced by a small record is cleaner.
+- **Deletion:** current repository state can remove a record, but independently retained or noncompliant copies may persist. AT publication must be treated as public and potentially permanent.
+- **PDS hosting:** small self-hosting is practical but still operates an Internet service with a domain, public IPv4, ports 80/443, storage, monitoring, backups, updates, and usually SMTP. It is not the runtime-light failure floor.
+- **Jetstream:** filtered JSON events are useful as low-cost hints, not authority. A consumer must fetch and verify the source record.
+- **Tap:** a beta selected-repository synchronization service that verifies MSTs, identities, signatures, history, and recovery. It is a better fit than a full Relay if a future Cyberbaser indexer follows a small set of peers.
+- **AppViews:** required for network-wide search, hydration, notifications, feeds, and application queries. Publishing a custom record does not make it appear in Bluesky search or notifications.
+- **Lexicons:** custom records should use a small domain-controlled Lexicon rather than stretching `app.bsky.*` social records into knowledge-base semantics. Publishing a Lexicon is a public compatibility commitment and is premature now.
+- **Labels and feeds:** labels are public moderation assertions, not proposal queues or trust scores. Custom feeds return Bluesky post skeletons and are not a generic KB discovery mechanism.
+
+### Fit by Cyberbaser seam
+
+| Seam | Fit | Recommended posture |
+|---|---|---|
+| Optional identity evidence | Medium-high | An adapter may turn identity-only OAuth into a receiver-verified DID. Missing or failed identity falls back to anonymous full review |
+| Public proposal carrier | Medium | Accept an explicitly supplied AT URI plus CID, import unchanged canonical proposal bytes, and retain them locally before acknowledgement |
+| Network-wide proposal inbox | Low | No native targeted inbox exists for custom records without indexing or application infrastructure |
+| Owner-signed publication announcement | High | Publish a signed pointer or digest for an already authoritative HTTPS descriptor, inventory, mapping, or release |
+| Discovery hints | Medium | Use Jetstream as a hint or Tap for a selected peer set. Never infer deletion from omission |
+| Cross-KB links | Medium | Keep direct HTTPS navigation. AT records may carry source-qualified claims about those links |
+| Complete federation substrate | Low | Account-centric runtime and aggregation pressure conflict with static-publication-first participation and the anonymous floor |
+| Private or selectively published data | Low | Public repository behavior is mature; private and permissioned uses are not ready for Cyberbaser privacy claims |
+| Moderation or trust | Low-medium | A local policy may consume selected evidence. No global reputation score, follower heuristic, or automatic authority |
+
+### The safe AT architecture
+
+The compatible shape is:
+
+> Owner HTTPS publications and Markdown remain authoritative. AT Protocol optionally carries public source-qualified announcements, identity evidence, or proposal references. The receiver imports and independently verifies the record, retains its own immutable queue copy, applies local trust policy, and runs the existing exact-change boundary. Removing AT must not impair ordinary links, anonymous intake, owner publication, or source history.
+
+AT Protocol must not become:
+
+- canonical Markdown storage;
+- a required account system;
+- the private correction path;
+- the anonymous contribution floor;
+- a Cyberbaser-wide DID namespace;
+- a mandatory PDS distribution;
+- a global AppView, relay, registry, or reputation service;
+- a Bluesky-post proposal convention; or
+- authority to apply a signed change automatically.
+
+## Recommended experiments
+
+### 1. Content-addressed offline proposal drop
+
+**Cost:** low. **Evidence value:** high.
+
+Define a temporary fixture containing:
+
+- the unchanged canonical proposal bytes;
+- a small manifest;
+- proposal and attachment hashes; and
+- optional immutable blobs.
+
+Ingest the same drop from a local directory, removable-media simulation, and ordinary network copy. Every carrier must produce the same proposal identity, validation result, candidate bytes, and queue artifact.
+
+This creates the network-neutral contract needed before selecting Iroh or another transport.
+
+### 2. Iroh proposal-transfer fixture
+
+**Cost:** low to medium. **Evidence value:** very high.
+
+Transfer the same proposal drop between two endpoints. Require:
+
+1. receiver bytes and digests equal the sender's exactly;
+2. direct and relay paths are semantically indistinguishable;
+3. duplicate transfers collapse by content hash;
+4. interrupted transfer resumes without creating a second proposal identity;
+5. received data enters the existing proposal queue only; and
+6. no Iroh component can read owner credentials or write canonical Markdown.
+
+A pass proves only that Iroh is a useful replaceable carrier.
+
+### 3. Queryable local intake journal
+
+**Cost:** low. **Evidence value:** high.
+
+Prototype a disposable SQLite sidecar recording proposal digest, target base identity, validation results, identity evidence, trust classification, owner decision, application result, and recovery state. It must explain every outcome without becoming a source copy or authority.
+
+Deleting the journal may lose convenience and audit views; it must not lose source knowledge, proposal bytes retained by their real carrier, or Git history.
+
+### 4. Anonymous-versus-capability comparison
+
+**Cost:** medium. **Evidence value:** medium-high.
+
+Run one proposal through three evidence states:
+
+- anonymous and unsigned;
+- signed without delegated scope; and
+- accompanied by one narrow, expiring Biscuit-, UCAN-, or project-specific capability.
+
+All three use identical content validation and owner decision. Measure whether capability evidence improves routing enough to justify its complexity. It must never promote itself into source authority.
+
+### 5. Local AT direct-record carrier
+
+**Cost:** medium. **Evidence value:** medium.
+
+Use two disposable local PDS accounts and a bundled draft Lexicon that is not published through public DNS. The record references an unchanged canonical proposal blob, digest, creation time, and public target descriptor. Give the receiver an explicit DID-based AT URI plus record CID.
+
+Acceptance requires:
+
+1. exact canonical proposal bytes and digest survive;
+2. repository commit, record CID, blob CID, and proposal digest are independently verified;
+3. stale source fails before trust or application;
+4. later record update or deletion cannot alter the receiver's retained queue copy;
+5. the DID changes identity evidence only;
+6. the same proposal through anonymous intake yields identical candidate bytes;
+7. no private path, title, body, credential, or session reaches the AT repository; and
+8. removing both PDSs and the adapter leaves direct links, anonymous intake, owner publication, and source authority intact.
+
+A pass establishes an optional public carrier property. It does not justify a production Lexicon, offered lane, PDS requirement, or federation selection.
+
+### Later only: owner-signed publication announcements
+
+Wait for an independently operated peer to request it. At that point, test one small custom record that points to the owner's authoritative HTTPS descriptor and complete inventory, includes their digests, and is followed only for an explicit peer DID set through Tap.
+
+The AT record remains an announcement. Missing events mean stale or unknown, never deletion. The owner's direct HTTPS publication remains readable and authoritative with every AT component offline.
+
+## What not to build
+
+- CRDT synchronization of canonical Markdown.
+- General two-way vault synchronization or last-write-wins source merging.
+- An Iroh, AT Protocol, Tailscale, GitHub, or relay dependency in the product essence.
+- A mandatory key, DID, account, invitation, or capability before someone can submit a correction.
+- A custom Cyberbaser PDS, full Relay, global AppView, feed generator, labeler, or reputation service.
+- A production AT Lexicon before independent implementation pressure exists.
+- Private proposals in public AT repositories.
+- A distributed virtual filesystem or application database that becomes a second content namespace.
+- Natural-language patch instructions where exact pinned operations are required.
+- Blockchain or zero-knowledge infrastructure for integrity already provided more cheaply by pinned hashes and owner verification.
+- Production security authority built on pre-alpha or unaudited p2panda, Keyhive, Rayfish, or other experimental components.
+
+## Preserved option, not a decision
+
+The current evidence supports this wording:
+
+> Local-first and federated protocols may provide replaceable transport, identity-evidence, signed-publication, reconciliation, and review-state spokes around Cyberbaser's exact proposal contract. They do not replace owner-controlled Markdown, local moderation, direct HTTPS navigation, or the anonymous trust floor. Iroh is the strongest near-term transport fixture candidate. AT Protocol is compatible as an optional public identity, signed-assertion, proposal-carrier, and discovery spoke, but is not selected as the canonical store, account system, direct-link layer, trust authority, or federation substrate.
+
+## Primary sources and projects
+
+### Local-first and peer networking
+
+- [Iroh](https://github.com/n0-computer/iroh), [iroh-blobs](https://github.com/n0-computer/iroh-blobs), [iroh-gossip](https://github.com/n0-computer/iroh-gossip), and [iroh-docs](https://github.com/n0-computer/iroh-docs)
+- [p2panda](https://github.com/p2panda/p2panda)
+- [Willow](https://willowprotocol.org/) and [willow-js](https://github.com/earthstar-project/willow-js)
+- [ReflectSync](https://github.com/sagemathinc/reflect-sync)
+- [UCAN specification](https://github.com/ucan-wg/spec), [Biscuit](https://github.com/eclipse-biscuit/biscuit), and [Keyhive](https://github.com/inkandswitch/keyhive)
+- [TinyBase](https://github.com/tinyplex/tinybase), [Automerge](https://github.com/automerge/automerge), and [Loro](https://github.com/loro-dev/loro)
+- [remoteStorage](https://github.com/remotestorage/spec), [Spacedrive](https://github.com/spacedriveapp/spacedrive), and [Rayfish](https://github.com/rayfish/rayfish)
+- [JMAP](https://github.com/jmapio/jmap), [Zenoh](https://github.com/eclipse-zenoh/zenoh), and [patch.md](https://github.com/BennettSchwartz/patchmd)
+
+### AT Protocol
+
+- [Architecture overview](https://atproto.com/guides/overview)
+- [Repository specification](https://atproto.com/specs/repository), [Sync specification](https://atproto.com/specs/sync), and [AT URI scheme](https://atproto.com/specs/at-uri-scheme)
+- [DID specification](https://atproto.com/specs/did), [Handle specification](https://atproto.com/specs/handle), and [PLC read replicas](https://atproto.com/blog/plc-replicas)
+- [OAuth specification](https://atproto.com/specs/oauth), [Permissions specification](https://atproto.com/specs/permission), and [permission sets](https://atproto.com/guides/permission-sets)
+- [Account lifecycle](https://atproto.com/guides/account-lifecycle) and [account migration](https://atproto.com/guides/account-migration)
+- [Lexicon specification](https://atproto.com/specs/lexicon), [Lexicon guide](https://atproto.com/guides/lexicon), and [publishing Lexicons](https://atproto.com/guides/publishing-lexicons)
+- [Streaming data](https://atproto.com/guides/streaming-data) and [Introducing Tap](https://atproto.com/blog/introducing-tap)
+- [Labels specification](https://atproto.com/specs/label), [feeds guide](https://atproto.com/guides/feeds), and [custom schemas](https://docs.bsky.app/docs/advanced-guides/custom-schemas)
+- [Reference PDS](https://github.com/bluesky-social/pds), [atproto implementation](https://github.com/bluesky-social/atproto), and [Indigo/Tap](https://github.com/bluesky-social/indigo)
+
+## Related
+
+- [Proposal contract](/cyberbaser/design/proposal-contract/) — the canonical bytes every carrier must preserve
+- [Federation](/cyberbaser/research/federation/) — static owner publications, direct links, and disposable indexes
+- [Federated identity](/cyberbaser/research/federated-identity/) — identity evidence without central authority or a mandatory account
+- [Architecture](/cyberbaser/design/architecture/) — owner-controlled source authority and replaceable spokes
+- [Principles](/cyberbaser/getting-started/principles/) — the anonymous floor, source ownership, and independent contribution paths

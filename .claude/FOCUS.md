@@ -10,7 +10,9 @@ Federation remains the long-term non-central seam. The five-origin fixture is co
 
 **R24 contributor attribution:** Q08 is closed for the measured one-commit GitHub fork-and-squash path. Cross-repository PR #7 came from `Benthediver99`; authoritative squash commit `4a40055` retained that mapped account, name, and noreply address as author, while GitHub remained committer and `cybersader` remained PR merger. Run `31551432560` and Pages deployment `5861172637` succeeded. This is maintainer-controlled operational evidence, not independent-contributor usability evidence. Visible credit, anonymous/pseudonymous attribution, multi-commit behavior, other forges, and trust-history computation remain open under challenge 07. Q09 remains open.
 
-Last updated: 2026-08-11 (R24 closed Q08 for the measured GitHub fork-and-squash path; broader attribution residue, Q09, and Q10 remain open)
+**Local-first protocol option pass:** the maintainer's 200 most recent GitHub stars and current AT Protocol primary sources were reviewed. Iroh is the strongest near-term replaceable proposal-transport fixture candidate; p2panda, Willow, ReflectSync, capabilities, and CRDTs supply adjacent patterns. AT Protocol is preserved only as an optional public identity, signed-record, proposal-carrier, and discovery spoke, not selected as source storage, required accounts, trust authority, or federation substrate. No experiment or implementation is authorized by the research.
+
+Last updated: 2026-08-11 (R24 closed Q08; local-first and AT Protocol options recorded without changing the architecture; Q09 and Q10 remain open)
 
 ## Locked This Cycle (do not relitigate without new evidence)
 
