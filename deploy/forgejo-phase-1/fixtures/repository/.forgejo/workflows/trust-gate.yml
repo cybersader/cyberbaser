@@ -1,0 +1,41 @@
+name: trust-gate
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  trust-gate:
+    runs-on: ${{ vars.WP3_RUNNER_LABEL }}
+    steps:
+      - name: Checkout triggering commit without an external action
+        run: |
+          set -euo pipefail
+          test -n "${WP3_FORGE_INTERNAL_ORIGIN:-}"
+          test -n "${GITHUB_REPOSITORY:-}"
+          test -n "${GITHUB_SHA:-}"
+          test -n "${FORGEJO_TOKEN:-}"
+          "${CYBERBASER_TOOL_ROOT}/private-checkout" \
+            workspace \
+            "${WP3_FORGE_INTERNAL_ORIGIN}/${GITHUB_REPOSITORY}.git" \
+            "${GITHUB_SHA}" \
+            main
+      - name: Reject workflow and fixture-tooling changes
+        run: |
+          set -euo pipefail
+          changed="$(git -C workspace diff --name-only "refs/remotes/origin/main" "${GITHUB_SHA}")"
+          if printf '%s\n' "$changed" | grep -Eq '^(\.forgejo/workflows/|fixture-tools/)'; then
+            printf '%s\n' 'controlled PR changed protected workflow or fixture tooling' >&2
+            exit 1
+          fi
+      - name: Run the allowlisted Cyberbaser trust tool
+        run: |
+          set -euo pipefail
+          before="$RUNNER_TEMP/wp3-before.md"
+          change="$RUNNER_TEMP/wp3-change.json"
+          policy="$RUNNER_TEMP/wp3-trust.yml"
+          result="$RUNNER_TEMP/wp3-trust-result.json"
+          git -C workspace show "refs/remotes/origin/main:content/page.md" > "$before"
+          bun -e 'import {readFileSync,writeFileSync} from "node:fs"; const [before,after,out]=process.argv.slice(1); writeFileSync(out,JSON.stringify({author:"wp3-fixture",authorType:"agent",files:[{path:"content/page.md",before:readFileSync(before,"utf8"),after:readFileSync(after,"utf8"),status:"modified"}]}));' "$before" workspace/content/page.md "$change"
+          printf '%s\n' 'agents:' '  - wp3-fixture' 'caps:' '  lines: 60' '  files: 1' '  proseWords: 25' 'allowedNewFolders:' '  - "content/**"' 'frontmatterAllowlist: []' > "$policy"
+          "${CYBERBASER_TOOL_ROOT}/cb-trust" "$policy" --json "$change" --out "$result"
+          bun -e 'const r=await Bun.file(process.argv[1]).json(); if(r.route!=="auto-merge") process.exit(1)' "$result"

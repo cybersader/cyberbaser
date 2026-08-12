@@ -21,14 +21,18 @@ Every contribution path the product offers must still work **independently**; th
 |---|---|---|
 | Historical serializer-backed CMS writer proposal (Decap, Sveltia, Tina, Pages CMS) | **Withdrawn.** R12 disqualifies those whole-file save adapters, not rich interfaces | [Write-path proposal §1](/cyberbaser/research/proposal-write-path/) |
 | Maintainer local authoring · Obsidian + Git | **Built and in daily use.** Direct owner authoring, not an external proposal | `publish-site.yml` in the vault repo |
+| Private owner-alpha wiki · Quartz + exact Markdown editor | **Built and in real use** (first bare-metal live acceptance Save 2026-08-02). WP2's Linux/amd64 OCI package and operator surfaces are mechanically accepted; the image is local-only, and container physical-device/external-live evidence remains pending | `apps/owner-alpha/` · [container deployment](/cyberbaser/development/owner-alpha-container-deployment/) |
 | External proposal · GitHub web editor | **Built and borrowed.** The only shipped outside-contributor surface | `EditThisPage.tsx` → `github.com/.../edit/` |
+| Forgejo Lane A adapter | **Implemented and hermetically tested.** Not live-validated, installed, linked, offered, or production authority | [Forgejo intake adapter](/cyberbaser/development/forgejo-intake-adapter/) |
+| Account-free Lane B mechanics | **Implemented and mechanically tested, disabled by default.** Local queue, sibling intake app, optional Quartz form, and local-only deployment bundle; not publicly deployed, human-tested, offered, a source writer, or production authority | [Account-free intake Lane B](/cyberbaser/development/account-free-intake/) |
 | Reader inline correction | **Study instrument only.** No product surface or counted human result | [Pilot protocol](/cyberbaser/research/concierge-human-correction-pilot/) |
 | Trusted rich browser / WYSIWYG authoring | **Intended, unbuilt.** Editor and adapter contract are not selected | [Vision](/cyberbaser/getting-started/vision/) |
-| Common owner review boundary | **Canonical requirement; partial interfaces only.** GitHub review is borrowed, and the private pilot renders one local study card | [Architecture](/cyberbaser/design/architecture/) |
-| Account-free contribution product | **Unshipped.** Q09 remains open | [Open question Q09](/cyberbaser/reference/open-questions/#q09--what-is-the-contribution-path-for-someone-with-no-account) |
+| Common owner-controlled boundary | **Canonical requirement; two owner interfaces.** GitHub review remains borrowed for external proposals; the private owner-alpha app gives one-Save authority to a strict local policy | [Architecture](/cyberbaser/design/architecture/) |
+| Account-free contribution product | **Unshipped.** Lane B mechanics exist but are disabled, local-only, unexposed, and untested by humans; Q09 remains open | [Open question Q09](/cyberbaser/reference/open-questions/#q09--what-is-the-contribution-path-for-someone-with-no-account) |
 | Concierge human-correction pilot | **Human run not started.** Internal mechanical and operator rehearsals completed; neither counts | [Pilot protocol](/cyberbaser/research/concierge-human-correction-pilot/) |
 | OFM damage check on a PR | **Built, report-only.** `continue-on-error: true`, blocks nothing | `@cyberbaser/ofm` via `ofm-check.yml` |
 | Trust classification on a PR | **Built, decision-only.** Emits a label and a summary table | `@cyberbaser/trust` via `trust-gate.yml` |
+| Decision ledger | **Two-stage capture/record adapter implemented and hermetically tested; live installation separately authorized and still pending; no real fork run; zero live entries** | [Decision ledger](/cyberbaser/design/decision-ledger/) |
 | Auto-merge for the auto-merge route | **Designed, disabled.** The step is commented out in the workflow | `trust-gate.yml` |
 | Branch protection / required checks | **Does not exist.** No protection rule, no ruleset on `main` | — |
 | Per-PR rendered preview | **Designed, unbuilt** | [Hub BOM · H5](/cyberbaser/research/proposal-hub-bom/#per-pr-rendered-previews) |
@@ -44,12 +48,13 @@ It was ruled out on measurement, not taste. The [write-path proposal](/cyberbase
 
 That result closes arbitrary whole-file save adapters, not rich authoring as an interface category. A browser editor may parse content, use blocks, render WYSIWYG, or keep transient UI state. To conform, its adapter must bind to a pinned source base, emit a bounded proposal, preserve every untouched byte, and leave owner-controlled application outside the editor. An arbitrary CMS cannot become plug-and-play with zero integration because its document model still has to map deliberately onto that proposal boundary.
 
-**Why the old three-path framing ended.** The principle is path independence, not a mandatory count or a commitment to three specific surfaces. In practice there are **two source-change lanes** today:
+**Why the old three-path framing ended.** The principle is path independence, not a mandatory count or a commitment to three specific surfaces. In practice there are **three source-change lanes** today, two of them owner-only:
 
 - direct owner-local authoring in Obsidian + Git;
+- the private owner-alpha wiki: browser editing from the owner's trusted devices, with one Save running the policy-bound exact pipeline;
 - an account-required external proposal through GitHub's web editor.
 
-**The persona Principle 3 exists for has no shipped path.** A domain expert with no GitHub account and no wish to make one cannot contribute today. The immediate [concierge human-correction pilot](/cyberbaser/research/concierge-human-correction-pilot/) tests whether five ordinary readers can express useful exact corrections and whether one independent owner can review and apply them locally without GitHub. The concierge carries the submission through existing libraries by hand; it is not an anonymous endpoint, editor, automatic writer, or forge integration, and it does not close Q09.
+**The persona Principle 3 exists for still has no offered path.** A domain expert with no GitHub account and no wish to make one cannot contribute to the live site today. WP4 Lane B now implements a disabled Quartz correction form, strict anonymous intake service, exact retained-source derivation, and local durable proposal queue, but none is publicly deployed or human-tested. [`OD-01`](/cyberbaser/research/owner-self-dogfood/) tested the same exact-proposal and local-review boundary once with the maintainer switching reader and owner contexts. It was not an independent-reader result or closure of Q09.
 
 ## Maintainer local path: Obsidian + Git
 
@@ -62,7 +67,7 @@ That result closes arbitrary whole-file save adapters, not rich authoring as an 
 1. **Clone**: clone `cybersader/cyberbase` as an Obsidian vault
 2. **Edit locally**: full Obsidian affordances (wikilinks, callouts, graph view, templates)
 3. **Commit & push**: either via obsidian-git or a terminal
-4. **Build trigger**: `publish-site.yml` fires on push to `main` and runs the publish boundary, the projection, and the Quartz build, then deploys to GitHub Pages
+4. **Build trigger**: `publish-site.yml` fires on push to `main`, runs the publish boundary, projection, pinned Quartz build, and cumulative URL-continuity gate, then deploys to GitHub Pages only if every gate passes
 5. **Live**: **3 to 5 minutes later** the change is on the published site
 
 > [!info] The build time, measured
@@ -76,7 +81,49 @@ That result closes arbitrary whole-file save adapters, not rich authoring as an 
 
 ### What is not enforced on this path
 
-The maintainer pushes to `main` directly, and `ofm-check` and `trust-gate` are both `pull_request`-triggered. **A direct push is validated by nothing.** The contributor path has more checks than the maintainer path, not fewer. That asymmetry is deliberate for now (requiring PRs for all changes would break daily authoring from Obsidian), but it is a gap, not a design.
+The maintainer pushes to `main` directly, and `ofm-check` and `trust-gate` are both `pull_request`-triggered. The publication workflow now validates projection safety, emitted-path safety, artifact size, and cumulative URL continuity, but it still does not run OFM damage classification or trust routing for direct pushes. The contributor path therefore retains moderation checks the maintainer path lacks. That asymmetry is deliberate for now (requiring PRs for all changes would break daily authoring from Obsidian), but Q10 remains a real gap.
+
+## Private owner-alpha wiki: one Save, policy-bound publication
+
+**Status: built for private dogfood; the first real outward acceptance Save completed on 2026-08-02.**
+
+**What this is in practice.** The owner's machine becomes a personal wiki server, the same self-hosting pattern as running Jellyfin or Home Assistant at home. The vault, Git, credentials, and publishing policy all stay on that one machine. Every other device the owner trusts (phone on the couch, laptop in another room) is just a browser pointed at the server's private address: browse and search the full wiki, tap **Edit** on the page with the mistake, fix the sentence, tap **Save and publish** once, and the server does the rest. Noticing a problem and fixing it become the same moment, from wherever the owner happens to be, and the phone never holds the vault or any secret. Nothing is exposed to the public Internet; readers of the *published* site are untouched by any of this.
+
+The owner launches one Bun application bound to one owner-chosen private numeric IPv4 address (`127.0.0.1` by default, which keeps everything single-machine). Setting it to an RFC 1918 or RFC 6598 shared-address-space address instead lets an encrypted private overlay or trusted LAN carry the wiki to the owner's other devices; each additional device signs in through a one-time link the owner mints at the server console. The app is transport-neutral: it neither knows nor cares which private-network product or protocol carries the traffic, and it never binds a wildcard or public address. Startup verifies a clean canonical checkout against the actual remote branch, selects and projects the public corpus, builds pinned Quartz in owner mode, validates the rendered site, and serves browsing and search from an unprivileged reader origin with source editing and durable job status on a separate privileged origin. On WSL, the bare-metal launcher mirrors runtime code and derived state into a marked private ext4 cache so Quartz does not pay the measured many-small-file penalty of `/mnt/c`; the container path instead requires native Linux storage and does not run WSL mirroring code.
+
+Opening **Edit** binds the exact tracked Markdown path, renderer slug, base commit, policy revision, source bytes and digest, Git mode and object ID, and live URL. The first milestone accepts one existing UTF-8 LF Markdown body edit, preserves YAML frontmatter bytes, derives one minimal contiguous UTF-8 operation, and rejects no-ops, stale source, creates, deletes, renames, assets, and multi-file changes.
+
+### The deployment story: what runs where
+
+Three machines participate, and each holds exactly what it needs:
+
+| Place | What runs there | What it holds |
+|---|---|---|
+| **The server machine** (owner's desktop or a small home box) | The owner-alpha app: both wiki origins, the editor, the whole Save pipeline | The vault checkout, Git push credentials, the durable policy, job evidence |
+| **Any trusted device** (phone, laptop) | Just a browser on the private network | A session cookie. Never the vault, Git, or any credential |
+| **GitHub** (current dogfood infrastructure, not essence) | The vault repo, the `publish-site.yml` Actions workflow, Pages hosting | The canonical remote and the public site |
+
+The wiki the owner browses is served locally by the server machine, rebuilt from the vault on startup and after every accepted change; it is not the public site. The public site only changes when the server pushes a commit and the vault's own CI deploys it, exactly as if the owner had pushed from Obsidian.
+
+**What a Save looks like in time.** Sub-second to a few minutes of local checks (the render check builds the site twice to prove the edit lands cleanly), then the commit and push in seconds, then three to five minutes of GitHub Actions build-and-deploy that the server merely watches, then the live-page confirmation and local rebuild. The owner can close the browser after the redirect; the job is durable on the server and the status page shows where it is. If the server is stopped mid-job, the next launch resumes any state that is provably safe to resume and stops for the owner otherwise.
+
+**Standing it up now has two documented shapes.** Bare metal remains: clone the repo, copy `owner-alpha.example.json` to a mode-`0600` local config, point it at the vault, and run the launcher. WP2 adds the [operator-first container path](/cyberbaser/development/owner-alpha-container-deployment/): build one immutable Linux/amd64 image locally, choose an explicit rootless or rootful Docker Engine profile, bind the exact vault and credential-free config, mount one profile-bound state volume and one narrowly scoped HTTPS credential socket, then validate, initialize, and start detached. Linux host networking is mandatory, Docker Desktop and bridge publishing are unsupported, and Bun still binds only the exact owner-selected private address. The operator attaches to the live TTY, enters `b`, consumes the one-time link, and detaches without stopping the server.
+
+The OCI package is mechanically accepted, not published. A two-browser fixture Save reached a local bare Git remote and replacement recovery passed. The real 2026-08-02 Cyberbase Save used the bare-metal route; no physical-device Save, external-forge/live-site Save from the container, registry publication, or service installation is claimed.
+
+### The Save pipeline in detail
+
+Clicking **Save and publish** is the edit-specific owner authority event. There is no routine Apply, Commit, Push, Deploy, Approve, or Reject step. The durable local policy then:
+
+1. reruns checkout, source, byte-identity, OFM, trust, publication, projection, render, and link-delta checks;
+2. applies only the exact operation through an atomic same-directory replacement;
+3. verifies and creates one single-parent, one-path commit atop the bound base;
+4. pushes the exact commit normally and never force-pushes, merges, rebases, or guesses conflicts;
+5. binds and monitors the exact GitHub Actions run and Pages deployment;
+6. confirms the exact live page lost the old visible witness and gained the new witness once; and
+7. rebuilds the local Quartz owner site at the confirmed commit.
+
+This direct owner route is not an exception to the source-integrity rule. It is the owner's authority expressed through the same exact-change boundary. External tools still submit proposals and cannot acquire the owner policy, browser session, source path, Git command, remote, URL, or refspec from request data. The private app does not answer Q09 and does not select a rich editor, hosted service, database, or external intake authority. WP4's separate local queue and sibling Lane B service exist independently of this direct-owner route.
 
 ## Shipped contributor path: Direct GitHub
 
@@ -104,28 +151,52 @@ The maintainer pushes to `main` directly, and `ofm-check` and `trust-gate` are b
 - Do we surface a syntax hint for Obsidian-specific constructs in the raw view?
 - Should the PR template auto-fill with the page being edited?
 
-## Trusted-contributor rich authoring: intended, unbuilt
+## Forgejo Lane A: adapter built, contributor flow unbuilt
 
-**Status: architecturally allowed; no editor or adapter selected.** A trusted contributor may eventually use a browser WYSIWYG editor, hybrid Markdown/preview surface, CMS-like front end, or another specialized tool for larger section edits and new content. Cyberbaser should be able to replace that surface without replacing the source authority, review policy, renderer, or forge.
+**Status: implemented at the hermetic adapter layer only.** `@cyberbaser/forgejo-intake` treats one open Forgejo pull request as a carrier, binds it to four authoritative read-only API responses and exact inert Git objects, requires one modified existing Markdown file and one diff hunk, and proves that applying the emitted canonical proposal to the base bytes exactly reproduces the pull-request head bytes.
 
-The stable boundary is conceptual today, not a shipped API. A conforming authoring spoke must:
+The adapter separately supplies a Forgejo-local trust subject namespaced by canonical origin and numeric user ID, and reads `.cyberbaser/trust.yml` only from the exact base commit. It never writes source, merges, pushes, labels, comments, deploys, creates a queue, or authorizes acceptance.
+
+This does not add a fourth shipped source-change mechanism. No rendered page links to Forgejo, no live Forgejo instance has been validated, no contributor has used the path, and no installation or review product exists. GitHub's web editor remains the only shipped outside-contributor surface. See [Forgejo intake adapter](/cyberbaser/development/forgejo-intake-adapter/).
+
+## Account-free Lane B: mechanics built, contribution product unshipped
+
+**Status: implemented and mechanically tested, disabled by default, not publicly deployed or offered.** The implementation has five parts:
+
+1. `@cyberbaser/account-free-intake` validates one strict credential-free correction intent, resolves an opaque retained publication binding and exact historical Markdown blob from local read-only inputs, and emits the canonical anonymous proposal.
+2. `@cyberbaser/proposal-queue` stores exact proposal bytes plus bounded receipt, carrier, classification, and lifecycle evidence in one finite owner-local filesystem queue.
+3. `apps/account-free-intake` exposes the strict HTTP boundary and writes only that queue. It is a sibling service, not part of owner-alpha and not an owner-authority process.
+4. `renderers/quartz-cyberbase` contains a source-backed correction form, but normal builds omit it unless every required value and an explicit build-time enable token are supplied.
+5. `deploy/account-free-intake` packages the service behind an off-by-default Compose profile on a dedicated internal network, with no host port and no included reverse proxy.
+
+The no-R-number WP4 implementation amendment selects the local queue rather than bot pull requests for v1 and selects a sibling service rather than an owner-alpha in-process endpoint. Those are containment choices, not a permanent queue protocol or public deployment decision.
+
+The path ends at retained `pending-review` evidence and local inspection. It has no accept, reject, apply, merge, commit, push, deploy, or publication action. No public reverse proxy, TLS endpoint, edge DDoS control, service installation, image publication, ordinary-reader attempt, independent-owner result, or production authority exists. [Account-free intake Lane B](/cyberbaser/development/account-free-intake/) records the exact mechanics and evidence boundary. Q09 remains open.
+
+## Trusted-contributor rich authoring: contract built, editor unbuilt
+
+**Status: the shared one-file, one-splice adapter-output contract and narrow Forgejo PR adapter are implemented; no rich editor or contributor-facing product lane is selected.** A trusted contributor may eventually use a browser WYSIWYG editor, hybrid Markdown/preview surface, CMS-like front end, or another specialized tool. Cyberbaser should be able to replace that surface without replacing the source authority, review policy, renderer, or forge.
+
+A conforming authoring spoke must:
 
 1. read a known source path and pinned base representation;
-2. return a bounded, human-reviewable proposal rather than write the authoritative source directly;
-3. identify the intended old and new source content precisely enough to fail closed when the base is stale or mapping is ambiguous;
-4. preserve every byte outside the declared change by construction;
-5. carry rationale, source evidence, and author/trust claims without letting the spoke authorize itself; and
+2. return a canonical [`@cyberbaser/proposal`](/cyberbaser/design/proposal-contract/) rather than write the authoritative source directly;
+3. identify one intended old and new UTF-8 span precisely enough to fail closed when the base is stale or mapping is ambiguous;
+4. preserve every byte outside the declared splice by construction;
+5. carry rationale, evidence, and optional identity claims without letting the spoke authorize itself; and
 6. let the owner-controlled boundary run integrity, publication, link, trust, and rendered-candidate checks before application.
 
-The current `@cyberbaser/correction` package proves only one existing file, one exact quote, and one splice. It does not yet define multi-splice, structural, new-page, frontmatter, asset, or generalized rich-editor operations. [Translation Layer](/cyberbaser/design/translation-layer/) tracks the remaining source-mapping and unsupported-construct questions.
+The implemented contract composes `@cyberbaser/correction` with the existing trust classifier. It supports one existing Markdown file and one quote- or offset-bound splice. It does not define multi-splice, structural, new-page, frontmatter-policy, asset, or generalized rich-editor operations, and it contains no queue or source writer. [Translation Layer](/cyberbaser/design/translation-layer/) tracks the remaining source-mapping and unsupported-construct questions.
 
-## Account-free correction: bounded concierge experiment
+## Account-free correction evidence: mechanics now exist, human evidence does not
 
-**Status: immediate experiment, no product surface shipped.** The [pilot protocol](/cyberbaser/research/concierge-human-correction-pilot/) uses an exact seven-field account-free study instrument: page URL, exact quote, replacement, rationale, factual source, optional public credit name, and credit consent. Those fields are precommitted for measurement. They are not the product form, a contribution API, the permanent minimum payload, or a decision about whether the eventual reader surface is inline, selection-based, raw, or rich.
+**Status: Lane B mechanics are implemented; bounded owner evidence remains the only human-adjacent result.** The disabled product form intentionally differs from the earlier seven-field study instrument: it posts an opaque publication binding, exact quote plus optional context, replacement, rationale, inert HTTPS evidence URLs, and an optional idempotency key. It asks for no account, identity, contact, or public credit. This contract is mechanically tested, not validated by an unfamiliar reader.
 
-The concierge converts each submission into one exact UTF-8 byte splice, fails closed on a missing or ambiguous quote, proves every byte outside the splice is unchanged, runs OFM/trust/render/link checks, and assembles a local review card. The owner reviews and applies the accepted candidate outside GitHub through their normal local workflow. This tests reader completion, exact source anchoring, review burden, owner preference, privacy, and non-GitHub operation together.
+The earlier [owner self-dogfood result](/cyberbaser/research/owner-self-dogfood/) used page URL, exact quote, replacement, rationale, factual source, optional public credit name, and credit consent. Those were observation inputs, not the permanent product payload or evidence that the implemented Lane B surface is usable.
 
-The internal mechanical dry run and private operator rehearsal completed, but no ordinary reader or independent owner has produced counted evidence. Passing the precommitted thresholds would justify only the smallest measured automation around intake, anchoring, and local review-card generation. It would neither select a rich editor nor establish a zero-account product, automatic write path, hosted moderation console, Internet-scale abuse resistance, or cross-system interoperability.
+In `OD-01`, one maintainer switched between reader and owner contexts. The operator converted the submission into one exact UTF-8 byte splice, proved every byte outside it unchanged, ran OFM/trust/render/link checks, and assembled a local review card. The owner accepted the candidate, then separately authorized application and publication. The harness did not apply or publish the change itself.
+
+The original charter also assigned stale source and ambiguous quote to `OD-02`, and owner rejection to `OD-03`. Those attempts are **Not run — superseded** and blocked from initialization. Deterministic synthetic `ADV-*` scenarios now prove those mechanics; the rejection fixture is not a human owner rejection and creates no human-decision artifact. This evidence cannot establish ordinary-reader completion, independent-owner preference, or a zero-account product. The preserved [five-reader pilot](/cyberbaser/research/concierge-human-correction-pilot/) remains optional before making those stronger claims.
 
 ## Cross-path concerns
 
@@ -152,6 +223,14 @@ The trust classifier computes a route for every PR. What happens next is entirel
 Trusted contributors are designated in **`.cyberbaser/trust.yml`** in the vault repo (not `.github/trusted-contributors.yml`; the file moved out of the forge's namespace deliberately, per [dissent §1.4](/cyberbaser/research/dissent/)). Moving someone onto that list is a conscious act, and the policy is read from the base ref, so a PR cannot promote its own author.
 
 **Nothing has ever auto-merged, and nothing can.** Enabling it needs three things that do not exist: branch protection on `main`, the site build as a required check, and the commented-out step turned on. The first of those collides with the maintainer's direct-push workflow, which is why it has not happened.
+
+### Decision recording after closure
+
+The [decision ledger](/cyberbaser/design/decision-ledger/) now has an implemented two-stage GitHub adapter for recording what the maintainer actually did without giving the fork-triggered workflow write authority. Stage A runs on `pull_request: closed` with no repository permissions or checkout and uploads only a bounded routing hint. The hint is not evidence: it contains repository/run identity and the PR number, but no route, actor, decision, Git object, check, timestamp, path, command, or refspec.
+
+Stage B runs through GitHub's [`workflow_run` trust boundary](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_run). It binds the exact source run and artifact, then reconstructs authority from the pull-request, labels, timeline, collaborator-permission, and check-runs APIs plus exact inert base/head Git objects. A closed-unmerged decision uses the unique timeline `closed` event matching `closed_at`; the actor must currently have `maintain` or `admin` permission. The resulting row is the first successfully published Stage B observation, so mutable labels, checks, and permission are observed at record time rather than claimed as a perfect closure-time snapshot.
+
+The composition is hermetically tested for maintainer, fork, closed-unmerged, duplicate, and tampered-artifact scenarios. It is **not installed** in the live vault: the record template still carries a deliberate non-runnable immutable-tooling placeholder, no real fork run has occurred, and the live ledger has zero observations. Installation and the first outward write require separate explicit authorization.
 
 ### The policy, concretely (cyberbase's own)
 
@@ -182,20 +261,16 @@ A quarter-day interim exists too: have the PR job run the same projection and Qu
 
 ### Attribution
 
-> [!warning] Unverified, and three pages depend on it
-> The claim that "contributor names appear in git history automatically, so attribution is preserved without any special handling" has **never been observed working**. It was written about Decap's fork flow, which no longer exists in the write path.
+> [!note] Verified for the current one-commit GitHub fork-and-squash path
+> R24 tested a genuine cross-repository PR from a second account. The contributor's fork commit used their GitHub-mapped noreply address. After the owner performed a normal squash merge, authoritative `main` commit `4a40055` retained the contributor as both Git author and mapped GitHub author; GitHub `web-flow` was the committer, and the owner was recorded separately as the PR merger. The resulting publication also passed the live build and URL-continuity gate.
 >
-> The mechanism today is GitHub's own edit-and-fork flow, and the expectation is that the fork's commit author is the contributor's account and survives the merge. That is an expectation, not a measurement. The two live contribution PRs run during [R17](/cyberbaser/getting-started/roadmap/) were both authored by the maintainer's own account, so they could not have tested it.
->
-> This matters beyond UX: [Legal & Governance](/cyberbaser/design/legal-and-governance/) makes commit history the attribution record the content license points at. An untested claim is currently load-bearing for a licensing obligation.
->
-> Tracked as an open question — see [Q08 · Does the fork flow actually attribute the contributor?](/cyberbaser/reference/open-questions/#q08--does-the-fork-flow-actually-attribute-the-contributor) and the reopened brief [07 · Contributor attribution](/cyberbaser/agent-context/zz-challenges/07-contributor-attribution/). The check is roughly ten minutes of work: one `git log --format='%an %ae'` over the merged contribution PRs, plus one PR opened from a second account.
+> This closes [Q08](/cyberbaser/reference/open-questions/#q08--does-the-fork-flow-actually-attribute-the-contributor) narrowly. It does not prove multi-commit squash behavior, another forge, anonymous or pseudonymous lanes, visible page credit, contributor profiles, or trust-history computation. The second account was controlled by the maintainer, so the run is operational evidence rather than independent-contributor usability evidence. Those broader questions remain in [brief 07](/cyberbaser/agent-context/zz-challenges/07-contributor-attribution/).
 
 **What a reader sees today: nothing.** The published site's page layout is breadcrumbs, title, date and reading time, tags, and the edit link. There is no author line, no contributor list, no avatar, and no contributors page. The vault vision's "show contributors at the top of each page with pic and contributors page" has not been designed, costed, scheduled, or explicitly declined.
 
 ### Licensing
 
-Contribution only works legally if the vault has a content license with a contributor clause; without one, every accepted edit is owned by its contributor and readers can't reuse anything. The full treatment (license choice, mixed-vault carve-outs, the contributor clause) lives at [Legal & Governance](/cyberbaser/design/legal-and-governance/). Note the dependency flagged above: that page's attribution argument rests on the unverified claim.
+Contribution only works legally if the vault has a content license with a contributor clause; without one, every accepted edit is owned by its contributor and readers can't reuse anything. The full treatment (license choice, mixed-vault carve-outs, the contributor clause) lives at [Legal & Governance](/cyberbaser/design/legal-and-governance/). R24 verifies the current one-commit GitHub fork-and-squash history path; other contribution paths still need path-specific attribution evidence.
 
 ### Abuse / spam
 
@@ -211,4 +286,4 @@ Contribution only works legally if the vault has a content license with a contri
 
 Based on prior art ([awesome-* repos](/cyberbaser/research/prior-art/#awesome--repos)), the floor was set as **"as easy as editing an awesome-list repo on GitHub"** — 3 clicks: Edit → type → Propose change.
 
-That floor is met, and entirely by GitHub's editor rather than by anything cyberbaser built. It clears the bar for a contributor who already has a GitHub account, and it does not satisfy [Principle 3](/cyberbaser/getting-started/principles/) for someone who does not. The concierge pilot is the next falsification step: at least 3 of 5 readers must submit unaided in five minutes or less, at least two substantive corrections must be accepted and verified live, and the independent owner must prefer the review-card workflow to email plus manual source hunting. Until those results exist, the account-free product claim remains unearned.
+That floor is met, and entirely by GitHub's editor rather than by anything cyberbaser built. It clears the bar for a contributor who already has a GitHub account, and it does not satisfy [Principle 3](/cyberbaser/getting-started/principles/) for someone who does not. `OD-01` completed one real owner loop and recorded the handoff and review burden; the remaining chartered obligations were superseded by synthetic mechanical coverage. This cannot earn an ordinary-reader product claim. If Cyberbaser later needs that claim, the deferred five-reader protocol still requires at least 3 of 5 unaided submissions in five minutes or less, two substantive accepted-and-live corrections, and independent-owner preference.

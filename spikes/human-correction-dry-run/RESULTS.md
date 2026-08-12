@@ -1,12 +1,14 @@
 # Observed results
 
-- Latest completed internal candidate run: 2026-07-28
+- Latest harness verification: 2026-07-31
+- Latest completed historical internal candidate run: 2026-07-28
+- First completed owner self-dogfood reader-to-live loop: 2026-07-31 (`OD-01`)
 - Runtime: Bun 1.3.11
-- Branch: `research/human-correction-pilot`
+- Current branch: `feature/owner-self-dogfood`
 
 ## Evidence boundary
 
-This file records **internal agentic and mechanical evidence only**. The run is not a reader attempt, independent-owner result, human-usability result, accepted correction, live source correction, public deployment, owner-preference result, interoperability result, or shipped account-free contribution path.
+This file records **internal agentic, mechanical, harness-verification, and explicitly bounded owner self-dogfood evidence only**. The signed-out physical-phone handoff, returned submission, local review, owner acceptance, exact application, deployment, and live verification below are one maintainer's operational evidence, not an independent reader attempt or general human-usability result. `OD-01` is one owner-approved live correction, but it is not an independent-owner result, ordinary-reader validation, product-interface validation, interoperability result, or shipped account-free contribution path.
 
 The selected case was one owner-mapped, public Cyberbase spelling correction at pinned commit `b320c5c2c92d646b9df7019c9e29034341ebff6b`:
 
@@ -25,7 +27,7 @@ This run contributes:
 - no participant, concierge, or owner-review timing result; and
 - no owner-preference result.
 
-Q09 remains open. The independent human pilot remains next.
+Q09 remains open. The manual owner phase closed by supersession after `OD-01`; `OD-02` and `OD-03` are Not run — superseded. Their safety obligations now have synthetic mechanical coverage only. The unchanged independent human pilot is deferred until stronger unfamiliar-reader or independent-owner usability claims are needed.
 
 ## Commands and execution sequence
 
@@ -48,15 +50,105 @@ The selected correction needed no repair. The later audit hardened checkout isol
 
 | Check | Measured result |
 |---|---|
-| Frozen install | Completed successfully in 11.22 s. |
-| Scoped harness suite | Initial candidate run: 46 passed, 0 failed, 213 assertions across eight files, about 2.82 s. Post-audit checkout and review-state hardening: 47 passed, 0 failed, 218 assertions across eight files. Latest initialization, rendered-evidence, and decision-hardening rerun: 77 passed, 0 failed, 410 assertions across 12 files in 21.19 s. The focused pilot subset passed 26 tests with 157 assertions in 16.19 s; the render/adversarial/decision subset passed 24 tests with 146 assertions in 18.38 s; the latest initialization/input subset passed 15 tests with 95 assertions in 2.31 s. |
-| Authoritative verifier | 11 PASS, 0 FAIL, `complete: true`. |
+| Frozen install | Historical candidate run: 11.22 s. Latest charter-milestone verification: completed in 10.10 s with `bun.lock` byte-unchanged. |
+| Scoped harness suite | Initial candidate run: 46 passed, 0 failed, 213 assertions across eight files, about 2.82 s. Post-audit checkout and review-state hardening: 47 passed, 0 failed, 218 assertions across eight files. Initialization, rendered-evidence, and decision hardening: 77 passed, 0 failed, 410 assertions across 12 files in 21.19 s. Owner-self-dogfood implementation before final adversarial review: 81 passed, 0 failed, 434 assertions across 12 files in 27.12 s. Final immutable-decision, observation-binding, and schema-migration hardening: 82 passed, 0 failed, 442 assertions across 12 files in 26.16 s. After adversarial repair, the final focused owner-dogfood/input/workspace/run/card subset passed 41 tests with 276 assertions in 23.55 s. The complete charter-milestone suite passed 89 tests with 500 assertions across 12 files in 25.49 s. After the private Tailscale handoff was added, the package-scoped suite passed 105 tests with 594 assertions across 13 files in 32.42 s. After the guided wizard and adversarial decision-concurrency repairs, the complete package-scoped suite passed 120 tests with 647 assertions across 14 files in 79.88 s. After the browser-upgrade URL repair, it passed 121 tests with 650 assertions across 14 files in 86.42 s. After the pinned-publication-policy, immutable-repin, binding-transition lock, and historical terminal-state repairs, it passed 141 tests with 734 assertions across 14 files in 74.36 s. After reader-form-v2, deterministic adversarial coverage, and the read-only live verifier were integrated, the complete package-scoped suite passed 167 tests with 823 assertions across 16 files in 75.97 s. After binding submission versions to issued form bytes and hardening deployment identity, network deadlines/body limits, exact rendered-page checks, and no-lazy-fetch Git inspection, the final suite passed 180 tests with 852 assertions across 16 files in 83.03 s. |
+| Authoritative verifier | Original `synthetic-v1`: 11 PASS, 0 FAIL, `complete: true`, byte contract unchanged. Separate adversarial verifier: three sorted PASS scenarios, `complete: true`, byte-identical across two runs. |
+| New focused automation suites | Reader-form/adversarial affected set: 51 passed, 0 failed, 306 assertions across four files. Post-application verifier: 20 passed, 0 failed, 66 assertions in 15.83 s. |
 | Dependent package suites | Correction, linkcheck, OFM, projection, publish, and trust: 187 passed, 0 failed, 558 assertions across eight files. |
-| Canonical docs build and linkcheck | PASS, 99 pages built. Linkcheck found the existing single `other` finding in `agent-context/zz-challenges/mdx-auto-wrapping/`, within the explicit budget of 1. Existing Starlight override, Vite externalization, and large-chunk warnings remained non-fatal. |
+| Canonical docs build and linkcheck | Latest owner-self-dogfood update: PASS, 100 pages built. Linkcheck found the existing single `other` finding in `agent-context/zz-challenges/mdx-auto-wrapping/`, within the explicit budget of 1. Existing Starlight override, Vite externalization, and large-chunk warnings remained non-fatal. |
+| Documentation browser suite | The previous complete run passed 183 Playwright tests in 4.0 minutes, including homepage stability, responsive layout, recent pages, screenshots, smoke coverage, and standard-page backlinks. The 2026-07-31 smoke rerun rebuilt and started the preview server but Chromium launches all stopped at `spawn EIO` after this WSL session's Linux filesystem became read-only; no browser assertion ran, so that rerun is an environmental block rather than a pass. |
 | Repeated verifier determinism | Two fresh verifier processes exited zero, emitted no verifier diagnostic stderr, and produced byte-identical JSON; 0.922 s and 0.911 s. The `bun run verify` wrapper may print Bun's fixed launcher banner to stderr. |
 | Artifact validation | PASS for one sanitized case JSON, one result JSON, and one static review-card HTML. |
 
-The scoped tests covered fail-closed quote handling, ambiguous and missing anchors, stale-base detection, UTF-8 and CRLF preservation in the correction core, mapping containment, publication denial, candidate-only link deltas, rendered-target mismatch, injected build failure, cleanup, and review-card active-content rejection. Pilot-kit audit coverage also rejects ignored source mappings, stale current source bytes, altered stored evaluation evidence, missing build attestation, Cyberbase under the independent profile, incomplete review-card evidence, malformed or mismatched owner decisions, and multiline browser change fields. Rendered-target regression coverage permits multiple raw-HTML occurrences caused by derivative metadata only when the baseline has no replacement text and every old-text occurrence disappears from the candidate; even one candidate old-text residue still fails. The recorded Cyberbase run below remains the measured 1/0 baseline and 0/1 candidate result. Decision-time coverage proves that a valid Cyberbase decision performs a fresh injected live verification and tolerates only excluded build nondeterminism: aggregate successful-link totals/occurrences, target HTML byte length/hash, and harmless literal multiplicity above the presence threshold. The deterministic comparison still binds case/evaluation, projection, renderer/isolation, complete candidate-only and baseline-only tuples/counts, rendered-page safety, source isolation/no-write, and cleanup. The demonstrated tamper that changes a blocked stored candidate-only count from 1 to 0 and rewrites status as eligible is rejected, as are changed link tuples and target safety booleans. Cyberbase initialization coverage verifies the one-command explicit prefill and rejects partial flags, non-`yes` authorization, independent-profile use, non-Markdown sources, nested checkout paths, wrong origins, ignored untracked sources, and dirty worktrees before attempt creation. In real Cyberbase operation, `pilot:decision` reruns the full isolated live lane and may take as long as a full render. Synthetic and simulated form-shaped fixtures remain simulations, not human attempts.
+The scoped tests covered fail-closed quote handling, ambiguous and missing anchors, stale-base detection, UTF-8 and CRLF preservation in the correction core, mapping containment, publication denial, candidate-only link deltas, rendered-target mismatch, injected build failure, cleanup, and review-card active-content rejection. Pilot-kit audit coverage also rejects ignored source mappings, stale current source bytes, altered stored evaluation evidence, missing build attestation, Cyberbase under the independent profile, incomplete review-card evidence, malformed or mismatched owner decisions, and multiline browser change fields. Rendered-target regression coverage permits multiple raw-HTML occurrences caused by derivative metadata only when the baseline has no replacement text and every old-text occurrence disappears from the candidate; even one candidate old-text residue still fails. The recorded Cyberbase run below remains the measured 1/0 baseline and 0/1 candidate result. Decision-time coverage proves that a valid Cyberbase decision performs a fresh injected live verification and tolerates only excluded build nondeterminism: aggregate successful-link totals/occurrences, target HTML byte length/hash, and harmless literal multiplicity above the presence threshold. The deterministic comparison still binds case/evaluation, projection, renderer/isolation, complete candidate-only and baseline-only tuples/counts, rendered-page safety, source isolation/no-write, and cleanup. The demonstrated tamper that changes a blocked stored candidate-only count from 1 to 0 and rewrites status as eligible is rejected, as are changed link tuples and target safety booleans. Cyberbase initialization coverage verifies the one-command explicit prefill and rejects partial flags, non-`yes` authorization, independent-profile use, non-Markdown sources, nested checkout paths, wrong origins, ignored untracked sources, and dirty worktrees before attempt creation. In real Cyberbase operation, `pilot:decision` or its `dogfood:decision` alias reruns the full isolated live lane and may take as long as a full render. Synthetic and simulated form-shaped fixtures remain simulations, not human attempts.
+
+## Owner self-dogfood profile verification
+
+The 2026-07-30 implementation adds `owner-self-dogfood` without creating a second correction path. It reuses the existing initialization, exact preparation, isolated rendering, review-card, and decision-binding modules.
+
+| Check | Observed result |
+|---|---|
+| Attempt namespace | `owner-self-dogfood` accepts `OD-01` through `OD-99`; the existing profiles retain `HC-01` through `HC-99`. Cross-namespace IDs fail closed. |
+| Evidence class | Status, prepared, rendered, review-card, and validated-decision data report `owner-self-dogfood`, `countsTowardHumanPilot: false`, and `independentOwnerEvidence: false`. |
+| Independent-owner claim | An owner-dogfood operator record with `independentOwnerAttested: true` is rejected. |
+| Private context record | Initialization creates ignored `dogfood-observation.json` with the attempt's precommitted obligations, device/browser/role fields, and false source-write, deployment, and live-verification defaults. The planned reader context is prefilled for the mobile obligation. |
+| Owner rejection | A correctly bound rejection validates as a private owner-self-dogfood decision while source-write and public-deployment fields remain false. The test supplies the decision fixture; it does not claim a real owner decision. |
+| Existing paths | `cyberbase-rehearsal` and `independent-counted` compatibility tests remain passing. Stored schema-v1 status without classification fields is normalized to schema v2 and then checked against the validated profile. |
+| Observation binding | Reader and owner contexts are separate structured records. Owner-dogfood decision validation compares the recorded obligations and applicable mobile context with the canonical charter, strictly loads and snapshots the observation, and stops if source-write, deployment, or live-verification flags are already true. |
+| Decision immutability | A guided decision is created once as a run-local `wizard-owner-decision.json`; concurrent wizard sessions cannot replace it. The validated decision is also created with an exclusive atomic link. Re-running validation is rejected before replacement, and the original decision remains byte-intact. |
+| Authoritative verifier | Two corrected package-scoped runs emitted byte-identical JSON with 11 PASS checks and `complete: true`. |
+
+No physical phone pass, real owner decision, canonical source application, commit, push, deployment, or live correction was performed by this automated profile verification. The separate real `OD-01` evidence below did perform those actions under explicit owner authority.
+
+### Automated adversarial and post-application verification
+
+The manual phase closed after one real owner loop. The charter remains preserved, but `OD-02` and `OD-03` are **Not run — superseded** and no attempt directories were created for them.
+
+| Evidence | Observed result |
+|---|---|
+| `ADV-STALE-01` | PASS. Advancing the checkout beyond the pin returned `checkout-commit-mismatch`; applying the prepared operation to same-length mutated bytes returned `base-digest-mismatch`; the quote remained unique and no application or deployment occurred. |
+| `ADV-AMBIGUOUS-01` | PASS. A quote appearing twice returned `quote-ambiguous`; no evaluation result or eligible decision was created and source bytes remained unchanged. |
+| `ADV-REJECTION-BINDING-01` | PASS. A supplied synthetic reject fixture matched its attempt, case, and candidate digest. It created no human owner decision artifact and is not evidence that an owner rejected a real proposal. |
+| Determinism and classification | Two fresh adversarial runs were byte-identical. The report is classified `synthetic-mechanical-adversarial`, counts toward no human or owner pilot total, and contains no OD IDs, timestamps, PIDs, or temporary paths. |
+| Read-only live verifier | PASS against `OD-01`, application commit `7982bbde225653cac55721e8153cf9d4d42b463c`, and explicit Actions run `30642646520`. It reconstructed the exact one-path, one-splice commit from Git objects; matched reviewed base/candidate digests; bound the run to the active `Publish vault site` workflow, push event, `main`, successful `build` and `deploy` jobs, and the successful `github-pages` deployment; and observed bounded HTML page text at the exact URL with the old text absent and replacement present. |
+| Verifier mutation boundary | The verifier reported no Git mutation, source write, remote mutation, deployment trigger, or observation edit. A second invocation failed with `artifact-already-exists` and preserved the first private evidence artifact. After the final identity/deadline hardening, another real read-only pass reached the same create-once boundary, proving the stronger checks passed without replacing evidence. |
+
+### Series-charter precommitment
+
+The current charter milestone adds a private non-overwriting gate before any real `OD-*` initialization. The final post-review focused run measured 41 passing tests, 0 failures, and 276 assertions in 23.55 seconds.
+
+| Check | Observed result |
+|---|---|
+| Strict charter schema | Valid three-, four-, and five-attempt charters normalize successfully. Duplicate or HC IDs, missing or undeclared obligations, unused IDs, mismatched, signed-in, or whitespace-only mobile context, forged classification, and unknown privacy-expanding fields fail closed. |
+| Canonical storage | Initialization writes deterministic bytes only to ignored `.workspace/human-correction-pilot/owner-self-dogfood-series.json`. While it exists, a second initialization returns `artifact-already-exists` and preserves the first bytes. A manifest symlinked outside canonical storage is rejected. |
+| OD initialization gate | A missing charter returns `dogfood-series-required`; an undeclared OD ID returns `dogfood-attempt-not-declared`. Both failures occur before checkout inspection and leave no attempt directory, although a command may record a private global failure log. |
+| Observation binding | Initialization copies each attempt's exact assigned obligations into its private observation and prefills the planned reader context for the mobile obligation. Decision validation rejects changed obligations or a mismatched mobile context and requires the designated owner-rejection attempt to end with `reject`. Stale and ambiguous outcomes remain separate fail-closed evidence that no Cyberbaser candidate application or deployment occurred. |
+| Existing HC paths | Rehearsal and independent `HC-*` initialization remain available without a series charter. |
+| Real-series boundary | Automated implementation and tests create no canonical charter or attempt. Separately, the maintainer-approved private charter and initialized `OD-01` exist below ignored `.workspace/` storage. On 2026-07-31 the owner opened the form from a signed-out physical phone, returned a second corrected submission after one no-op entry, and prepared the exact candidate. After an explicit immutable repin preserved the policy-free failed run, new case `DRY-25DFAA853DD7` rendered successfully and received a validated owner acceptance after approximately 90 seconds of review. The owner then separately authorized the exact application, commit `7982bbde225653cac55721e8153cf9d4d42b463c`, publication, and live verification. GitHub Actions run `30642646520` completed build and deploy successfully. |
+
+The harness prevents command-based replacement while the charter exists. It does not provide cryptographic or filesystem immutability. Manual editing or deletion is outside the guarantee and invalidates the series rather than authorizing a replacement history.
+
+### One-shot private Tailscale handoff
+
+The owner-local `dogfood:serve` command was exercised against the real ignored `OD-01` form on 2026-07-30. The successful smoke used the numeric Tailscale IPv4 URL. A 2026-07-31 owner browser attempt exposed that advertising the MagicDNS hostname was misleading because the browser upgraded its plain-HTTP `.ts.net` URL to unsupported HTTPS. The command and wizard now advertise only the numeric `http://100.*` capability while retaining the same Tailscale-only bind. A fresh live smoke then advertised only that numeric form, returned the canonical 6,621-byte instrument, stopped after the GET, and exited zero.
+
+| Check | Observed result |
+|---|---|
+| Exact artifact | Before binding, the form matched the canonical generated instrument. The response SHA-256 then matched the ignored `OD-01/reader-form.html` byte-for-byte. No attempt-directory sibling was served. |
+| Bind boundary | The listener bound to the discovered Tailscale IPv4 (redacted from tracked results) on an ephemeral port. It did not bind to loopback, a LAN address, or `0.0.0.0`. |
+| One-shot lifecycle | The first exact GET returned the complete self-contained form, then the process reported `reason: served` and closed the listener. |
+| Intake boundary | Startup reported `acceptsSubmissions: false`. Only bodyless GET and metadata-only HEAD are allowed; body-bearing GET/HEAD and mutating methods fail without consuming the route, with request bodies capped at the server boundary. The form still downloads `submission.json` locally. |
+| Existing Serve state | `tailscale serve status --json` was byte-identical before and after the smoke. The command executes no Serve, Funnel, reset, restore, or configuration mutation. |
+| Automated coverage | The focused transport suite passed 16 tests with 91 assertions. The complete package-scoped harness passed 105 tests with 594 assertions across 13 files. |
+| Evidence claim | This proves the command mechanics on the maintainer's laptop only. It is not a physical-phone pass, reader completion, submission, owner decision, source application, or product endpoint. |
+
+### Guided owner path
+
+The TTY-only `bun run dogfood` wizard was exercised against the real ignored series state without creating a submission or owner decision.
+
+| Check | Observed result |
+|---|---|
+| Current-state menu | A real pseudo-terminal showed `OD-01` as awaiting reader submission and recommended, with only charter-declared `OD-01`, `OD-02`, and `OD-03` listed. Exit completed without starting an action. |
+| Guided Tailscale action | A second pseudo-terminal selected the recommended attempt, one-shot serve action, 15-minute expiry, and explicit confirmation. The fetched bytes matched the canonical ignored form, the listener closed after that GET, a second GET could not connect, the capability URL was redacted from recorded output, and the wizard returned to the menu and exited zero. |
+| Focused safety coverage | Wizard and workspace coverage passed 26 tests with 134 assertions. A focused wizard/workspace/run pass completed 38 tests with 222 assertions. |
+| Concurrency and interruption repair | Adversarial review found phantom-attempt logging, pre-confirmation timestamps, confirmed-action signal handling, and contradictory concurrent decision replacement. Initialization failures now log globally, timestamps are created only after confirmation, confirmed actions retain terminal ownership, and 20 concurrent decision attempts produced exactly one immutable run-local winner with 19 `artifact-already-exists` failures. |
+| First live form completion | The form successfully downloaded a bound `submission.json`, but the owner accidentally entered the misspelling as both quote and replacement. The no-op was caught before canonical intake. A second owner-controlled download corrected the replacement, took 41.586 seconds in the instrument, was copied byte-for-byte into the ignored canonical attempt path, and moved `OD-01` to the submitted stage. Historical `reader-form-v1` rejected empty and multiline quotes but not equal quote/replacement values. `reader-form-v2` now rejects equal values in browser and submission validation, while the completed `OD-01` v1 bytes remain unchanged. |
+| First isolated render | Preparation created case `DRY-8A782149D0E7` with the exact anchor, byte-preservation, checkout, mapping, OFM, and trust gates passing and all source/deployment write flags false. The pinned source commit predates `publish.yml`; the live lane incorrectly treated that absence as success and copied the entire vault instead of running default-deny selection, projection, and verification. Quartz then reached an unrelated unpublished Markdown file whose `--- ` plus list opening is interpreted as malformed YAML. No render evidence or owner-decision eligibility was produced. The failed run remains historical evidence and must not be retried or rewritten. |
+| Publication-boundary repair | Cyberbaser initialization, preparation, revalidation, and live rendering now require tracked `publish.yml` at the exact source pin. The whole-vault fallback is removed. Both lanes must prove `cyberbaser-select-project-verify`, mapped-source selection, successful projection, and successful verification before Quartz starts. A policy-free historical OD attempt is blocked and may be recovered only through one explicit immutable repin that preserves the original operator, submission, failed run, and logs while deriving a new base-bound case. |
+| Evidence claim | The signed-out physical-phone handoff and returned submission occurred. The owner-authorized repin, no-write preparation, verified publication projection, pinned-Quartz render, local owner review, acceptance, and fresh decision validation completed for `DRY-25DFAA853DD7`. The exact accepted candidate was then applied separately, committed, deployed, and verified at the live URL with the old selected text absent and replacement present. Automated fixtures cover the mechanical recovery path but are not physical-phone or independent-human evidence. The real end-to-end result is maintainer self-dogfood, not an independent-owner or product-interface result. |
+
+### Synthetic CLI smoke and adversarial attempts
+
+Before the series-charter gate was added, the actual `dogfood:*` CLI entry points were exercised with local synthetic Git fixtures carrying the public Cyberbase remote identity. These remain historical pre-charter command-path checks, not current charter-gate coverage, human attempts, or live-Cyberbase attempts.
+
+| Attempt | Command-path outcome |
+|---|---|
+| `OD-90` | `dogfood:init` created the ignored profile-specific form, operator, decision, and observation files. `dogfood:prepare` produced case `DRY-31581C9D965C`, an owner card, `evidenceClass: owner-self-dogfood`, and `ownerDecisionEligible: false` with `render-evidence-required`. The supplied checkout remained clean and byte-unchanged. |
+| `OD-92` | A repeated exact quote stopped `dogfood:prepare` with `quote-ambiguous`; both source occurrences remained unchanged and the checkout stayed clean. |
+| `OD-93` | Advancing the fixture checkout after initialization stopped `dogfood:prepare` with `checkout-commit-mismatch`, naming the actual and pinned commits. No silent rebase or fallback lookup occurred. |
+| Invalid attempt namespace/authorization | `owner-self-dogfood` with an `HC-*` ID stopped with `dogfood-attempt-id-required`; Cyberbase prefill with authorization other than exact `yes` stopped with `source-authorization-required`. |
+
+All attempt records were verified below ignored `.workspace/human-correction-pilot/`; all three fixture repositories were clean after harness execution. The synthetic attempts were removed after recording these non-sensitive aggregate outcomes. A bound owner rejection remains covered by the deterministic injected-live-lane test because no synthetic fixture may be mislabeled as a real owner decision.
 
 ## Complete Cyberbase-profile operator rehearsal
 
@@ -75,7 +167,7 @@ pilot:init → pilot:prepare → pilot:render → pilot:decision
 | Source checkout | SHA-256 `deff0dae352d59d3334234f00fecf73d3aa1a492f9fa04635decc304494bde6c` before and after; Git status remained empty. |
 | Cleanup | The ignored attempt and temporary checkout were removed. |
 
-The later one-command `pilot:init` prefill was also exercised against the clean pinned public Cyberbase checkout and the real owner-supplied IR DROP source mapping. It derived commit `b320c5c2c92d646b9df7019c9e29034341ebff6b`, verified the origin, clean state, tracked source bytes, and explicit public URL, then created the reader form and a prefilled private operator record. The rehearsal attempt was removed afterward.
+The later one-command `pilot:init` prefill was also exercised against the clean pinned public Cyberbase checkout and the previously selected owner-mapped IR DROP source. It derived commit `b320c5c2c92d646b9df7019c9e29034341ebff6b`, verified the origin, clean state, tracked source bytes, and explicit public URL, then created the reader form and a prefilled private operator record. The rehearsal attempt was removed afterward.
 
 Two earlier full rehearsals failed closed and were retained as adverse observations. The first exposed raw-HTML derivative multiplicity: a visually unique source passage appeared more than once in Quartz output. The rule now retains exact source-byte uniqueness while accepting one-or-more derivative appearances only when every old-text appearance disappears from the candidate and the replacement is absent from the baseline. The second exposed expected Quartz build variance in successful-link aggregates and generated HTML hashes. Decision validation now reruns the live lane and compares a deterministic safety projection that retains publication verification, candidate-only and baseline-only broken tuples, rendered old/new safety, source isolation, no-write assertions, and cleanup.
 
@@ -86,7 +178,7 @@ This rehearsal is not a reader attempt, owner result, accepted correction, appli
 | Observation | Result |
 |---|---|
 | Quote resolution | Exactly once at half-open UTF-8 byte range `[302, 394)` |
-| Source line during independent confirmation | Line 11 |
+| Source line during separate mechanical confirmation | Line 11 |
 | Base byte length | 2,678 |
 | Candidate byte length | 2,679 |
 | Size delta | One UTF-8 byte inserted |
@@ -267,10 +359,10 @@ These are review artifacts, not the private runnable case input and not a produc
 - One public Cyberbase candidate and one pinned Quartz configuration do not establish demand, general renderer support, a generalized source map, abuse resistance, accessibility, or interoperability.
 - The harness performs no source I/O and ships no endpoint, editor, hosted console, automatic writer, account system, or account-free contribution path.
 
-The next work is the precommitted independent pilot: five ordinary readers, one independently operated owner, owner-confirmed source mappings, local review cards, owner-controlled application, live verification of accepted corrections, human timing, and the forced owner-preference question. The fixed thresholds remain unchanged.
+The next work is routine owner-alpha use of the completed boundary, with mechanical setup, adversarial checks, post-application verification, deployment monitoring, and live checks automated wherever possible. `OD-02` and `OD-03` are Not run — superseded; do not initialize them. Nondelegated editorial judgment and outward source/publication authority remain human unless a precise owner policy delegates them. The unchanged five-reader, one-independent-owner protocol is deferred until Cyberbaser needs stronger unfamiliar-reader or independent-owner usability evidence.
 
 ## Overall result
 
 The internal dry run **completed successfully for its narrow mechanical scope**. It demonstrated that one exact public typo candidate could be bound to pinned source bytes, prepared as one splice, classified, projected, rendered, checked for candidate-only link damage, represented in sanitized static evidence, and cleaned up without modifying the supplied checkout.
 
-It did not demonstrate human usability, useful correction demand, independent-owner acceptance, owner preference, a live correction, a shipped contribution workflow, or interoperability. It does not close Q09 and does not earn an R-number.
+The internal synthetic run did not demonstrate human usability, useful correction demand, independent-owner acceptance, owner preference, a shipped contribution workflow, or interoperability. Separately, `OD-01` demonstrated one maintainer-controlled live correction and nothing broader. Neither closes Q09 or earns an R-number.

@@ -65,18 +65,22 @@ async function createVault() {
   return root;
 }
 
-function fakeCheckout(root) {
+function fakeCheckout(root, { publishConfigPresent = true } = {}) {
   return async () => ({
     root,
     head: COMMIT,
     clean: true,
     origin: `${REPOSITORY}.git`,
     repositoryMatches: true,
-    publishConfigPresent: true,
+    publishConfigPresent,
   });
 }
 
-function injectedLaneFunctions({ candidateOnlyLink = true, failCandidateRender = false } = {}) {
+function injectedLaneFunctions({
+  candidateOnlyLink = true,
+  failCandidateRender = false,
+  projectionMode = 'cyberbaser-select-project-verify',
+} = {}) {
   const calls = { build: [], setup: [], render: [], cleanup: [] };
   return {
     calls,
@@ -94,7 +98,7 @@ function injectedLaneFunctions({ candidateOnlyLink = true, failCandidateRender =
         calls.build.push(lane);
         await cp(vaultDir, outputDir, { recursive: true });
         return {
-          mode: 'injected-fake-build',
+          mode: projectionMode,
           selection: { counts: { pages: 1, assets: 0 }, errorCount: 0, sourcePublished: true },
           projection: { ok: true, counts: { pages: 1, assets: 0 }, failureCount: 0, warningCount: 0, verification: { ok: true } },
         };
@@ -213,6 +217,53 @@ describe('isolated live correction lane', () => {
     expect((await readFile(sourceFile)).equals(sourceBefore)).toBe(true);
   });
 
+  test('missing pinned publication policy stops before temporary copies or renderer work', async () => {
+    const checkout = await createVault();
+    const sourceFile = path.join(checkout, SOURCE_PATH);
+    const sourceBefore = await readFile(sourceFile);
+    const calls = { temporary: 0, copy: 0, setup: 0, render: 0 };
+
+    await expect(runLiveCorrection({
+      caseData: CASE,
+      checkoutDir: checkout,
+      pinnedCommit: COMMIT,
+      ownerPolicy: SYNTHETIC_OWNER_POLICY,
+      policyRevision: 'test-live-policy-v1',
+      basePath: 'kb',
+    }, {
+      inspectCheckout: fakeCheckout(checkout, { publishConfigPresent: false }),
+      async createTemporaryRoot() { calls.temporary += 1; },
+      async copyVault() { calls.copy += 1; },
+      async setupRenderer() { calls.setup += 1; },
+      async renderSite() { calls.render += 1; },
+    })).rejects.toMatchObject({ code: 'publication-boundary-policy-missing' });
+
+    expect(calls).toEqual({ temporary: 0, copy: 0, setup: 0, render: 0 });
+    expect((await readFile(sourceFile)).equals(sourceBefore)).toBe(true);
+  });
+
+  test('nonstandard projection evidence stops before renderer setup', async () => {
+    const checkout = await createVault();
+    const injected = injectedLaneFunctions({ projectionMode: 'legacy-verbatim-copy' });
+
+    await expect(runLiveCorrection({
+      caseData: CASE,
+      checkoutDir: checkout,
+      pinnedCommit: COMMIT,
+      ownerPolicy: SYNTHETIC_OWNER_POLICY,
+      policyRevision: 'test-live-policy-v1',
+      basePath: 'kb',
+    }, {
+      inspectCheckout: fakeCheckout(checkout),
+      ...injected.dependencies,
+    })).rejects.toMatchObject({ code: 'publication-boundary-evidence-invalid' });
+
+    expect(injected.calls.build).toEqual(['baseline', 'candidate']);
+    expect(injected.calls.setup).toEqual([]);
+    expect(injected.calls.render).toEqual([]);
+    expect(injected.calls.cleanup).toEqual([injected.calls.workspace]);
+  });
+
   test('rejects an explicit commit that differs from the frozen case', async () => {
     const checkout = await createVault();
     await expect(runLiveCorrection({
@@ -241,6 +292,20 @@ describe('live lane deterministic primitives', () => {
     expect(delta.baselineOnly).toEqual([baselineOnly]);
     expect(delta.unchanged).toBe(1);
     expect(Object.isFrozen(delta.candidateOnly)).toBe(true);
+  });
+
+  test('rejects a projection without publish.yml before creating output', async () => {
+    const vault = await temporary('correction-policy-free-vault-');
+    const output = path.join(await temporary('correction-policy-free-output-'), 'projected');
+    await mkdir(path.join(vault, 'docs'), { recursive: true });
+    await writeFile(path.join(vault, SOURCE_PATH), `# Guide\n\n${QUOTE}\n`, 'utf8');
+
+    await expect(buildProjection({
+      vaultDir: vault,
+      outputDir: output,
+      repositoryRelativePath: SOURCE_PATH,
+    })).rejects.toMatchObject({ code: 'publication-boundary-policy-missing' });
+    expect(await pathExists(output)).toBe(false);
   });
 
   test('composes current select, project, and verifyProjection without Quartz', async () => {
@@ -278,6 +343,30 @@ describe('live lane deterministic primitives', () => {
     await writeFile(path.join(repository, 'guide.md'), '# Changed\n', 'utf8');
     await expect(inspectCheckout({ checkoutDir: repository, pinnedCommit: head, repository: REPOSITORY }))
       .rejects.toMatchObject({ code: 'checkout-not-clean' });
+  });
+
+  test('rejects working publish.yml bytes hidden from Git status', async () => {
+    const repository = await temporary('correction-policy-bytes-');
+    await command(['git', 'init', '-q'], repository);
+    await command(['git', 'config', 'user.email', 'test@example.org'], repository);
+    await command(['git', 'config', 'user.name', 'Test User'], repository);
+    await mkdir(path.join(repository, 'docs'), { recursive: true });
+    await writeFile(path.join(repository, SOURCE_PATH), `# Guide\n\n${QUOTE}\n`, 'utf8');
+    await writeFile(path.join(repository, 'publish.yml'), 'allow:\n  - "docs/**"\n', 'utf8');
+    await command(['git', 'add', '.'], repository);
+    await command(['git', 'commit', '-q', '-m', 'fixture'], repository);
+    await command(['git', 'remote', 'add', 'origin', `${REPOSITORY}.git`], repository);
+    const head = await command(['git', 'rev-parse', 'HEAD'], repository);
+
+    await command(['git', 'update-index', '--assume-unchanged', 'publish.yml'], repository);
+    await writeFile(path.join(repository, 'publish.yml'), 'allow:\n  - "private/**"\n', 'utf8');
+    expect(await command(['git', 'status', '--porcelain=v1', '--untracked-files=all'], repository)).toBe('');
+    await expect(inspectCheckout({
+      checkoutDir: repository,
+      pinnedCommit: head,
+      repository: REPOSITORY,
+      sourcePath: SOURCE_PATH,
+    })).rejects.toMatchObject({ code: 'publication-policy-not-at-pinned-commit' });
   });
 
   test('rejects a clean checkout containing a tracked symbolic link', async () => {

@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "listen": {
+    "host": "127.0.0.1",
+    "port": 4317
+  },
+  "repository": {
+    "checkout": "/absolute/path/to/repository",
+    "remote": {
+      "name": "origin",
+      "url": "https://forgejo.example/owner/repository.git"
+    },
+    "branch": "main"
+  },
+  "owner": {
+    "identity": "owner",
+    "allowedTrustRoutes": [
+      "auto-merge",
+      "quick-review"
+    ]
+  },
+  "live": {
+    "baseUrl": "https://published.example/site/"
+  },
+  "workflow": {
+    "provider": "forgejo-actions",
+    "apiBaseUrl": "https://forgejo.example/api/v1",
+    "repository": "owner/repository",
+    "path": ".forgejo/workflows/publish-site.yml",
+    "event": "push",
+    "branch": "main",
+    "jobs": [
+      "build",
+      "deploy"
+    ],
+    "deploymentJob": "deploy"
+  },
+  "workspace": {
+    "root": ".workspace/owner-alpha",
+    "store": ".workspace/owner-alpha/store",
+    "site": ".workspace/owner-alpha/site",
+    "cache": ".workspace/owner-alpha/cache"
+  },
+  "paths": {
+    "include": [
+      "**/*.md"
+    ],
+    "exclude": [
+      ".git/**",
+      ".workspace/**"
+    ]
+  },
+  "limits": {
+    "maxSourceBytes": 2097152,
+    "maxReplacementBytes": 65536,
+    "maxChangedBytes": 65536,
+    "maxChangedLines": 60,
+    "maxArtifactBytes": 8388608,
+    "requestTimeoutMs": 30000,
+    "networkTimeoutMs": 900000
+  },
+  "checks": {
+    "allowedOfmVerdicts": [
+      "clean"
+    ],
+    "requirePublishedSource": true,
+    "requireProjectionVerification": true,
+    "requireNoNewBrokenLinks": true,
+    "requireRenderedWitness": true
+  },
+  "git": {
+    "autoCommit": true,
+    "autoPush": true,
+    "useHooks": true,
+    "commitMessagePrefix": "owner-alpha:"
+  }
+}

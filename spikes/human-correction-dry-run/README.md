@@ -43,22 +43,156 @@ They are review evidence, not runnable private inputs. Raw source mapping, local
 bun install --frozen-lockfile
 bun test
 bun run verify
+bun run verify:adversarial
 ```
 
-`bun run verify` is the authoritative offline synthetic verifier. It reads only the synthetic public Markdown fixtures and prints deterministic JSON. A nonzero exit means at least one named criterion failed. Bun may print its fixed `$ bun run bin/verify.js` package-script launcher banner to standard error; that banner is not a verifier diagnostic.
+`bun run verify` is the byte-stable authoritative `synthetic-v1` verifier. It reads only synthetic public Markdown fixtures and retains its original 11-check contract. `bun run verify:adversarial` is a separate deterministic verifier for stale-source, ambiguous-quote, and synthetic rejection-binding mechanics. Its output is classified `synthetic-mechanical-adversarial`, creates no human owner decision, and counts toward neither owner self-dogfood nor the human pilot. A nonzero exit from either command means at least one named criterion failed. Bun may print its fixed package-script launcher banner to standard error; that banner is not a verifier diagnostic.
 
-## Prepare a private human-pilot attempt
+## Owner self-dogfood and routine owner-alpha use
 
-The pilot operator layer is a thin concierge wrapper around the same case, evaluation, review, checkout, projection, rendering, and link-delta modules. It adds no server, database, account integration, hosted form, source writer, generalized renderer executor, or public-results publisher.
+`OD-01` completed the one genuine owner self-dogfood loop required in this phase. The immutable three-ID charter remains preserved, while `OD-02` and `OD-03` are **Not run — superseded** and must not be initialized. Their stale-source, ambiguous-quote, and rejection-path obligations now run through `verify:adversarial` as synthetic mechanical coverage. No human owner rejection occurred.
+
+Owner self-dogfood reuses the same case, evaluation, review, checkout, projection, rendering, link-delta, and decision-binding modules. It reuses the same case, evaluation, review, checkout, projection, rendering, link-delta, and decision-binding modules, but uses distinct `OD-01` through `OD-99` attempt IDs and the `owner-self-dogfood` profile. One maintainer may switch between reader and owner contexts. Status, preparation, rendering, review-card, and validated-decision outputs report `evidenceClass: owner-self-dogfood`, `countsTowardHumanPilot: false`, and `independentOwnerEvidence: false`; raw input/scaffold files are not evidence-classification outputs.
+
+### Retained guided owner path
+
+The wizard now serves as the preserved `OD-01` inspector and historical operator reference. It shows `OD-02` and `OD-03` as terminal **Not run — superseded** states and offers no initialization or decision action for either ID. From the Portagenty `dogfood` shell, run:
+
+```bash
+bun run dogfood
+```
+
+The TTY-only wizard reads the create-once charter, shows only its precommitted attempt IDs, derives each conservative stage, and marks the next valid action as recommended. Numbered menus guide initialization, the one-shot Tailscale handoff, preparation, one-time repin recovery for a policy-free historical pin, isolated rendering, explicit owner-decision entry, and decision validation. Fixed profile and binding values are generated from the existing contracts; source mappings and editorial decisions always require explicit owner input.
+
+Opening Portagenty or the wizard starts no listener. The wizard confirms immediately before every operation, and Exit, Ctrl-C, or EOF before confirmation performs no pending action or failure log. A confirmed editorial decision is stored once in the current run as `wizard-owner-decision.json`; concurrent wizard sessions cannot overwrite it, while the strict manual path continues to use the bound `owner-decision.json` scaffold. Repin and guided-decision binding transitions use the Linux `flock` utility for a nonblocking kernel lock. The ignored lock file may persist between processes, but only an active kernel lock means the attempt is busy, so process termination does not strand the attempt. It never infers a source from a URL, repairs a stale or ambiguous proposal, applies source, commits, pushes, deploys, or authorizes itself. Piped/non-TTY use fails promptly and points automation to the strict commands below.
+
+The historical charter remains a separate create-once prerequisite rather than a routine wizard action. Preserve the existing charter; do not recreate it to continue the superseded attempts.
+
+### Automation and exact CLI reference
+
+The completed phase used a privately precommitted series. Its non-overwriting charter declares three to five unique attempt IDs, assigns each of the five required obligations exactly once, uses every declared ID, names the planned signed-out phone/OS/browser, and fixes the maintainer-only evidence boundary. Its schema provides no dedicated fields for candidates, paths, URLs, quotes, replacements, notes, decisions, or observations, and rejects unknown field names. Use the mobile labels only to name the actual environment, not to embed other private data.
+
+Example shape only; replace the sample device, operating system, and browser with the actual planned environment before initialization:
+
+```json
+{
+  "schemaVersion": 1,
+  "artifactType": "private-owner-self-dogfood-series-charter",
+  "profile": "owner-self-dogfood",
+  "attemptIds": ["OD-01", "OD-02", "OD-03"],
+  "obligationAssignments": {
+    "normal-correction": "OD-01",
+    "signed-out-mobile-handoff": "OD-01",
+    "stale-source": "OD-02",
+    "ambiguous-quote": "OD-02",
+    "owner-rejection": "OD-03"
+  },
+  "plannedSignedOutMobile": {
+    "attemptId": "OD-01",
+    "device": "Pixel 8",
+    "operatingSystem": "Android 16",
+    "browser": "Chrome 138",
+    "signedIn": false
+  },
+  "evidenceClassification": {
+    "evidenceClass": "owner-self-dogfood",
+    "countsTowardHumanPilot": false,
+    "independentOwnerEvidence": false,
+    "claimBoundary": "maintainer operational and mechanical evidence only"
+  }
+}
+```
+
+Historical charter creation command:
+
+```bash
+bun run dogfood:series-init -- \
+  --input '/absolute/private/owner-dogfood-series.json'
+```
+
+The canonical file is `.workspace/human-correction-pilot/owner-self-dogfood-series.json`. It is now historical evidence: preserve it, preserve `OD-01`, and do not initialize the declared `OD-02` or `OD-03`. While it exists, a second initialization cannot replace it. This is an exclusive non-overwriting harness write, not cryptographic or filesystem immutability. Manual editing or deletion is outside the guarantee and invalidates the series. `dogfood:init` fails before checkout inspection or attempt-artifact creation when the charter is missing or the requested OD ID was not declared; the command may still record a private global failure log.
+
+Historical `OD-01` initialization command after the owner chose a genuine candidate and confirmed its page-to-source mapping:
+
+```bash
+bun run dogfood:init -- \
+  --attempt OD-01 \
+  --profile owner-self-dogfood \
+  --checkout '/absolute/path/to/clean/cyberbase-checkout' \
+  --source 'owner/supplied/repository-relative-page.md' \
+  --url 'https://cybersader.github.io/cyberbase/exact-public-page/' \
+  --authorize-source yes
+```
+
+Initialization creates the local reader form and operator/decision files plus `dogfood-observation.json`, a private scaffold that carries the attempt's exact precommitted obligations, separate reader and owner device/browser/account contexts, manual interventions, and whether a source write, deployment, or live verification actually happened. It also requires tracked `publish.yml` at the exact pinned checkout revision. The source commit and publication policy are one identity: an untracked policy, policy copied from another revision, or policy-free source pin cannot satisfy the Cyberbaser boundary. The planned phone context is prefilled for the mobile obligation. Decision validation compares both the obligations and that mobile context with the canonical charter. Blank observation fields are not evidence, and automated browser emulation must not be labeled as a physical-phone result.
+
+The wizard offers the bounded phone handoff when an initialized attempt is awaiting submission. Its exact CLI equivalent is:
+
+```bash
+bun run dogfood:serve -- --attempt OD-01 --expires-minutes 15
+```
+
+It safely opens only the declared attempt's canonical `reader-form.html`, verifies that its bytes still match the generated instrument, snapshots those bytes in memory, discovers the current node's active Tailscale IPv4, and binds an ephemeral listener to that address only. It prints a random one-shot URL using the numeric Tailscale IPv4, atomically allows only the first bodyless GET, stops the listener immediately afterward or at the bounded expiry, and accepts no submission. Use the `http://100.*` URL exactly as printed; MagicDNS `.ts.net` hostnames are not advertised because browsers may upgrade them to HTTPS even though this disposable server does not terminate TLS. HEAD is metadata-only; body-bearing GET/HEAD and every mutating method are rejected without consuming the route. Treat the URL as an expiring capability secret. The link uses HTTP inside Tailscale's encrypted tunnel; it does not claim browser TLS. The command never falls back to `0.0.0.0`, a LAN address, loopback proxying, Tailscale Serve, or Funnel, and it does not read or change any existing Tailscale Serve configuration.
+
+An owner-controlled exact-file transfer remains valid. In either mode, deliver **only** the form. Never serve or copy the containing attempt directory: it also contains private operator, observation, decision, log, and run artifacts. After the HTML loads, the form makes no subsequent request, uploads nothing, and downloads `submission.json` locally. Transfer only that downloaded JSON back to the laptop and place it at the returned attempt path. This is disposable study transport, not a hosted form, intake endpoint, account-free contribution path, or independent-reader/owner evidence.
+
+Preparation and rendering recheck tracked `publish.yml` at the exact source pin. There is no whole-vault or policy-free fallback. Both projection lanes must prove the exact `cyberbaser-select-project-verify` mode, confirm that the mapped source was selected, and pass projection verification before Quartz starts.
+
+A historical owner-dogfood attempt whose source pin predates `publish.yml` remains blocked evidence. The wizard offers a one-time explicit repin, or the owner can run:
+
+```bash
+bun run dogfood:repin -- \
+  --attempt OD-01 \
+  --checkout '/absolute/path/to/clean/policy-bearing-cyberbase-checkout' \
+  --authorize-source yes \
+  --reason 'The original source pin predates the publication policy.'
+```
+
+The operation validates the same repository, source path, public URL, correction, and owner policy against the replacement checkout. It writes create-once `operator-repin.json`; only the checkout path and base commit may change. The original `operator.json`, submission, failed runs, and logs remain untouched. A changed source pin produces a new mechanical case ID, so the old run remains historical evidence and the replacement case must be prepared separately.
+
+Then run:
+
+```bash
+bun run dogfood:prepare -- --attempt OD-01
+bun run dogfood:render -- --attempt OD-01
+# after the owner fills the bound owner-decision.json
+bun run dogfood:decision -- --attempt OD-01
+```
+
+The original recommended series covered a normal correction, signed-out mobile handoff, stale source, ambiguous quote, and owner rejection across three to five attempts. The charter remains historical evidence, but the phase closed after `OD-01`; `OD-02` and `OD-03` are Not run — superseded. `ADV-STALE-01` and `ADV-AMBIGUOUS-01` prove the fail-closed errors and no-application boundary. `ADV-REJECTION-BINDING-01` validates only a supplied synthetic reject fixture against attempt, case, and candidate digest. It creates no human-decision artifact and must never be described as a genuine owner rejection. Any changed validated case input still creates a different mechanical case ID, while a decision remains separately bound to an eligible existing case.
+
+The harness cannot complete the owner's editorial step on the owner's behalf. Before validating an owner-self-dogfood decision, it strictly loads `dogfood-observation.json`, verifies its attempt obligations and planned mobile context against the canonical charter, requires that source-write, deployment, and live-verification flags are still false, and snapshots the private observation into the validated decision artifact. That validated artifact is create-once: a later contradictory decision cannot replace it. An accepted candidate is applied and published only through a separately authorized owner-controlled route. Nothing in the proposal path writes canonical source, commits, pushes, deploys, or authorizes itself.
+
+### Read-only post-application verification
+
+After an authorized application and deployment already exist, verify them without inferring a latest commit or run:
+
+```bash
+bun run dogfood:verify-live -- \
+  --attempt OD-01 \
+  --checkout '/absolute/repository/root/containing-the-git-objects' \
+  --application-commit '<40-character-commit>' \
+  --deployment-run-id '<positive-actions-run-id>' \
+  --wait-seconds 30
+```
+
+The command requires the immutable validated `accept` and its reviewed no-write evaluation. It accepts any explicit checkout of the validated repository that contains the bound objects; current `HEAD` need not equal the historical commit. Git object inspection disables optional locks and lazy promisor-object fetching. The application must be single-parented from the reviewed base, change exactly one path without changing its mode, match the reviewed baseline and candidate digests, and preserve byte-identical prefix and suffix outside the reconstructed splice. The explicit Actions run must use the active `Publish vault site` workflow at `.github/workflows/publish-site.yml`, be a push to `main` for the application SHA, contain exactly the successful `build` and `deploy` jobs, and bind the deploy job to a successful `github-pages` deployment whose environment URL covers the bound public page. Network requests and response bodies share the caller's deadline and fixed byte limits. The public check requires the exact normalized path and query, an HTML content type, and the replacement in rendered page text rather than arbitrary response bytes. Only after every check passes does the command create private `post-application-live-verification.json` once. It performs no Git mutation, source write, remote mutation, deployment trigger, or observation edit.
+
+## Prepare a deferred independent human-pilot attempt
+
+The pilot operator layer is a thin concierge wrapper around the same modules. It adds no deployed or Cyberbaser-operated product server, database, account integration, hosted form, source writer, generalized renderer executor, or public-results publisher. The optional expiring Tailscale command above is an owner-local exact-file transport and accepts no intake. This larger protocol is preserved for later if Cyberbaser needs unfamiliar-reader or independent-owner usability evidence; it was not required before `OD-01` and remains deferred.
 
 All live material is created below the repository's ignored `.workspace/human-correction-pilot/` directory. Every command verifies its destinations with `git check-ignore`, rejects symlinked workspace components, and keeps raw submissions, credit requests, owner mappings, local paths, and private cards out of tracked files.
 
-There are two explicit profiles:
+There are three explicit profiles:
 
 - `cyberbase-rehearsal` supplies safe defaults for the public Cyberbase repository, the Cyberbaser publication boundary, the pinned Quartz `v4.5.2` wrapper, and an anonymous/full-review policy. It is permanently marked as **zero counted independent-owner evidence**.
+- `owner-self-dogfood` uses the same Cyberbase safety defaults with `OD-*` attempt IDs, a private observation scaffold, and explicit maintainer-only evidence classification. It can never claim independent owner evidence or count toward the human pilot.
 - `independent-counted` guesses no repository, checkout, source path, commit, URL, base path, or build command. It requires explicit source-processing authorization and independent-owner attestation. The Cyberbase repository is rejected under this profile, including equivalent trailing-slash and `.git` URLs. The preparation kit itself always reports `countsTowardPilot: false`; only the later private human record may count an attempt or result after a bound decision, owner-controlled application, and live verification.
 
-Initialize one attempt only after the human study is ready to begin. The existing two-argument form creates blank mapping templates for either profile:
+`countsTowardPilot` is the legacy preparation-kit compatibility field and remains false on every kit artifact. `countsTowardHumanPilot` is the explicit profile evidence-classification field and is also false for rehearsal and owner self-dogfood outputs. Neither field turns an automated or prepared artifact into a counted human result.
+
+Initialize one attempt only after the human study is ready to begin. The existing two-argument form creates blank mapping templates for any profile:
 
 ```bash
 bun run pilot:init -- --attempt HC-01 --profile cyberbase-rehearsal
@@ -66,7 +200,7 @@ bun run pilot:init -- --attempt HC-01 --profile cyberbase-rehearsal
 bun run pilot:init -- --attempt HC-01 --profile independent-counted
 ```
 
-For a Cyberbase dogfood rehearsal, the owner-confirmed mapping can instead be verified and prefilled in one command:
+For a Cyberbase rehearsal or owner self-dogfood attempt, the owner-confirmed mapping can instead be verified and prefilled in one command. Use `HC-*` with `cyberbase-rehearsal` or `OD-*` with `owner-self-dogfood`:
 
 ```bash
 bun run pilot:init -- \
@@ -78,9 +212,9 @@ bun run pilot:init -- \
   --authorize-source yes
 ```
 
-The four prefill flags are all-or-none and are accepted only for `cyberbase-rehearsal`; authorization must be exactly `yes`. The command derives the checkout's exact local `HEAD`, then reuses the live lane's repository-root, no-symlink, clean-worktree, Cyberbase-origin, tracked-source, and source-at-HEAD verification before creating anything. It writes that verified checkout, commit, owner-supplied source path, exact public URL, and authorization into `operator.json`. It never infers a source from the URL, title, slug, search, or renderer output, and it never overwrites an existing attempt.
+The four prefill flags are all-or-none and are accepted only for `cyberbase-rehearsal` or `owner-self-dogfood`; authorization must be exactly `yes`. The command derives the checkout's exact local `HEAD`, then reuses the live lane's repository-root, no-symlink, clean-worktree, Cyberbase-origin, tracked-source, source-at-HEAD, and tracked-policy-at-HEAD verification before creating anything. It writes that verified checkout, commit, owner-supplied source path, exact public URL, and authorization into `operator.json`. It never infers a source from the URL, title, slug, search, or renderer output, and it never overwrites an existing attempt.
 
-Successful JSON output identifies `readerForm`, `submission`, and `operator` paths explicitly. Blank initialization creates an incomplete `operator.json`; Cyberbase prefill creates a verified mapped operator. Both modes create a blank `owner-decision.json` scaffold. The form is one self-contained local file. It has exactly the seven precommitted participant fields, makes no network request, loads no remote resource, collects no account/contact/credential field, and downloads `submission.json` locally. An empty replacement requires an explicit deletion confirmation. Browsers normalize textarea line endings before script can serialize them, so this bounded instrument rejects multiline exact quotes and replacements. Supported single-line values are not trimmed, case-folded, or whitespace-repaired; rationale may still contain multiple lines.
+Successful JSON output identifies `readerForm`, `submission`, and `operator` paths explicitly. Blank initialization creates an incomplete `operator.json`; Cyberbase prefill creates a verified mapped operator. Both modes create a blank `owner-decision.json` scaffold. The form is one self-contained local file. It has exactly the seven precommitted participant fields, makes no network request, loads no remote resource, collects no account/contact/credential field, and downloads `submission.json` locally. New attempts use `reader-form-v2`, which rejects an exact quote equal to its replacement in browser and submission validation. Preparation and post-application verification also require the submission's declared instrument version to match the canonical issued form bytes, so a v2 submission cannot claim the v1 validation contract. Historical `reader-form-v1` forms and submissions retain their original validation contract, preserving `OD-01` bytes. An empty replacement requires an explicit deletion confirmation. Browsers normalize textarea line endings before script can serialize them, so this bounded instrument rejects multiline exact quotes and replacements. Supported single-line values are not trimmed, case-folded, or whitespace-repaired; rationale may still contain multiple lines.
 
 The human concierge must then:
 
@@ -96,7 +230,7 @@ Prepare the exact no-write candidate and private owner card:
 bun run pilot:prepare -- --attempt HC-01
 ```
 
-Preparation verifies the checkout before and after evaluation, requires the owner-mapped Markdown file to be tracked with bytes exactly matching the pinned commit, forces the trust subject to `anonymous` with an empty author regardless of public credit, and writes one deterministic run directory named with the existing mechanical case ID. Changed mapping, base revision, quote, or replacement therefore creates a different run instead of overwriting previous evidence. The private run includes exact `baseline-source.md` and `candidate-source.md` snapshots, a bound `render-attestation.json` scaffold, and a bound owner-decision template. These remain under ignored workspace storage and are not source writes. The initial card is explicitly incomplete: rendering is required before `ownerDecisionEligible` can become true. OFM `damage` produces no owner card; `suspect` produces a blocked card; trust remains informational.
+Preparation verifies the checkout before and after evaluation, requires the owner-mapped Markdown file to be tracked with bytes exactly matching the pinned commit, forces the trust subject to `anonymous` with an empty author regardless of public credit, and writes one deterministic run directory named with the existing mechanical case ID. Any changed validated case input creates a different run instead of overwriting previous evidence; owner decisions remain separately bound to an eligible existing case. The private run includes exact `baseline-source.md` and `candidate-source.md` snapshots, a bound `render-attestation.json` scaffold, and a bound owner-decision template. These remain under ignored workspace storage and are not source writes. The initial card is explicitly incomplete: rendering is required before `ownerDecisionEligible` can become true. OFM `damage` produces no owner card; `suspect` produces a blocked card; trust remains informational.
 
 For a Cyberbase rehearsal, reuse the existing isolated pinned-Quartz lane:
 
@@ -200,12 +334,16 @@ Normal tests inject fake build and render functions. They make no network reques
 - `src/pilot-run.js`: no-write pilot preparation, exact source snapshots, fresh evidence rebinding, Cyberbase-live or owner-static render verification, and owner-decision binding validation.
 - `src/pilot-review-card.js`: deterministic private owner cards, complete contract checks, participant context, and explicit pending status.
 - `src/cli.js`: one strict `--name value` parser shared by the four pilot commands.
-- `src/verification.js`: authoritative synthetic checks shared by the verifier and tests.
-- `bin/verify.js`: deterministic synthetic verifier entry point.
+- `src/verification.js`: authoritative byte-stable `synthetic-v1` checks shared by the original verifier and tests.
+- `src/adversarial-verification.js`: deterministic stale, ambiguous, and synthetic rejection-binding safety scenarios with explicit non-human classification.
+- `src/post-application-verification.js`: read-only Git-object, deployment-job, and live-page verification for an already authorized application.
+- `bin/verify.js`: original deterministic synthetic verifier entry point.
+- `bin/verify-adversarial.js`: deterministic synthetic mechanical adversarial verifier.
+- `bin/dogfood-verify-live.js`: strict post-application and live verifier; creates one private evidence artifact only after success.
 - `bin/dry-run.js`: read-only local-checkout entry point.
 - `bin/live-run.js`: isolated local projection/rendering entry point; no public deployment or source application.
 - `bin/pilot-init.js`, `bin/pilot-prepare.js`, `bin/pilot-render.js`, `bin/pilot-decision.js`: private concierge operator entry points.
-- `templates/`: public-safe local form and JSON scaffolds; no participant data.
+- `templates/`: public-safe local form and JSON scaffolds; `reader-form-v1.html` preserves historical bytes and `reader-form.html` is the v2 default; no participant data.
 - `fixtures/`: synthetic public Markdown only.
 - `test/`: focused unit and integration coverage.
 - [`TESTING.md`](./TESTING.md): predeclared criteria and commands.

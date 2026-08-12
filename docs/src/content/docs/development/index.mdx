@@ -13,6 +13,16 @@ Cyberbaser is in **v1 Build**. This repository contains two different publish co
 
 GitHub, Actions, Pages, and Quartz are the current dogfood infrastructure, not permanent product dependencies.
 
+## Owner-alpha container deployment
+
+WP2 packages the private owner-alpha wiki as one Linux/amd64 OCI image with explicit rootless and rootful Docker Engine profiles. Start with the [operator-first deployment guide](/cyberbaser/development/owner-alpha-container-deployment/) for the exact private-address, mount, credential-socket, state-volume, bootstrap, recovery, upgrade, and teardown contract.
+
+The package is mechanically accepted but not published to a registry. Docker Desktop, bridge publishing, physical-device Save evidence, and an external-forge/live-site Save from the container remain outside the claim.
+
+## Account-free intake Lane B
+
+WP4 Lane B is implemented as a strict account-free derivation package, a carrier-neutral local proposal queue, a separate optional Bun intake service, a disabled-by-default Quartz correction form, and local-only OCI/Compose packaging. The intake service is a sibling of owner-alpha, not part of the owner-authority process, and its only durable write is a dedicated proposal queue. The implementation is mechanically tested but not publicly deployed, human-tested, offered, or authorized to write source. Q09 remains open. See [Account-free intake Lane B](/cyberbaser/development/account-free-intake/).
+
 ## Docs site: local development
 
 ```bash
@@ -47,9 +57,20 @@ bun test --cwd packages/projection
 bun test --cwd packages/linkcheck
 bun test --cwd packages/trust
 bun test --cwd packages/correction
+bun test --cwd packages/proposal
+bun test packages/forgejo-intake/test
+bun test packages/proposal-queue/test
+bun test packages/account-free-intake/test
+bun test apps/account-free-intake/test
+bash renderers/quartz-cyberbase/tests/run.sh
+bun test deploy/account-free-intake/test
 ```
 
-`@cyberbaser/correction` is an exact UTF-8 quote-anchor and single-splice, no-I/O primitive for the precommitted [concierge pilot](/cyberbaser/research/concierge-human-correction-pilot/). Passing its tests does not make it a shipped editor, endpoint, writer, or account-free product path.
+`@cyberbaser/correction` is the exact UTF-8 quote/offset and single-splice primitive. `@cyberbaser/proposal` builds the canonical one-file, one-splice external adapter-output contract around it and feeds receiver-verified subjects into the existing trust classifier. Both packages are pure and no-I/O. `@cyberbaser/account-free-intake`, `@cyberbaser/proposal-queue`, the sibling intake app, the disabled Quartz form, and the local deployment bundle implement Lane B through retained review evidence only. None writes source or closes Q09. See [Proposal Contract](/cyberbaser/design/proposal-contract/) and [Account-free intake Lane B](/cyberbaser/development/account-free-intake/).
+
+## Forgejo intake adapter
+
+`@cyberbaser/forgejo-intake` is the first effectful external adapter for that contract. It reconstructs one proposal from an open Forgejo pull request using four injected read-only API responses and exact inert Git objects. The package is hermetically tested against injected Forgejo metadata and real local Git, and its CI has read-only repository permissions. It is not validated against a live Forgejo instance, installed, linked from rendered pages, offered to contributors, or production authority. See [Forgejo intake adapter](/cyberbaser/development/forgejo-intake-adapter/).
 
 ## Deployments
 

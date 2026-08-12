@@ -6,13 +6,19 @@ import {
   convertReaderFieldsToCase,
   countsTowardPilot,
   createSubmissionRecord,
+  evidenceClassification,
   operatorDefaults,
+  validateDogfoodObservation,
+  validateDogfoodObservationSeriesBinding,
   validateOperator,
+  validateOperatorRepin,
+  validateOwnerDogfoodSeriesCharter,
   validateOwnerDecision,
   validateSubmission,
 } from '../src/pilot-input.js';
 
 const TEMPLATE = path.resolve(import.meta.dir, '../templates/reader-form.html');
+const V1_TEMPLATE = path.resolve(import.meta.dir, '../templates/reader-form-v1.html');
 const FORM_FIELDS = Object.freeze({
   pageUrl: 'https://example.org/kb/guide',
   exactQuote: '  Exact line with é and emoji ✅  ',
@@ -22,6 +28,49 @@ const FORM_FIELDS = Object.freeze({
   publicCreditName: 'Reader Name',
   creditConsent: 'no',
 });
+
+function validDogfoodOperator(overrides = {}) {
+  const value = operatorDefaults('OD-01', 'owner-self-dogfood');
+  return {
+    ...value,
+    checkoutDir: '/owner/cyberbase',
+    baseCommit: '1234567890abcdef1234567890abcdef12345678',
+    sourcePath: 'guide.md',
+    publicUrl: 'https://cybersader.github.io/cyberbase/guide/',
+    sourceAuthorizedForLocalProcessing: true,
+    ...overrides,
+  };
+}
+
+function validDogfoodSeries(overrides = {}) {
+  return {
+    schemaVersion: 1,
+    artifactType: 'private-owner-self-dogfood-series-charter',
+    profile: 'owner-self-dogfood',
+    attemptIds: ['OD-01', 'OD-02', 'OD-03'],
+    obligationAssignments: {
+      'normal-correction': 'OD-01',
+      'signed-out-mobile-handoff': 'OD-01',
+      'stale-source': 'OD-02',
+      'ambiguous-quote': 'OD-02',
+      'owner-rejection': 'OD-03',
+    },
+    plannedSignedOutMobile: {
+      attemptId: 'OD-01',
+      device: 'Owner phone',
+      operatingSystem: 'Mobile OS',
+      browser: 'Mobile browser',
+      signedIn: false,
+    },
+    evidenceClassification: {
+      evidenceClass: 'owner-self-dogfood',
+      countsTowardHumanPilot: false,
+      independentOwnerEvidence: false,
+      claimBoundary: 'maintainer operational and mechanical evidence only',
+    },
+    ...overrides,
+  };
+}
 
 function validIndependentOperator(overrides = {}) {
   return {
@@ -76,6 +125,17 @@ describe('reader form contract', () => {
     expect(html).toContain('__PROFILE_NOTICE__');
   });
 
+  test('defaults to reader-form-v2 while preserving the historical v1 template', async () => {
+    const [current, historical] = await Promise.all([
+      readFile(TEMPLATE, 'utf8'),
+      readFile(V1_TEMPLATE, 'utf8'),
+    ]);
+    expect(current).toContain("instrumentVersion: 'reader-form-v2'");
+    expect(current).toContain('Replacement must differ from the exact quote.');
+    expect(historical).toContain("instrumentVersion: 'reader-form-v1'");
+    expect(historical).not.toContain('Replacement must differ from the exact quote.');
+  });
+
   test('has no network target, remote resource, storage call, account field, or contact collector', async () => {
     const html = await readFile(TEMPLATE, 'utf8');
     expect(html).not.toMatch(/<form[^>]+(?:action|method)=/iu);
@@ -93,6 +153,7 @@ describe('reader form contract', () => {
       elapsedMs: 5000,
       fields: { ...FORM_FIELDS, replacement: '' },
     });
+    expect(submission.instrumentVersion).toBe('reader-form-v2');
     expect(submission.exactQuote).toBe(FORM_FIELDS.exactQuote);
     expect(submission.replacement).toBe('');
     expect(submission.rationale).toBe(FORM_FIELDS.rationale);
@@ -112,6 +173,23 @@ describe('reader form contract', () => {
       elapsedMs: 5000,
       fields: { ...FORM_FIELDS, replacement: 'line 1\r\nline 2' },
     })).toThrow(/must be one line/u);
+    expect(() => createSubmissionRecord({
+      attemptId: 'HC-01',
+      openedAt: '2026-07-28T12:00:00.000Z',
+      submittedAt: '2026-07-28T12:00:05.000Z',
+      elapsedMs: 5000,
+      fields: { ...FORM_FIELDS, replacement: FORM_FIELDS.exactQuote },
+    })).toThrow(/replacement must differ/u);
+    const historical = createSubmissionRecord({
+      attemptId: 'HC-01',
+      openedAt: '2026-07-28T12:00:00.000Z',
+      submittedAt: '2026-07-28T12:00:05.000Z',
+      elapsedMs: 5000,
+      instrumentVersion: 'reader-form-v1',
+      fields: { ...FORM_FIELDS, replacement: FORM_FIELDS.exactQuote },
+    });
+    expect(historical.instrumentVersion).toBe('reader-form-v1');
+    expect(historical.replacement).toBe(historical.exactQuote);
   });
 });
 
@@ -171,8 +249,240 @@ describe('strict pilot schemas and deterministic conversion', () => {
       'https://github.com/cybersader/cyberbase.git',
     ]) {
       expect(() => validateOperator(validIndependentOperator({ repository })))
-        .toThrow(/permanently limited to the zero-count rehearsal profile/u);
+        .toThrow(/limited to non-counting rehearsal and owner-self-dogfood profiles/u);
     }
+  });
+
+  test('owner self-dogfood has a distinct ID namespace and can never claim independent evidence', () => {
+    const operator = validateOperator(validDogfoodOperator());
+    expect(operator.attemptId).toBe('OD-01');
+    expect(evidenceClassification(operator)).toEqual({
+      evidenceClass: 'owner-self-dogfood',
+      countsTowardHumanPilot: false,
+      independentOwnerEvidence: false,
+      claimBoundary: 'maintainer operational and mechanical evidence only',
+    });
+    expect(countsTowardPilot(operator)).toBe(false);
+    expect(() => operatorDefaults('HC-01', 'owner-self-dogfood'))
+      .toThrow(/must use an OD-01 through OD-99 attempt ID/u);
+    expect(() => operatorDefaults('OD-01', 'cyberbase-rehearsal'))
+      .toThrow(/must use an HC-01 through HC-99 attempt ID/u);
+    expect(() => validateOperator(validDogfoodOperator({ independentOwnerAttested: true })))
+      .toThrow(/cannot claim independent-owner evidence/u);
+  });
+
+  test('operator repin changes only checkout and base while preserving the original binding', () => {
+    const original = validDogfoodOperator();
+    const replacement = {
+      ...original,
+      checkoutDir: '/owner/cyberbase-policy-bearing',
+      baseCommit: 'abcdef1234567890abcdef1234567890abcdef12',
+    };
+    const artifact = {
+      schemaVersion: 1,
+      artifactType: 'private-owner-self-dogfood-operator-repin',
+      attemptId: 'OD-01',
+      reason: 'The original source pin predates publish.yml.',
+      repinnedAt: '2026-07-31T13:00:00.000Z',
+      previousCheckoutDir: original.checkoutDir,
+      previousBaseCommit: original.baseCommit,
+      publishConfigPresent: true,
+      replacementOperator: replacement,
+    };
+
+    expect(validateOperatorRepin(artifact, original)).toMatchObject({
+      previousBaseCommit: original.baseCommit,
+      replacementOperator: { baseCommit: replacement.baseCommit },
+    });
+    expect(() => validateOperatorRepin({
+      ...artifact,
+      replacementOperator: { ...replacement, publicUrl: 'https://example.org/changed' },
+    }, original)).toThrow(/may change only checkoutDir and baseCommit/u);
+    expect(() => validateOperatorRepin({
+      ...artifact,
+      publishConfigPresent: false,
+    }, original)).toThrow(/requires publish.yml/u);
+    expect(() => validateOperatorRepin({
+      ...artifact,
+      replacementOperator: original,
+    }, original)).toThrow(/different base commit/u);
+    expect(() => validateOperatorRepin({
+      ...artifact,
+      extra: 'not allowed',
+    }, original)).toThrow(/unknown field: extra/u);
+  });
+
+  test('owner self-dogfood observation keeps reader and owner contexts separate', () => {
+    const observation = validateDogfoodObservation({
+      schemaVersion: 1,
+      attemptId: 'OD-01',
+      evidenceClass: 'owner-self-dogfood',
+      precommittedObligations: [
+        'normal-correction',
+        'signed-out-mobile-handoff',
+      ],
+      scenario: 'signed-out mobile handoff',
+      readerContext: {
+        device: 'Owner phone', operatingSystem: 'Mobile OS', browser: 'Mobile browser', signedIn: false,
+      },
+      ownerContext: {
+        device: 'laptop', operatingSystem: 'desktop OS', browser: 'desktop browser', signedIn: true,
+      },
+      roleSeparation: 'same maintainer, separate reader and owner contexts',
+      startedAt: '2026-07-30T12:00:00.000Z',
+      completedAt: '',
+      manualInterventions: ['private file transfer'],
+      sourceWritePerformed: false,
+      publicDeploymentPerformed: false,
+      liveVerificationPerformed: false,
+      notes: '',
+    });
+    expect(observation.readerContext.device).toBe('Owner phone');
+    expect(observation.ownerContext.device).toBe('laptop');
+    expect(
+      validateDogfoodObservationSeriesBinding(observation, validDogfoodSeries()),
+    ).toEqual(observation);
+    expect(() => validateDogfoodObservationSeriesBinding({
+      ...observation,
+      precommittedObligations: ['signed-out-mobile-handoff'],
+    }, validDogfoodSeries())).toThrow(/do not match the precommitted series assignment/u);
+    for (const [field, value] of [
+      ['device', 'Different phone'],
+      ['operatingSystem', 'Different OS'],
+      ['browser', 'Different browser'],
+      ['signedIn', true],
+    ]) {
+      expect(() => validateDogfoodObservationSeriesBinding({
+        ...observation,
+        readerContext: { ...observation.readerContext, [field]: value },
+      }, validDogfoodSeries())).toThrow(/does not match the precommitted signed-out mobile context/u);
+    }
+    expect(() => validateDogfoodObservation({
+      ...observation,
+      ownerContext: { ...observation.ownerContext, signedIn: 'yes' },
+    })).toThrow(/signedIn must be boolean or null/u);
+  });
+
+  test('validates and freezes three-to-five-attempt owner dogfood series charters', () => {
+    const three = validateOwnerDogfoodSeriesCharter(validDogfoodSeries());
+    expect(three.attemptIds).toEqual(['OD-01', 'OD-02', 'OD-03']);
+    expect(Object.isFrozen(three)).toBe(true);
+    expect(Object.isFrozen(three.obligationAssignments)).toBe(true);
+    expect(Object.isFrozen(three.plannedSignedOutMobile)).toBe(true);
+    expect(Object.isFrozen(three.evidenceClassification)).toBe(true);
+
+    const four = validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      attemptIds: ['OD-01', 'OD-02', 'OD-03', 'OD-04'],
+      obligationAssignments: {
+        'normal-correction': 'OD-01',
+        'signed-out-mobile-handoff': 'OD-01',
+        'stale-source': 'OD-02',
+        'ambiguous-quote': 'OD-03',
+        'owner-rejection': 'OD-04',
+      },
+    }));
+    expect(four.attemptIds).toHaveLength(4);
+
+    const five = validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      attemptIds: ['OD-01', 'OD-02', 'OD-03', 'OD-04', 'OD-05'],
+      obligationAssignments: {
+        'normal-correction': 'OD-01',
+        'signed-out-mobile-handoff': 'OD-02',
+        'stale-source': 'OD-03',
+        'ambiguous-quote': 'OD-04',
+        'owner-rejection': 'OD-05',
+      },
+      plannedSignedOutMobile: {
+        attemptId: 'OD-02',
+        device: 'Owner phone',
+        operatingSystem: 'Mobile OS',
+        browser: 'Mobile browser',
+        signedIn: false,
+      },
+    }));
+    expect(five.attemptIds).toHaveLength(5);
+  });
+
+  test('rejects incomplete, undeclared, signed-in, forged, and privacy-expanding series charters', () => {
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      attemptIds: ['OD-01', 'OD-02'],
+    }))).toThrow(/three to five/u);
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      attemptIds: ['OD-01', 'OD-02', 'OD-02'],
+    }))).toThrow(/must be unique/u);
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      attemptIds: ['OD-01', 'OD-02', 'HC-03'],
+    }))).toThrow(/must use OD-01 through OD-99/u);
+    for (const forbiddenField of [
+      'candidate', 'sourcePath', 'url', 'quote', 'replacement', 'notes', 'decision', 'observation',
+    ]) {
+      expect(() => validateOwnerDogfoodSeriesCharter({
+        ...validDogfoodSeries(),
+        [forbiddenField]: 'private value',
+      })).toThrow(new RegExp(`unknown field: ${forbiddenField}`, 'u'));
+    }
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      plannedSignedOutMobile: {
+        ...validDogfoodSeries().plannedSignedOutMobile,
+        notes: 'private note',
+      },
+    }))).toThrow(/unknown field: notes/u);
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      evidenceClassification: {
+        ...validDogfoodSeries().evidenceClassification,
+        ownerName: 'private owner',
+      },
+    }))).toThrow(/unknown field: ownerName/u);
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      obligationAssignments: {
+        ...validDogfoodSeries().obligationAssignments,
+        'extra-scenario': 'OD-01',
+      },
+    }))).toThrow(/unknown field: extra-scenario/u);
+
+    const missingObligation = validDogfoodSeries();
+    delete missingObligation.obligationAssignments['owner-rejection'];
+    expect(() => validateOwnerDogfoodSeriesCharter(missingObligation))
+      .toThrow(/owner-rejection is required/u);
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      obligationAssignments: {
+        ...validDogfoodSeries().obligationAssignments,
+        'owner-rejection': 'OD-04',
+      },
+    }))).toThrow(/must reference a declared OD attempt/u);
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      attemptIds: ['OD-01', 'OD-02', 'OD-03', 'OD-04'],
+    }))).toThrow(/OD-04 must have at least one obligation/u);
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      plannedSignedOutMobile: {
+        ...validDogfoodSeries().plannedSignedOutMobile,
+        attemptId: 'OD-02',
+      },
+    }))).toThrow(/must match the signed-out-mobile-handoff obligation/u);
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      plannedSignedOutMobile: {
+        ...validDogfoodSeries().plannedSignedOutMobile,
+        signedIn: true,
+      },
+    }))).toThrow(/must set signedIn to false/u);
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      plannedSignedOutMobile: {
+        ...validDogfoodSeries().plannedSignedOutMobile,
+        device: '',
+      },
+    }))).toThrow(/must not be empty/u);
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      plannedSignedOutMobile: {
+        ...validDogfoodSeries().plannedSignedOutMobile,
+        device: '   ',
+      },
+    }))).toThrow(/must contain a non-whitespace character/u);
+    expect(() => validateOwnerDogfoodSeriesCharter(validDogfoodSeries({
+      evidenceClassification: {
+        ...validDogfoodSeries().evidenceClassification,
+        countsTowardHumanPilot: true,
+      },
+    }))).toThrow(/must remain fixed/u);
   });
 
   test('owner-decision identifiers must use prepared-run formats before binding validation', () => {

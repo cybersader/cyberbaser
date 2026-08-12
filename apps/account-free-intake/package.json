@@ -1,0 +1,25 @@
+{
+  "name": "@cyberbaser/account-free-intake-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Strict credential-free HTTP intake and read-only review runtime for anonymous Cyberbaser proposals.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "bin": {
+    "account-free-intake": "./bin/server.js",
+    "account-free-review": "./bin/review.js"
+  },
+  "scripts": {
+    "start": "bun bin/server.js",
+    "review": "bun bin/review.js",
+    "test": "bun test test"
+  },
+  "dependencies": {
+    "@cyberbaser/account-free-intake": "file:../../packages/account-free-intake",
+    "@cyberbaser/proposal-queue": "file:../../packages/proposal-queue"
+  }
+}

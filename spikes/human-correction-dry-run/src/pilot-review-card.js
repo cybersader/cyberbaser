@@ -48,6 +48,16 @@ function present(value) {
   return value !== undefined && value !== null;
 }
 
+export function cyberbaserBoundaryEvidenceComplete(renderEvidence) {
+  const lanes = [renderEvidence?.projection?.baseline, renderEvidence?.projection?.candidate];
+  return renderEvidence?.artifactType === 'private-local-rendered-correction-run'
+    && renderEvidence?.sourceCheckout?.publishConfigPresent === true
+    && lanes.every((lane) => lane?.mode === 'cyberbaser-select-project-verify'
+      && lane?.selection?.sourcePublished === true
+      && lane?.projection?.ok === true
+      && lane?.projection?.verification?.ok === true);
+}
+
 export function reviewCardContractMissing({ operator, evaluation, renderEvidence }) {
   if (!renderEvidence) return ['rendering'];
   const missing = [];
@@ -80,10 +90,10 @@ export function reviewCardContractMissing({ operator, evaluation, renderEvidence
   requireField(Number.isSafeInteger(renderEvidence?.siteChecks?.candidate?.broken), 'links.candidateBroken');
   requireField(Number.isSafeInteger(renderEvidence?.siteChecks?.linkDelta?.counts?.candidateOnly), 'links.candidateOnly');
   if (operator.publicationBoundary === 'cyberbaser') {
-    requireField(present(renderEvidence?.projection?.baseline?.selection), 'projection.baselineSelection');
-    requireField(renderEvidence?.projection?.baseline?.projection?.verification?.ok === true, 'projection.baselineVerification');
-    requireField(present(renderEvidence?.projection?.candidate?.selection), 'projection.candidateSelection');
-    requireField(renderEvidence?.projection?.candidate?.projection?.verification?.ok === true, 'projection.candidateVerification');
+    requireField(
+      cyberbaserBoundaryEvidenceComplete(renderEvidence),
+      'projection.cyberbaserBoundary',
+    );
   } else {
     requireField(renderEvidence?.artifactType === 'private-owner-static-output-render-evidence', 'projection.notApplicable');
     requireField(renderEvidence?.preparedSourceBinding?.snapshotsRevalidated === true, 'rendering.preparedSnapshots');
@@ -114,6 +124,10 @@ export function buildPilotOwnerEvidence({ submission, operator, evaluation, stat
       attemptId: status.attemptId,
       profile: status.profile,
       countsTowardPilot: status.countsTowardPilot,
+      evidenceClass: status.evidenceClass,
+      countsTowardHumanPilot: status.countsTowardHumanPilot,
+      independentOwnerEvidence: status.independentOwnerEvidence,
+      claimBoundary: status.claimBoundary,
       readerUnaided: operator.readerUnaided,
       accessInterruption: operator.accessInterruption,
       independentOwnerAttested: operator.independentOwnerAttested,
@@ -244,6 +258,9 @@ export function renderPilotOwnerReviewHtml(input) {
     ? evidence.participantContext.publicCreditName
     : `${evidence.participantContext.publicCreditName || '(none)'} (no public consent)`;
   const title = `${evidence.attempt.attemptId} owner review`;
+  const artifactNotice = evidence.attempt.evidenceClass === 'owner-self-dogfood'
+    ? 'Owner self-dogfood artifact. This is private maintainer operational evidence, not independent human validation, a product console, or an automatic source writer.'
+    : 'Private concierge study artifact. This is not a product console, public pilot result, or automatic source writer.';
   const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -258,14 +275,14 @@ export function renderPilotOwnerReviewHtml(input) {
 <body>
 <main class="card">
 <header class="head"><h1>${escapeHtml(title)}</h1><span class="badge">pending human owner</span></header>
-<div class="notice">Private concierge study artifact. This is not a product console, public pilot result, or automatic source writer.</div>
-<section class="section"><h2>Attempt and eligibility</h2><dl>${row('Attempt opened', evidence.attempt.openedAt)}${row('Profile', evidence.attempt.profile)}${row('Counts toward pilot', evidence.attempt.countsTowardPilot)}${row('Reader unaided', evidence.attempt.readerUnaided)}${row('Elapsed milliseconds', evidence.attempt.elapsedMs)}${row('Review-card contract complete', evidence.reviewCardContract.complete)}${row('Missing contract evidence', evidence.reviewCardContract.missing.join(', ') || 'none')}${row('Owner decision eligible', evidence.status.ownerDecisionEligible)}${row('Blocking reasons', blockers)}</dl></section>
+<div class="notice">${escapeHtml(artifactNotice)}</div>
+<section class="section"><h2>Attempt and eligibility</h2><dl>${row('Attempt opened', evidence.attempt.openedAt)}${row('Profile', evidence.attempt.profile)}${row('Evidence class', evidence.attempt.evidenceClass)}${row('Counts toward human pilot', evidence.attempt.countsTowardHumanPilot)}${row('Independent owner evidence', evidence.attempt.independentOwnerEvidence)}${row('Claim boundary', evidence.attempt.claimBoundary)}${row('Counts toward pilot', evidence.attempt.countsTowardPilot)}${row('Reader unaided', evidence.attempt.readerUnaided)}${row('Elapsed milliseconds', evidence.attempt.elapsedMs)}${row('Review-card contract complete', evidence.reviewCardContract.complete)}${row('Missing contract evidence', evidence.reviewCardContract.missing.join(', ') || 'none')}${row('Owner decision eligible', evidence.status.ownerDecisionEligible)}${row('Blocking reasons', blockers)}</dl></section>
 <section class="section"><h2>Exact proposed change</h2><div class="diff old">- ${escapeHtml(before)}</div><div class="diff new">+ ${escapeHtml(after)}</div>${row('Deletion', exact.deletion)}${row('Rationale', evidence.participantContext.rationale)}${row('Factual source', evidence.participantContext.factualSource)}${row('Credit request / consent', `${credit} / ${evidence.participantContext.creditConsent}`)}</section>
 <section class="section"><h2>Owner-confirmed mapping and source binding</h2><dl>${row('Public page', evidence.mapping.publicUrl)}${row('Repository', evidence.mapping.repository)}${row('Checkout', evidence.mapping.checkoutDir)}${row('Source path', evidence.mapping.sourcePath)}${row('Base commit', evidence.mapping.baseCommit)}${row('Mechanical case ID', evidence.sourceBinding.mechanicalCaseId)}${row('Byte range', `[${evidence.sourceBinding.halfOpenByteRange.join(', ')})`)}${row('Base bytes / digest', `${evidence.sourceBinding.baseByteLength} / ${evidence.sourceBinding.baseDigest}`)}${row('Candidate bytes / digest', `${evidence.sourceBinding.candidateByteLength} / ${evidence.sourceBinding.candidateDigest}`)}${row('Expected old bytes verified', evidence.sourceBinding.expectedOldBytesVerified)}${row('Quote occurrences without context', evidence.anchorStatus.quoteOccurrencesWithoutContext)}${row('Context required', evidence.anchorStatus.contextRequired)}${row('Exact prefix / suffix', `${JSON.stringify(evidence.anchorStatus.prefix)} / ${JSON.stringify(evidence.anchorStatus.suffix)}`)}${row('Final selector resolved once', evidence.anchorStatus.finalSelectorResolvedExactlyOnce)}</dl></section>
 <section class="section"><h2>Mechanical checks</h2><dl>${row('Outside-splice bytes', evidence.byteProof.prefixIdentical && evidence.byteProof.suffixIdentical ? 'identical' : 'not identical')}${row('Bytes preserved before / after', `${evidence.byteProof.prefixBytesPreserved} / ${evidence.byteProof.suffixBytesPreserved}`)}${row('OFM verdict', evidence.ofm.verdict)}${row('OFM findings', JSON.stringify(evidence.ofm.findings))}${row('OFM churn', evidence.ofm.stats.churn)}${row('OFM escapes before / after', `${evidence.ofm.stats.escapesBefore} / ${evidence.ofm.stats.escapesAfter}`)}${row('Trust route', `${evidence.trust.tier}/${evidence.trust.route} (informational only)`)}${row('Trust reasons', JSON.stringify(evidence.trust.reasons))}${row('Trust checks', JSON.stringify(evidence.trust.checks))}${row('Trust subject', evidence.trust.authorType)}${row('Policy revision', evidence.trust.policyRevision)}</dl></section>
 ${renderSection(evidence)}
 ${publicationSection(evidence)}
-<footer class="footer">No source write or public deployment has occurred. The owner must complete the bound owner-decision.json by hand, run pilot:decision, and apply any accepted candidate through the owner's normal local workflow.</footer>
+<footer class="footer">No source write or public deployment has occurred. The owner must either complete the bound owner-decision.json by hand or record the immutable guided decision, run pilot:decision, and apply any accepted candidate through the owner's normal local workflow.</footer>
 </main>
 </body>
 </html>

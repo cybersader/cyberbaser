@@ -1,0 +1,181 @@
+---
+title: Decision Ledger
+description: The append-only vault record that connects each closed pull request's trust route and integrity evidence to the maintainer's actual decision.
+sidebar:
+  order: 25
+status: research
+tags: [design, contribution, governance]
+---
+
+The **decision ledger** is an append-only JSONL record in the owner-controlled vault of every eligible closed pull request's trust route, OFM verdict, check-run observation, and the maintainer's actual decision.
+
+:::caution[Status on 2026-08-03: implemented and hermetically tested, live installation pending]
+`@cyberbaser/ledger` now includes the selected two-stage GitHub adapter, exact authority reconstruction, and bounded non-force publication. Its hermetic acceptance suite passes for a maintainer PR, a fork PR, a closed-unmerged PR, duplicate delivery, and a tampered artifact using fake GitHub API responses and local bare remotes.
+
+That is mechanical evidence, not production evidence. The templates are **not installed** in the live Cyberbase vault, no real GitHub fork run has exercised them, the external vault has not been mutated by WP1, and the canonical ledger still has **zero live observations**.
+:::
+
+## Why it exists
+
+The trust classifier can label a proposal `auto-merge`, `quick-review`, `full-review`, or `reject`, but a label is only a prediction. The maintainer's merge or close decision is the outcome needed to test whether those routes agree with real governance.
+
+That record is the only path to the first auto-merge precondition: **at least 20 classified pull requests with the maintainer's own decision recorded, with zero `auto-merge` disagreements**. The costed alternative and the reason a commit-backed ledger was chosen over a hosted moderation database are described in the architecture page's [console-fork section](/cyberbaser/design/architecture/#open-the-console-fork).
+
+The ledger stays beside the policy at `.cyberbaser/decision-ledger.jsonl`. It is versioned with the vault, excluded from publishable Markdown, and owned by the same default branch that holds `.cyberbaser/trust.yml`. [JSON Lines](https://jsonlines.org/) permits one complete append per decision without rewriting an enclosing array, while Git independently records when each observation entered the vault.
+
+## Entry schema
+
+Each line is one compact UTF-8 JSON object followed by `LF`. Version 1 requires the keys in the order below. The reader rejects unknown fields, unknown enum values, malformed timestamps, invalid object IDs, duplicate pull-request numbers, noncanonical serialization, blank lines, and partial final lines.
+
+| Field | Type | Rule |
+|---|---|---|
+| `schemaVersion` | integer | Exactly `1`. |
+| `prNumber` | positive integer | Repository-local pull-request number and the deduplication key. |
+| `author` | string or `null` | GitHub login from the authoritative pull-request record; `null` when no login is available. |
+| `authorType` | enum | `agent`, `human`, or `anonymous`, using the exact base-bound trust policy plus GitHub bot detection. |
+| `trustRoute` | enum or `null` | `auto-merge`, `quick-review`, `full-review`, `reject`, or `null` when Stage B observes no recognized route label. |
+| `ofmVerdict` | enum | `clean`, `suspect`, `damage`, or `not-applicable`; recomputed from the exact base and head Git objects. |
+| `checks` | array | Check runs observed for `headSha`, excluding the ledger job. Keep the newest run for each app/name pair and sort by app slug then name. |
+| `maintainerDecision` | enum | `merged` or `closed-unmerged`, accepted only after the responsible actor is verified to have current `maintain` or `admin` permission. |
+| `mergeCommitSha` | string or `null` | Pull-request API merge commit for a merge; otherwise `null`. |
+| `baseSha` | string | Exact `pull_request.base.sha` from the pull-request API. |
+| `headSha` | string | Exact `pull_request.head.sha` from the pull-request API. |
+| `timestamps` | object | `openedAt`, `closedAt`, and `recordedAt`, in that order, normalized to RFC 3339 UTC with second precision. |
+
+Every `checks` item has the mandatory key order `name`, `appSlug`, `status`, `conclusion`. Status is `queued`, `in_progress`, `completed`, `waiting`, `requested`, or `pending`; conclusion preserves GitHub's conclusion string or `null` for an incomplete run. Failures, cancellations, skipped checks, and work still running when Stage B observes them remain evidence rather than being reduced to a pass/fail boolean.
+
+## The selected two-stage trigger
+
+GitHub gives public-fork `pull_request` workflows a read-only token. Asking one `pull_request: closed` job to both inspect an external PR and push the ledger therefore fails for the primary contributor case. Giving that untrusted stage broader authority would create the more serious problem described by GitHub Security Lab as a [pwn request](https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/).
+
+WP1 replaces that unsafe one-stage shape with two workflows.
+
+### Stage A: capture an inert routing hint
+
+`Decision Ledger Capture` runs on `pull_request: closed` with `permissions: {}`. It has a three-minute timeout and one-day artifact retention. It checks out neither the vault nor the contributor branch, imports no repository package, and executes no contributor-controlled file.
+
+It writes exactly one small canonical JSON file whose fields are:
+
+- schema version;
+- repository ID and exact `owner/repository` name;
+- source workflow run ID and run attempt; and
+- pull-request number.
+
+The deterministic workflow run name and artifact name also bind the source run ID and PR number. The artifact contains no route, labels, actors, decision, SHAs, timestamps, checks, OFM result, URL, path, command, ref, or refspec.
+
+:::important[The artifact is not an authority source]
+Stage A's artifact is only enough to route Stage B back to the exact GitHub records it must verify. It cannot assert what happened, who decided, which objects were involved, or where anything should be written.
+:::
+
+### Stage B: reconstruct and record from trusted sources
+
+`Decision Ledger Record` runs on the successful completion of `Decision Ledger Capture` through GitHub's [`workflow_run` event](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_run). It receives only `actions: read`, `checks: read`, `contents: write`, `issues: read`, and `pull-requests: read`. Repository-wide concurrency never cancels an in-progress recorder.
+
+Before reconstructing an entry, Stage B:
+
+1. requires the expected source event, workflow name, workflow path, repository identity, run ID, run attempt, successful conclusion, and default-branch context;
+2. re-fetches that exact source run through the [workflow-runs API](https://docs.github.com/en/rest/actions/workflow-runs#get-a-workflow-run);
+3. lists artifacts for that exact run through the [artifacts API](https://docs.github.com/en/rest/actions/artifacts#list-workflow-run-artifacts) and requires exactly one bounded, unexpired artifact with the deterministic name;
+4. downloads only that archive, requires one fixed filename, and parses strict canonical JSON within compressed and unpacked byte limits;
+5. requires the Stage B event, refetched run, artifact metadata, archive contents, repository, run attempt, and PR number to agree; and
+6. allows `workflow_run.pull_requests` to be empty, but rejects a conflicting or ambiguous non-empty array.
+
+GitHub explicitly documents that `workflow_run` can access secrets and write tokens even when the preceding workflow cannot, and warns that untrusted artifacts must not be allowed to influence privileged behavior. The adapter's binding and reconstruction rules exist to keep that privilege boundary narrow.
+
+Stage B checks out the latest base-repository default branch and reviewed Cyberbaser tooling only. It fetches the pull-request Git objects into private refs and treats contributor content as inert bytes. The contributor head is never the active worktree, and no contributor package, hook, workflow, or build is executed.
+
+## Exact authority sources
+
+Every ledger authority field is reconstructed independently. Nothing in this table comes from the capture artifact.
+
+| Ledger evidence | Authority source |
+|---|---|
+| Repository and source run | Stage B event context plus the exact refetched Actions run |
+| PR number | Trusted source-run title and artifact metadata, then verification against the [pull-request API](https://docs.github.com/en/rest/pulls/pulls#get-a-pull-request) |
+| Author, opened/closed time, merged state, merge SHA, base SHA, head SHA | Pull-request API |
+| Trust route | Paginated [issue-label API](https://docs.github.com/en/rest/issues/labels#list-labels-for-an-issue) |
+| Merged actor | Pull-request API `merged_by` |
+| Closed-unmerged actor | The unique paginated [issue timeline](https://docs.github.com/en/rest/issues/timeline#list-timeline-events-for-an-issue) `closed` event whose time matches `closed_at` |
+| Actor authority | Current [collaborator-permission API](https://docs.github.com/en/rest/collaborators/collaborators#get-repository-permissions-for-a-user); require `maintain` or `admin` |
+| Checks | Paginated [check-runs API](https://docs.github.com/en/rest/checks/runs#list-check-runs-for-a-git-reference) for the exact head SHA |
+| Agent policy | `.cyberbaser/trust.yml` at the exact base commit |
+| OFM verdict | Recomputed from the exact base/head Git objects |
+| `recordedAt` | Stage B clock |
+
+For a merge, the responsible actor is `merged_by.login`. For a closed-unmerged PR, the pull-request payload does not supply an equivalent authoritative closer field, so the adapter pages the issue timeline and requires exactly one `closed` event matching `pull_request.closed_at`. No match or more than one match fails closed. The selected actor must then resolve to current `maintain` or `admin` permission.
+
+The adapter verifies the base, head, and merge objects as commits; requires the fetched `refs/pull/<number>/head` object to equal the API head SHA; reads policy from the exact base; and recomputes OFM across exact base/head Markdown blobs. Malformed policy, incomplete pagination, contradictory labels, missing Git objects, object/ref mismatches, ambiguous timeline events, insufficient actor permission, or unverifiable authority produce no entry.
+
+## Timing semantics and idempotency
+
+A ledger row is the first **successfully published Stage B observation**. It is not a perfect closure-instant snapshot of every mutable GitHub field.
+
+- PR state, author, base/head/merge identities, and opened/closed timestamps come from the authoritative pull-request record.
+- Route labels are observed when Stage B reads the issue-label API.
+- Checks are observed when Stage B reads check runs for the exact head SHA.
+- Actor permission is the actor's current permission when Stage B verifies it.
+- `recordedAt` is the Stage B clock immediately before the entry is built.
+
+That timing is deliberate and must remain visible in analysis. A label, check, or permission may change between closure and recording. The ledger records what the trusted recorder successfully observed, not an unattainable claim that every mutable API field was frozen at the closure instant.
+
+Before publishing, the writer validates the complete existing history and deduplicates by `prNumber`. Duplicate delivery changes neither the ledger nor Git. A later closure after reopening is also a no-op, so mutable later observations cannot replace the first published row.
+
+## Exact safe publication
+
+Publication is implemented in tested package code. For at most three attempts it:
+
+1. verifies that the configured Git fetch and push destinations both equal the trusted base-repository destination;
+2. resolves and fetches exactly one default-branch ref;
+3. creates a fresh detached worktree at that accepted tip;
+4. creates `.cyberbaser/` if needed, validates the existing ledger, and reruns first-closure deduplication;
+5. appends through the existing canonical CLI path;
+6. verifies that only `.cyberbaser/decision-ledger.jsonl` changed;
+7. creates one factual, single-parent bot commit containing exactly that path;
+8. re-reads the remote ref and requires it to remain at the accepted base;
+9. pushes the exact commit to `refs/heads/<default>` without force; and
+10. re-reads the remote ref and requires the exact commit to have landed.
+
+Only a classified fast-forward branch-advance race is retried. Authentication, branch protection, malformed history, destination mismatch, rewind/divergence, authority failure, or post-push mismatch stops immediately. The publisher never force-pushes, merges, rebases, rolls back, writes a fork or PR head, or accepts a repository, remote, URL, branch, path, command, ref, or refspec from the artifact.
+
+The file remains append-only by construction. Every read validates all existing lines before validation, statistics, or append can succeed. Existing ledger lines are never sorted, repaired, normalized, truncated, or changed; atomic replacement preserves their bytes exactly.
+
+## Hermetic acceptance result
+
+The WP1 acceptance suite composes the capture contract, fake GitHub authority, exact Git-object reconstruction, canonical entry builder, local ledger append, commit creation, and normal push against temporary checkouts and local bare remotes.
+
+It proves mechanically that:
+
+- a maintainer-authored merged PR publishes one valid row;
+- a fork PR publishes while a contributor-controlled install script remains unexecuted;
+- a closed-unmerged PR uses the unique authoritative timeline closer;
+- duplicate delivery preserves the first row and creates no second commit; and
+- a tampered artifact fails before any reconstruction Git command, ledger write, commit, or push.
+
+Workflow-structure tests also reject `pull_request_target`, any writable one-stage `pull_request` ledger workflow, contributor checkout, mutable action references, and force pushes. Cyberbaser's own [ledger package CI](https://github.com/cybersader/cyberbaser/blob/main/.github/workflows/ledger.yml) is read-only test automation, not the live vault recorder.
+
+These tests provide the implementation evidence required for WP1. They do **not** prove GitHub's live fork event shape, branch-protection compatibility, credential behavior, or production operations in the Cyberbase vault.
+
+## Live installation is a separate authorization boundary
+
+The supplied Stage B template is intentionally non-runnable. Its Cyberbaser checkout uses an all-zero tooling placeholder, which must be replaced with the exact reviewed 40-character Cyberbaser commit before installation. It never falls back to `main`, `latest`, a tag, or another mutable tooling ref. The GitHub actions and Bun version are also pinned.
+
+Installing and activating the two workflows is an outward mutation of the separate Cyberbase vault and creates a write-capable default-branch recorder. Package completion does not authorize that step. A live install requires separate explicit maintainer authorization, review of the exact Cyberbaser tooling commit, substitution of the immutable placeholder, review of `.cyberbaser/trust.yml`, and installation through the vault's normal owner-controlled path.
+
+Only after that separate action may a low-risk maintainer PR, real fork PR, and closed-unmerged PR be used to verify live behavior. Until then, the honest state remains: **implemented, hermetically tested, not installed, no real fork run, zero live observations**.
+
+After an authorized installation and first observation, validate the default-branch file with:
+
+```sh
+cb-decision-ledger validate --file .cyberbaser/decision-ledger.jsonl
+cb-decision-ledger stats --file .cyberbaser/decision-ledger.jsonl --target 20
+```
+
+The domain CLI prints machine-readable JSON only on stdout. It performs no Git operations, network requests, commits, or pushes; the GitHub recorder adapter owns those effects.
+
+## What the statistics mean
+
+`stats` first validates the full ledger, then reports counts and merge/close breakdowns for `auto-merge`, `quick-review`, `full-review`, `reject`, and `unclassified`. Only outcome-bearing routes enter the agreement rate: `auto-merge` agrees with `merged`, and `reject` agrees with `closed-unmerged`. Review-depth routes and unclassified observations are excluded.
+
+Progress toward activation counts entries with a recognized route, valid OFM verdict, and recorded maintainer decision. The precondition is met only when at least 20 such first-closure observations exist and `autoMergeDisagreements` is zero. An unclassified pull request, a workflow rerun, or a later closure after reopening cannot advance the threshold.
+
+Related design: [Contribution workflows](/cyberbaser/design/contribution-workflows/) explains where trust labels and maintainer decisions occur today; the [next-arc architecture plan](/cyberbaser/design/v2-architecture-plan/) places WP1 before container packaging; [Legal & governance](/cyberbaser/design/legal-and-governance/) covers the policy those decisions implement; [Architecture](/cyberbaser/design/architecture/) places the ledger in the commit-backed governance path.

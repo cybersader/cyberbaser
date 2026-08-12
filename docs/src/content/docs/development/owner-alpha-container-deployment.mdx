@@ -1,0 +1,286 @@
+---
+title: Owner-alpha container deployment
+description: "Operator-first guide to the verified Linux/amd64 OCI package: exact mounts, runtime identities, private-address networking, bootstrap, Save recovery, upgrades, evidence, and limits."
+sidebar:
+  order: 10
+status: research
+tags: [setup, architecture, testing]
+---
+
+**WP2 status: implementation and mechanical acceptance complete.** Cyberbaser now has one Linux/amd64 OCI image, hardened Compose profiles for rootless and rootful Docker Engine, profile-bound state initialization, systemd examples, a socket-only HTTPS credential-helper client, a pre-seeded offline Quartz toolchain, restart-aware readiness, and container-level acceptance coverage.
+
+This is not a published image or a hosted service. The current operator path starts from a repository checkout and a local immutable image build. No registry image, service installation, physical-phone Save, external-forge Save, or container-driven real Cyberbase Save is claimed.
+
+The owner-alpha product boundary is described in [Contribution workflows](/cyberbaser/design/contribution-workflows/#private-owner-alpha-wiki-one-save-policy-bound-publication). This page is the deployment runbook. The tracked source-level guide is `deploy/owner-alpha/README.md`.
+
+WP3's [Forgejo Actions phase-one fixture](/cyberbaser/development/forgejo-phase-1/) is deliberately separate. It does not add a Forgejo server, runner, observer token, published-site TLS endpoint, or fixture cleanup lifecycle to this WP2 package. The normal container remains anonymous-only for deployment observation.
+
+## Operator story: clean Linux host
+
+A clean deployment has three host inputs, one external socket service, one named volume, and one immutable image:
+
+1. an exact Git worktree root owned by the runtime identity;
+2. a credential-free mode-`0600` config;
+3. a directory containing only the HTTPS credential broker's `helper.sock`;
+4. a dedicated named state volume;
+5. a local `sha256:...` image ID or immutable `repository@sha256:...` digest.
+
+The supported target is a local Linux Docker Engine on amd64. Docker Desktop is outside the v1 contract. Docker's [host network driver](https://docs.docker.com/engine/network/drivers/host/) is mandatory because Bun binds the owner-selected address itself; Docker's [rootless mode](https://docs.docker.com/engine/security/rootless/) is one explicit profile, not an interchangeable `user:` setting.
+
+### 1. Choose the runtime profile
+
+| Profile | Required daemon | Main-process identity | Practical constraint |
+|---|---|---|---|
+| `rootless` | Rootless Docker Engine | Container `0:0`, mapped to the unprivileged daemon user | That host user must own the vault; the selected address must be visible through real host networking |
+| `rootful` | Rootful Docker Engine | Vault owner's exact nonzero numeric UID/GID | The initializer may prepare only the named state volume; the app never changes vault ownership or permissions |
+
+The management helper rejects a profile/daemon mismatch and rejects remote Docker endpoints. Container UID zero in the rootless profile is root inside the user namespace, not host root. Capabilities are still dropped, privilege escalation is disabled, and the image root remains read-only.
+
+The final WP2 review used a real rootless daemon with native ext4-backed storage. Numeric nonzero identity, state initialization, profile mismatch, and replacement mechanics passed, but an actual rootful-daemon run remains pending.
+
+### 2. Choose the exact private address
+
+Owner-alpha never binds a wildcard. Configure one numeric IPv4 address from loopback, RFC 1918 private space, or RFC 6598 shared address space. The address must exist in the Linux network namespace used by Docker host networking. The owner port and adjacent reader port must both be unused.
+
+With the default port:
+
+```text
+http://<private-ip>:4317/              privileged owner origin
+http://<private-ip>:4318/cyberbase/    unprivileged reader origin
+```
+
+Do not use a hostname, `0.0.0.0`, a public address, IPv6, a public port forward, `ports:`, or bridge publishing. A later bridge-compatible design would need an application change that separates the internal bind address from the externally validated origin.
+
+The application speaks plain HTTP. Use loopback or a private network whose confidentiality you trust. Exact Host/Origin checks and CSRF prevent confused-origin requests; they do not encrypt traffic or stop an on-path peer.
+
+### 3. Build and pin the image locally
+
+From the repository root:
+
+```bash
+docker buildx build \
+  --platform linux/amd64 \
+  --file deploy/owner-alpha/Containerfile \
+  --tag cyberbaser-owner-alpha:wp2 \
+  --load \
+  .
+
+docker image inspect --format '{{.Id}}' cyberbaser-owner-alpha:wp2
+```
+
+Put the returned `sha256:...` ID in the operator environment. The tag is only a temporary local build name. Production Compose has no `build:` stanza, uses `pull_policy: never`, and rejects `latest` or a tag-only image reference.
+
+The image freezes Bun 1.3.11, Node 22.23.2, exact Debian snapshot packages, the owner-alpha dependency closure, and Quartz v4.5.2 at commit `4923affa7722dfc751f1074348e6dad214fe0c08`. Quartz and its locked npm dependencies are pre-seeded under `/opt/cyberbaser/vendor/quartz`. Runtime rendering copies and re-verifies that seed; it does not fetch Quartz or install npm packages.
+
+### 4. Prepare the vault and config
+
+The vault must be:
+
+- the exact Git worktree root, not a parent directory or symlink alias;
+- clean and on the configured branch;
+- configured with the exact credential-free HTTPS remote;
+- owned and writable by the runtime identity;
+- configured with Git author name and email;
+- on native Linux storage for the supported performance and filesystem contract.
+
+Enabled vault hooks stay enabled. The image must contain their dependencies, or the owner must make a separate explicit policy change. Deployment never disables hooks automatically.
+
+Copy the tracked config example to an operator-controlled location:
+
+```bash
+install -d -m 700 /home/owner/.config/cyberbaser
+install -m 600 \
+  deploy/owner-alpha/owner-alpha.container.example.json \
+  /home/owner/.config/cyberbaser/owner-alpha.local.json
+```
+
+The container-specific values are:
+
+```json
+{
+  "listen": {
+    "host": "127.0.0.1",
+    "port": 4317
+  },
+  "repository": {
+    "checkout": "/vault"
+  },
+  "workspace": {
+    "root": ".workspace/owner-alpha",
+    "store": ".workspace/owner-alpha/store",
+    "site": ".workspace/owner-alpha/site",
+    "cache": ".workspace/owner-alpha/cache"
+  }
+}
+```
+
+Replace the address, remote, branch, workflow identity, live URL, owner policy, and limits for the deployment. Keep the file credential-free. The read-only bind is immutable input, not the file Bun loads: the entrypoint copies it without following symlinks into private tmpfs, verifies mode, ownership, link count, size, and timestamps, then the application validates that staged copy.
+
+### 5. Provide the HTTPS credential socket
+
+The image contains `git-credential-owner-alpha-socket`, a bounded client that accepts only Git's `get` operation and permits only the HTTPS host and repository path in the staged config. WP2 does **not** include a production host-side broker.
+
+The operator supplies a broker at:
+
+```text
+<operator-socket-directory>/helper.sock
+```
+
+That directory must be real, owned by the runtime host identity, inaccessible to other users, and contain nothing except `helper.sock`. No host home, token file, private key, general Git config, SSH agent, or Docker socket is mounted. Credentials cross only the Unix socket and Git child-process pipes; they are not placed in config, Compose environment, image layers, named state, or retained logs.
+
+Schema version 1 requires an exact GitHub HTTPS URL. SSH remotes and SSH-agent-only authentication are unsupported. Private-repository deployment observation is also unsupported because the current GitHub HTTP observation adapter sends no authorization header.
+
+### 6. Prepare the operator environment
+
+Copy the example:
+
+```bash
+install -m 600 \
+  deploy/owner-alpha/operator.env.example \
+  /home/owner/.config/cyberbaser/owner-alpha.env
+```
+
+Set the explicit profile, immutable image identity, absolute vault/config/socket paths, dedicated state-volume name, state-profile marker, numeric UID/GID, and tmpfs sizes. `/tmp` must be executable because the pre-seeded Quartz toolchain runs its esbuild binary there. It must hold two vault copies and two isolated renderer workspaces; the example uses 4 GiB and startup requires at least 2 GiB free.
+
+Changing rootless/rootful profile or numeric runtime identity requires a new named volume. The marker refuses silent reuse under another profile, and the initializer never recursively changes ownership on an existing volume.
+
+### 7. Validate, initialize, and start
+
+```bash
+OWNER_ALPHA_ENV_FILE=/home/owner/.config/cyberbaser/owner-alpha.env \
+  deploy/owner-alpha/owner-alpha-compose.sh validate
+
+OWNER_ALPHA_ENV_FILE=/home/owner/.config/cyberbaser/owner-alpha.env \
+  deploy/owner-alpha/owner-alpha-compose.sh init
+
+OWNER_ALPHA_ENV_FILE=/home/owner/.config/cyberbaser/owner-alpha.env \
+  deploy/owner-alpha/owner-alpha-compose.sh start
+```
+
+`validate` checks the local engine, selected profile, immutable image, exact bind sources, ownership, file modes, socket shape, and Compose expansion. `init` is a networkless one-shot that mounts only the named volume. `start` launches detached and waits for health.
+
+Health is readiness-aware: startup recovery must finish, a private ready marker must exist, and an exact-Host request to the reader origin must succeed. A successful socket bind alone is not readiness. Recovery failure stops both listeners, leaves readiness absent, and exits nonzero.
+
+## Exact mount and runtime contract
+
+| Resource | Container location | Access and purpose |
+|---|---|---|
+| Vault checkout | `/vault` | Read-write bind; exact worktree root and only writable host bind |
+| Source config | `/config/owner-alpha.local.json` | Read-only, credential-free bind |
+| Active config and ready marker | `/run/owner-alpha` | Private mode-`0700`, size-bounded, non-executable tmpfs |
+| Durable state | `/opt/cyberbaser/.workspace` | Dedicated named volume for job evidence, site, cache, renderer workspace, HOME, and npm cache |
+| Render scratch | `/tmp` | Size-bounded executable tmpfs |
+| Credential channel | `/run/owner-alpha-credentials/helper.sock` | Read-only socket-directory bind containing only the socket |
+| Application root and Quartz seed | `/opt/cyberbaser` | Read-only image filesystem |
+
+The hardened runtime also requires host networking, init, stdin and TTY allocation, detached default attachment, Docker logging driver `none`, all capabilities dropped, `no-new-privileges`, and bounded on-failure restart. It does not set `CI=true`.
+
+## Attach and bootstrap
+
+Always-on startup is detached and deliberately loses the initial one-time capability. Attach to the live TTY and mint a replacement:
+
+```bash
+OWNER_ALPHA_ENV_FILE=/home/owner/.config/cyberbaser/owner-alpha.env \
+  deploy/owner-alpha/owner-alpha-compose.sh bootstrap
+```
+
+Enter `b`, press Enter, consume the one-time URL in a fresh browser context, then detach with `Ctrl-p Ctrl-q`. The URL appears only in the active attachment. Docker logging is disabled and the systemd examples do not pipe output into the journal.
+
+A replacement capability invalidates the previous unused capability. Existing bootstrapped sessions remain active until process restart. Restart revokes all sessions and capabilities because they exist only in process memory.
+
+## What Save does
+
+From the reader origin, open **Edit**, change one existing tracked UTF-8 LF Markdown body, and select **Save and publish** once. Acceptance becomes durable before the browser receives success. The policy then:
+
+1. rechecks the checkout, source identity, exact bytes, OFM, trust, publication, projection, render, and link delta;
+2. applies one exact operation with atomic same-directory replacement;
+3. creates one single-parent, one-path commit at the bound base;
+4. pushes normally, never force-pushing, merging, rebasing, or guessing a conflict;
+5. binds and observes the exact deployment;
+6. verifies the live witness; and
+7. rebuilds the local owner wiki.
+
+The image is offline for installed application and renderer dependencies, not for production effects. The configured Git remote, deployment observer, and live verifier still require outbound network access.
+
+## Restart and recovery
+
+Replacement restart is the normal way to revoke sessions or activate a new image:
+
+```bash
+OWNER_ALPHA_ENV_FILE=/home/owner/.config/cyberbaser/owner-alpha.env \
+  deploy/owner-alpha/owner-alpha-compose.sh restart
+```
+
+The named state volume survives replacement. Recovery resumes only classified-safe states:
+
+| Durable state | Recovery action |
+|---|---|
+| `accepted` | Restart checks from the safe boundary |
+| `committed` | Resume at push; do not create another commit |
+| `pushing` with the exact remote commit already present | Reconcile and continue |
+| `monitoring-deployment` | Repeat observation only |
+| `live-verification-failed` | Repeat the bounded read-only live check |
+| `applying` without durable source-applied evidence | Stop for `manual-intervention` |
+
+Containerization does not weaken ambiguous-effect handling. An interrupted source application is never replayed merely because the process restarted.
+
+## Upgrades and rollback
+
+1. Build or obtain the replacement image.
+2. Inspect and record its immutable image ID or repository digest.
+3. Replace only `OWNER_ALPHA_IMAGE` in the mode-`0600` operator env file.
+4. Run `validate`.
+5. Run `restart`.
+6. Check `status`, bootstrap again if needed, and confirm the reader origin.
+
+No mutable pull, runtime package install, or `latest` tag participates. Keep the previous immutable image locally until the new deployment is verified; rollback is an explicit env-file change followed by `restart`.
+
+Tracked user and system systemd examples call the same helper and keep output out of journald. They were validated with `systemd-analyze verify`, but WP2 did not install or enable either unit.
+
+## Teardown
+
+Stop without deleting durable state:
+
+```bash
+OWNER_ALPHA_ENV_FILE=/home/owner/.config/cyberbaser/owner-alpha.env \
+  deploy/owner-alpha/owner-alpha-compose.sh stop
+```
+
+Deleting the named state volume is a separate destructive decision. It removes job evidence, the local site, caches, renderer workspace, and process home. It must never delete or change ownership of the vault, which remains the authoritative source.
+
+## Evidence boundary
+
+### Mechanically verified in WP2
+
+- digest-pinned Linux/amd64 image build and content inspection;
+- frozen Bun, Node, Debian, owner-alpha, and Quartz dependency identities;
+- read-only root, inert Git metadata, non-root default image user, and no setuid/setgid files;
+- exact mounts, private-address listeners, logging disabled, and bootstrap non-retention;
+- real rootless `0:0` user-namespace behavior on Linux Docker Engine;
+- numeric nonzero UID/GID and profile-bound state mechanics;
+- two-browser fixture Save to a local bare Git remote;
+- exact Host/Origin isolation and no owner/API routes on the reader origin;
+- durable job survival, session revocation, readiness-aware replacement, and recovery classifications;
+- Compose expansion, both systemd units, immutable CI workflow structure, and negative security cases.
+
+### Not established by WP2
+
+- Docker Desktop, bridge publishing, Podman, multi-architecture, IPv6, hostname, or public-address support;
+- actual rootful-daemon execution on the final review host;
+- a physical-device Save through the container;
+- an external-forge push or public live-site verification from the container;
+- a real owner-alpha Save against the external Cyberbase vault;
+- private-repository deployment observation;
+- image registry publication or service installation;
+- in-image TLS, public Internet exposure, or a fully offline production pipeline;
+- automatic safe completion when stopped during ambiguous `applying` work.
+
+The bare-metal owner-alpha route did complete one real policy-activated Cyberbase Save on 2026-08-02. That is valuable owner evidence, but it is not container evidence and must not be merged into the WP2 claim.
+
+## Related
+
+- [Architecture](/cyberbaser/design/architecture/) explains where the OCI runtime sits in the owner-controlled boundary.
+- [Contribution workflows](/cyberbaser/design/contribution-workflows/) follows the owner experience from browse to verified live page.
+- [Architecture plan](/cyberbaser/design/v2-architecture-plan/) records WP2 completion and points next to WP3 phase 1.
+- [Roadmap](/cyberbaser/getting-started/roadmap/) separates completed packaging from still-pending physical-device and external-runtime evidence.
+- External: [Docker host networking](https://docs.docker.com/engine/network/drivers/host/) and [Docker rootless mode](https://docs.docker.com/engine/security/rootless/).

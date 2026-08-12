@@ -1,0 +1,104 @@
+name: ${WP3_COMPOSE_PROJECT:?set WP3_COMPOSE_PROJECT}
+
+services:
+  forgejo:
+    image: ${WP3_FORGEJO_IMAGE:?set WP3_FORGEJO_IMAGE to an immutable image ID or repository digest}
+    pull_policy: never
+    read_only: true
+    init: true
+    restart: "no"
+    # Forgejo refuses to run as UID 0, so the container keeps the rootless
+    # image's non-root git user (1000). Docker seeds the fresh named volume with
+    # that user's ownership (nocopy is not set), and the writable tmpfs paths
+    # below are owned by the same UID. The harness still requires a rootless
+    # daemon so job-container writes map back to the unprivileged host user.
+    user: "1000:1000"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: local
+      options:
+        max-size: 2m
+        max-file: "2"
+    labels:
+      io.cyberbaser.fixture: wp3
+      io.cyberbaser.wp3.run: ${WP3_RUN_UUID:?set WP3_RUN_UUID}
+    # 8443 because rootless engines cannot publish privileged ports, and
+    # 127.0.0.1 because the rootless port-forwarder only reliably serves the
+    # standard loopback address. The published site is separated by IP+port on a
+    # direct host bind. Job containers reach this server inside the labelled
+    # network through the forgejo-wp3 alias below.
+    ports:
+      - "127.0.0.1:8443:3000"
+    networks:
+      default:
+        aliases:
+          - forgejo-wp3
+    # The rootless Forgejo image keeps persistent state under /var/lib/gitea and
+    # its generated app.ini under /etc/gitea. Both must be writable; only
+    # /var/lib/gitea persists for the run.
+    environment:
+      FORGEJO__database__DB_TYPE: sqlite3
+      FORGEJO__database__PATH: /var/lib/gitea/data/forgejo.db
+      FORGEJO__server__PROTOCOL: https
+      FORGEJO__server__DOMAIN: 127.0.0.1
+      FORGEJO__server__ROOT_URL: https://127.0.0.1:8443/
+      FORGEJO__server__HTTP_ADDR: 0.0.0.0
+      FORGEJO__server__HTTP_PORT: "3000"
+      FORGEJO__server__CERT_FILE: /run/wp3-tls/server.crt
+      FORGEJO__server__KEY_FILE: /run/wp3-tls/server.key
+      FORGEJO__server__DISABLE_SSH: "true"
+      FORGEJO__service__DISABLE_REGISTRATION: "true"
+      FORGEJO__security__INSTALL_LOCK: "true"
+      FORGEJO__packages__ENABLED: "false"
+      FORGEJO__lfs__START_SERVER: "false"
+      FORGEJO__mailer__ENABLED: "false"
+      FORGEJO__actions__ENABLED: "true"
+      FORGEJO__repository__ENABLE_PUSH_CREATE_USER: "false"
+      FORGEJO__repository__ENABLE_PUSH_CREATE_ORG: "false"
+      FORGEJO__log__MODE: console
+      FORGEJO__log__LEVEL: warn
+    volumes:
+      # nocopy is intentionally unset so Docker seeds the fresh volume with the
+      # image's git-user ownership, letting the non-root process write it.
+      - type: volume
+        source: forgejo-state
+        target: /var/lib/gitea
+      - type: bind
+        source: ${WP3_TLS_DIR:?set WP3_TLS_DIR}
+        target: /run/wp3-tls
+        read_only: true
+        bind:
+          create_host_path: false
+    tmpfs:
+      # /tmp is executable because git invokes helper binaries from temp paths.
+      # The writable tmpfs paths are owned by the non-root git UID.
+      - /tmp:rw,nosuid,nodev,exec,mode=0700,uid=1000,gid=1000,size=64m
+      - /run:rw,nosuid,nodev,noexec,mode=0755,size=16m
+      - /etc/gitea:rw,nosuid,nodev,noexec,mode=0700,uid=1000,gid=1000,size=4m
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --no-check-certificate
+        - --quiet
+        - --spider
+        - https://127.0.0.1:3000/api/v1/version
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+
+volumes:
+  forgejo-state:
+    labels:
+      io.cyberbaser.fixture: wp3
+      io.cyberbaser.wp3.run: ${WP3_RUN_UUID:?set WP3_RUN_UUID}
+
+networks:
+  default:
+    labels:
+      io.cyberbaser.fixture: wp3
+      io.cyberbaser.wp3.run: ${WP3_RUN_UUID:?set WP3_RUN_UUID}

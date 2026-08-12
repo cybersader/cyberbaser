@@ -1,0 +1,111 @@
+FROM --platform=linux/amd64 oven/bun:1.3.11@sha256:38919894db4e117a37f74e3dca503e84f24d97f19cabc5f499a289c2a5d0db7c AS bun-source
+
+FROM --platform=linux/amd64 node:22.23.2-bookworm-slim@sha256:0f65470961851f2354dc8e560853e2f428ea928436135fc7e35780ab100c7e00 AS runtime-base
+
+COPY deploy/owner-alpha/debian-packages.lock /tmp/debian-packages.lock
+RUN set -eux; \
+    snapshot="$(grep '^DEBIAN_SNAPSHOT=' /tmp/debian-packages.lock | cut -d= -f2)"; \
+    test -n "$snapshot"; \
+    printf '%s\n' \
+      "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/$snapshot bookworm main" \
+      "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/$snapshot bookworm-updates main" \
+      "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/$snapshot bookworm-security main" \
+      > /etc/apt/sources.list; \
+    rm -f /etc/apt/sources.list.d/debian.sources; \
+    packages="$(grep -E '^[a-z0-9][a-z0-9+.-]*=' /tmp/debian-packages.lock | tr '\n' ' ')"; \
+    apt-get -o Acquire::Retries=3 update; \
+    apt-get install -y --no-install-recommends $packages; \
+    rm -rf /var/lib/apt/lists/* /tmp/debian-packages.lock
+COPY --from=bun-source /usr/local/bin/bun /usr/local/bin/bun
+RUN test "$(bun --version)" = '1.3.11' \
+    && test "$(node --version)" = 'v22.23.2'
+
+FROM runtime-base AS quartz-seed
+RUN set -eux; \
+    quartz_repository='https://github.com/jackyzha0/quartz.git'; \
+    quartz_tag='v4.5.2'; \
+    quartz_commit='4923affa7722dfc751f1074348e6dad214fe0c08'; \
+    quartz_lock_sha256='9ea5873a2bb495054f23b16f96d1d41f44348863e655f4c6d86b107f372b09b9'; \
+    quartz_install_sha256='38bc51071b55a4444abdea3e0620747882e2be3a8610da5715a9c0b40b320850'; \
+    git clone --depth 1 --branch "$quartz_tag" "$quartz_repository" /seed/quartz; \
+    test "$(git -C /seed/quartz remote get-url origin)" = "$quartz_repository"; \
+    test "$(git -C /seed/quartz describe --tags --exact-match)" = "$quartz_tag"; \
+    test "$(git -C /seed/quartz rev-parse HEAD)" = "$quartz_commit"; \
+    test "$(sha256sum /seed/quartz/package-lock.json | cut -d' ' -f1)" = "$quartz_lock_sha256"; \
+    npm --prefix /seed/quartz ci --no-audit --no-fund; \
+    test "$(cd /seed/quartz && sha256sum package.json package-lock.json | sha256sum | cut -d' ' -f1)" = "$quartz_install_sha256"; \
+    printf '%s\n' "$quartz_install_sha256" > /seed/quartz/node_modules/.cyberbaser-install-sha256
+
+FROM runtime-base AS owner-dependencies
+WORKDIR /opt/cyberbaser/apps/owner-alpha
+COPY apps/owner-alpha/package.json apps/owner-alpha/bun.lock ./
+COPY packages/ /opt/cyberbaser/packages/
+RUN bun install --frozen-lockfile --production --ignore-scripts \
+    && bun pm cache rm
+
+FROM runtime-base AS final
+WORKDIR /opt/cyberbaser
+
+COPY .gitignore ./.gitignore
+COPY apps/owner-alpha/package.json apps/owner-alpha/bun.lock ./apps/owner-alpha/
+COPY apps/owner-alpha/src/ ./apps/owner-alpha/src/
+COPY apps/owner-alpha/public/ ./apps/owner-alpha/public/
+COPY packages/ ./packages/
+COPY renderers/quartz-cyberbase/ ./renderers/quartz-cyberbase/
+COPY deploy/owner-alpha/entrypoint.sh deploy/owner-alpha/stage-config.js deploy/owner-alpha/state-init.sh deploy/owner-alpha/git-credential-owner-alpha-socket.js deploy/owner-alpha/healthcheck.js ./deploy/owner-alpha/
+COPY --from=owner-dependencies /opt/cyberbaser/apps/owner-alpha/node_modules ./apps/owner-alpha/node_modules
+COPY --from=quartz-seed /seed/quartz ./vendor/quartz
+COPY --chmod=0555 deploy/owner-alpha/entrypoint.sh /usr/local/bin/owner-alpha-entrypoint
+COPY --chmod=0555 deploy/owner-alpha/state-init.sh /usr/local/bin/owner-alpha-state-init
+RUN printf '%s\n' '#!/bin/sh' 'exec bun /opt/cyberbaser/deploy/owner-alpha/git-credential-owner-alpha-socket.js "$@"' \
+      > /usr/local/bin/git-credential-owner-alpha-socket \
+    && chmod 0555 /usr/local/bin/git-credential-owner-alpha-socket
+
+RUN chmod 0555 \
+      ./deploy/owner-alpha/entrypoint.sh \
+      ./deploy/owner-alpha/stage-config.js \
+      ./deploy/owner-alpha/state-init.sh \
+      ./deploy/owner-alpha/git-credential-owner-alpha-socket.js \
+      ./deploy/owner-alpha/healthcheck.js \
+      ./renderers/quartz-cyberbase/setup.sh \
+      ./renderers/quartz-cyberbase/build.sh \
+    && ln -s apps/owner-alpha/node_modules /opt/cyberbaser/node_modules \
+    && git init -q /opt/cyberbaser \
+    && test -z "$(git -C /opt/cyberbaser remote)" \
+    && test -z "$(git -C /opt/cyberbaser rev-list --all)" \
+    && { git config --system --unset-all credential.helper || true; }
+RUN /usr/bin/git config --system --add credential.helper '' \
+    && /usr/bin/git config --system --add credential.helper owner-alpha-socket \
+    && /usr/bin/git config --system credential.useHttpPath true \
+    && /usr/bin/git config --system --add safe.directory /opt/cyberbaser \
+    && /usr/bin/git config --system --add safe.directory /opt/cyberbaser/vendor/quartz \
+    && printf '%s\n' \
+      '#!/bin/sh' \
+      'exec /usr/bin/git -c credential.helper= -c credential.helper=owner-alpha-socket -c credential.useHttpPath=true "$@"' \
+      > /usr/local/bin/git \
+    && chmod 0555 /usr/local/bin/git \
+    && mkdir -p \
+      /config \
+      /run/owner-alpha \
+      /run/owner-alpha-credentials \
+      /tmp \
+      /vault \
+      /opt/cyberbaser/.workspace \
+    && chmod 0700 /run/owner-alpha \
+    && chmod 0755 /config /run/owner-alpha-credentials /tmp /vault /opt/cyberbaser/.workspace \
+    && chmod -R a-w /opt/cyberbaser/vendor/quartz \
+    && find / -xdev -type f -perm /6000 -exec chmod a-s {} + \
+    && test -z "$(find / -xdev -type f -perm /6000 -print -quit)"
+
+ENV HOME=/opt/cyberbaser/.workspace/owner-alpha/home \
+    XDG_CACHE_HOME=/opt/cyberbaser/.workspace/owner-alpha/cache/xdg \
+    TMPDIR=/tmp \
+    OWNER_ALPHA_READY_FILE=/run/owner-alpha/ready \
+    OWNER_ALPHA_CREDENTIAL_SOCKET=/run/owner-alpha-credentials/helper.sock
+
+STOPSIGNAL SIGTERM
+HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
+  CMD ["bun", "/opt/cyberbaser/deploy/owner-alpha/healthcheck.js"]
+
+USER 65532:65532
+ENTRYPOINT ["/usr/local/bin/owner-alpha-entrypoint"]

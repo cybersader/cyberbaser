@@ -8,10 +8,10 @@ status: research
 tags: [research, attribution, contribution]
 ---
 
-:::caution[Still open — and it was falsely marked answered for three months. Reopened 2026-07-26.]
-**Status: none of the six investigation items was addressed and none of the four deliverables was produced.** [v1 architecture](/cyberbaser/research/v1-architecture/) lists this brief among the challenges it answers; its entire attribution content is one phrase inside a "Deferred to v2+" list. A deferral was recorded as a resolution.
+:::caution[Narrow GitHub history path verified; the broader attribution brief remains open. Updated 2026-08-11.]
+**Status:** R24 completed investigation item 1 for the current dogfood path. A genuine cross-repository PR from a second account carried one contributor-authored commit. After the owner performed a normal squash merge, authoritative `main` commit `4a40055` retained the contributor's GitHub-mapped name, noreply address, and account as author; GitHub was the committer and the owner was recorded separately as the PR merger. The live publication passed. [Q08 is closed](/cyberbaser/reference/open-questions/#q08--does-the-fork-flow-actually-attribute-the-contributor).
 
-**The honest current statement, which appeared nowhere in the KB until this banner:** cyberbaser has no contributor attribution. Credit exists only in git history, its correctness across the web path has **never been observed**, the content license's attribution obligation depends on that unobserved mechanism, and nothing on any published page tells a reader who wrote it.
+That result repairs the legal dependency for this one measured path. It does not complete this brief: visible page credit, contributor profiles, trust-history computation, anonymous and pseudonymous attribution, multi-commit squash behavior, and other forges remain unresolved. The second account was controlled by the maintainer, so this is operational evidence rather than independent-contributor usability evidence.
 
 **What exists today, against this brief's own deliverable table:**
 
@@ -19,14 +19,12 @@ tags: [research, attribution, contribution]
 |---|---|---|
 | Obsidian + Git push | commit author | nothing |
 | Web CMS PR | n/a — no CMS in the write path (R12) | n/a |
-| GitHub "Edit this page" | commit author on the fork, **unverified** | nothing |
-| Anonymous | **no mechanism exists** | nothing |
+| GitHub "Edit this page" | contributor remains the authoritative squash-commit author for the measured one-commit fork path | nothing |
+| Anonymous | proposal is anonymous at the trust floor; no public credit mechanism exists | nothing |
 
-The live site's layout is breadcrumbs, title, date and reading time, tags, and an edit link. There is no author component, no contributor list, no avatar, no contributors page. The one person-shaped element points *outward* to GitHub: it invites contribution, it does not credit it.
+The live site's layout is breadcrumbs, title, date and reading time, tags, and an edit link. There is no author component, no contributor list, no avatar, and no contributors page. The one person-shaped element points *outward* to GitHub: it invites contribution, it does not credit it.
 
-**Item 1 is now a ten-minute check, not a research project.** One `git log --format='%an %ae'` over the merged contribution PRs plus one PR from a second account settles it. The two live contribution PRs run in R17 were both authored by the maintainer's own account and could not have answered it. Tracked as [Q08](/cyberbaser/reference/open-questions/#q08--does-the-fork-flow-actually-attribute-the-contributor).
-
-**Why this matters beyond UX.** The untested assertion at [Contribution Workflows · Attribution](/cyberbaser/design/contribution-workflows/#attribution) hardened into a legal dependency: [Legal & Governance](/cyberbaser/design/legal-and-governance/) makes commit history the attribution record the license points at, and a downstream proposal then made "don't rewrite history" a project invariant on that basis. Item 2 (pseudonymous identity) does have one real piece of design, in the [hub BOM](/cyberbaser/research/proposal-hub-bom/): a fixed bot identity plus a stable pseudonymous submission ID, and never a network identifier in a commit, since git history is permanent. That design does not cite this brief and covers one of six items.
+**Why this still matters beyond UX.** [Legal & Governance](/cyberbaser/design/legal-and-governance/) can now point at measured Git history for the current GitHub path, but every other accepted path needs an explicit attribution rule. Item 2 (pseudonymous identity) has one design fragment in the [hub BOM](/cyberbaser/research/proposal-hub-bom/): a fixed bot identity plus a stable pseudonymous submission ID, and never a network identifier in a commit, since git history is permanent. The implemented proposal contract keeps identity claims inert and preserves the anonymous trust floor; neither mechanism supplies visible credit.
 :::
 
 ## The assignment

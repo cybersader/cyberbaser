@@ -25,7 +25,7 @@ __PROFILE_NOTICE__
 <textarea name="exactQuote" required></textarea>
 </label>
 <label>Replacement
-<span class="instruction">Write one replacement line. Leave this empty only if the quoted text should be deleted; multiline replacements are outside this pilot form.</span>
+<span class="instruction">Write one different replacement line. Leave this empty only if the quoted text should be deleted; multiline replacements are outside this pilot form.</span>
 <textarea name="replacement"></textarea>
 </label>
 <label>Rationale
@@ -78,6 +78,9 @@ __PROFILE_NOTICE__
       if (/[\r\n]/u.test(values.replacement)) {
         throw new Error('Multiline replacements are not supported because browsers normalize textarea line endings.');
       }
+      if (values.exactQuote === values.replacement) {
+        throw new Error('Replacement must differ from the exact quote.');
+      }
       if (values.rationale.length === 0) throw new Error('Rationale is required.');
       const pageUrl = httpsUrl(values.pageUrl, 'Page URL');
       const factualSource = values.factualSource === 'not applicable'
@@ -95,7 +98,7 @@ __PROFILE_NOTICE__
       const submittedAt = new Date().toISOString();
       const submission = {
         schemaVersion: 1,
-        instrumentVersion: 'reader-form-v1',
+        instrumentVersion: 'reader-form-v2',
         attemptId,
         openedAt,
         submittedAt,

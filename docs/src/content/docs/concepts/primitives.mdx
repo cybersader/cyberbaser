@@ -305,7 +305,7 @@ The gap, stated plainly: **the fully anonymous path and the generalized rich-aut
 
 ## Stable URLs
 
-**A page's URL does not change when the vault is reorganized.** The one primitive on this page that is still unsolved.
+**A previously published page address remains usable after reorganization: it stays canonical or its old route redirects directly to the current canonical page.**
 
 <div class="cb-url-lock" role="img" aria-label="A browser URL bar that stays identical while the underlying file moves to a different folder in the vault.">
   <div class="cb-mock-bar"><span class="cb-mock-dot cb-mock-dot-r"></span><span class="cb-mock-dot cb-mock-dot-y"></span><span class="cb-mock-dot cb-mock-dot-g"></span><span class="cb-mock-url">wiki.example.org/basics/exposure-triangle</span><span class="cb-mock-live">URL unchanged</span></div>
@@ -341,13 +341,15 @@ The gap, stated plainly: **the fully anonymous path and the generalized rich-aut
 
 Breaking external links — from blog posts, other wikis, search indexes — is the cardinal sin of a long-lived knowledge site. The whole point of publishing is that the link keeps working.
 
-Where it stands: the site ships **verbatim paths** today. The URL is the vault path as written, folder case and all, because lowercasing pages while assets keep their natural case breaks relative references. That is a deliberate v0 choice, safe only because a census of 4,183 paths found zero slug collisions.
+Where it stands: R16's **verbatim path-derived URLs** remain the live convention. Folder case and natural names are preserved because lowercasing pages independently from assets would break relative references, and the 4,183-path census found zero slug collisions.
 
-What is undecided is the durable scheme: a frontmatter slug, a permanent hash, or a title-slug with redirects generated on rename. Until that is chosen there is no **URL freeze**, so a reorganization today still moves URLs. A slug-diff gate that fails the build on an unintended URL change is the next step. Tracked in [Open Questions](/cyberbaser/reference/open-questions/) and [the renderer/URL proposal](/cyberbaser/research/proposal-renderer-urls/).
+R23 separates continuity from naming. A reviewed previous sitemap is the public-address baseline. Every candidate build must retain each baseline URL as canonical or emit a direct, same-origin redirect stub to one current canonical URL. The checker validates both inventories, every candidate route file, `noindex`, the canonical target, the zero-delay refresh target, and the absence of redirect chains.
+
+`@cyberbaser/linkcheck` implements and tests that check. The current public sitemap and a local candidate build each contained the same 931 canonical URLs, with zero failures; one real Quartz alias stub also passed separately. Cyberbase now retains that inventory as a cumulative baseline and requires pinned `cb-urlcheck` before Pages publication. The first required run preserved all 931 URLs and deployed successfully.
 
 </details>
 
-<a class="cb-deeper" href="/cyberbaser/reference/open-questions/">Go deeper: the open question of how URLs stay stable →</a>
+<a class="cb-deeper" href="/cyberbaser/reference/open-questions/#q06--content-addressability-slugs-hashes-or-title-based-with-redirects">Go deeper: R23 and the URL continuity contract →</a>
 
 ---
 

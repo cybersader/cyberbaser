@@ -11,17 +11,33 @@
     "cb-correction-pilot-init": "bin/pilot-init.js",
     "cb-correction-pilot-prepare": "bin/pilot-prepare.js",
     "cb-correction-pilot-render": "bin/pilot-render.js",
-    "cb-correction-pilot-decision": "bin/pilot-decision.js"
+    "cb-correction-pilot-decision": "bin/pilot-decision.js",
+    "cb-correction-dogfood-series-init": "bin/dogfood-series-init.js",
+    "cb-correction-dogfood-repin": "bin/dogfood-repin.js",
+    "cb-correction-dogfood-serve": "bin/dogfood-serve.js",
+    "cb-correction-dogfood-verify-live": "bin/dogfood-verify-live.js",
+    "cb-correction-adversarial-verify": "bin/verify-adversarial.js",
+    "cb-correction-dogfood": "bin/dogfood.js"
   },
   "scripts": {
     "test": "bun test",
     "verify": "bun run bin/verify.js",
+    "verify:adversarial": "bun run bin/verify-adversarial.js",
     "dry-run": "bun run bin/dry-run.js",
     "live-run": "bun run bin/live-run.js",
     "pilot:init": "bun run bin/pilot-init.js",
     "pilot:prepare": "bun run bin/pilot-prepare.js",
     "pilot:render": "bun run bin/pilot-render.js",
-    "pilot:decision": "bun run bin/pilot-decision.js"
+    "pilot:decision": "bun run bin/pilot-decision.js",
+    "dogfood": "bun run bin/dogfood.js",
+    "dogfood:series-init": "bun run bin/dogfood-series-init.js",
+    "dogfood:repin": "bun run bin/dogfood-repin.js",
+    "dogfood:serve": "bun run bin/dogfood-serve.js",
+    "dogfood:verify-live": "bun run bin/dogfood-verify-live.js",
+    "dogfood:init": "bun run bin/pilot-init.js",
+    "dogfood:prepare": "bun run bin/pilot-prepare.js",
+    "dogfood:render": "bun run bin/pilot-render.js",
+    "dogfood:decision": "bun run bin/pilot-decision.js"
   },
   "dependencies": {
     "@cyberbaser/correction": "file:../../packages/correction",

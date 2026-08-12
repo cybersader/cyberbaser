@@ -1,0 +1,9 @@
+# Debian 12 package snapshot for the local-only Linux/amd64 account-free intake image.
+DEBIAN_SNAPSHOT=20260803T000000Z
+bash=5.2.15-2+b13
+ca-certificates=20230311+deb12u1
+coreutils=9.1-1
+findutils=4.9.0-4
+git=1:2.39.5-0+deb12u3
+grep=3.8-5
+util-linux=2.38.1-5+deb12u3

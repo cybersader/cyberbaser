@@ -1,0 +1,12 @@
+{
+  "name": "@cyberbaser/account-free-intake-deploy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-only isolated OCI and Compose packaging for account-free intake.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "test": "bun test test",
+    "test:runtime": "bun test test/runtime-acceptance.test.js"
+  }
+}

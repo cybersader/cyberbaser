@@ -1,6 +1,6 @@
 ---
 title: "Renderer, URLs, filenames: what we publish and at what addresses"
-description: "Four decisions that unblock first publish: adopt Quartz as the vault's spoke renderer, fix the URL contract to path-slug plus aliases, replace the kebab-case lint with a safety lint, and run the one build measurement nobody has run."
+description: "Historical 2026-07-25 proposal covering renderer, URL, filename, and build questions. R23 later resolved URL continuity at the emitted-site boundary without adopting a permanent path-slug or source-alias convention."
 sidebar:
   label: "Renderer + URL decisions"
   order: 13
@@ -12,9 +12,15 @@ tags: [architecture, tradeoffs, scaling]
 One of several competing v1 designs from the adversarial design pass of 2026-07-25. Nothing on this page is locked. The deciding gate is the corpus round-trip measurement described in [the v1 build plan](/cyberbaser/research/v1-build-plan/), which also maps how the competing shapes differ.
 :::
 
-Four questions have been sitting open with no owner, and they are the same question asked four ways: **what do we publish, and at what addresses.** Nothing can ship until they are answered, and none of them needs more research. They need one measurement and one afternoon of convention-setting.
+:::note[Outcome under R23]
+This page is preserved as the proposal that made URL continuity concrete. R23 accepts the reader-facing invariant but not D2 as a permanent source naming contract. The live site keeps R16's exact-case, verbatim path-derived URLs. `@cyberbaser/linkcheck` now verifies that every URL in a previous sitemap either remains canonical or has a direct, same-origin `noindex` + canonical + zero-delay-refresh stub to one current canonical URL. Source `aliases` remain one possible renderer input, not the contract itself.
 
-This page decides all four. It supersedes the renderer and SEO rows in [the v1 architecture table](/cyberbaser/research/v1-architecture/) and closes Q02 and Q06 in [Open Questions](/cyberbaser/reference/open-questions/).
+The checker is implemented and tested. A read-only copy of the public sitemap and a local pinned-Quartz candidate each contained the same 931 canonical URLs, with zero failures; one real emitted alias stub also passed separately. Cyberbase now retains that inventory as a cumulative baseline and requires pinned `cb-urlcheck` before Pages publication. The first gated run preserved all 931 URLs and deployed successfully. The task list below remains historical planning evidence and must not be executed as the current roadmap.
+:::
+
+Four questions had been sitting open with no owner, and this proposal treated them as the same question asked four ways: **what do we publish, and at what addresses.** The text below is preserved in its 2026-07-25 planning frame.
+
+This page proposed answers to all four. Later decisions adopted parts of it: Quartz and the safety lint shipped, while R23 resolved Q06 at the emitted-site boundary rather than adopting D2's source convention.
 
 ## The four decisions
 
@@ -306,8 +312,8 @@ The moderation policy commits the maintainer to reviewing the rendered preview r
 - [The v1 architecture](/cyberbaser/research/v1-architecture/) - rows superseded here: translation layer (line 41), SEO/permalink (lines 50, 131), filename lint (line 130)
 - [Assumptions and risks](/cyberbaser/research/assumptions-and-risks/#tested-quartz-prior-art-audit-2026-06-19) - the Quartz audit this decision acts on
 - [Architecture](/cyberbaser/design/architecture/) - the boundary table (lines 249-253) that D1 makes executable
-- [Open Questions](/cyberbaser/reference/open-questions/) - Q02 closed as not-applicable, Q06 answered, Q05 pending one measurement
-- [Primitives, Stable URLs](/cyberbaser/concepts/primitives/#stable-urls) - line 349 still says "open question for now"; D2 replaces it
+- [Open Questions](/cyberbaser/reference/open-questions/) - Q06 is closed by R23; D2 on this page is historical design input, not the accepted source naming contract
+- [Primitives, Stable URLs](/cyberbaser/concepts/primitives/#stable-urls) - R23 defines continuity at the emitted-site boundary while exact-case verbatim paths remain the current convention
 - External: [Quartz `sluggify`](https://github.com/jackyzha0/quartz/blob/v4/quartz/util/path.ts) · [Quartz `AliasRedirects`](https://github.com/jackyzha0/quartz/blob/v4/quartz/plugins/emitters/aliases.ts) · [Astro static redirects](https://docs.astro.build/en/guides/routing/) · [GitHub Pages limits](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits) · [GitHub large file limits](https://docs.github.com/en/repositories/working-with-files/managing-large-files/about-large-files-on-github)
 
 ---

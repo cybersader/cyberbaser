@@ -1,4 +1,4 @@
-import { readFile, realpath, stat } from 'node:fs/promises';
+import { lstat, readFile, readdir, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { applyCorrection, prepareCorrection } from '@cyberbaser/correction';
 import { checkSite } from '@cyberbaser/linkcheck';
@@ -9,27 +9,41 @@ import {
   candidateOnlyLinkDelta,
   captureRenderedTargetEvidence,
   inspectCheckout,
+  inspectPinnedPublicationPolicy,
   runLiveCorrection,
 } from './live-run.js';
 import {
   convertPilotSubmission,
   countsTowardPilot,
+  evidenceClassification,
   ownerDecisionTemplate,
   renderAttestationTemplate,
+  validateDogfoodObservationSeriesBinding,
   validateOperator,
+  validateOperatorRepin,
   validateOwnerDecision,
   validateRenderAttestation,
   validateSubmission,
 } from './pilot-input.js';
-import { buildPilotOwnerReview, reviewCardContractMissing } from './pilot-review-card.js';
+import {
+  buildPilotOwnerReview,
+  cyberbaserBoundaryEvidenceComplete,
+  reviewCardContractMissing,
+} from './pilot-review-card.js';
 import { buildReviewCard } from './review-card.js';
 import {
+  atomicCreateArtifact,
   atomicWriteArtifact,
   attemptPaths,
   commitRunStaging,
   createRunStaging,
+  deriveCheckoutHead,
   loadAttemptJson,
+  loadAttemptOperator,
+  loadOwnerDogfoodSeries,
+  matchReaderFormInstrumentVersion,
   verifyAttemptWorkspace,
+  withAttemptBindingLock,
   writeStagedArtifact,
 } from './pilot-workspace.js';
 
@@ -46,6 +60,16 @@ function fail(code, message, details) {
   throw new PilotRunError(code, message, details);
 }
 
+async function artifactExists(file) {
+  try {
+    await lstat(file);
+    return true;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
 function clonePlain(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -54,15 +78,17 @@ function preparationStatus({ attemptId, operator, evaluation }) {
   const ofmClean = evaluation.ofm.verdict === 'clean';
   const publicationReady = operator.publicationBoundary === 'not-applicable';
   const blockingReasons = ['render-evidence-required'];
+  const classification = evidenceClassification(operator);
   if (evaluation.ofm.verdict === 'suspect') blockingReasons.unshift('ofm-suspect-blocks-owner-decision');
   if (evaluation.ofm.verdict === 'damage') blockingReasons.unshift('ofm-damage-stops-attempt');
   return deepFreeze({
-    schemaVersion: 1,
+    schemaVersion: 2,
     artifactType: 'private-human-correction-pilot-preparation',
     attemptId,
     mechanicalCaseId: evaluation.caseId,
     profile: operator.profile,
     countsTowardPilot: countsTowardPilot(operator),
+    ...classification,
     counting: {
       status: 'not-counted-by-preparation-kit',
       reason: 'human attempt and independent-owner results are recorded only after validated decision, owner-controlled application, and live verification',
@@ -91,7 +117,7 @@ function renderedStatus({ operator, priorStatus, evaluation, renderEvidence }) {
   const linkDelta = renderEvidence.siteChecks.linkDelta;
   const candidateOnlyLinks = linkDelta.counts.candidateOnly;
   const publicationReady = operator.publicationBoundary === 'not-applicable'
-    || renderEvidence.artifactType === 'private-local-rendered-correction-run';
+    || cyberbaserBoundaryEvidenceComplete(renderEvidence);
   const renderingReady = candidateOnlyLinks === 0
     && Object.values(renderEvidence.renderedTarget.comparable).every(Boolean);
   const missingReviewEvidence = reviewCardContractMissing({ operator, evaluation, renderEvidence });
@@ -125,11 +151,32 @@ function renderedStatus({ operator, priorStatus, evaluation, renderEvidence }) {
 async function loadValidatedAttempt(paths) {
   await verifyAttemptWorkspace(paths);
   const submission = validateSubmission(await loadAttemptJson(paths.submission, 'submission', paths));
-  const operator = validateOperator(await loadAttemptJson(paths.operator, 'operator', paths));
+  const operator = await loadAttemptOperator(paths);
   if (submission.attemptId !== paths.attemptId || operator.attemptId !== paths.attemptId) {
     fail('attempt-id-mismatch', 'attempt files must match the requested attempt ID');
   }
+  const issuedInstrumentVersion = await matchReaderFormInstrumentVersion(
+    await readFile(paths.readerForm),
+    paths.attemptId,
+    operator.profile,
+  );
+  if (submission.instrumentVersion !== issuedInstrumentVersion) {
+    fail(
+      'submission-instrument-version-mismatch',
+      'submission instrument version does not match the issued reader form',
+    );
+  }
   return { submission, operator };
+}
+
+function assertPublicationPolicyAtPin(operator, checkout) {
+  if (operator.publicationBoundary === 'cyberbaser'
+    && checkout.publishConfigPresent !== true) {
+    fail(
+      'publication-boundary-policy-missing',
+      'Cyberbaser processing requires publish.yml at the pinned source revision',
+    );
+  }
 }
 
 async function inspectBeforeAndAfter({ operator, action, inspector = inspectCheckout }) {
@@ -190,6 +237,150 @@ function assertStableEqual(actual, expected, code, message) {
   if (stableStringify(actual) !== stableStringify(expected)) fail(code, message);
 }
 
+function normalizeStoredStatus(statusInput, operator) {
+  const status = clonePlain(statusInput);
+  if (status.schemaVersion === 2) return deepFreeze(status);
+  if (status.schemaVersion !== 1) {
+    fail('unsupported-status-schema', 'stored status schema is not supported');
+  }
+  const classification = evidenceClassification(operator);
+  for (const [key, expected] of Object.entries(classification)) {
+    if (Object.hasOwn(status, key) && stableStringify(status[key]) !== stableStringify(expected)) {
+      fail(
+        'prepared-status-classification-mismatch',
+        'stored status evidence classification does not match the validated profile',
+      );
+    }
+  }
+  return deepFreeze({
+    ...status,
+    schemaVersion: 2,
+    ...classification,
+  });
+}
+
+export async function repinOwnerDogfoodAttempt({
+  attemptId,
+  checkoutDir,
+  sourceAuthorization,
+  reason,
+  repinnedAt = new Date().toISOString(),
+  projectRoot,
+  workspaceRoot,
+} = {}) {
+  const paths = attemptPaths(attemptId, { projectRoot, workspaceRoot });
+  await verifyAttemptWorkspace(paths);
+  const series = await loadOwnerDogfoodSeries({ projectRoot, workspaceRoot });
+  if (!series.attemptIds.includes(paths.attemptId)) {
+    fail('dogfood-attempt-not-declared', `${paths.attemptId} is not declared in the owner self-dogfood series`);
+  }
+  if (sourceAuthorization !== 'yes') {
+    fail('source-authorization-required', 'authorize-source must be exactly yes');
+  }
+  const originalOperator = validateOperator(
+    await loadAttemptJson(paths.operator, 'operator', paths),
+  );
+  if (originalOperator.profile !== 'owner-self-dogfood') {
+    fail('operator-repin-profile-mismatch', 'only owner self-dogfood attempts may be repinned');
+  }
+  if (await artifactExists(paths.operatorRepin)) {
+    fail('operator-repin-already-exists', 'this attempt already has an immutable operator repin');
+  }
+  const submission = validateSubmission(
+    await loadAttemptJson(paths.submission, 'submission', paths),
+  );
+  return withAttemptBindingLock(paths, async () => {
+    if (await artifactExists(paths.operatorRepin)) {
+      fail('operator-repin-already-exists', 'this attempt already has an immutable operator repin');
+    }
+    const canonicalDecision = await loadAttemptJson(paths.ownerDecision, 'owner-decision', paths);
+    if (canonicalDecision?.decision !== ''
+      || canonicalDecision?.reason !== ''
+      || canonicalDecision?.reviewSeconds !== null
+      || canonicalDecision?.decidedAt !== '') {
+      fail('operator-repin-after-decision', 'a recorded owner decision prevents operator repinning');
+    }
+    const runs = await readdir(paths.runs, { withFileTypes: true });
+    for (const entry of runs) {
+      if (!entry.isDirectory()) continue;
+      const runDir = path.join(paths.runs, entry.name);
+      if (await artifactExists(path.join(runDir, 'wizard-owner-decision.json'))
+        || await artifactExists(path.join(runDir, 'validated-owner-decision.json'))) {
+        fail('operator-repin-after-decision', 'a recorded owner decision prevents operator repinning');
+      }
+    }
+    const originalPolicy = await inspectPinnedPublicationPolicy({
+      checkoutDir: originalOperator.checkoutDir,
+      pinnedCommit: originalOperator.baseCommit,
+      repository: originalOperator.repository,
+    });
+    if (originalPolicy.publishConfigPresent === true) {
+      fail(
+        'operator-repin-not-required',
+        'operator repin is limited to historical owner-dogfood pins that lack publish.yml',
+      );
+    }
+
+    const replacementHead = await deriveCheckoutHead(checkoutDir);
+    const replacementCheckout = await inspectCheckout({
+      checkoutDir,
+      pinnedCommit: replacementHead,
+      repository: originalOperator.repository,
+      sourcePath: originalOperator.sourcePath,
+    });
+    assertPublicationPolicyAtPin(originalOperator, replacementCheckout);
+    if (replacementCheckout.head === originalOperator.baseCommit) {
+      fail('operator-repin-base-unchanged', 'operator repin must select a different base commit');
+    }
+    const replacementOperator = validateOperator({
+      ...originalOperator,
+      checkoutDir: replacementCheckout.root,
+      baseCommit: replacementCheckout.head,
+    });
+    const originalCase = convertPilotSubmission(submission, originalOperator);
+    const replacementCase = convertPilotSubmission(submission, replacementOperator);
+    const originalCaseId = caseId(originalCase);
+    const replacementCaseId = caseId(replacementCase);
+    if (replacementCaseId === originalCaseId) {
+      fail('operator-repin-case-unchanged', 'operator repin must produce a new base-bound mechanical case');
+    }
+    await inspectBeforeAndAfter({
+      operator: replacementOperator,
+      action: (checkout) => {
+        assertPublicationPolicyAtPin(replacementOperator, checkout);
+        return evaluateCorrection({
+          caseData: replacementCase,
+          checkoutDir: checkout.root,
+          ownerPolicy: replacementOperator.ownerPolicy,
+          policyRevision: replacementOperator.ownerPolicyRevision,
+          trustSubject: { authorType: 'anonymous', author: '' },
+        });
+      },
+    });
+    const repin = validateOperatorRepin({
+      schemaVersion: 1,
+      artifactType: 'private-owner-self-dogfood-operator-repin',
+      attemptId: paths.attemptId,
+      reason,
+      repinnedAt,
+      previousCheckoutDir: originalOperator.checkoutDir,
+      previousBaseCommit: originalOperator.baseCommit,
+      publishConfigPresent: true,
+      replacementOperator,
+    }, originalOperator);
+    await atomicCreateArtifact(paths.operatorRepin, stableStringify(repin), paths);
+    return deepFreeze({
+      attemptId: paths.attemptId,
+      originalCaseId,
+      replacementCaseId,
+      previousBaseCommit: originalOperator.baseCommit,
+      baseCommit: replacementOperator.baseCommit,
+      checkoutDir: replacementOperator.checkoutDir,
+      publishConfigPresent: true,
+    });
+  });
+}
+
 export async function preparePilotAttempt({
   attemptId,
   projectRoot,
@@ -202,13 +393,16 @@ export async function preparePilotAttempt({
 
   const evaluation = await inspectBeforeAndAfter({
     operator,
-    action: (checkout) => evaluateCorrection({
-      caseData,
-      checkoutDir: checkout.root,
-      ownerPolicy: operator.ownerPolicy,
-      policyRevision: operator.ownerPolicyRevision,
-      trustSubject: { authorType: 'anonymous', author: '' },
-    }),
+    action: (checkout) => {
+      assertPublicationPolicyAtPin(operator, checkout);
+      return evaluateCorrection({
+        caseData,
+        checkoutDir: checkout.root,
+        ownerPolicy: operator.ownerPolicy,
+        policyRevision: operator.ownerPolicyRevision,
+        trustSubject: { authorType: 'anonymous', author: '' },
+      });
+    },
   });
   if (evaluation.caseId !== mechanicalCaseId) fail('mechanical-case-id-mismatch', 'deterministic case ID changed during preparation');
   if (evaluation.trust.authorType !== 'anonymous') {
@@ -256,6 +450,9 @@ export async function preparePilotAttempt({
       mechanicalCaseId,
       runDir,
       countsTowardPilot: status.countsTowardPilot,
+      evidenceClass: status.evidenceClass,
+      countsTowardHumanPilot: status.countsTowardHumanPilot,
+      independentOwnerEvidence: status.independentOwnerEvidence,
       ownerDecisionEligible: false,
       blockingReasons: [...status.blockingReasons],
       ownerCardCreated: Boolean(ownerReview),
@@ -282,16 +479,20 @@ async function revalidatePreparedRun({ paths, submission, operator, caseData, me
     if (error?.code) throw error;
     fail('prepared-run-unavailable', 'the prepared run artifacts could not be loaded');
   }
+  storedStatus = normalizeStoredStatus(storedStatus, operator);
   assertStableEqual(storedCase, caseData, 'prepared-case-mismatch', 'stored case does not match the current submission and owner mapping');
   const freshEvaluation = await inspectBeforeAndAfter({
     operator,
-    action: (checkout) => evaluateCorrection({
-      caseData,
-      checkoutDir: checkout.root,
-      ownerPolicy: operator.ownerPolicy,
-      policyRevision: operator.ownerPolicyRevision,
-      trustSubject: { authorType: 'anonymous', author: '' },
-    }),
+    action: (checkout) => {
+      assertPublicationPolicyAtPin(operator, checkout);
+      return evaluateCorrection({
+        caseData,
+        checkoutDir: checkout.root,
+        ownerPolicy: operator.ownerPolicy,
+        policyRevision: operator.ownerPolicyRevision,
+        trustSubject: { authorType: 'anonymous', author: '' },
+      });
+    },
   });
   assertStableEqual(storedEvaluation, freshEvaluation, 'prepared-evaluation-mismatch', 'stored mechanical evidence does not match a fresh evaluation of the pinned source bytes');
   if (freshEvaluation.caseId !== mechanicalCaseId || storedStatus.mechanicalCaseId !== mechanicalCaseId) {
@@ -538,10 +739,41 @@ export async function renderPilotAttempt({
     mechanicalCaseId,
     runDir,
     countsTowardPilot: status.countsTowardPilot,
+    evidenceClass: status.evidenceClass,
+    countsTowardHumanPilot: status.countsTowardHumanPilot,
+    independentOwnerEvidence: status.independentOwnerEvidence,
     ownerDecisionEligible: status.ownerDecisionEligible,
     blockingReasons: [...status.blockingReasons],
     arbitraryOwnerCommandExecuted: false,
   });
+}
+
+export function validateEligibleOwnerDecisionBinding(decisionInput, {
+  attemptId,
+  mechanicalCaseId,
+  candidateDigest,
+  ownerDecisionEligible,
+  requiredDecision,
+} = {}) {
+  if (ownerDecisionEligible !== true) {
+    fail('owner-decision-not-eligible', 'owner decision binding requires an eligible candidate');
+  }
+  const decision = validateOwnerDecision(decisionInput);
+  if (decision.attemptId !== attemptId
+    || decision.mechanicalCaseId !== mechanicalCaseId
+    || decision.candidateDigest !== candidateDigest) {
+    fail(
+      'owner-decision-binding-mismatch',
+      'owner decision does not match the eligible attempt, mechanical case, and candidate digest',
+    );
+  }
+  if (requiredDecision !== undefined && decision.decision !== requiredDecision) {
+    fail(
+      'dogfood-owner-rejection-required',
+      'the required rejection path must use a reject decision',
+    );
+  }
+  return decision;
 }
 
 export async function validatePilotOwnerDecision({
@@ -618,23 +850,86 @@ export async function validatePilotOwnerDecision({
       blockingReasons: expectedStatus.blockingReasons,
     });
   }
-  const decision = validateOwnerDecision(
-    await loadAttemptJson(paths.ownerDecision, 'owner-decision', paths),
-  );
-  if (decision.attemptId !== paths.attemptId
-    || decision.mechanicalCaseId !== mechanicalCaseId
-    || decision.candidateDigest !== preparedRun.evaluation.candidate.digest) {
-    fail('owner-decision-binding-mismatch', 'owner decision does not match the eligible attempt, mechanical case, and candidate digest');
+  let dogfoodObservation = null;
+  let dogfoodSeries = null;
+  if (operator.profile === 'owner-self-dogfood') {
+    dogfoodSeries = await loadOwnerDogfoodSeries({
+      projectRoot: paths.projectRoot,
+      workspaceRoot: paths.workspaceRoot,
+    });
+    dogfoodObservation = validateDogfoodObservationSeriesBinding(
+      await loadAttemptJson(paths.dogfoodObservation, 'dogfood-observation', paths),
+      dogfoodSeries,
+    );
+    if (dogfoodObservation.attemptId !== paths.attemptId) {
+      fail(
+        'dogfood-observation-binding-mismatch',
+        'dogfood observation does not match the eligible attempt',
+      );
+    }
+    if (dogfoodObservation.sourceWritePerformed
+      || dogfoodObservation.publicDeploymentPerformed
+      || dogfoodObservation.liveVerificationPerformed) {
+      fail(
+        'dogfood-observation-conflicts-with-decision-validation',
+        'owner decision must be validated before any source write, public deployment, or live verification',
+      );
+    }
   }
+  const wizardDecisionPath = path.join(preparedRun.runDir, 'wizard-owner-decision.json');
+  let decision;
+  if (await artifactExists(wizardDecisionPath)) {
+    if (operator.profile !== 'owner-self-dogfood') {
+      fail(
+        'wizard-owner-decision-profile-mismatch',
+        'wizard owner decisions require owner self-dogfood',
+      );
+    }
+    const expectedBlankDecision = ownerDecisionTemplate(paths.attemptId, {
+      mechanicalCaseId,
+      candidateDigest: preparedRun.evaluation.candidate.digest,
+    });
+    const canonicalDecision = await loadAttemptJson(paths.ownerDecision, 'owner-decision', paths);
+    if (stableStringify(canonicalDecision) !== stableStringify(expectedBlankDecision)) {
+      fail(
+        'wizard-owner-decision-authority-conflict',
+        'wizard decision requires a blank canonical scaffold',
+      );
+    }
+    decision = validateOwnerDecision(
+      await loadAttemptJson(wizardDecisionPath, 'wizard-owner-decision', paths),
+    );
+  } else {
+    decision = validateOwnerDecision(
+      await loadAttemptJson(paths.ownerDecision, 'owner-decision', paths),
+    );
+  }
+  decision = validateEligibleOwnerDecisionBinding(decision, {
+    attemptId: paths.attemptId,
+    mechanicalCaseId,
+    candidateDigest: preparedRun.evaluation.candidate.digest,
+    ownerDecisionEligible: expectedStatus.ownerDecisionEligible,
+    ...(dogfoodSeries?.obligationAssignments['owner-rejection'] === paths.attemptId
+      ? { requiredDecision: 'reject' }
+      : {}),
+  });
+  const classification = evidenceClassification(operator);
   const validated = deepFreeze({
-    schemaVersion: 1,
-    artifactType: 'private-validated-human-owner-decision',
+    artifactType: operator.profile === 'owner-self-dogfood'
+      ? 'private-validated-owner-self-dogfood-decision'
+      : 'private-validated-human-owner-decision',
     ...clonePlain(decision),
+    schemaVersion: operator.profile === 'owner-self-dogfood' ? 2 : 1,
+    ...classification,
+    ...(dogfoodObservation
+      ? { dogfoodObservationAtValidation: clonePlain(dogfoodObservation) }
+      : {}),
     ownerDecisionEligibleAtValidation: true,
-    sourceWritePerformed: false,
+    sourceWritePerformed: dogfoodObservation?.sourceWritePerformed ?? false,
+    publicDeploymentPerformed: dogfoodObservation?.publicDeploymentPerformed ?? false,
     countsTowardPilot: false,
   });
-  await atomicWriteArtifact(
+  await atomicCreateArtifact(
     path.join(preparedRun.runDir, 'validated-owner-decision.json'),
     stableStringify(validated),
     paths,

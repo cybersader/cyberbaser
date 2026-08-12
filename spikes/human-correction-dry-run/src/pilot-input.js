@@ -1,13 +1,40 @@
 import path from 'node:path';
-import { deepFreeze } from './case.js';
+import { deepFreeze, stableStringify } from './case.js';
 
-const ATTEMPT_RE = /^HC-(?:0[1-9]|[1-9][0-9])$/u;
+const ATTEMPT_RE = /^(?:HC|OD)-(?:0[1-9]|[1-9][0-9])$/u;
 const COMMIT_RE = /^[0-9a-f]{40}$/u;
 const CONTROL_RE = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u;
-const PROFILES = new Set(['cyberbase-rehearsal', 'independent-counted']);
+const PROFILES = new Set(['cyberbase-rehearsal', 'owner-self-dogfood', 'independent-counted']);
 const KINDS = new Set(['typo', 'factual', 'link', 'wording', 'formatting']);
 const PUBLICATION_BOUNDARIES = new Set(['cyberbaser', 'not-applicable']);
 const RENDERER_PROFILES = new Set(['cyberbase-quartz-v4.5.2', 'owner-static-output']);
+const INSTRUMENT_VERSIONS = new Set(['reader-form-v1', 'reader-form-v2']);
+export const OWNER_DOGFOOD_OBLIGATIONS = deepFreeze([
+  'normal-correction',
+  'signed-out-mobile-handoff',
+  'stale-source',
+  'ambiguous-quote',
+  'owner-rejection',
+]);
+const SUPERSEDED_OWNER_DOGFOOD_ATTEMPTS = new Set(['OD-02', 'OD-03']);
+
+export function isSupersededOwnerDogfoodAttempt(attemptId) {
+  return SUPERSEDED_OWNER_DOGFOOD_ATTEMPTS.has(attemptId);
+}
+const OWNER_DOGFOOD_CLASSIFICATION = deepFreeze({
+  evidenceClass: 'owner-self-dogfood',
+  countsTowardHumanPilot: false,
+  independentOwnerEvidence: false,
+  claimBoundary: 'maintainer operational and mechanical evidence only',
+});
+const OWNER_DOGFOOD_SERIES_KEYS = new Set([
+  'schemaVersion', 'artifactType', 'profile', 'attemptIds', 'obligationAssignments',
+  'plannedSignedOutMobile', 'evidenceClassification',
+]);
+const OWNER_DOGFOOD_MOBILE_KEYS = new Set([
+  'attemptId', 'device', 'operatingSystem', 'browser', 'signedIn',
+]);
+const OWNER_DOGFOOD_CLASSIFICATION_KEYS = new Set(Object.keys(OWNER_DOGFOOD_CLASSIFICATION));
 const SUBMISSION_KEYS = new Set([
   'schemaVersion', 'instrumentVersion', 'attemptId', 'openedAt', 'submittedAt', 'elapsedMs',
   'pageUrl', 'exactQuote', 'replacement', 'rationale', 'factualSource', 'publicCreditName',
@@ -18,6 +45,10 @@ const OPERATOR_KEYS = new Set([
   'publicUrl', 'sourceAuthorizedForLocalProcessing', 'independentOwnerAttested', 'readerUnaided',
   'accessInterruption', 'correctionKind', 'selectorContext', 'ownerPolicyRevision', 'ownerPolicy',
   'publicationBoundary', 'renderer',
+]);
+const OPERATOR_REPIN_KEYS = new Set([
+  'schemaVersion', 'artifactType', 'attemptId', 'reason', 'repinnedAt',
+  'previousCheckoutDir', 'previousBaseCommit', 'publishConfigPresent', 'replacementOperator',
 ]);
 const SELECTOR_KEYS = new Set(['prefix', 'suffix']);
 const RENDERER_KEYS = new Set(['profile', 'basePath', 'buildCommand']);
@@ -30,6 +61,15 @@ const RENDER_ATTESTATION_KEYS = new Set([
   'candidateSourceDigest', 'rendererProfile', 'buildCommand', 'baselineSiteDir',
   'candidateSiteDir', 'builtFromPreparedSnapshots', 'builtInIsolatedWorkspaces',
   'ownerConfirmedAt',
+]);
+const DOGFOOD_OBSERVATION_KEYS = new Set([
+  'schemaVersion', 'attemptId', 'evidenceClass', 'precommittedObligations', 'scenario',
+  'readerContext', 'ownerContext', 'roleSeparation', 'startedAt', 'completedAt',
+  'manualInterventions', 'sourceWritePerformed', 'publicDeploymentPerformed',
+  'liveVerificationPerformed', 'notes',
+]);
+const DOGFOOD_CONTEXT_KEYS = new Set([
+  'device', 'operatingSystem', 'browser', 'signedIn',
 ]);
 const CASE_ID_RE = /^DRY-[0-9A-F]{12}$/u;
 const REPRESENTATION_DIGEST_RE = /^sha-256=:[A-Za-z0-9+/]{43}=:$/u;
@@ -80,6 +120,12 @@ function exactString(value, label, { nonEmpty = false, oneLine = false } = {}) {
   return value;
 }
 
+function exactNonBlankString(value, label) {
+  const text = exactString(value, label, { nonEmpty: true, oneLine: true });
+  if (!/\S/u.test(text)) fail('blank-string', `${label} must contain a non-whitespace character`);
+  return text;
+}
+
 function exactHttpsUrl(value, label) {
   const text = exactString(value, label, { nonEmpty: true, oneLine: true });
   let url;
@@ -112,7 +158,7 @@ function exactIsoDate(value, label) {
 
 function exactAttemptId(value) {
   const attemptId = exactString(value, 'attemptId', { nonEmpty: true, oneLine: true });
-  if (!ATTEMPT_RE.test(attemptId)) fail('invalid-attempt-id', 'attemptId must use HC-01 through HC-99');
+  if (!ATTEMPT_RE.test(attemptId)) fail('invalid-attempt-id', 'attemptId must use HC-01 through HC-99 or OD-01 through OD-99');
   return attemptId;
 }
 
@@ -142,7 +188,9 @@ export function validateSourcePath(value) {
 
 export function validateProfile(value) {
   const profile = exactString(value, 'profile', { nonEmpty: true, oneLine: true });
-  if (!PROFILES.has(profile)) fail('invalid-profile', 'profile must be cyberbase-rehearsal or independent-counted');
+  if (!PROFILES.has(profile)) {
+    fail('invalid-profile', 'profile must be cyberbase-rehearsal, owner-self-dogfood, or independent-counted');
+  }
   return profile;
 }
 
@@ -151,8 +199,16 @@ export function validateSubmission(input) {
   strictKeys(value, SUBMISSION_KEYS, 'submission');
   requiredKeys(value, SUBMISSION_KEYS, 'submission');
   if (value.schemaVersion !== 1) fail('invalid-schema-version', 'submission.schemaVersion must be 1');
-  if (value.instrumentVersion !== 'reader-form-v1') {
-    fail('invalid-instrument-version', 'submission.instrumentVersion must be reader-form-v1');
+  const instrumentVersion = exactString(
+    value.instrumentVersion,
+    'submission.instrumentVersion',
+    { nonEmpty: true, oneLine: true },
+  );
+  if (!INSTRUMENT_VERSIONS.has(instrumentVersion)) {
+    fail(
+      'invalid-instrument-version',
+      'submission.instrumentVersion must be reader-form-v1 or reader-form-v2',
+    );
   }
   if (!Number.isSafeInteger(value.elapsedMs) || value.elapsedMs < 0) {
     fail('invalid-elapsed-ms', 'submission.elapsedMs must be a non-negative safe integer');
@@ -168,17 +224,26 @@ export function validateSubmission(input) {
   if (creditConsent === 'yes' && publicCreditName.length === 0) {
     fail('credit-name-required', 'credit consent yes requires a non-empty public credit name');
   }
+  const exactQuote = exactString(
+    value.exactQuote,
+    'submission.exactQuote',
+    { nonEmpty: true, oneLine: true },
+  );
+  const replacement = exactString(value.replacement, 'submission.replacement', { oneLine: true });
+  if (instrumentVersion === 'reader-form-v2' && exactQuote === replacement) {
+    fail('no-op-replacement', 'reader-form-v2 replacement must differ from the exact quote');
+  }
 
   return deepFreeze({
     schemaVersion: 1,
-    instrumentVersion: 'reader-form-v1',
+    instrumentVersion,
     attemptId: exactAttemptId(value.attemptId),
     openedAt: exactIsoDate(value.openedAt, 'submission.openedAt'),
     submittedAt: exactIsoDate(value.submittedAt, 'submission.submittedAt'),
     elapsedMs: value.elapsedMs,
     pageUrl: exactHttpsUrl(value.pageUrl, 'submission.pageUrl'),
-    exactQuote: exactString(value.exactQuote, 'submission.exactQuote', { nonEmpty: true, oneLine: true }),
-    replacement: exactString(value.replacement, 'submission.replacement', { oneLine: true }),
+    exactQuote,
+    replacement,
     rationale: exactString(value.rationale, 'submission.rationale', { nonEmpty: true }),
     factualSource,
     publicCreditName,
@@ -186,7 +251,14 @@ export function validateSubmission(input) {
   });
 }
 
-export function createSubmissionRecord({ attemptId, openedAt, submittedAt, elapsedMs, fields }) {
+export function createSubmissionRecord({
+  attemptId,
+  openedAt,
+  submittedAt,
+  elapsedMs,
+  fields,
+  instrumentVersion = 'reader-form-v2',
+}) {
   const values = plainRecord(fields, 'form-fields');
   strictKeys(values, new Set([
     'pageUrl', 'exactQuote', 'replacement', 'rationale', 'factualSource', 'publicCreditName',
@@ -194,7 +266,7 @@ export function createSubmissionRecord({ attemptId, openedAt, submittedAt, elaps
   ]), 'form-fields');
   return validateSubmission({
     schemaVersion: 1,
-    instrumentVersion: 'reader-form-v1',
+    instrumentVersion,
     attemptId,
     openedAt,
     submittedAt,
@@ -274,6 +346,13 @@ export function validateOperator(input) {
   requiredKeys(value, OPERATOR_KEYS, 'operator');
   if (value.schemaVersion !== 1) fail('invalid-schema-version', 'operator.schemaVersion must be 1');
   const profile = validateProfile(value.profile);
+  const attemptId = exactAttemptId(value.attemptId);
+  if (profile === 'owner-self-dogfood' && !attemptId.startsWith('OD-')) {
+    fail('dogfood-attempt-id-required', 'owner-self-dogfood must use an OD-01 through OD-99 attempt ID');
+  }
+  if (profile !== 'owner-self-dogfood' && !attemptId.startsWith('HC-')) {
+    fail('pilot-attempt-id-required', 'pilot and rehearsal profiles must use an HC-01 through HC-99 attempt ID');
+  }
   const repository = exactHttpsUrl(value.repository, 'operator.repository');
   const checkoutDir = exactString(value.checkoutDir, 'operator.checkoutDir', { nonEmpty: true, oneLine: true });
   if (!path.isAbsolute(checkoutDir)) fail('invalid-checkout-dir', 'operator.checkoutDir must be an absolute local path');
@@ -298,19 +377,22 @@ export function validateOperator(input) {
   }
   const renderer = validateRenderer(value.renderer);
 
-  if (profile === 'cyberbase-rehearsal') {
+  if (profile === 'cyberbase-rehearsal' || profile === 'owner-self-dogfood') {
     if (!isCyberbaseRepository(repository)) {
-      fail('rehearsal-repository-mismatch', 'cyberbase-rehearsal must use the public Cyberbase repository');
+      fail('cyberbase-profile-repository-mismatch', `${profile} must use the public Cyberbase repository`);
     }
     if (renderer.profile !== 'cyberbase-quartz-v4.5.2') {
-      fail('rehearsal-renderer-mismatch', 'cyberbase-rehearsal must use the pinned Cyberbase Quartz profile');
+      fail('cyberbase-profile-renderer-mismatch', `${profile} must use the pinned Cyberbase Quartz profile`);
     }
     if (publicationBoundary !== 'cyberbaser') {
-      fail('rehearsal-boundary-mismatch', 'cyberbase-rehearsal must verify the Cyberbaser publication boundary');
+      fail('cyberbase-profile-boundary-mismatch', `${profile} must verify the Cyberbaser publication boundary`);
+    }
+    if (profile === 'owner-self-dogfood' && value.independentOwnerAttested !== false) {
+      fail('dogfood-cannot-claim-independent-owner', 'owner-self-dogfood cannot claim independent-owner evidence');
     }
   } else {
     if (isCyberbaseRepository(repository)) {
-      fail('cyberbase-cannot-be-independent', 'the Cyberbase repository is permanently limited to the zero-count rehearsal profile');
+      fail('cyberbase-cannot-be-independent', 'the Cyberbase repository is limited to non-counting rehearsal and owner-self-dogfood profiles');
     }
     if (value.independentOwnerAttested !== true) {
       fail('independent-owner-attestation-required', 'independent-counted requires explicit independent-owner attestation');
@@ -322,7 +404,7 @@ export function validateOperator(input) {
 
   return deepFreeze({
     schemaVersion: 1,
-    attemptId: exactAttemptId(value.attemptId),
+    attemptId,
     profile,
     repository,
     checkoutDir,
@@ -342,9 +424,181 @@ export function validateOperator(input) {
   });
 }
 
+export function validateOperatorRepin(input, originalOperatorInput) {
+  const value = plainRecord(input, 'operator-repin');
+  strictKeys(value, OPERATOR_REPIN_KEYS, 'operator-repin');
+  requiredKeys(value, OPERATOR_REPIN_KEYS, 'operator-repin');
+  if (value.schemaVersion !== 1) fail('invalid-schema-version', 'operator-repin.schemaVersion must be 1');
+  if (value.artifactType !== 'private-owner-self-dogfood-operator-repin') {
+    fail('invalid-operator-repin-artifact-type', 'operator-repin artifact type is invalid');
+  }
+  const originalOperator = validateOperator(originalOperatorInput);
+  const replacementOperator = validateOperator(value.replacementOperator);
+  if (originalOperator.profile !== 'owner-self-dogfood'
+    || replacementOperator.profile !== 'owner-self-dogfood') {
+    fail('operator-repin-profile-mismatch', 'operator repin requires owner self-dogfood operators');
+  }
+  const attemptId = exactAttemptId(value.attemptId);
+  if (attemptId !== originalOperator.attemptId || attemptId !== replacementOperator.attemptId) {
+    fail('operator-repin-attempt-mismatch', 'operator repin attempt IDs must match');
+  }
+  if (value.previousCheckoutDir !== originalOperator.checkoutDir
+    || value.previousBaseCommit !== originalOperator.baseCommit) {
+    fail('operator-repin-previous-binding-mismatch', 'operator repin previous binding does not match the original operator');
+  }
+  if (value.publishConfigPresent !== true) {
+    fail('operator-repin-policy-required', 'operator repin requires publish.yml at the replacement pin');
+  }
+  if (replacementOperator.baseCommit === originalOperator.baseCommit) {
+    fail('operator-repin-base-unchanged', 'operator repin must select a different base commit');
+  }
+  const {
+    checkoutDir: originalCheckout,
+    baseCommit: originalBase,
+    ...originalFixed
+  } = originalOperator;
+  const {
+    checkoutDir: replacementCheckout,
+    baseCommit: replacementBase,
+    ...replacementFixed
+  } = replacementOperator;
+  if (stableStringify(originalFixed) !== stableStringify(replacementFixed)) {
+    fail('operator-repin-binding-changed', 'operator repin may change only checkoutDir and baseCommit');
+  }
+  return deepFreeze({
+    schemaVersion: 1,
+    artifactType: 'private-owner-self-dogfood-operator-repin',
+    attemptId,
+    reason: exactNonBlankString(value.reason, 'operator-repin.reason'),
+    repinnedAt: exactIsoDate(value.repinnedAt, 'operator-repin.repinnedAt'),
+    previousCheckoutDir: originalCheckout,
+    previousBaseCommit: originalBase,
+    publishConfigPresent: true,
+    replacementOperator,
+  });
+}
+
 export function countsTowardPilot(operator) {
   validateOperator(operator);
   return false;
+}
+
+export function evidenceClassification(operatorOrProfile) {
+  const operator = typeof operatorOrProfile === 'string' ? null : validateOperator(operatorOrProfile);
+  const profile = operator ? operator.profile : validateProfile(operatorOrProfile);
+  if (profile === 'owner-self-dogfood') return OWNER_DOGFOOD_CLASSIFICATION;
+  if (profile === 'cyberbase-rehearsal') {
+    return deepFreeze({
+      evidenceClass: 'internal-cyberbase-rehearsal',
+      countsTowardHumanPilot: false,
+      independentOwnerEvidence: false,
+      claimBoundary: 'zero counted independent-owner evidence; internal agentic and mechanical evidence only',
+    });
+  }
+  return deepFreeze({
+    evidenceClass: 'independent-human-pilot-candidate',
+    countsTowardHumanPilot: false,
+    independentOwnerEvidence: operator?.independentOwnerAttested ?? false,
+    claimBoundary: 'counting remains outside the preparation kit until owner application and live verification',
+  });
+}
+
+export function validateOwnerDogfoodSeriesCharter(input) {
+  const value = plainRecord(input, 'owner-dogfood-series');
+  strictKeys(value, OWNER_DOGFOOD_SERIES_KEYS, 'owner-dogfood-series');
+  requiredKeys(value, OWNER_DOGFOOD_SERIES_KEYS, 'owner-dogfood-series');
+  if (value.schemaVersion !== 1) {
+    fail('invalid-schema-version', 'owner-dogfood-series.schemaVersion must be 1');
+  }
+  if (value.artifactType !== 'private-owner-self-dogfood-series-charter') {
+    fail(
+      'invalid-dogfood-series-artifact-type',
+      'owner-dogfood-series.artifactType must be private-owner-self-dogfood-series-charter',
+    );
+  }
+  if (validateProfile(value.profile) !== 'owner-self-dogfood') {
+    fail('invalid-dogfood-series-profile', 'owner-dogfood-series.profile must be owner-self-dogfood');
+  }
+  if (!Array.isArray(value.attemptIds) || value.attemptIds.length < 3 || value.attemptIds.length > 5) {
+    fail('invalid-dogfood-series-size', 'owner-dogfood-series.attemptIds must contain three to five IDs');
+  }
+  const attemptIds = value.attemptIds.map((item) => exactAttemptId(item));
+  if (attemptIds.some((attemptId) => !attemptId.startsWith('OD-'))) {
+    fail('dogfood-attempt-id-required', 'owner dogfood series must use OD-01 through OD-99 attempt IDs');
+  }
+  if (new Set(attemptIds).size !== attemptIds.length) {
+    fail('duplicate-dogfood-attempt-id', 'owner-dogfood-series.attemptIds must be unique');
+  }
+
+  const assignments = plainRecord(value.obligationAssignments, 'dogfood-obligation-assignments');
+  const obligationKeys = new Set(OWNER_DOGFOOD_OBLIGATIONS);
+  strictKeys(assignments, obligationKeys, 'dogfood-obligation-assignments');
+  requiredKeys(assignments, obligationKeys, 'dogfood-obligation-assignments');
+  const declared = new Set(attemptIds);
+  const normalizedAssignments = {};
+  for (const obligation of OWNER_DOGFOOD_OBLIGATIONS) {
+    const assignedAttempt = exactAttemptId(assignments[obligation]);
+    if (!assignedAttempt.startsWith('OD-') || !declared.has(assignedAttempt)) {
+      fail(
+        'dogfood-obligation-attempt-not-declared',
+        `dogfood obligation ${obligation} must reference a declared OD attempt`,
+      );
+    }
+    normalizedAssignments[obligation] = assignedAttempt;
+  }
+  const usedAttempts = new Set(Object.values(normalizedAssignments));
+  const unusedAttempt = attemptIds.find((attemptId) => !usedAttempts.has(attemptId));
+  if (unusedAttempt) {
+    fail(
+      'unused-dogfood-attempt',
+      `declared dogfood attempt ${unusedAttempt} must have at least one obligation`,
+    );
+  }
+
+  const mobile = plainRecord(value.plannedSignedOutMobile, 'planned-signed-out-mobile');
+  strictKeys(mobile, OWNER_DOGFOOD_MOBILE_KEYS, 'planned-signed-out-mobile');
+  requiredKeys(mobile, OWNER_DOGFOOD_MOBILE_KEYS, 'planned-signed-out-mobile');
+  const mobileAttemptId = exactAttemptId(mobile.attemptId);
+  if (mobileAttemptId !== normalizedAssignments['signed-out-mobile-handoff']) {
+    fail(
+      'dogfood-mobile-attempt-mismatch',
+      'planned signed-out mobile attempt must match the signed-out-mobile-handoff obligation',
+    );
+  }
+  if (mobile.signedIn !== false) {
+    fail('dogfood-mobile-must-be-signed-out', 'planned signed-out mobile context must set signedIn to false');
+  }
+
+  const classification = plainRecord(value.evidenceClassification, 'dogfood-evidence-classification');
+  strictKeys(classification, OWNER_DOGFOOD_CLASSIFICATION_KEYS, 'dogfood-evidence-classification');
+  requiredKeys(classification, OWNER_DOGFOOD_CLASSIFICATION_KEYS, 'dogfood-evidence-classification');
+  for (const [key, expected] of Object.entries(OWNER_DOGFOOD_CLASSIFICATION)) {
+    if (classification[key] !== expected) {
+      fail(
+        'dogfood-evidence-classification-mismatch',
+        `dogfood evidence classification ${key} must remain fixed`,
+      );
+    }
+  }
+
+  return deepFreeze({
+    schemaVersion: 1,
+    artifactType: 'private-owner-self-dogfood-series-charter',
+    profile: 'owner-self-dogfood',
+    attemptIds: [...attemptIds],
+    obligationAssignments: normalizedAssignments,
+    plannedSignedOutMobile: {
+      attemptId: mobileAttemptId,
+      device: exactNonBlankString(mobile.device, 'planned-signed-out-mobile.device'),
+      operatingSystem: exactNonBlankString(
+        mobile.operatingSystem,
+        'planned-signed-out-mobile.operatingSystem',
+      ),
+      browser: exactNonBlankString(mobile.browser, 'planned-signed-out-mobile.browser'),
+      signedIn: false,
+    },
+    evidenceClassification: { ...OWNER_DOGFOOD_CLASSIFICATION },
+  });
 }
 
 export function convertPilotSubmission(submissionInput, operatorInput) {
@@ -434,6 +688,133 @@ export function renderAttestationTemplate({ attemptId, mechanicalCaseId, baselin
   };
 }
 
+function validateDogfoodContext(input, label) {
+  const value = plainRecord(input, label);
+  strictKeys(value, DOGFOOD_CONTEXT_KEYS, label);
+  requiredKeys(value, DOGFOOD_CONTEXT_KEYS, label);
+  if (value.signedIn !== null && typeof value.signedIn !== 'boolean') {
+    fail('invalid-dogfood-signed-in', `${label}.signedIn must be boolean or null`);
+  }
+  return deepFreeze({
+    device: exactString(value.device, `${label}.device`, { oneLine: true }),
+    operatingSystem: exactString(value.operatingSystem, `${label}.operatingSystem`, { oneLine: true }),
+    browser: exactString(value.browser, `${label}.browser`, { oneLine: true }),
+    signedIn: value.signedIn,
+  });
+}
+
+export function validateDogfoodObservation(input) {
+  const value = plainRecord(input, 'dogfood-observation');
+  strictKeys(value, DOGFOOD_OBSERVATION_KEYS, 'dogfood-observation');
+  requiredKeys(value, DOGFOOD_OBSERVATION_KEYS, 'dogfood-observation');
+  if (value.schemaVersion !== 1) {
+    fail('invalid-schema-version', 'dogfood-observation.schemaVersion must be 1');
+  }
+  if (value.evidenceClass !== 'owner-self-dogfood') {
+    fail('invalid-dogfood-evidence-class', 'dogfood-observation.evidenceClass must be owner-self-dogfood');
+  }
+  if (!Array.isArray(value.precommittedObligations)) {
+    fail(
+      'invalid-precommitted-obligations',
+      'dogfood-observation.precommittedObligations must be an array',
+    );
+  }
+  const precommittedObligations = value.precommittedObligations.map((item, index) => {
+    const obligation = exactString(
+      item,
+      `dogfood-observation.precommittedObligations[${index}]`,
+      { nonEmpty: true, oneLine: true },
+    );
+    if (!OWNER_DOGFOOD_OBLIGATIONS.includes(obligation)) {
+      fail(
+        'invalid-dogfood-obligation',
+        `dogfood-observation precommitted obligation is not canonical: ${obligation}`,
+      );
+    }
+    return obligation;
+  });
+  if (new Set(precommittedObligations).size !== precommittedObligations.length) {
+    fail(
+      'duplicate-dogfood-obligation',
+      'dogfood-observation.precommittedObligations must be unique',
+    );
+  }
+  if (!Array.isArray(value.manualInterventions)) {
+    fail('invalid-manual-interventions', 'dogfood-observation.manualInterventions must be an array');
+  }
+  for (const field of [
+    'sourceWritePerformed', 'publicDeploymentPerformed', 'liveVerificationPerformed',
+  ]) {
+    if (typeof value[field] !== 'boolean') {
+      fail('invalid-boolean', `dogfood-observation.${field} must be boolean`);
+    }
+  }
+  return deepFreeze({
+    schemaVersion: 1,
+    attemptId: exactAttemptId(value.attemptId),
+    evidenceClass: 'owner-self-dogfood',
+    precommittedObligations,
+    scenario: exactString(value.scenario, 'dogfood-observation.scenario', { oneLine: true }),
+    readerContext: validateDogfoodContext(value.readerContext, 'dogfood-observation.readerContext'),
+    ownerContext: validateDogfoodContext(value.ownerContext, 'dogfood-observation.ownerContext'),
+    roleSeparation: exactString(value.roleSeparation, 'dogfood-observation.roleSeparation', { nonEmpty: true }),
+    startedAt: value.startedAt === ''
+      ? ''
+      : exactIsoDate(value.startedAt, 'dogfood-observation.startedAt'),
+    completedAt: value.completedAt === ''
+      ? ''
+      : exactIsoDate(value.completedAt, 'dogfood-observation.completedAt'),
+    manualInterventions: value.manualInterventions.map((item, index) => (
+      exactString(item, `dogfood-observation.manualInterventions[${index}]`, { nonEmpty: true })
+    )),
+    sourceWritePerformed: value.sourceWritePerformed,
+    publicDeploymentPerformed: value.publicDeploymentPerformed,
+    liveVerificationPerformed: value.liveVerificationPerformed,
+    notes: exactString(value.notes, 'dogfood-observation.notes'),
+  });
+}
+
+export function validateDogfoodObservationSeriesBinding(observationInput, seriesInput) {
+  const observation = validateDogfoodObservation(observationInput);
+  const series = validateOwnerDogfoodSeriesCharter(seriesInput);
+  const expectedObligations = OWNER_DOGFOOD_OBLIGATIONS.filter(
+    (obligation) => series.obligationAssignments[obligation] === observation.attemptId,
+  );
+  if (expectedObligations.length === 0) {
+    fail(
+      'dogfood-observation-attempt-not-declared',
+      'dogfood observation attempt is not declared in the owner self-dogfood series',
+    );
+  }
+  if (
+    observation.precommittedObligations.length !== expectedObligations.length
+    || observation.precommittedObligations.some(
+      (obligation, index) => obligation !== expectedObligations[index],
+    )
+  ) {
+    fail(
+      'dogfood-observation-obligation-mismatch',
+      'dogfood observation obligations do not match the precommitted series assignment',
+    );
+  }
+  if (expectedObligations.includes('signed-out-mobile-handoff')) {
+    const planned = series.plannedSignedOutMobile;
+    const reader = observation.readerContext;
+    if (
+      reader.device !== planned.device
+      || reader.operatingSystem !== planned.operatingSystem
+      || reader.browser !== planned.browser
+      || reader.signedIn !== false
+    ) {
+      fail(
+        'dogfood-observation-mobile-context-mismatch',
+        'dogfood observation reader context does not match the precommitted signed-out mobile context',
+      );
+    }
+  }
+  return observation;
+}
+
 export function validateOwnerDecision(input) {
   const value = plainRecord(input, 'owner-decision');
   strictKeys(value, DECISION_KEYS, 'owner-decision');
@@ -473,12 +854,18 @@ export const FAIL_CLOSED_ANONYMOUS_POLICY = deepFreeze({
 export function operatorDefaults(attemptIdInput, profileInput) {
   const attemptId = exactAttemptId(attemptIdInput);
   const profile = validateProfile(profileInput);
-  const rehearsal = profile === 'cyberbase-rehearsal';
+  const cyberbaseProfile = profile === 'cyberbase-rehearsal' || profile === 'owner-self-dogfood';
+  if (profile === 'owner-self-dogfood' && !attemptId.startsWith('OD-')) {
+    fail('dogfood-attempt-id-required', 'owner-self-dogfood must use an OD-01 through OD-99 attempt ID');
+  }
+  if (profile !== 'owner-self-dogfood' && !attemptId.startsWith('HC-')) {
+    fail('pilot-attempt-id-required', 'pilot and rehearsal profiles must use an HC-01 through HC-99 attempt ID');
+  }
   return {
     schemaVersion: 1,
     attemptId,
     profile,
-    repository: rehearsal ? 'https://github.com/cybersader/cyberbase' : '',
+    repository: cyberbaseProfile ? 'https://github.com/cybersader/cyberbase' : '',
     checkoutDir: '',
     baseCommit: '',
     sourcePath: '',
@@ -489,13 +876,15 @@ export function operatorDefaults(attemptIdInput, profileInput) {
     accessInterruption: false,
     correctionKind: 'typo',
     selectorContext: {},
-    ownerPolicyRevision: rehearsal ? 'cyberbase-rehearsal-anonymous-full-review-v1' : '',
+    ownerPolicyRevision: cyberbaseProfile
+      ? `${profile}-anonymous-full-review-v1`
+      : '',
     ownerPolicy: JSON.parse(JSON.stringify(FAIL_CLOSED_ANONYMOUS_POLICY)),
-    publicationBoundary: rehearsal ? 'cyberbaser' : 'not-applicable',
+    publicationBoundary: cyberbaseProfile ? 'cyberbaser' : 'not-applicable',
     renderer: {
-      profile: rehearsal ? 'cyberbase-quartz-v4.5.2' : 'owner-static-output',
-      basePath: rehearsal ? 'cyberbase' : '',
-      buildCommand: rehearsal
+      profile: cyberbaseProfile ? 'cyberbase-quartz-v4.5.2' : 'owner-static-output',
+      basePath: cyberbaseProfile ? 'cyberbase' : '',
+      buildCommand: cyberbaseProfile
         ? 'renderers/quartz-cyberbase/build.sh <content-dir> <quartz-dir>'
         : '',
     },

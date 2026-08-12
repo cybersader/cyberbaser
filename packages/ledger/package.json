@@ -1,0 +1,24 @@
+{
+  "name": "@cyberbaser/ledger",
+  "version": "0.1.0",
+  "description": "Append-only, canonical decision evidence for trust-route outcomes in owner-controlled knowledge bases.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./github": "./src/github/index.js"
+  },
+  "bin": {
+    "cb-decision-ledger": "bin/cb-decision-ledger.js",
+    "cb-decision-ledger-github": "bin/cb-decision-ledger-github.js"
+  },
+  "scripts": {
+    "test": "bun test test"
+  },
+  "dependencies": {
+    "@cyberbaser/ofm": "file:../ofm",
+    "@cyberbaser/trust": "file:../trust",
+    "js-yaml": "^4.1.0"
+  }
+}

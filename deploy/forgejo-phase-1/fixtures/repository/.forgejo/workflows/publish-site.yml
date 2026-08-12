@@ -1,0 +1,49 @@
+name: publish-site
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ${{ vars.WP3_RUNNER_LABEL }}
+    steps:
+      - name: Checkout triggering commit without an external action
+        run: |
+          set -euo pipefail
+          test -n "${WP3_FORGE_INTERNAL_ORIGIN:-}"
+          test -n "${GITHUB_REPOSITORY:-}"
+          test -n "${GITHUB_SHA:-}"
+          test -n "${FORGEJO_TOKEN:-}"
+          "${CYBERBASER_TOOL_ROOT}/private-checkout" \
+            workspace \
+            "${WP3_FORGE_INTERNAL_ORIGIN}/${GITHUB_REPOSITORY}.git" \
+            "${GITHUB_SHA}"
+      - name: Build the run-scoped publication
+        run: |
+          set -euo pipefail
+          stage="${WP3_PUBLICATION_ROOT}/${GITHUB_RUN_ID}/stage"
+          rm -rf -- "$stage"
+          mkdir -p -- "$stage"
+          "${CYBERBASER_TOOL_ROOT}/ofm-check" roundtrip workspace/content/page.md
+          bun -e 'const source=await Bun.file(process.argv[1]).text(); const escaped=source.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;"); await Bun.write(process.argv[2],`<!doctype html><meta charset="utf-8"><main><pre>${escaped}</pre></main>`);' workspace/content/page.md "$stage/index.html"
+          printf '%s\n' "${GITHUB_SHA}" > "$stage/commit"
+          chmod -R a-w "$stage"
+
+  deploy:
+    needs: [build]
+    runs-on: ${{ vars.WP3_RUNNER_LABEL }}
+    steps:
+      - name: Publish the exact build atomically
+        run: |
+          set -euo pipefail
+          stage="${WP3_PUBLICATION_ROOT}/${GITHUB_RUN_ID}/stage"
+          release="${WP3_PUBLICATION_ROOT}/${GITHUB_RUN_ID}/release"
+          test "$(cat "$stage/commit")" = "${GITHUB_SHA}"
+          test -f "$stage/index.html"
+          rm -rf -- "$release"
+          mv -- "$stage" "$release"
+          link="${WP3_PUBLICATION_ROOT}/current.next"
+          # Relative target: the publication root is a bind mount, so an
+          # absolute in-container path would not resolve for the host reader.
+          ln -s -- "${GITHUB_RUN_ID}/release" "$link"
+          mv -Tf -- "$link" "${WP3_PUBLICATION_ROOT}/current"

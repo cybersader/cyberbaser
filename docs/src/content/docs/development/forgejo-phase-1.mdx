@@ -1,0 +1,196 @@
+---
+title: Forgejo Actions phase one
+description: The strict Forgejo 16 deployment-observation adapter, container-isolated acceptance fixture, measured evidence, and remaining production boundaries.
+sidebar:
+  order: 12
+status: research
+tags: [setup, testing, architecture]
+---
+
+**Status: WP3 phase one is complete.** The strict adapter and fixture are hermetically tested, and the real Forgejo 16.0.2 gate passed on 2026-08-10 under a rootless Docker daemon. The gate proved job-container isolation, the controlled PR checks, one exact owner-alpha Save, fixed run/job binding, an HTTPS live transition, unchanged seed authority, storage below 4 GiB, and exact manifest-bound cleanup.
+
+This result does not move production authority, install workflows in the external vault, publish an image, install a service, prove external-vault workflow parity, or select a production private-repository credential design. WP4's shared proposal contract, Forgejo Lane A adapter, local queue, and account-free Lane B mechanics are now implemented separately. Lane A has only injected-Forgejo-metadata and real-local-Git evidence, not this page's real Forgejo fixture evidence; it is not installed or offered. Lane B is disabled, local-only, unexposed, and human-untested. A Forgejo authority cutover remains a separate explicit decision.
+
+WP3 adds a second provider behind owner-alpha's existing deployment-observation seam. The source path is unchanged:
+
+```text
+accepted source-bound operation
+  → exact candidate splice
+  → verified one-path commit
+  → normal non-force push
+  → exact provider run/job observation
+  → exact live-page witness
+```
+
+GitHub remains the current dogfood authority and Pages host. Forgejo, Docker, Actions, and the fixture renderer are replaceable infrastructure spokes. Cyberbaser's product boundary remains the owner-controlled exact-change boundary described in [Architecture](/cyberbaser/design/architecture/) and the [next-arc plan](/cyberbaser/design/v2-architecture-plan/).
+
+## When an owner chooses Forgejo
+
+Choosing `forgejo-actions` changes only the post-push deployment observer. The owner still opens an existing source-backed page and selects **Save and publish** once. Owner-alpha still rechecks the pinned source and policy, prepares and applies one exact splice, creates one single-parent one-path commit, and pushes normally to the configured branch. It does not dispatch a workflow, rerun a job, cancel work, write a commit status, or call a Forgejo mirror API.
+
+After the push, the provider dispatcher selects `discoverForgejoActionsRun()`. That adapter preflights the exact Forgejo 16 instance, discovers one run for the pushed commit, fixes that candidate in memory, and binds the configured job IDs, attempts, handles, and deployment-job dependencies before `run-bound` becomes durable. Recovery from `run-bound` calls `monitorForgejoActionsDeployment()` with the stored binding and never rediscovers or adopts another run. The provider-neutral live witness then proves that the old text disappeared and the new text appears exactly once. Source application, Git publication, durable recovery, and live confirmation are unchanged.
+
+## What is implemented
+
+### Strict provider configuration
+
+Schema version 1 is a provider-discriminated union:
+
+- `github-actions` keeps its existing accepted keys, normalized output, validation messages, policy JSON, and pinned policy revision (`sha256:e740f0cf94abb24d230a56b7290a808ddad81d7836d8a5eefaa7aee3d83a2c22`).
+- `forgejo-actions` requires one canonical credential-free HTTPS remote, the exact same-origin `/api/v1`, the exact owner/repository slug, a `.forgejo/workflows/*.yml` path, `push`, the source branch, a non-empty unique job set, and one deployment job in that set.
+
+Self-hosted Forgejo may use one explicit non-default HTTPS port. The repository remote, API base, and live URL must remain canonical and origin-consistent where required. GitHub remains portless. Explicit `:443` is rejected because URL canonicalization removes it.
+
+The Forgejo branch also rejects credentials, query strings, fragments, encoded path segments, nested installations, `.github/workflows` fallback, trailing-dot identifiers, API-origin mismatch, and repository/owner mismatch. The tracked examples are `apps/owner-alpha/owner-alpha.example.json` and `apps/owner-alpha/owner-alpha.forgejo.example.json`.
+
+### Narrow provider dispatcher
+
+Owner-alpha imports generic `discoverDeploymentRun()` and `monitorDeploymentRun()` defaults. Dispatch uses only `config.workflow.provider`:
+
+- `github-actions` calls the unchanged GitHub adapter.
+- `forgejo-actions` calls the Forgejo adapter.
+- any other value fails `unsupported-deployment-provider` before network access.
+
+Direct provider exports remain available for focused tests and compatibility. The job-state graph, recovery classes, artifact shapes, and injected pipeline signatures did not change.
+
+### Forgejo 16 adapter
+
+The adapter supports Forgejo 16.x only. The disposable gate is narrower: it requires the explicitly reviewed 16.0.2 release. Adopting another fixture release requires an explicit pin and review. Forgejo 15 lacks the required run-scoped jobs endpoint; Forgejo 17+, Gitea, subpath installations, and SSH remotes require separate review.
+
+Every runtime request is a sequential, read-only `GET` to one configured origin:
+
+```text
+/api/v1/version
+/api/v1/repos/{owner}/{repo}/actions/runs
+/api/v1/repos/{owner}/{repo}/actions/runs/{run_id}
+/api/v1/repos/{owner}/{repo}/actions/runs/{run_id}/jobs
+```
+
+Requests use `redirect: "error"`, one caller deadline, a 2 MiB streaming JSON ceiling, and the existing transient-status policy (`408`, `425`, `429`, and `5xx`). Authentication rejection and other non-retryable statuses fail immediately. A redirect fails on the first request rather than consuming the phase deadline or rereading the observer token. Unknown run or job statuses fail closed.
+
+Discovery binds one candidate by exact workflow filename, SHA, push event, trigger event, repository identity, branch ref, and `event_payload.after`. Forgejo's run response uses `commit_sha`, `workflow_id`, and native terminal status values such as `success`; the fixture and adapter now use those exact fields. After a candidate appears, discovery never lists runs again or substitutes a newer candidate.
+
+Before durable `run-bound`, discovery binds each configured job's ID, name, attempt, handle, and dependency set. A job that exists but still has Forgejo's pre-assignment `attempt: 0` or empty handle is polled while the run remains nonterminal. Forgejo 16 may return `needs: null` for a job with no dependencies; that one empty form normalizes to `[]`, while non-empty dependency graphs must remain explicit arrays. API job order does not matter; durable evidence is emitted in configured order.
+
+Monitoring validates the stored binding before network access. It reobserves only the stored run and jobs. A changed job ID, attempt, handle, or dependency set is terminal rerun identity drift. Success requires the bound run and every bound job to report `success`. Publication evidence names the owner-policy destination and reports `forgeEnvironmentAttested: false`; the following provider-neutral live witness is the publication proof.
+
+### Authentication boundary
+
+Anonymous observation is the production default. The adapter dependency seam may accept a test-only callback:
+
+```js
+getForgejoObserverToken: async () => string | null
+```
+
+The disposable private-repository gate reads its observer token from a mode-`0600` file on every request. The callback builds `Authorization: Bearer …` in memory. That value does not enter owner-alpha configuration, process environment, command arguments, Git configuration, endpoint URLs, durable job artifacts, retained evidence, or errors.
+
+Workflow checkout uses Forgejo's separate automatic repository-scoped `FORGEJO_TOKEN`, which Forgejo places in each step environment. The tracked workflows fail if it is absent and call a read-only allowlisted checkout tool. That tool disables system, global, indexed, and interactive Git credential sources, installs a temporary helper for the exact private fetch, and removes it afterward. A smart-HTTP regression with a hostile `HOME` and ambient helper proves that the private checkout uses the automatic job token rather than unrelated host credentials.
+
+This is not a production private-repository observer credential design. The default owner-alpha server and the [WP2 container](/cyberbaser/development/owner-alpha-container-deployment/) remain anonymous-only for deployment observation.
+
+## Disposable acceptance fixture
+
+The package under `deploy/forgejo-phase-1/` follows a one-run trust boundary. It does not modify the WP2 Compose package.
+
+The fixture:
+
+1. creates one tiny authoritative bare repository on native ext4 or btrfs and records its refs and objects;
+2. creates one private temporary Forgejo repository and seeds it once, without enabling Forgejo's mirror service;
+3. proves that the original bare repository remains unchanged;
+4. creates one controlled same-repository branch and pull request;
+5. runs tracked shell-only `ofm-check` and `trust-gate` workflows using staged read-only Cyberbaser tools;
+6. rejects PR changes to workflow definitions or fixture tooling;
+7. merges only after both exact workflow runs succeed;
+8. clones the Forgejo repository into an isolated owner-alpha checkout;
+9. runs one exact owner-alpha Save, binds its normal push to one Forgejo run and exact job attempts, then verifies the HTTPS live witness;
+10. rechecks the original bare repository and performs manifest-bound cleanup.
+
+The word **mirrored** is deliberately narrow. The harness clones the authoritative bare repository and pushes that snapshot into Forgejo once. It does not configure Forgejo's mirror service or continuing synchronization. The temporary Forgejo repository becomes the isolated fixture authority for that one run only. This proves a one-time seed path and a Forgejo-hosted Save path, not a production mirror or authority cutover.
+
+Because external vault workflows are not present in this repository, the gate proves only these tracked fixture definitions and the actual Cyberbaser OFM/trust tools. It makes no claim that unpublished external workflows were faithfully ported.
+
+## Runner isolation
+
+Adversarial review rejected the original same-UID host-runner plan. Host-mode workflow steps could read run-root credentials, unrelated same-user files, runner registration state, and an ambient rootless Docker socket. Omitting a socket mount did not remove that authority.
+
+The accepted boundary treats the checksum-pinned runner daemon as trusted fixture infrastructure, but every workflow job executes inside an unprivileged run-scoped container:
+
+- registration binds one run-scoped label to one run-scoped `docker://` image;
+- the job joins only the exact Compose network;
+- privileged mode, host networking, host PID, added capabilities, unconfined seccomp, and engine sockets are rejected;
+- the runner volume allowlist contains exactly two run-root sources;
+- the tool source is mounted read-only at `/wp3/tools` and is also mode-read-only on the host;
+- the publication handoff is mounted at `/wp3/publication`;
+- every job container and the job image carry exact cleanup labels;
+- host-mode and LXC labels are permanently rejected.
+
+The `isolation-probe` workflow runs before the controlled PR. It fails if job code can observe Docker or Podman sockets, the host run-root parent, host Git identity, host engine storage, host SSH state, the host loopback Forgejo origin, or a writable tool allowlist. It also requires the publication handoff to be writable and the checkout tool to be readable. The real gate passed this probe.
+
+The runner remains one-run and capacity one. Persistent, shared, multi-tenant, and externally controlled runners remain out of scope.
+
+## Runtime and cleanup
+
+The real gate requires four exact opt-in inputs:
+
+```text
+OWNER_ALPHA_REAL_FORGEJO=1
+WP3_FORGEJO_IMAGE=<immutable image ID or repository@sha256 digest>
+WP3_FORGEJO_RUNNER=<absolute native-Linux runner binary path>
+WP3_FORGEJO_RUNNER_SHA256=<expected lowercase SHA-256>
+```
+
+Provisioning those inputs is separate. The gate uses `pull_policy: never` for Forgejo and does not publish anything.
+
+The run root is one mode-`0700` UUID directory below `/home/cybersader/.cache/cyberbaser/wp3/`. The harness rejects mounted Windows/WSL paths, unsupported filesystems, aliases, symlink components, wrong ownership, occupied fixture bindings, non-rootless engines, and concurrent runs. Native ext4 and btrfs are accepted.
+
+Forgejo listens at `https://127.0.0.1:8443`; job containers reach the same instance at `https://forgejo-wp3:3000`; the published witness listens at `https://127.0.0.3:8443`. A per-run ECDSA P-256 CA and certificates stay below the run root. The Forgejo container uses SQLite, no SSH, disabled registration and unrelated units, dropped capabilities, `no-new-privileges`, bounded tmpfs/logging, and exact run labels. The runner bytes are copied into the run root, rehashed, and executed only from that checksum-bound copy.
+
+### The 4 GiB ceiling
+
+The hard combined ceiling is 4,294,967,296 bytes:
+
+```text
+max(0, current Docker data-root bytes - baseline Docker data-root bytes)
++ current run-root bytes
+```
+
+The harness measures this value at preflight, after Forgejo initialization, after PR checks, after merge, after owner-alpha Save, after deployment and live confirmation, before teardown, and after teardown. At or above 3.5 GiB, no new phase starts. Above 4 GiB, the gate fails and enters cleanup. Rootless-overlay `du` permission warnings do not discard a valid printed total; absence of a valid total still fails closed.
+
+Cleanup reads only an atomic mode-`0600` manifest. Docker creation is authorized there before Compose starts. If Compose or the runner creates a labelled resource before ID persistence, cleanup requires the exact run and provenance labels, records the recovered immutable ID atomically, and only then removes it. A process is stopped only when PID, `/proc` start time, executable, and run-root path match. The child releases successful runner/static-server handles back to the harness, which verifies and stops those exact PIDs. Cleanup removes the run-scoped job image by immutable image ID. No prune command or unrelated cleanup is allowed.
+
+## Measured evidence
+
+The final retained evidence run on 2026-08-10 recorded:
+
+| Evidence | Result |
+|---|---:|
+| Forgejo release | `16.0.2+gitea-1.22.0` |
+| Isolation probe | success |
+| Controlled PR gates | `ofm-check`, `trust-gate` success |
+| Controlled PR | merged |
+| Owner-alpha changed path | `content/page.md` only |
+| Exact splice | true |
+| Bound deployment | run `6`, `build` → `deploy`, attempt `1` |
+| Publication and live witness | success |
+| Authoritative seed repository | unchanged |
+| Peak combined temporary storage | `172,289,041` bytes |
+| After-teardown measurement before run-root removal | `33,979,833` bytes |
+| Cleanup | 2 processes stopped, 4 Docker resources removed, 0 skipped |
+| Residual labelled resources and run roots | 0 |
+
+The opt-in runtime test then passed: **3 pass, 0 fail, 22 assertions**. The focused Forgejo adapter plus fixture regression run passed: **42 pass, 0 fail, 398 assertions**. Full repository and documentation verification is recorded with the implementation change.
+
+### Evidence boundary
+
+WP3 phase one now establishes:
+
+- a reviewed job-container isolation boundary for the disposable runner;
+- successful real Forgejo 16 execution of `isolation-probe`, `ofm-check`, `trust-gate`, `build`, and `deploy`;
+- one exact owner-alpha Save, normal push, fixed run/job binding, and HTTPS live witness;
+- peak temporary storage below 4 GiB;
+- unchanged one-time seed authority;
+- cleanup of every labelled process and Docker resource created by the run.
+
+It does **not** establish a production private-repository credential design, production authentication, persistent mirroring, public mirroring, physical-device evidence, independent-owner evidence, service installation, external-vault workflow parity, image publication, or production authority cutover.
+
+For operator details and exact commands, see `deploy/forgejo-phase-1/README.md`. For the unchanged source boundary, see [Owner-alpha container deployment](/cyberbaser/development/owner-alpha-container-deployment/), [Principles](/cyberbaser/getting-started/principles/), and the [Roadmap](/cyberbaser/getting-started/roadmap/).

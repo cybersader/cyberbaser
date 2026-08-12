@@ -1,0 +1,243 @@
+---
+title: Owner self-dogfood
+summary: The completed one-maintainer Cyberbase correction loop, its superseded charter, and the automated safety boundary that follows.
+description: OD-01 completed one real owner loop; OD-02 and OD-03 are Not run — superseded, with remaining safety obligations covered mechanically.
+status: research
+tags: [research, testing, contribution]
+sidebar:
+  order: 43
+---
+
+Cyberbaser completed its first real owner loop on the Cyberbase stack. One maintainer switched between reader and owner roles, using a signed-out phone for the reader context and a laptop for local review. That loop exposed the useful technical and operational friction without recruiting five people or turning the maintainer into a manual test runner for deterministic failure paths.
+
+This is not independent human validation. It can show what happened for one maintainer, one device and browser, one pinned source, and one bounded proposal. It cannot establish ordinary-reader usability, independent-owner usability, demand, or a general account-free product path.
+
+> [!important] Evidence boundary
+> Owner self-dogfood contributes **zero** attempts to the deferred [five-reader concierge protocol](/cyberbaser/research/concierge-human-correction-pilot/). It does not close [Q09](/cyberbaser/reference/open-questions/#q09--what-is-the-contribution-path-for-someone-with-no-account), select a rich editor, or turn the seven-field form into the product UI.
+
+## The original bounded series
+
+The precommitted protocol called for three to five attempt envelopes covering all five obligations below. A blocked attempt remains part of the evidence. Changing any validated case input creates a new mechanical case ID rather than repairing history in place; an owner decision remains separately bound to the existing eligible case.
+
+| Obligation | What happens | Required terminal state |
+|---|---|---|
+| Normal correction | Copy one exact line from a live Cyberbase page, propose one replacement, prepare and render the candidate | Complete local owner card; no source write before the owner's decision |
+| Signed-out mobile handoff | Open the live page and local study form from one named phone/browser while signed out, then transfer the downloaded JSON to the laptop | Exact supported values survive the handoff; device and intervention notes remain private |
+| Stale source | Change the bound source or base after preparation | The next stage stops before eligibility or application; no silent rebase or fallback search |
+| Ambiguous quote | Submit a quote that occurs more than once without enough adjacent context | `quote-ambiguous`; no eligible card and no source write |
+| Owner rejection | Review a mechanically eligible candidate and choose `reject` | The bound rejection validates; no application or deployment follows |
+
+The same maintainer may perform every role. Repetition gives scenario coverage, not a sample size: do not calculate reader pass rates, human medians, or independent-owner preference from these attempts.
+
+## Current OD-01 evidence
+
+On 2026-07-31 the owner opened the bound form from a signed-out physical phone over the private one-shot Tailscale handoff. The first download accidentally repeated the misspelling as the replacement; the no-op was caught before canonical intake. A second download carried the intended correction, recorded 41.586 seconds in the instrument, and was transferred byte-for-byte into the ignored attempt.
+
+Preparation resolved the exact quote once and created no-write case `DRY-8A782149D0E7`. The first isolated render then exposed a harness defect rather than candidate damage: the pinned source commit predates `publish.yml`, and the live lane treated missing policy as permission to copy the whole vault. Quartz consequently reached an unrelated unpublished file with malformed YAML-like frontmatter. No render evidence or owner-decision eligibility was produced.
+
+The repair now fails closed when tracked `publish.yml` is absent at the source pin and requires exact select/project/verify evidence before Quartz. The owner then authorized one immutable repin to clean policy-bearing Cyberbase commit `b320c5c2c92d646b9df7019c9e29034341ebff6b`. The original operator and failed `DRY-8A782149D0E7` run remain untouched; the repin derived new no-write case `DRY-25DFAA853DD7`.
+
+Both publication lanes selected the mapped source, passed projection verification, and rendered through pinned Quartz. The owner reviewed the local baseline/candidate card, judged that the rendering was correct for testing the underlying correction model rather than the eventual product interface, and accepted the candidate after approximately 90 seconds. Fresh decision validation reran the isolated live lane and preserved the pre-application boundary in the immutable decision artifact.
+
+The owner then separately authorized the publication tail. The exact accepted candidate was applied on an isolated branch, matched the reviewed candidate digest, and preserved 333 prefix bytes plus 2,345 suffix bytes around a one-byte insertion. Commit `7982bbde225653cac55721e8153cf9d4d42b463c` was pushed to Cyberbase `main`; GitHub Actions run `30642646520` completed both build and deploy successfully. The live mapped URL returned HTTP 200 with the old selected text absent and the accepted replacement present. A tracked read-only verifier later reconstructed the exact commit from Git objects, confirmed both workflow jobs, rechecked the public page, and created one private create-once evidence artifact without mutating source, Git, remote state, deployment, or the observation. This remains one maintainer's operational evidence, not an unfamiliar-reader or independent-owner result, and the review card remains an instrument rather than a product-interface decision.
+
+## Sequencing amendment after OD-01
+
+The manual owner series is now **closed by supersession after one completed real loop**. The immutable three-ID charter remains historical evidence of the original plan. `OD-02` and `OD-03` are **Not run — superseded**; they were not initialized and are not counted as completed attempts.
+
+The obligations originally assigned to them now have deterministic mechanical coverage:
+
+| Scenario | Mechanic proved | Claim limit |
+|---|---|---|
+| `ADV-STALE-01` | A checkout advanced beyond the pin stops with `checkout-commit-mismatch`; applying the prepared operation to same-length mutated bytes stops with `base-digest-mismatch` | Synthetic stale-source safety only |
+| `ADV-AMBIGUOUS-01` | A repeated exact quote stops with `quote-ambiguous`, leaves source unchanged, and creates no eligible result | Synthetic ambiguity safety only |
+| `ADV-REJECTION-BINDING-01` | A supplied synthetic `reject` fixture must match attempt, case, and candidate digest | Rejection-path binding only; **no human owner rejection occurred** |
+
+Owner-controlled authority does not require a synchronous human click for every low-risk operation. Policy may delegate deterministic checks and monitoring. Real-device claims, nondelegated editorial judgment, and outward source or publication authority remain human where those claims or actions are needed. The proposal harness still never writes canonical source or authorizes itself.
+
+## Product consequence: the private owner-alpha wiki
+
+OD-01 showed that the exact-change boundary worked, but it also showed that manually operating a form, JSON handoff, render command, review card, application command, deployment observation, and live verifier was not the product experience the owner wanted to dogfood. The selected consequence is a separate private owner-local application under `apps/owner-alpha/`.
+
+The owner browses and searches the real Quartz-rendered Cyberbase, opens a source-backed page, edits exact Markdown, and clicks **Save and publish** once. Save is the per-edit authority event. A durable local policy automatically derives and verifies one exact operation, runs the integrity/trust/publication/projection/render/link checks, applies only the declared bytes, creates and pushes one exact commit, binds and monitors the exact deployment, confirms the live visible-text transition, and rebuilds the local wiki. Routine stage approvals are intentionally absent.
+
+This does not rewrite the evidence history above. The private app is new product implementation, not another `OD-*` attempt, physical-phone evidence, unfamiliar-reader evidence, independent-owner evidence, or a human rejection. Its fixture and browser checks remain mechanical evidence. External contributor paths also remain proposal-only; the app's write authority belongs to the owner's local Save plus configured policy and cannot be borrowed by an external spoke.
+
+The first milestone supports only one existing tracked UTF-8 LF Markdown body edit and one minimal contiguous operation. The first real low-risk Save/push against Cyberbase is the remaining outward acceptance event. See [Contribution workflows](/cyberbaser/design/contribution-workflows/#private-owner-alpha-wiki-one-save-policy-bound-publication) for the operating boundary.
+
+## Historical precommitment
+
+Before any `OD-*` attempt, the maintainer creates one private, non-overwriting charter at `.workspace/human-correction-pilot/owner-self-dogfood-series.json`. It declares three to five unique `OD-*` IDs, assigns each obligation above exactly once, uses every declared ID, and names the planned signed-out phone, operating system, and browser.
+
+This prevents the series from being assembled after the outcomes are known. The charter fixes only the scenario envelope and evidence boundary. Its strict schema provides no dedicated fields for candidates, paths, URLs, quotes, replacements, notes, decisions, or observations, and rejects unknown field names. The phone labels must only name the actual environment. Candidate and attempt data remain attempt-local and require the owner's later confirmation.
+
+A three-attempt allocation may combine compatible obligations like this:
+
+| Attempt | Precommitted obligations |
+|---|---|
+| `OD-01` | normal correction · signed-out mobile handoff |
+| `OD-02` | stale source · ambiguous quote |
+| `OD-03` | owner rejection |
+
+While the charter exists, the harness creates it through an exclusive non-overwriting write and refuses a second initialization. This is not cryptographic or filesystem immutability. Manual editing or deletion is outside the guarantee and invalidates the series rather than authorizing rebuilt history.
+
+The charter binds scenario assignments, but a label is not proof that its outcome occurred. Initialization copies each attempt's assignment into its private observation, decision validation rejects assignment or planned-mobile mismatch, and the attempt designated for owner rejection must end with `reject`. The stale and ambiguous obligations are demonstrated separately by their recorded fail-closed error and evidence that no Cyberbaser candidate application or deployment occurred because they stop before an eligible decision exists.
+
+## Reuse the existing safe path
+
+The private harness under `spikes/human-correction-dry-run/` already has the required boundary:
+
+- `@cyberbaser/correction` resolves one exact UTF-8 selector and prepares one contiguous splice in memory;
+- `@cyberbaser/ofm` checks authoring-semantic damage;
+- the Cyberbaser publication selector and projection verifier run against isolated temporary copies;
+- pinned Quartz builds baseline and candidate sites separately;
+- link and rendered-text evidence are compared before an owner decision becomes eligible;
+- raw submissions, local paths, observations, decisions, and cards stay under ignored `.workspace/` storage;
+- the harness never writes canonical source, commits, pushes, deploys, or authorizes itself.
+
+This follows the source boundary in [The translation layer](/cyberbaser/design/translation-layer/) and the owner route in [Contribution workflows](/cyberbaser/design/contribution-workflows/). The exact quote shape remains related to the W3C [Text Quote Selector](https://www.w3.org/TR/annotation-model/#text-quote-selector), but Cyberbaser binds it to a pinned source revision and fails closed when the mapping is stale or ambiguous.
+
+## Retained OD-01 operator path
+
+The following command sequence is retained as the `OD-01` operating transcript and API reference. Do not recreate the charter or initialize `OD-02` or `OD-03`; the wizard now shows those IDs as terminal **Not run — superseded** states with no action.
+
+To inspect the preserved owner workspace, open the Portagenty `dogfood` shell and run:
+
+```bash
+bun run dogfood
+```
+
+The TTY-only wizard reads the create-once charter, lists only its declared attempts, derives their conservative stages, and marks the next valid action as recommended. Numbered menus guide explicit initialization, the one-shot Tailscale handoff, preparation, one-time repin recovery for a policy-free historical pin, isolated rendering, owner-decision entry, and decision validation. Opening Portagenty or the wizard starts no listener. Exit, Ctrl-C, or EOF before final confirmation performs no pending action, and non-TTY automation is directed to the exact commands below.
+
+The wizard generates only fixed profile and binding values already controlled by the harness. A confirmed editorial decision becomes one immutable run-local `wizard-owner-decision.json`, so concurrent wizard sessions cannot overwrite each other; the exact manual path continues to use the bound `owner-decision.json` scaffold. The wizard never infers source from a URL, chooses an editorial decision, repairs stale or ambiguous input, applies source, commits, pushes, deploys, or verifies a live correction. It is an owner convenience layer over the same strict APIs, not a reader-facing product UI or account-free contribution path.
+
+The series charter was a separate deliberate create-once prerequisite. The example below records its exact historical shape; it is not an instruction to create another owner series. The values below are an example shape only; replace the sample device, operating system, and browser with the actual planned environment:
+
+```json
+{
+  "schemaVersion": 1,
+  "artifactType": "private-owner-self-dogfood-series-charter",
+  "profile": "owner-self-dogfood",
+  "attemptIds": ["OD-01", "OD-02", "OD-03"],
+  "obligationAssignments": {
+    "normal-correction": "OD-01",
+    "signed-out-mobile-handoff": "OD-01",
+    "stale-source": "OD-02",
+    "ambiguous-quote": "OD-02",
+    "owner-rejection": "OD-03"
+  },
+  "plannedSignedOutMobile": {
+    "attemptId": "OD-01",
+    "device": "Pixel 8",
+    "operatingSystem": "Android 16",
+    "browser": "Chrome 138",
+    "signedIn": false
+  },
+  "evidenceClassification": {
+    "evidenceClass": "owner-self-dogfood",
+    "countsTowardHumanPilot": false,
+    "independentOwnerEvidence": false,
+    "claimBoundary": "maintainer operational and mechanical evidence only"
+  }
+}
+```
+
+Historical charter creation command:
+
+```bash
+bun run dogfood:series-init -- \
+  --input '/absolute/private/owner-dogfood-series.json'
+```
+
+Historical `OD-01` initialization command after the owner confirmed its checkout, source path, and public URL:
+
+```bash
+bun run dogfood:init -- \
+  --attempt OD-01 \
+  --profile owner-self-dogfood \
+  --checkout '/absolute/path/to/clean/cyberbase-checkout' \
+  --source 'owner/confirmed/page.md' \
+  --url 'https://cybersader.github.io/cyberbase/exact-page/' \
+  --authorize-source yes
+```
+
+The command creates a private reader form, `operator.json`, `owner-decision.json`, and `dogfood-observation.json`. It fails before attempt-artifact creation when the series is missing, the OD ID was not declared, or the pinned checkout does not contain tracked `publish.yml`. The source commit and publication policy are one identity: an untracked policy, policy copied from another revision, or policy-free source pin cannot satisfy the Cyberbaser boundary. The command may still record a private global failure log. The observation scaffold carries the attempt's exact precommitted obligations, prefills the planned signed-out phone context when applicable, and records whether any source write, deployment, or live verification actually occurred. Decision validation compares the obligations and mobile context with the canonical charter. The observation is not a trusted declaration by itself; mechanical evidence and owner-controlled publication still have to agree with it.
+
+When an initialized attempt is awaiting submission, the wizard offers the bounded Tailscale transport. Its exact CLI equivalent is:
+
+```bash
+bun run dogfood:serve -- --attempt OD-01 --expires-minutes 15
+```
+
+The command safe-opens only the declared attempt's canonical `reader-form.html`, verifies that it still matches the generated instrument, snapshots its bytes in memory, and binds an ephemeral listener directly to the current node's Tailscale IPv4. It prints a random capability URL using the numeric Tailscale IPv4, atomically allows only the first bodyless GET, and stops immediately afterward or at the bounded expiry. Use the `http://100.*` URL exactly as printed; MagicDNS `.ts.net` hostnames are not advertised because browsers may upgrade them to HTTPS even though this disposable server does not terminate TLS. HEAD is metadata-only; body-bearing GET/HEAD and every mutating method are rejected without consuming the route. The link uses HTTP inside Tailscale's encrypted tunnel, not browser TLS. A bind or discovery failure stops the command; it never broadens to `0.0.0.0`, a LAN address, a loopback proxy, Tailscale Serve, or Funnel, and it neither reads nor changes existing Serve configuration.
+
+The post-`OD-01` template version is `reader-form-v2`, which rejects a replacement identical to the exact quote in both browser and submission validation. Historical `reader-form-v1` bytes and submissions remain valid under their original contract, including the completed `OD-01` evidence.
+
+An owner-controlled exact-file transfer remains an alternative. In either case, deliver **only** the form. Never expose the attempt directory: it also contains private operator, observation, decision, log, and run artifacts. After the HTML loads, the self-contained form makes no subsequent request, has no network intake, uploads nothing, and downloads `submission.json` locally. Manually return only that JSON to the laptop. The temporary route is a study transport, not a hosted product form, contribution endpoint, account-free path, or independent-reader/owner evidence, so [Q09](/cyberbaser/reference/open-questions/#q09--what-is-the-contribution-path-for-someone-with-no-account) remains open.
+
+After the reader submission is returned as `submission.json`, preparation and rendering recheck tracked `publish.yml` at the exact source pin. There is no whole-vault or policy-free fallback. Both projection lanes must prove the exact `cyberbaser-select-project-verify` mode, confirm that the mapped source was selected, and pass projection verification before Quartz starts.
+
+A historical owner-dogfood attempt whose source pin predates `publish.yml` remains blocked evidence. The wizard offers a one-time explicit repin, or the owner can run the strict equivalent:
+
+```bash
+bun run dogfood:repin -- \
+  --attempt OD-01 \
+  --checkout '/absolute/path/to/clean/policy-bearing-cyberbase-checkout' \
+  --authorize-source yes \
+  --reason 'The original source pin predates the publication policy.'
+```
+
+The operation validates the same repository, source path, public URL, correction, and owner policy against the replacement checkout. It writes create-once `operator-repin.json`; only the checkout path and base commit may change. The original `operator.json`, submission, failed runs, and logs remain untouched. A changed source pin produces a new mechanical case ID, so the old run remains historical evidence and the replacement case must be prepared separately.
+
+Then run:
+
+```bash
+bun run dogfood:prepare -- --attempt OD-01
+bun run dogfood:render -- --attempt OD-01
+```
+
+Open the generated `owner-rendered-review.html`. If the owner records a bound `accept`, `reject`, or `clarify` decision, validate it with:
+
+```bash
+bun run dogfood:decision -- --attempt OD-01
+```
+
+Validation still performs no source application. For an accepted correction, the owner separately authorizes and performs application and publication through the normal owner-controlled route. The read-only verifier can then reconstruct and verify that already-completed tail:
+
+```bash
+bun run verify:adversarial
+bun run dogfood:verify-live -- \
+  --attempt OD-01 \
+  --checkout '/absolute/path/to/repository-containing-the-git-objects' \
+  --application-commit '<40-character-commit>' \
+  --deployment-run-id '<explicit-actions-run-id>' \
+  --wait-seconds 30
+```
+
+The adversarial command emits deterministic synthetic/mechanical JSON and creates no owner artifact. The live command requires the immutable validated `accept`, inspects Git objects read-only, requires one exact changed source path and splice, verifies the explicit run and every job, checks the exact public URL, then creates one private create-once evidence artifact. It never applies source, edits the observation, commits, pushes, or triggers deployment.
+
+## What the results may say
+
+After a real series, Cyberbaser may report statements such as:
+
+- this maintainer completed or failed a named task on the recorded device/browser;
+- the stale or ambiguous case stopped with the recorded error and no Cyberbaser candidate application or deployment;
+- the local card was sufficient for this maintainer to accept, reject, or request clarification;
+- one approved candidate reached the live Cyberbase page, if that application and live verification actually happened;
+- the manual phone-to-laptop handoff created a specific measured burden.
+
+It may not report that unfamiliar readers can use the path unaided, that mobile generally works, that an independent owner prefers it, or that the account-free contribution problem is solved.
+
+## When to run the larger pilot
+
+The preserved [concierge human-correction pilot](/cyberbaser/research/concierge-human-correction-pilot/) becomes useful only when Cyberbaser needs stronger evidence before making an unfamiliar-reader or independent-owner usability claim. Its five readers, separate owner, thresholds, and `Not run` results remain unchanged. Deferring it avoids unnecessary recruitment now without weakening the standard for a future public claim.
+
+The current product sequence is therefore:
+
+1. preserve `OD-01` as the completed real owner loop and `OD-02`/`OD-03` as Not run — superseded;
+2. use deterministic adversarial checks instead of staged human failure rituals;
+3. use the owner-controlled boundary for real corrections when useful, automating post-application and live verification;
+4. build the smallest justified intake improvement only when observed use calls for one; and
+5. run the larger independent protocol only before making the stronger claims it was designed to test.
+
+See [Direction](/cyberbaser/getting-started/direction/) and the [Roadmap](/cyberbaser/getting-started/roadmap/) for how this evidence controls the next implementation decision.

@@ -1,0 +1,26 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "@cyberbaser/account-free-intake-app",
+      "dependencies": {
+        "@cyberbaser/account-free-intake": "file:../../packages/account-free-intake",
+        "@cyberbaser/proposal-queue": "file:../../packages/proposal-queue",
+      },
+    },
+  },
+  "packages": {
+    "@cyberbaser/account-free-intake": ["@cyberbaser/account-free-intake@file:../../packages/account-free-intake", { "dependencies": { "@cyberbaser/proposal": "file:../proposal", "@cyberbaser/trust": "file:../trust" } }],
+
+    "@cyberbaser/proposal-queue": ["@cyberbaser/proposal-queue@file:../../packages/proposal-queue", { "dependencies": { "@cyberbaser/proposal": "file:../proposal" }, "devDependencies": { "@cyberbaser/trust": "file:../trust" } }],
+
+    "@cyberbaser/account-free-intake/@cyberbaser/proposal": ["@cyberbaser/proposal@file:../../packages/proposal", {}],
+
+    "@cyberbaser/account-free-intake/@cyberbaser/trust": ["@cyberbaser/trust@file:../../packages/trust", {}],
+
+    "@cyberbaser/proposal-queue/@cyberbaser/proposal": ["@cyberbaser/proposal@file:../../packages/proposal", {}],
+
+    "@cyberbaser/proposal-queue/@cyberbaser/trust": ["@cyberbaser/trust@file:../../packages/trust", {}],
+  }
+}

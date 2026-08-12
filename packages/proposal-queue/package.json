@@ -1,0 +1,20 @@
+{
+  "name": "@cyberbaser/proposal-queue",
+  "version": "0.1.0",
+  "description": "Carrier-neutral durable queue for canonical Cyberbaser proposals.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "test": "bun test test"
+  },
+  "dependencies": {
+    "@cyberbaser/proposal": "file:../proposal"
+  },
+  "devDependencies": {
+    "@cyberbaser/trust": "file:../trust"
+  }
+}

@@ -1,0 +1,108 @@
+FROM --platform=linux/amd64 docker.io/oven/bun:1.3.11@sha256:38919894db4e117a37f74e3dca503e84f24d97f19cabc5f499a289c2a5d0db7c AS bun-source
+
+FROM --platform=linux/amd64 docker.io/library/node:22.23.2-bookworm-slim@sha256:0f65470961851f2354dc8e560853e2f428ea928436135fc7e35780ab100c7e00 AS runtime-base
+
+COPY deploy/account-free-intake/debian-packages.lock /tmp/debian-packages.lock
+RUN set -eux; \
+    snapshot="$(grep '^DEBIAN_SNAPSHOT=' /tmp/debian-packages.lock | cut -d= -f2)"; \
+    test -n "$snapshot"; \
+    printf '%s\n' \
+      "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/$snapshot bookworm main" \
+      "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/$snapshot bookworm-updates main" \
+      "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/$snapshot bookworm-security main" \
+      > /etc/apt/sources.list; \
+    rm -f /etc/apt/sources.list.d/debian.sources; \
+    packages="$(grep -E '^[a-z0-9][a-z0-9+.-]*=' /tmp/debian-packages.lock | tr '\n' ' ')"; \
+    apt-get -o Acquire::Retries=3 update; \
+    apt-get install -y --no-install-recommends $packages; \
+    rm -rf /var/lib/apt/lists/* /tmp/debian-packages.lock
+COPY --from=bun-source /usr/local/bin/bun /usr/local/bin/bun
+RUN test "$(bun --version)" = '1.3.11' \
+    && test "$(node --version)" = 'v22.23.2' \
+    && git --version \
+    && flock --version
+
+FROM runtime-base AS dependencies
+WORKDIR /opt/cyberbaser
+COPY packages/correction/package.json ./packages/correction/package.json
+COPY packages/correction/src/ ./packages/correction/src/
+COPY packages/ofm/package.json packages/ofm/bun.lock ./packages/ofm/
+COPY packages/ofm/src/ ./packages/ofm/src/
+COPY packages/trust/package.json packages/trust/bun.lock ./packages/trust/
+COPY packages/trust/src/ ./packages/trust/src/
+COPY packages/proposal/package.json packages/proposal/bun.lock ./packages/proposal/
+COPY packages/proposal/src/ ./packages/proposal/src/
+COPY packages/proposal/schema/ ./packages/proposal/schema/
+COPY packages/account-free-intake/package.json packages/account-free-intake/bun.lock ./packages/account-free-intake/
+COPY packages/account-free-intake/src/ ./packages/account-free-intake/src/
+COPY packages/proposal-queue/package.json packages/proposal-queue/bun.lock ./packages/proposal-queue/
+COPY packages/proposal-queue/src/ ./packages/proposal-queue/src/
+COPY apps/account-free-intake/package.json apps/account-free-intake/bun.lock ./apps/account-free-intake/
+RUN set -eux; \
+    for package in ofm trust proposal account-free-intake proposal-queue; do \
+      bun install --cwd "/opt/cyberbaser/packages/$package" --frozen-lockfile --production --ignore-scripts; \
+    done; \
+    bun install --cwd /opt/cyberbaser/apps/account-free-intake --frozen-lockfile --production --ignore-scripts; \
+    cd /opt/cyberbaser/apps/account-free-intake; \
+    bun pm cache rm
+
+FROM runtime-base AS final
+WORKDIR /opt/cyberbaser
+
+COPY --from=dependencies /opt/cyberbaser/packages/correction ./packages/correction
+COPY --from=dependencies /opt/cyberbaser/packages/ofm ./packages/ofm
+COPY --from=dependencies /opt/cyberbaser/packages/trust ./packages/trust
+COPY --from=dependencies /opt/cyberbaser/packages/proposal ./packages/proposal
+COPY --from=dependencies /opt/cyberbaser/packages/account-free-intake ./packages/account-free-intake
+COPY --from=dependencies /opt/cyberbaser/packages/proposal-queue ./packages/proposal-queue
+COPY --from=dependencies /opt/cyberbaser/apps/account-free-intake/node_modules ./apps/account-free-intake/node_modules
+COPY apps/account-free-intake/package.json apps/account-free-intake/bun.lock ./apps/account-free-intake/
+COPY apps/account-free-intake/src/ ./apps/account-free-intake/src/
+COPY apps/account-free-intake/bin/ ./apps/account-free-intake/bin/
+COPY deploy/account-free-intake/entrypoint.sh deploy/account-free-intake/queue-init.sh deploy/account-free-intake/stage-config.js deploy/account-free-intake/healthcheck.js ./deploy/account-free-intake/
+COPY --chmod=0555 deploy/account-free-intake/entrypoint.sh /usr/local/bin/account-free-intake-entrypoint
+COPY --chmod=0555 deploy/account-free-intake/queue-init.sh /usr/local/bin/account-free-intake-queue-init
+
+RUN set -eux; \
+    chmod 0555 \
+      ./apps/account-free-intake/bin/server.js \
+      ./apps/account-free-intake/bin/review.js \
+      ./deploy/account-free-intake/entrypoint.sh \
+      ./deploy/account-free-intake/queue-init.sh \
+      ./deploy/account-free-intake/stage-config.js \
+      ./deploy/account-free-intake/healthcheck.js; \
+    mkdir -p \
+      /config \
+      /run/account-free-intake \
+      /srv/cyberbaser/source-bindings \
+      /srv/cyberbaser/source-objects.git \
+      /var/lib/cyberbaser \
+      /tmp; \
+    chown 65532:65532 /run/account-free-intake /tmp; \
+    chmod 0555 /config /srv /srv/cyberbaser /srv/cyberbaser/source-bindings /srv/cyberbaser/source-objects.git; \
+    chmod 0700 /run/account-free-intake /tmp; \
+    chmod 0755 /var/lib/cyberbaser; \
+    find / -xdev -type f -perm /6000 -exec chmod a-s {} +; \
+    test -z "$(find / -xdev -type f -perm /6000 -print -quit)"; \
+    test ! -e /vault; \
+    test ! -e /run/owner-alpha; \
+    test ! -e /run/owner-alpha-credentials; \
+    test ! -e /var/run/docker.sock; \
+    test ! -e /run/podman/podman.sock
+
+LABEL io.cyberbaser.local-only="true" \
+      io.cyberbaser.account-free-intake="schema-v1"
+
+ENV HOME=/nonexistent \
+    TMPDIR=/tmp \
+    GIT_TERMINAL_PROMPT=0 \
+    GIT_CONFIG_NOSYSTEM=1 \
+    GIT_CONFIG_GLOBAL=/dev/null \
+    ACCOUNT_FREE_INTAKE_CONFIG=/run/account-free-intake/account-free-intake.json
+
+STOPSIGNAL SIGTERM
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD ["bun", "/opt/cyberbaser/deploy/account-free-intake/healthcheck.js"]
+
+USER 65532:65532
+ENTRYPOINT ["/usr/local/bin/account-free-intake-entrypoint"]

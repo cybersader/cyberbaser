@@ -34,7 +34,7 @@ Green is work rooted in first principles that stays solved. Red is work the outs
   <div class="cb-wi cb-wi-software" style="--pos:8%"><span class="cb-wi-name">OFM validator + corpus runner</span><span class="cb-wi-desc">damage classifier, masking core · shipped</span></div>
   <div class="cb-wi cb-wi-software" style="--pos:14%"><span class="cb-wi-name">Publish boundary</span><span class="cb-wi-desc">default-deny selector, leak test · shipped</span></div>
   <div class="cb-wi cb-wi-software" style="--pos:20%"><span class="cb-wi-name">Link checker</span><span class="cb-wi-desc">the ratchet the renderer won't give you · shipped</span></div>
-  <div class="cb-wi cb-wi-software" style="--pos:26%"><span class="cb-wi-name">Stable-URL scheme</span><span class="cb-wi-desc">chosen once, then frozen · open</span></div>
+  <div class="cb-wi cb-wi-software" style="--pos:26%"><span class="cb-wi-name">URL continuity invariant</span><span class="cb-wi-desc">R23 checker built · live install pending</span></div>
   <div class="cb-wi cb-wi-platform" style="--pos:34%"><span class="cb-wi-name">Renderer spoke</span><span class="cb-wi-desc">pinned Quartz for the vault · shipped</span></div>
   <div class="cb-wi cb-wi-platform" style="--pos:40%"><span class="cb-wi-name">Splice-only web edit surface</span><span class="cb-wi-desc">raw editor now, in-page later · partial</span></div>
   <div class="cb-wi cb-wi-platform" style="--pos:46%"><span class="cb-wi-name">Identity + trust config</span><span class="cb-wi-desc">optional accounts, machine identities · open</span></div>
@@ -92,7 +92,7 @@ Rooted in the nature of the problem, so it stays solved.
 | OFM validator (`@cyberbaser/ofm`) | Construct-damage detection is mechanical; the fixture corpus is durable | [Round-trip enforcement](/cyberbaser/agent-context/zz-challenges/translation-layer-round-trip-enforcement/) |
 | Publish boundary (`@cyberbaser/publish`) | Default-deny is a permanent safety property, not a feature that ages | [Architecture](/cyberbaser/design/architecture/) |
 | Link checker (`@cyberbaser/linkcheck`) | Broken-link detection is arithmetic; the budget ratchet is durable | [Architecture](/cyberbaser/design/architecture/) |
-| Stable-URL scheme | Chosen once and frozen; still open | [Primitives: stable URLs](/cyberbaser/concepts/primitives/#stable-urls) |
+| URL continuity invariant (`cb-urlcheck`) | R23 separates durable public continuity from changeable naming and renderer choices; Cyberbase enforces the cumulative baseline before Pages publication | [Primitives: stable URLs](/cyberbaser/concepts/primitives/#stable-urls) |
 
 **Analogy**: R&D. High upfront cost, near-zero marginal cost. This is the technical moat — restated after the July gate as *byte preservation plus mechanical validation plus governance*, rather than "the best serializer".
 

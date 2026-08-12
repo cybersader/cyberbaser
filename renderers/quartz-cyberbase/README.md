@@ -1,8 +1,8 @@
 # quartz-cyberbase
 
 The Quartz renderer spoke for the `cybersader/cyberbase` site. It is a pinned,
-reproducible wrapper around an upstream Quartz checkout: six files here, zero
-forked Quartz source.
+reproducible wrapper around an upstream Quartz checkout, with zero forked Quartz
+source.
 
 ## What this is (and is not)
 
@@ -37,12 +37,13 @@ Consequences that are load-bearing, not stylistic:
 | `build.sh` | Point a projected content tree at that checkout and run `npx quartz build`. |
 | `quartz.config.ts` | Site config: `baseUrl`, plugin/emitter chain, theme. |
 | `quartz.layout.ts` | Component layout. Quartz imports this from the repo root, so it must be shipped even if it barely differs from upstream. Also holds `VAULT_REPO_URL`, the single declaration of the source repo. |
-| `components/*.tsx` | Cyberbaser-local Quartz components, copied into `<quartz>/quartz/components/` by `setup.sh`. Imports are written relative to that destination, and `quartz.layout.ts` imports them by path so upstream's `components/index.ts` stays untouched. Currently: `EditThisPage.tsx`, the contribution Path C entry point (GitHub web editor link, built from `fileData.relativePath` — the VERBATIM projection makes that the vault repo path). |
+| `components/*.{ts,tsx}` | Cyberbaser-local Quartz components and pure helpers, copied into `<quartz>/quartz/components/` by `setup.sh`. `EditThisPage.tsx` keeps the public GitHub editor link and can instead emit an absolute cross-origin link to the privileged owner origin. `SuggestCorrection.tsx` is a separate disabled-by-default account-free form: when explicitly enabled, it exposes only the public intake action, retained binding digest, and opaque page ID. The helpers own exact URL/source validation, page-ID derivation, strict browser payload construction, response bounds, and retry idempotency. `validate-owner-origin.ts` is the CLI wrapper `build.sh` uses for owner validation. |
+| `tests/` | Focused Bun + shell assertions for public URL compatibility, exact owner query encoding, synthetic/tag-page exclusion, build-mode guards, disabled account-free configuration, opaque page IDs, strict browser payloads, bounded responses, and retry behavior. No added test framework. |
 | `styles/custom.scss` | The theme stylesheet, copied to `<quartz>/quartz/styles/custom.scss` by `setup.sh`. See "Theme" below. |
 
 ## The pin
 
-**Quartz `v4.5.2`** (commit `4923aff`), set in `setup.sh` as `QUARTZ_REF`.
+**Quartz `v4.5.2`** at immutable commit `4923affa7722dfc751f1074348e6dad214fe0c08`, with the repository, tag, and commit set in `setup.sh` as `QUARTZ_REPO`, `QUARTZ_REF`, and `QUARTZ_COMMIT`.
 
 Rationale: v4.5.2 is the version actually measured against the vault during the
 R14 spike on 2026-07-25. It scored **20/20** on the Obsidian-flavored-markdown
@@ -144,6 +145,9 @@ mobile menu; the sidebar's `position: sticky` is untouched.
 ```bash
 ./setup.sh ~/bench/quartz-site                   # once (re-runnable)
 ./build.sh /path/to/projected/content ~/bench/quartz-site
+# owner mode accepts one exact private numeric IPv4 origin (loopback, RFC 1918, or RFC 6598)
+CYBERBASER_EDIT_LINK_MODE=owner CYBERBASER_OWNER_ORIGIN=http://127.0.0.1:4317 ./build.sh /path/to/projected/content ~/bench/quartz-site
+./tests/run.sh
 ```
 
 `build.sh` prints the output directory as its last line and propagates the
@@ -151,6 +155,17 @@ Quartz exit code. Useful env vars:
 
 - `COPY_CONTENT=1` — copy the content tree instead of symlinking it.
 - `OUTPUT_DIR=…` — override the output path (default `$QUARTZ_DIR/public`).
+- `CYBERBASER_EDIT_LINK_MODE=public|owner` — selects edit-link behavior at build
+  time. `public` is the default and preserves the GitHub edit URL. `owner` emits
+  `/owner/edit?relativePath=…&slug=…` with both exact values percent-encoded.
+  Owner mode is same-origin, local-only, and rejected when `CI` is true.
+- `CYBERBASER_ACCOUNT_FREE_INTAKE=enabled` — explicit opt-in for the account-free
+  form. Unset is the fail-closed default. Enabling also requires one exact HTTPS
+  intake origin, retained binding digest, credential-free source repository,
+  and immutable source revision through the corresponding
+  `CYBERBASER_ACCOUNT_FREE_*` variables. The browser receives only the intake
+  action, binding digest, and opaque page ID. Current public builds leave this
+  unset; the form is not offered.
 - `QUARTZ_REF=…` — override the pin in `setup.sh` (for evaluating a bump only).
 
 ## How CI uses it
@@ -158,15 +173,22 @@ Quartz exit code. Useful env vars:
 The deploy runs from the vault repo, which owns the Pages environment, but the
 renderer and the pipeline are cloned from cyberbaser (public):
 
-1. Check out `cybersader/cyberbase` (the content).
-2. Check out `cybersader/cyberbaser` (this directory + `packages/publish`).
+1. Check out `cybersader/cyberbase` (the content plus its cumulative URL baseline).
+2. Check out immutable Cyberbaser commit `eac9f1f` (renderer, projection, and checker).
 3. Run the projection: `publish.yml` boundary, frontmatter pre-flight,
    case-collision guard, verbatim path copy, post-hoc leak test. Output: a
    projected content tree.
 4. `renderers/quartz-cyberbase/setup.sh "$RUNNER_TEMP/quartz"`
 5. `renderers/quartz-cyberbase/build.sh "$PROJECTED" "$RUNNER_TEMP/quartz"`
-6. `actions/upload-pages-artifact` on `$RUNNER_TEMP/quartz/public`, then
+6. Run `cb-urlcheck` against `.cyberbaser/url-baseline.xml`; upload its
+   deterministic report and stop before Pages upload on any uncovered URL.
+7. `actions/upload-pages-artifact` on `$RUNNER_TEMP/quartz/public`, then
    `actions/deploy-pages@v4` (`build_type: workflow`).
+
+CI always builds public edit links. Public mode is the default, invalid modes
+fail before Quartz runs, and owner mode is rejected whenever `CI` is true. The
+owner route is fixed to same-origin `/owner/edit`; there is no configurable
+localhost or owner host value that can leak into generated output.
 
 `baseUrl` is `cybersader.github.io/cyberbase`, matching the project-Pages base
 path `/cyberbase`. If the site ever moves to a custom domain, that string and the

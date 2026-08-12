@@ -55,6 +55,11 @@ async function createVault() {
     `---\ntitle: Secret\n---\n\n${QUOTE}\n`,
     'utf8',
   );
+  await writeFile(
+    path.join(root, 'docs', 'private', 'malformed.md'),
+    '--- \n- [Where is the Data](#where-is-the-data)\n--- \n# Where is the Data\n',
+    'utf8',
+  );
   return root;
 }
 
@@ -92,7 +97,7 @@ function isolatedDependencies({ failBuildLane = null, renderCandidateAsBaseline 
         }
         await cp(vaultDir, outputDir, { recursive: true });
         return {
-          mode: 'injected-adversarial-build',
+          mode: 'cyberbaser-select-project-verify',
           selection: { counts: { pages: 1, assets: 0 }, errorCount: 0, sourcePublished: true },
           projection: {
             ok: true,
@@ -135,6 +140,29 @@ describe('adversarial publication and link boundaries', () => {
       repositoryRelativePath: 'docs/private/secret.md',
     })).rejects.toMatchObject({ code: 'candidate-not-published' });
     expect(await pathExists(path.join(output, 'docs', 'private', 'secret.md'))).toBe(false);
+  });
+
+  test('excludes unpublished malformed frontmatter and fails closed when policy selects it', async () => {
+    const vault = await createVault();
+    const output = path.join(await temporary('correction-malformed-excluded-'), 'projected');
+    const sourcePath = 'docs/private/malformed.md';
+
+    const projected = await buildProjection({
+      vaultDir: vault,
+      outputDir: output,
+      repositoryRelativePath: SOURCE_PATH,
+    });
+    expect(projected.projection.ok).toBe(true);
+    expect(await pathExists(path.join(output, sourcePath))).toBe(false);
+
+    await writeFile(path.join(vault, 'publish.yml'), 'allow:\n  - "docs/private/**"\n', 'utf8');
+    const selectedOutput = path.join(await temporary('correction-malformed-published-'), 'projected');
+    await expect(buildProjection({
+      vaultDir: vault,
+      outputDir: selectedOutput,
+      repositoryRelativePath: sourcePath,
+    })).rejects.toMatchObject({ code: 'candidate-not-published' });
+    expect(await pathExists(selectedOutput)).toBe(false);
   });
 
   test('reports candidate-only link regressions while excluding inherited baseline debt', () => {

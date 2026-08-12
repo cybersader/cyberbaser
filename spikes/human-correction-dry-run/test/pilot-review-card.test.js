@@ -76,6 +76,10 @@ const status = Object.freeze({
   attemptId: 'HC-01',
   profile: 'independent-counted',
   countsTowardPilot: false,
+  evidenceClass: 'independent-human-pilot-candidate',
+  countsTowardHumanPilot: false,
+  independentOwnerEvidence: true,
+  claimBoundary: 'counting remains outside the preparation kit until owner application and live verification',
   ownerDecisionEligible: false,
   blockingReasons: ['render-evidence-required'],
   noWrite: {
@@ -96,8 +100,35 @@ describe('private pilot owner review card', () => {
     expect(card.evidence.trust.authorType).toBe('anonymous');
     expect(card.evidence.status.ownerDecision).toBe('pending-human-owner');
     expect(card.html).toContain('No source write or public deployment has occurred.');
-    expect(card.html).toContain('The owner must complete the bound owner-decision.json by hand');
+    expect(card.html).toContain('complete the bound owner-decision.json by hand or record the immutable guided decision');
     expect(card.html).not.toMatch(/<script\b|\s(?:src|href|action)\s*=/iu);
+  });
+
+  test('labels owner self-dogfood without implying independent human validation', () => {
+    const card = buildPilotOwnerReview({
+      submission: { ...submission, attemptId: 'OD-01' },
+      operator: {
+        ...operator,
+        profile: 'owner-self-dogfood',
+        independentOwnerAttested: false,
+        publicationBoundary: 'cyberbaser',
+      },
+      evaluation,
+      status: {
+        ...status,
+        attemptId: 'OD-01',
+        profile: 'owner-self-dogfood',
+        evidenceClass: 'owner-self-dogfood',
+        countsTowardHumanPilot: false,
+        independentOwnerEvidence: false,
+        claimBoundary: 'maintainer operational and mechanical evidence only',
+      },
+    });
+    expect(card.evidence.attempt.evidenceClass).toBe('owner-self-dogfood');
+    expect(card.evidence.attempt.countsTowardHumanPilot).toBe(false);
+    expect(card.evidence.attempt.independentOwnerEvidence).toBe(false);
+    expect(card.html).toContain('Owner self-dogfood');
+    expect(card.html).toContain('not independent human validation');
   });
 
   test('reports missing rendered views, link totals, and source binding instead of treating a thin card as complete', () => {
@@ -118,6 +149,49 @@ describe('private pilot owner review card', () => {
     expect(missing).toContain('rendering.candidateView');
     expect(missing).toContain('links.baselineBroken');
     expect(missing).toContain('rendering.preparedSnapshots');
+  });
+
+  test('requires exact select-project-verify evidence for the Cyberbaser boundary', () => {
+    const cyberOperator = {
+      ...operator,
+      profile: 'owner-self-dogfood',
+      independentOwnerAttested: false,
+      publicationBoundary: 'cyberbaser',
+    };
+    const lane = {
+      mode: 'cyberbaser-select-project-verify',
+      selection: { sourcePublished: true },
+      projection: { ok: true, verification: { ok: true } },
+    };
+    const renderEvidence = {
+      artifactType: 'private-local-rendered-correction-run',
+      sourceCheckout: { publishConfigPresent: true },
+      projection: { baseline: lane, candidate: lane },
+      renderedTarget: {
+        comparable: { sameRenderedPage: true },
+        baseline: { observedExactText: 'Old exact text.', byteLength: 100 },
+        candidate: { observedExactText: 'New exact text.', byteLength: 100 },
+      },
+      siteChecks: {
+        baseline: { broken: 0 },
+        candidate: { broken: 0 },
+        linkDelta: { counts: { candidateOnly: 0 } },
+      },
+    };
+
+    expect(reviewCardContractMissing({
+      operator: cyberOperator,
+      evaluation,
+      renderEvidence,
+    })).not.toContain('projection.cyberbaserBoundary');
+
+    const legacy = structuredClone(renderEvidence);
+    legacy.projection.baseline.mode = 'verbatim-without-publish-config';
+    expect(reviewCardContractMissing({
+      operator: cyberOperator,
+      evaluation,
+      renderEvidence: legacy,
+    })).toContain('projection.cyberbaserBoundary');
   });
 
   test('identical inputs produce byte-identical private JSON and HTML', () => {
