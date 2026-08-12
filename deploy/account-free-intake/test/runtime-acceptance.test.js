@@ -259,6 +259,17 @@ describe('account-free intake local OCI runtime acceptance', () => {
     const networkInspect = JSON.parse(docker(['network', 'inspect', network]).stdout.toString())[0];
     expect(networkInspect.Internal).toBe(true);
 
+    const rootfsBaseline = docker(['diff', container]).stdout.toString().trim()
+      .split('\n').filter(Boolean).sort();
+    const engineManagedDiff = new Set([
+      'A /config/account-free-intake.json',
+      'A /usr/sbin/docker-init',
+      'C /config',
+      'C /usr',
+      'C /usr/sbin',
+    ]);
+    expect(rootfsBaseline.every((entry) => engineManagedDiff.has(entry))).toBe(true);
+
     docker(['exec', container, 'bun', '/opt/cyberbaser/deploy/account-free-intake/healthcheck.js']);
     docker(['exec', container, 'bash', '-c', 'set -euo pipefail; test ! -e /vault; test ! -e /run/owner-alpha; test ! -e /run/owner-alpha-credentials; test ! -e /var/run/docker.sock; test ! -e /run/podman/podman.sock; test ! -e /root/.ssh; test ! -e /source-worktree; test ! -e /publication-output']);
 
@@ -285,7 +296,8 @@ process.stdout.write(body);
     expect((await stat(item.configFile)).mode & 0o222).toBe(0);
     expect((await stat(item.bindings)).mode & 0o222).toBe(0);
     expect((await stat(item.bare)).mode & 0o222).toBe(0);
-    expect(docker(['diff', container]).stdout.toString().trim()).toBe('');
+    expect(docker(['diff', container]).stdout.toString().trim()
+      .split('\n').filter(Boolean).sort()).toEqual(rootfsBaseline);
 
     docker(['rm', '--force', container]);
     cleanupContainers.delete(container);
