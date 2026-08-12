@@ -92,7 +92,9 @@ A serialized claim never promotes itself into the trust policy. `proposalToTrust
 
 Public credit is a separate attribution problem and is not inferred from the identity claim. R24 closed Q08 only for the measured one-commit GitHub fork-and-squash history path; proposal-lane, anonymous, pseudonymous, and visible page credit remain open under challenge 07.
 
-The contract is also transport-neutral. A future Iroh, AT Protocol, filesystem-drop, Forgejo, HTTPS, or removable-media adapter must carry the unchanged canonical proposal bytes or reconstruct exactly the same validated object. Transport identifiers, endpoint keys, DIDs, record CIDs, capabilities, and signatures remain external evidence or receipt metadata; they do not become proposal source authority or new required fields. The [local-first protocol review](/cyberbaser/research/local-first-protocol-options/) records the candidate seams and bounded experiments.
+The contract is also transport-neutral. An Iroh, AT Protocol, filesystem-drop, Forgejo, HTTPS, or removable-media adapter must carry the unchanged canonical proposal bytes or reconstruct exactly the same validated object. Transport identifiers, endpoint keys, DIDs, record CIDs, capabilities, and signatures remain external evidence or receipt metadata; they do not become proposal source authority or new required fields.
+
+The controlled local [Iroh proposal-transfer fixture](/cyberbaser/research/local-first-protocol-options/#2-iroh-proposal-transfer-fixture--completed-locally) now supplies one concrete transport-equivalence result. Real Iroh 1.0.3 direct-IP and local-relay data connections delivered the same canonical bytes, proposal digest, semantics, candidate bytes, and missing-policy full-review classification. An interrupted relay prefix was not queueable; the completed content-identical replay collapsed through the existing Lane B idempotency seam to one retained receipt. No Iroh-specific lane, proposal field, queue field, identity authority, or source-write path was added. The custom chunked ALPN is fixture machinery, not a selected Cyberbaser protocol or Iroh-native resume guarantee.
 
 ## Canonical bytes and limits
 

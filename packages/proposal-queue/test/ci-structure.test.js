@@ -6,6 +6,7 @@ import { JSON_SCHEMA, load } from 'js-yaml';
 const repositoryRoot = resolve(import.meta.dir, '..', '..', '..');
 const CHECKOUT_SHA = '11bd71901bbe5b1630ceea73d27597364c9af683';
 const SETUP_BUN_SHA = '735343b667d3e6f658f44d0eca948eb6282f2b76';
+const RUST_TOOLCHAIN_SHA = '6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772';
 const IMMUTABLE_ACTION_RE = /^[^\s@]+@[0-9a-f]{40}$/u;
 const REPOSITORY_MUTATION_RE = /\b(?:POST|PUT|PATCH|DELETE)\b|\bgit\s+(?:push|merge|reset|checkout|switch|commit|tag)\b/iu;
 const PUBLICATION_RE = /upload-artifact|deploy-pages|create-release|docker\s+push/iu;
@@ -87,6 +88,30 @@ describe('WP4 read-only CI structure', () => {
       'bash renderers/quartz-cyberbase/tests/run.sh',
     ]) expect(runs).toContain(command);
     expect(source).not.toMatch(/\b(?:docker|curl|wget)\b/iu);
+  });
+
+  test('Iroh fixture CI uses pinned local-only Rust and Bun verification without publishing', async () => {
+    const { source, workflow } = await parseWorkflow('iroh-proposal-transfer.yml');
+    expectReadOnlyWorkflow(source, workflow);
+    expect(Object.keys(workflow.jobs)).toEqual(['verify']);
+
+    const job = workflow.jobs.verify;
+    expect(job['runs-on']).toBe('ubuntu-latest');
+    expect(job['timeout-minutes']).toBe(15);
+    expect(job.steps).toHaveLength(8);
+    expectPinnedBootstrap(job);
+    expect(job.steps[2].uses).toBe(`dtolnay/rust-toolchain@${RUST_TOOLCHAIN_SHA}`);
+    expect(job.steps[2].with.toolchain).toBe('1.97.1');
+
+    const runs = job.steps.map((step) => step.run).filter(Boolean);
+    for (const command of [
+      'bun install --cwd spikes/iroh-proposal-transfer --frozen-lockfile',
+      'cargo test --locked --manifest-path spikes/iroh-proposal-transfer/Cargo.toml',
+      'bun test spikes/iroh-proposal-transfer/test',
+      'bun test packages/proposal-queue/test/ci-structure.test.js',
+      'bun run spikes/iroh-proposal-transfer/bin/verify.js',
+    ]) expect(runs).toContain(command);
+    expect(source).not.toMatch(/secrets\.|services:|upload-artifact|deploy-pages|docker|curl|wget/iu);
   });
 
   test('account-free container CI builds and accepts locally without publishing', async () => {

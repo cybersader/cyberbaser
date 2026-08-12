@@ -25,8 +25,8 @@ The practical sequence is therefore:
 4. test optional capability evidence only after the anonymous path remains identical;
 5. test AT Protocol only as a bounded public carrier or signed announcement, not as infrastructure Cyberbaser requires.
 
-:::caution[Research result, not a technology selection]
-This page records a 2026-08-11 review of the 200 most recent stars on the maintainer's GitHub account and a separate primary-source AT Protocol review. Stars are directional evidence, not product approval. No library, protocol, custom Lexicon, PDS, relay, AppView, CRDT, capability format, or experiment is selected by this page. The existing product boundary remains unchanged.
+:::caution[Bounded fixture, not a technology selection]
+This page began with a 2026-08-11 review of the 200 most recent stars on the maintainer's GitHub account and a separate primary-source AT Protocol review. One controlled local Iroh fixture completed on 2026-08-12. Stars are directional evidence, and the fixture selects neither a production carrier nor a permanent wire protocol. No custom Lexicon, PDS, public relay, AppView, CRDT, capability format, offered lane, or source authority was selected. The existing product boundary remains unchanged.
 :::
 
 ## What the recent stars suggest
@@ -193,20 +193,26 @@ Ingest the same drop from a local directory, removable-media simulation, and ord
 
 This creates the network-neutral contract needed before selecting Iroh or another transport.
 
-### 2. Iroh proposal-transfer fixture
+### 2. Iroh proposal-transfer fixture — completed locally
 
-**Cost:** low to medium. **Evidence value:** very high.
+**Result:** passed on 2026-08-12. **Evidence value:** high, bounded to controlled local Linux execution.
 
-Transfer the same proposal drop between two endpoints. Require:
+The standalone `spikes/iroh-proposal-transfer/` fixture uses real Iroh 1.0.3 connections and a deliberately disposable chunked ALPN. It does not use `iroh-blobs`: the custom fixture protocol made one exact acknowledged interruption boundary deterministic without claiming that resumability is an Iroh core guarantee.
 
-1. receiver bytes and digests equal the sender's exactly;
-2. direct and relay paths are semantically indistinguishable;
-3. duplicate transfers collapse by content hash;
-4. interrupted transfer resumes without creating a second proposal identity;
-5. received data enters the existing proposal queue only; and
-6. no Iroh component can read owner credentials or write canonical Markdown.
+The machine-readable verifier established:
 
-A pass proves only that Iroh is a useful replaceable carrier.
+1. the direct data connection positively selected an IP path with relay disabled;
+2. the interrupted, continued, and duplicate data connections positively selected the in-process local relay with IP transports disabled;
+3. both routes delivered the same 12,964 canonical proposal bytes, the same Cyberbaser SHA-256 proposal digest, proposal semantics, candidate bytes, and missing-policy full-review classification;
+4. the relay transfer stopped after exactly 4,096 fsynced and acknowledged bytes, reconnected with the same transport content identity and offset, and completed without minting a second proposal identity;
+5. a third transport request returned `already-present` and moved zero content bytes;
+6. the interrupted prefix failed canonical proposal parsing and entered no queue;
+7. completed direct and relay deliveries retained exact `proposal.json` bytes, while the second content-identical Lane B delivery replayed the first receipt and left one pending queue entry; and
+8. Rust received only opaque proposal bytes and a temporary fixture directory. It received no owner credentials, real source path, Git authority, trust policy, or source-application capability.
+
+The verifier runs the complete fixture twice and requires byte-identical normalized reports. It removes temporary endpoints, relay state, transfer files, and queue roots after each run.
+
+This establishes only that Iroh can be a useful replaceable carrier under controlled local conditions. The custom ALPN remains fixture machinery. The result does not establish production readiness, public relay compatibility, real NAT traversal, hostile-network security, arbitrary crash or power-loss durability, independent interoperability, offered account-free intake, human usability, identity verification, owner decision UI, or source-write authority.
 
 ### 3. Queryable local intake journal
 
@@ -271,7 +277,7 @@ The AT record remains an announcement. Missing events mean stale or unknown, nev
 
 The current evidence supports this wording:
 
-> Local-first and federated protocols may provide replaceable transport, identity-evidence, signed-publication, reconciliation, and review-state spokes around Cyberbaser's exact proposal contract. They do not replace owner-controlled Markdown, local moderation, direct HTTPS navigation, or the anonymous trust floor. Iroh is the strongest near-term transport fixture candidate. AT Protocol is compatible as an optional public identity, signed-assertion, proposal-carrier, and discovery spoke, but is not selected as the canonical store, account system, direct-link layer, trust authority, or federation substrate.
+> Local-first and federated protocols may provide replaceable transport, identity-evidence, signed-publication, reconciliation, and review-state spokes around Cyberbaser's exact proposal contract. They do not replace owner-controlled Markdown, local moderation, direct HTTPS navigation, or the anonymous trust floor. Controlled local evidence now shows that Iroh 1.0.3 can carry unchanged proposal bytes across separately forced direct-IP and local-relay paths without changing semantics, trust routing, or queue identity. This does not select Iroh or the fixture ALPN for production. AT Protocol remains compatible as an optional public identity, signed-assertion, proposal-carrier, and discovery spoke, but is not selected as the canonical store, account system, direct-link layer, trust authority, or federation substrate.
 
 ## Primary sources and projects
 
