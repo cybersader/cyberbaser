@@ -45,15 +45,15 @@ fi
 # origin guard (exit 1, "not a Quartz checkout") instead of invoking npx.
 mkdir -p "$TMP_DIR/quartz-shell"
 set +e
-CYBERBASER_EDIT_LINK_MODE=owner CYBERBASER_OWNER_ORIGIN='http://8.8.8.8:4317' \
+CI=FALSE CYBERBASER_EDIT_LINK_MODE=owner CYBERBASER_OWNER_ORIGIN='http://8.8.8.8:4317' \
   "$WRAPPER_DIR/build.sh" "$TMP_DIR/content" "$TMP_DIR/quartz" \
   >"$TMP_DIR/owner-public-ip.log" 2>&1
 PUBLIC_IP_STATUS=$?
-CYBERBASER_EDIT_LINK_MODE=owner CYBERBASER_OWNER_ORIGIN='http://wiki.internal:4317' \
+CI=FALSE CYBERBASER_EDIT_LINK_MODE=owner CYBERBASER_OWNER_ORIGIN='http://wiki.internal:4317' \
   "$WRAPPER_DIR/build.sh" "$TMP_DIR/content" "$TMP_DIR/quartz" \
   >"$TMP_DIR/owner-hostname.log" 2>&1
 HOSTNAME_STATUS=$?
-CYBERBASER_EDIT_LINK_MODE=owner CYBERBASER_OWNER_ORIGIN='http://100.100.100.100:4317' \
+CI=FALSE CYBERBASER_EDIT_LINK_MODE=owner CYBERBASER_OWNER_ORIGIN='http://100.100.100.100:4317' \
   "$WRAPPER_DIR/build.sh" "$TMP_DIR/content" "$TMP_DIR/quartz-shell" \
   >"$TMP_DIR/owner-private.log" 2>&1
 PRIVATE_STATUS=$?
