@@ -9,10 +9,10 @@ tags: [design, contribution, governance]
 
 The **decision ledger** is an append-only JSONL record in the owner-controlled vault of every eligible closed pull request's trust route, OFM verdict, check-run observation, and the maintainer's actual decision.
 
-:::caution[Status on 2026-08-03: implemented and hermetically tested, live installation pending]
-`@cyberbaser/ledger` now includes the selected two-stage GitHub adapter, exact authority reconstruction, and bounded non-force publication. Its hermetic acceptance suite passes for a maintainer PR, a fork PR, a closed-unmerged PR, duplicate delivery, and a tampered artifact using fake GitHub API responses and local bare remotes.
+:::caution[Status on 2026-08-12: installed, one live unclassified observation]
+Cyberbase PR #8 installed the two-stage workflows. The first two Record attempts failed closed before publication and exposed two measured GitHub integration mismatches: custom `run-name` occupies `workflow_run.name`, and artifact ZIP downloads require the normal API media type plus a bounded HTTPS redirect. Cyberbaser PRs #4 and #5 repaired those assumptions; Cyberbase PRs #9 and #10 advanced the installed immutable tooling pin.
 
-That is mechanical evidence, not production evidence. The templates are **not installed** in the live Cyberbase vault, no real GitHub fork run has exercised them, the external vault has not been mutated by WP1, and the canonical ledger still has **zero live observations**.
+Capture run `31648052403` and Record run `31648065388` then published the first valid row through single-path commit `4994bb6ce40a8f2dfb06f979ec8b49bb6ed63560`. The complete ledger validates with one entry. That row has `trustRoute: null` and `ofmVerdict: not-applicable`, so it is a real maintainer publication observation but does not advance the classified threshold: **0 / 20 classified observations**. No real fork, closed-unmerged, or duplicate live case has run yet.
 :::
 
 ## Why it exists
@@ -155,13 +155,13 @@ Workflow-structure tests also reject `pull_request_target`, any writable one-sta
 
 These tests provide the implementation evidence required for WP1. They do **not** prove GitHub's live fork event shape, branch-protection compatibility, credential behavior, or production operations in the Cyberbase vault.
 
-## Live installation is a separate authorization boundary
+## Live installation and current evidence
 
 The supplied Stage B template is intentionally non-runnable. Its Cyberbaser checkout uses an all-zero tooling placeholder, which must be replaced with the exact reviewed 40-character Cyberbaser commit before installation. It never falls back to `main`, `latest`, a tag, or another mutable tooling ref. The GitHub actions and Bun version are also pinned.
 
-Installing and activating the two workflows is an outward mutation of the separate Cyberbase vault and creates a write-capable default-branch recorder. Package completion does not authorize that step. A live install requires separate explicit maintainer authorization, review of the exact Cyberbaser tooling commit, substitution of the immutable placeholder, review of `.cyberbaser/trust.yml`, and installation through the vault's normal owner-controlled path.
+Installing and activating the two workflows was an outward mutation of the separate Cyberbase vault and created a write-capable default-branch recorder. Cyberbase PR #8 performed that authorized installation; PRs #9 and #10 applied measured fail-closed repairs through normal review and immutable tooling pins.
 
-Only after that separate action may a low-risk maintainer PR, real fork PR, and closed-unmerged PR be used to verify live behavior. Until then, the honest state remains: **implemented, hermetically tested, not installed, no real fork run, zero live observations**.
+The first successful row is real GitHub and default-branch publication evidence for one maintainer-authored workflow-only PR. It is not yet live fork-token, closed-unmerged, duplicate-delivery, classifier-agreement, or independent-human evidence. The ledger currently contains one unclassified entry and **zero classified observations** toward the 20-entry precondition.
 
 After an authorized installation and first observation, validate the default-branch file with:
 
