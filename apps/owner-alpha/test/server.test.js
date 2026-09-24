@@ -653,6 +653,91 @@ describe('privileged proposal review routes', () => {
     }
   });
 
+  function projectedEntry({ baseText, oldText, replacementText, start, type = 'quote' }) {
+    const entry = structuredClone(REVIEW_ENTRY);
+    const startByte = start ?? Buffer.byteLength(baseText.slice(0, baseText.indexOf(oldText)), 'utf8');
+    const endByte = startByte + Buffer.byteLength(oldText, 'utf8');
+    entry.evidence.proposal.operation = {
+      ...entry.evidence.proposal.operation,
+      type,
+      selector: type === 'quote' ? { prefix: null, quote: oldText, suffix: null } : null,
+      start: startByte,
+      end: endByte,
+      expectedOldBytesBase64: Buffer.from(oldText).toString('base64'),
+      replacementBytesBase64: Buffer.from(replacementText).toString('base64'),
+    };
+    const buffer = Buffer.from(baseText, 'utf8');
+    const candidateText = Buffer.concat([buffer.subarray(0, startByte), Buffer.from(replacementText), buffer.subarray(endByte)]).toString('utf8');
+    entry.document = { baseText, candidateText, reason: null };
+    return entry;
+  }
+
+  async function renderMode(entry, mode) {
+    const service = {
+      ...reviewServiceFixture(),
+      async load() { return { entry, decision: null }; },
+    };
+    const { fetch } = await enabledFixture({ proposalReview: service });
+    const opened = await openReview(fetch, `/owner/review/${REVIEW_QUEUE_ID}?mode=${mode}`);
+    expect(opened.response.status).toBe(200);
+    return opened.body;
+  }
+
+  test('shows a changed passage exactly once even when the page holds invisible characters', async () => {
+    const baseText = 'Intro\u200b text.\n\nMiddle para.\n\nTail changed.\n';
+    const entry = projectedEntry({ baseText, oldText: 'changed', replacementText: 'edited' });
+    const body = await renderMode(entry, 'changes');
+    expect(body.match(/Middle para\./gu)).toHaveLength(1);
+    expect(body.match(/⟦U\+200B ZERO WIDTH SPACE⟧/gu)).toHaveLength(1);
+    expect(body.match(/Exact source · changed passage/gu)).toHaveLength(1);
+    expect(body).toContain('<del class="doc-removed">changed</del>');
+    expect(body).toContain('<ins class="doc-added">edited</ins>');
+  });
+
+  test('keeps a change appended at the end of the page visible in every mode', async () => {
+    const baseText = '# T\n\nAlpha.\n';
+    const entry = projectedEntry({
+      baseText,
+      oldText: '',
+      replacementText: '\nAdded at the end.\n',
+      start: Buffer.byteLength(baseText, 'utf8'),
+      type: 'offset',
+    });
+    const changes = await renderMode(entry, 'changes');
+    expect(changes).toContain('<ins class="doc-added">');
+    expect(changes).toContain('Added at the end.');
+    expect(changes.match(/Exact source · changed passage/gu)).toHaveLength(1);
+    const current = await renderMode(entry, 'current');
+    expect(current).toContain('insertion point');
+    const proposed = await renderMode(entry, 'proposed');
+    expect(proposed).toContain('Added at the end.');
+  });
+
+  test('shows the declared change for an empty pinned page', async () => {
+    const entry = projectedEntry({ baseText: '', oldText: '', replacementText: 'Hello there.\n', start: 0, type: 'offset' });
+    const changes = await renderMode(entry, 'changes');
+    expect(changes).toContain('<ins class="doc-added">Hello there.');
+    expect(changes).not.toContain('<div class="reading-body document-changes"></div>');
+  });
+
+  test('keeps the removed and added halves of one whole-line change in one passage', async () => {
+    const baseText = 'Alpha.\n\nBeta.\n';
+    const entry = projectedEntry({ baseText, oldText: 'Alpha.\n', replacementText: 'Gamma.\n' });
+    const changes = await renderMode(entry, 'changes');
+    expect(changes.match(/Exact source · changed passage/gu)).toHaveLength(1);
+    expect(changes).toContain('<del class="doc-removed">Alpha.');
+    expect(changes).toContain('<ins class="doc-added">Gamma.');
+  });
+
+  test('names the reading bound instead of a missing page when the text is withheld', async () => {
+    const entry = structuredClone(REVIEW_ENTRY);
+    const reason = 'the pinned page exceeds the 262144 byte reading bound, so only the declared change spans are shown';
+    entry.document = { baseText: null, candidateText: null, reason };
+    const body = await renderMode(entry, 'changes');
+    expect(body).toContain(reason);
+    expect(body).not.toContain('does not exist in the pinned base');
+  });
+
   test('keeps verified reading text out of list and detail JSON projections', async () => {
     const entry = {
       ...REVIEW_ENTRY,

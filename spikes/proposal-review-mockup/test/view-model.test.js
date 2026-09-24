@@ -80,6 +80,13 @@ test('receipt previews lead with decision, note, full scope, source unchanged, a
   ]);
 });
 
+
+// Context is cut at the edges of changed blocks by the shared projection, so
+// compare the shape with adjacent context runs collapsed.
+function shape(segments) {
+  return segments.map((item) => item.kind).filter((kind, index, kinds) => kind !== 'context' || kinds[index - 1] !== 'context');
+}
+
 test('document projections are replayed from the pinned base and declared exact operations', () => {
   const fixture = fixtureView(getFixture('v1-retention-paragraph'));
   const raw = getFixture('v1-retention-paragraph');
@@ -91,9 +98,9 @@ test('document projections are replayed from the pinned base and declared exact 
   const [file] = fixture.document.files;
   expect(file.path).toBe('handbook/backup-retention.md');
   expect(file.operationNumbers).toEqual([1]);
-  expect(file.current.segments.map((item) => item.kind)).toEqual(['context', 'removed', 'context']);
-  expect(file.proposed.segments.map((item) => item.kind)).toEqual(['context', 'added', 'context']);
-  expect(file.unified.segments.map((item) => item.kind)).toEqual(['context', 'removed', 'added', 'context']);
+  expect(shape(file.current.segments)).toEqual(['context', 'removed', 'context']);
+  expect(shape(file.proposed.segments)).toEqual(['context', 'added', 'context']);
+  expect(shape(file.unified.segments)).toEqual(['context', 'removed', 'added', 'context']);
   expect(file.current.segments.map((item) => item.text).join('')).toBe(raw.sourceFiles[0].baseText);
   expect(file.proposed.segments.map((item) => item.text).join('')).toBe(raw.sourceFiles[0].candidateText);
   for (const segment of file.unified.segments) {
@@ -105,13 +112,13 @@ test('document projections are replayed from the pinned base and declared exact 
 test('insertion, deletion, and multi-operation projections mark every declared change', () => {
   const insertion = fixtureView(getFixture('v1-offline-limitation-insertion'));
   const insertionFile = insertion.document.files[0];
-  expect(insertionFile.current.segments.map((item) => item.kind)).toEqual(['context', 'insertion-point', 'context']);
-  expect(insertionFile.proposed.segments.map((item) => item.kind)).toEqual(['context', 'added', 'context']);
+  expect(shape(insertionFile.current.segments)).toEqual(['context', 'insertion-point', 'context']);
+  expect(shape(insertionFile.proposed.segments)).toEqual(['context', 'added', 'context']);
 
   const deletion = fixtureView(getFixture('v1-obsolete-notice-deletion'));
   const deletionFile = deletion.document.files[0];
-  expect(deletionFile.current.segments.map((item) => item.kind)).toEqual(['context', 'removed', 'context']);
-  expect(deletionFile.proposed.segments.map((item) => item.kind)).toEqual(['context', 'deletion-point', 'context']);
+  expect(shape(deletionFile.current.segments)).toEqual(['context', 'removed', 'context']);
+  expect(shape(deletionFile.proposed.segments)).toEqual(['context', 'deletion-point', 'context']);
 
   const target = fixtureView(getFixture('v2-setup-three-places'));
   const targetFile = target.document.files[0];

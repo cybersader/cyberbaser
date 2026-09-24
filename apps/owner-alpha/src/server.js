@@ -13,7 +13,7 @@ import {
 } from './proposal-decisions.js';
 import { createProposalReviewClient } from './proposal-review-client.js';
 import { createOwnerProposalReviewSource } from './proposal-review.js';
-import { documentProjection } from '@cyberbaser/review-projection';
+import { documentProjection, segmentsWithinSpan } from '@cyberbaser/review-projection';
 import { fail, OwnerAlphaError } from './errors.js';
 import { listDurableJobs, loadDurableJob, validateJobId } from './job-state.js';
 import { ensureOwnerSite } from './site.js';
@@ -431,7 +431,9 @@ const REVIEW_MODE_KEYS = Object.freeze(REVIEW_MODES.map((mode) => mode.key));
 
 function reviewProjection(entry) {
   const document = entry.document ?? null;
-  if (document === null) return null;
+  // A stated reason (for example the reading bound) means there is no text to
+  // project; passing nulls on would misreport the page as absent from the base.
+  if (document === null || document.reason !== null) return null;
   const operation = entry.evidence.proposal.operation;
   const path = entry.summary.source.path;
   return documentProjection({
@@ -489,15 +491,17 @@ function blockHtml(block) {
   return '';
 }
 
-function segmentsInBlock(segments, block) {
-  return segments.filter((item) => (item.end > item.start
-    ? item.start < block.end && item.end > block.start
-    : item.start >= block.start && item.start < block.end));
+function documentEnd(source) {
+  return source.blocks.at(-1)?.end ?? 0;
 }
 
-function blockSegments(segments, span) {
+function segmentsInBlock(segments, block, end) {
+  return segmentsWithinSpan(segments, block, end);
+}
+
+function blockSegments(segments, span, end) {
   const scoped = [];
-  for (const item of segmentsInBlock(segments, span)) {
+  for (const item of segmentsInBlock(segments, span, end)) {
     if (item.kind !== 'context' || item.text.length !== item.end - item.start) {
       scoped.push(item);
       continue;
@@ -510,13 +514,21 @@ function blockSegments(segments, span) {
   return scoped;
 }
 
+// Blocks are keyed by the operation numbers they touch, so the removed and
+// added halves of one operation always land in the same region even when the
+// addition anchors at the start of the following block.
+function changedOperations(source, block, end) {
+  return new Set(segmentsInBlock(source.segments, block, end)
+    .filter((item) => item.kind !== 'context')
+    .map((item) => item.operation ?? source.segments.indexOf(item)));
+}
+
 function readingRegions(source) {
+  const end = documentEnd(source);
   const regions = [];
   let index = 0;
   while (index < source.blocks.length) {
-    const changed = new Set(segmentsInBlock(source.segments, source.blocks[index])
-      .filter((item) => item.kind !== 'context')
-      .map((item) => source.segments.indexOf(item)));
+    const changed = changedOperations(source, source.blocks[index], end);
     if (changed.size === 0) {
       regions.push({ changed: false, blocks: [source.blocks[index]] });
       index += 1;
@@ -525,9 +537,7 @@ function readingRegions(source) {
     const blocks = [source.blocks[index]];
     let cursor = index + 1;
     while (cursor < source.blocks.length) {
-      const next = new Set(segmentsInBlock(source.segments, source.blocks[cursor])
-        .filter((item) => item.kind !== 'context')
-        .map((item) => source.segments.indexOf(item)));
+      const next = changedOperations(source, source.blocks[cursor], end);
       if (next.size === 0 || [...next].every((id) => !changed.has(id))) break;
       for (const id of next) changed.add(id);
       blocks.push(source.blocks[cursor]);
@@ -540,11 +550,15 @@ function readingRegions(source) {
 }
 
 function sourceRegionHtml(source, span, label, extraClass = '') {
-  return `<div class="md-source-wrap${extraClass}"><p class="md-source-label">${escapeHtml(label)}</p><div class="md-source">${segmentsHtml(blockSegments(source.segments, span))}</div></div>`;
+  return `<div class="md-source-wrap${extraClass}"><p class="md-source-label">${escapeHtml(label)}</p><div class="md-source">${segmentsHtml(blockSegments(source.segments, span, documentEnd(source)))}</div></div>`;
 }
 
 function readingHtml(source, className) {
   const parts = [];
+  if (source.blocks.length === 0) {
+    // An empty pinned page has no blocks; the declared change is still shown.
+    parts.push(sourceRegionHtml(source, { start: 0, end: 0 }, 'Exact source \u00b7 changed passage'));
+  }
   for (const region of readingRegions(source)) {
     const span = { start: region.blocks[0].start, end: region.blocks.at(-1).end };
     if (region.changed) {

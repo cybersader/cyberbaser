@@ -50,7 +50,7 @@ This keeps the two things that matter in tension honest at the same time. The ow
 
 This is rung **R1 · structural reading** in the [review projection model](/cyberbaser/design/review-projection-model/): ATX headings, paragraphs, ordered and unordered lists, blockquotes, fenced code, thematic breaks, YAML frontmatter, and inline bold, italic, code, links, and wikilinks.
 
-Anything outside that rung degrades to exact source with a stated reason rather than being rendered wrongly or dropped. A block containing a callout, table, embed, math, task list, footnote, inline HTML, block reference, or renderer-executed fence is shown as `Exact source · not interpreted here: callout`. Raw HTML is escaped and shown as text, never injected. Links and wikilinks render as non-navigating marks, because resolving them is an R2 capability this surface does not have.
+Anything outside that rung degrades to exact source with a stated reason rather than being rendered wrongly or dropped. A block containing a callout, table (with or without outer pipes), embed, image, math, task list, footnote, inline HTML or an HTML comment, block reference, renderer-executed fence, setext heading, indented block, or nested page metadata is shown as `Exact source · not interpreted here: callout`. Raw HTML is escaped and shown as text, never injected. Links and wikilinks render as non-navigating marks, because resolving them is an R2 capability this surface does not have.
 
 Turning **Rendered reading** off returns every mode to Markdown source at reading width.
 

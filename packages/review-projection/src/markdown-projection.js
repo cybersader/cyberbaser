@@ -2,23 +2,39 @@ import { exposeInvisibleText } from './invisible-text.js';
 
 const FENCE = /^(?:```|~~~)/u;
 const HEADING = /^(#{1,6})\s+(.*)$/u;
-const RULE = /^(?:-{3,}|\*{3,}|_{3,})\s*$/u;
+const RULE = /^ {0,3}(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})$/u;
 const QUOTE = /^>\s?/u;
 const BULLET = /^(\s{0,3})([-*+])\s+(.*)$/u;
 const ORDERED = /^(\s{0,3})(\d{1,9})[.)]\s+(.*)$/u;
+// These run over every block slice. Line anchors use horizontal whitespace
+// only: `\s` matches newlines, which made a run of blank lines quadratic.
 const UNINTERPRETED = Object.freeze([
   [/!\[\[/u, 'note or image embed'],
-  [/^\s*>\s*\[!/mu, 'callout'],
-  [/^\s*\|.*\|\s*$/mu, 'table'],
-  [/\$\$|(?<!\\)\$[^$\n]+\$/u, 'math'],
-  [/^(?:```|~~~)\s*(?:mermaid|dataview|dataviewjs)/imu, 'renderer-executed block'],
-  [/^\s*[-*+]\s+\[[ xX]\]/mu, 'task list'],
-  [/\[\^[^\]\s]+\]/u, 'footnote'],
-  [/<\/?[a-zA-Z][^>]*>/u, 'inline HTML'],
+  [/!\[[^\]\n]{0,1024}\]\(/u, 'image'],
+  [/^[ \t]*>[ \t]*\[!/mu, 'callout'],
+  [/^[ \t]*\|.*\|[ \t]*$/mu, 'table'],
+  // A GFM delimiter row without outer pipes still makes the block a table.
+  [/^[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)+$/mu, 'table'],
+  [/\$\$|(?<!\\)\$[^$\n]{1,1024}\$/u, 'math'],
+  [/^(?:```|~~~)[ \t]*(?:mermaid|dataview|dataviewjs)/imu, 'renderer-executed block'],
+  [/^[ \t]*[-*+][ \t]+\[[ xX]\]/mu, 'task list'],
+  [/\[\^[^\]\s]{1,256}\]/u, 'footnote'],
+  [/<\/?[a-zA-Z][^>]{0,1024}>|<!--/u, 'inline HTML'],
   [/%%/u, 'Obsidian comment'],
-  [/\^[A-Za-z0-9-]{3,}\s*$/mu, 'block reference'],
+  [/\^[A-Za-z0-9-]{3,}[ \t]*$/mu, 'block reference'],
 ]);
-const INLINE = /(`[^`\n]+`)|(\[\[[^\]\n]+\]\])|(\[[^\]\n]*\]\([^)\s]*\))|(\*\*[^*\n]+\*\*)|(\*[^*\n]+\*)|(_[^_\n]+_)/u;
+const FRONTMATTER_ENTRY = /^[A-Za-z0-9_.-]+:(?:[ \t]|$)/u;
+const SETEXT_UNDERLINE = /^ {0,3}-+[ \t]*\r?\n?$/u;
+const SETEXT_EQUALS = /^ {0,3}=+[ \t]*\r?\n?$/u;
+const INDENTED = /^(?: {4,}|\t)\S/mu;
+
+// Line text is used only to classify structure; offsets always cover the raw
+// bytes, so a CRLF file keeps its exact spans while its headings, lists, rules,
+// and frontmatter are still recognised.
+function lineText(text, start, end) {
+  const raw = text.slice(start, end);
+  return raw.endsWith('\r') ? raw.slice(0, -1) : raw;
+}
 
 function lines(text) {
   const result = [];
@@ -26,10 +42,10 @@ function lines(text) {
   while (start <= text.length) {
     const index = text.indexOf('\n', start);
     if (index === -1) {
-      if (start < text.length) result.push({ start, end: text.length, text: text.slice(start) });
+      if (start < text.length) result.push({ start, end: text.length, text: lineText(text, start, text.length) });
       break;
     }
-    result.push({ start, end: index + 1, text: text.slice(start, index) });
+    result.push({ start, end: index + 1, text: lineText(text, start, index) });
     start = index + 1;
   }
   return result;
@@ -39,26 +55,97 @@ function token(type, text, extra = {}) {
   return Object.freeze({ type, text: exposeInvisibleText(text), ...extra });
 }
 
+const WORD_CHARACTER = /[A-Za-z0-9]/u;
+
+/**
+ * Inline scanner for rung R1: code spans, wikilinks, links, strong, and
+ * emphasis. It walks the text once and finds closers with cached `indexOf`
+ * lookups, so a line of unmatched openers costs linear time instead of the
+ * quadratic backtracking a regex alternation showed on adversarial input.
+ * Underscore emphasis is not intraword, so snake_case_names keep their
+ * underscores.
+ */
 export function inlineTokens(value) {
   const tokens = [];
-  let rest = value;
-  while (rest.length > 0) {
-    const match = INLINE.exec(rest);
-    if (match === null || match.index === undefined) { tokens.push(token('text', rest)); break; }
-    if (match.index > 0) tokens.push(token('text', rest.slice(0, match.index)));
-    const [found] = match;
-    if (found.startsWith('`')) tokens.push(token('code', found.slice(1, -1)));
-    else if (found.startsWith('[[')) {
-      const inner = found.slice(2, -2);
-      const [target, alias] = inner.split('|');
-      tokens.push(token('wikilink', alias ?? target, { target: exposeInvisibleText(target) }));
-    } else if (found.startsWith('[')) {
-      const split = found.indexOf('](');
-      tokens.push(token('link', found.slice(1, split), { target: exposeInvisibleText(found.slice(split + 2, -1)) }));
-    } else if (found.startsWith('**')) tokens.push(token('strong', found.slice(2, -2)));
-    else tokens.push(token('emphasis', found.slice(1, -1)));
-    rest = rest.slice(match.index + found.length);
+  const length = value.length;
+  const cache = new Map();
+  const find = (needle, from) => {
+    const hit = cache.get(needle);
+    if (hit && from >= hit.from && (hit.at === -1 || from <= hit.at)) return hit.at;
+    const at = value.indexOf(needle, from);
+    cache.set(needle, { from, at });
+    return at;
+  };
+  const plain = (text, forbidden) => text.length > 0 && !forbidden.test(text);
+  let textStart = 0;
+  let index = 0;
+  const flush = (end) => {
+    if (end > textStart) tokens.push(token('text', value.slice(textStart, end)));
+  };
+  while (index < length) {
+    const character = value[index];
+    let matched = null;
+    if (character === '`') {
+      const close = find('`', index + 1);
+      if (close !== -1 && plain(value.slice(index + 1, close), /\n/u)) {
+        matched = { end: close + 1, type: 'code', text: value.slice(index + 1, close) };
+      }
+    } else if (character === '[') {
+      if (value[index + 1] === '[') {
+        const close = find(']]', index + 2);
+        if (close !== -1 && plain(value.slice(index + 2, close), /[\]\n]/u)) {
+          const inner = value.slice(index + 2, close);
+          const pipe = inner.indexOf('|');
+          const target = pipe === -1 ? inner : inner.slice(0, pipe);
+          const alias = pipe === -1 ? target : inner.slice(pipe + 1);
+          matched = { end: close + 2, type: 'wikilink', text: alias, extra: { target: exposeInvisibleText(target) } };
+        }
+      }
+      if (matched === null) {
+        const close = find(']', index + 1);
+        if (close !== -1 && value[close + 1] === '(' && !value.slice(index + 1, close).includes('\n')) {
+          const paren = find(')', close + 2);
+          if (paren !== -1 && !/\s/u.test(value.slice(close + 2, paren))) {
+            matched = {
+              end: paren + 1,
+              type: 'link',
+              text: value.slice(index + 1, close),
+              extra: { target: exposeInvisibleText(value.slice(close + 2, paren)) },
+            };
+          }
+        }
+      }
+    } else if (character === '*') {
+      if (value[index + 1] === '*') {
+        const close = find('**', index + 2);
+        if (close !== -1 && plain(value.slice(index + 2, close), /[*\n]/u)) {
+          matched = { end: close + 2, type: 'strong', text: value.slice(index + 2, close) };
+        }
+      }
+      if (matched === null) {
+        const close = find('*', index + 1);
+        if (close !== -1 && plain(value.slice(index + 1, close), /[*\n]/u)) {
+          matched = { end: close + 1, type: 'emphasis', text: value.slice(index + 1, close) };
+        }
+      }
+    } else if (character === '_' && !(index > 0 && WORD_CHARACTER.test(value[index - 1]))) {
+      const close = find('_', index + 1);
+      if (close !== -1
+        && plain(value.slice(index + 1, close), /[_\n]/u)
+        && !(close + 1 < length && WORD_CHARACTER.test(value[close + 1]))) {
+        matched = { end: close + 1, type: 'emphasis', text: value.slice(index + 1, close) };
+      }
+    }
+    if (matched === null) {
+      index += 1;
+      continue;
+    }
+    flush(index);
+    tokens.push(token(matched.type, matched.text, matched.extra ?? {}));
+    index = matched.end;
+    textStart = index;
   }
+  flush(length);
   return tokens.length > 0 ? tokens : [token('text', '')];
 }
 
@@ -173,10 +260,31 @@ export function markdownBlocks(text) {
   if (blocks.length === 0) return Object.freeze([]);
   const last = blocks.at(-1);
   if (last.end < text.length) blocks.push(block('gap', last.end, text.length));
-  return Object.freeze(blocks.map((item) => {
+  return Object.freeze(blocks.map((item, index) => {
     if (item.kind === 'gap') return Object.freeze({ ...item, uninterpreted: Object.freeze([]) });
     const slice = text.slice(item.start, item.end);
     const found = UNINTERPRETED.filter(([pattern]) => pattern.test(slice)).map(([, label]) => label);
+    if (item.kind === 'paragraph') {
+      // A paragraph directly followed by a dashes-only rule is a setext heading,
+      // and a paragraph indented four or more spaces is an indented block. Both
+      // sit outside the rung, so they degrade instead of reading as prose.
+      const next = blocks[index + 1];
+      const lastLineStart = slice.lastIndexOf('\n', slice.length - 2) + 1;
+      if ((next?.kind === 'rule' && next.start === item.end && SETEXT_UNDERLINE.test(text.slice(next.start, next.end)))
+        || (lastLineStart > 0 && SETEXT_EQUALS.test(slice.slice(lastLineStart)))) {
+        found.push('setext heading');
+      }
+      if (INDENTED.test(slice)) found.push('indented block');
+    }
+    if (item.kind === 'frontmatter') {
+      // Only flat `key: value` metadata is read; nested or list-valued YAML
+      // would show as names with empty values, so it degrades instead.
+      const body = slice.split('\n').map((line) => (line.endsWith('\r') ? line.slice(0, -1) : line));
+      body.shift();
+      while (body.length > 0 && body.at(-1).trim().length === 0) body.pop();
+      body.pop();
+      if (body.some((line) => line.trim().length > 0 && !FRONTMATTER_ENTRY.test(line))) found.push('structured metadata');
+    }
     return Object.freeze({ ...item, uninterpreted: Object.freeze(found) });
   }));
 }

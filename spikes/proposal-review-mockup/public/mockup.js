@@ -133,14 +133,21 @@ function documentBody(segments, className = 'document-body') {
   appendSegments(body, segments);
   return body;
 }
-function segmentsInBlock(segments, block) {
+function documentEnd(source) {
+  return source.blocks.at(-1)?.end ?? 0;
+}
+// A zero-width segment at the end of the document belongs to the final block,
+// so an appended change stays visible. Mirrors segmentsWithinSpan in
+// @cyberbaser/review-projection.
+function segmentsInBlock(segments, block, end = null) {
   return segments.filter((item) => (item.end > item.start
     ? item.start < block.end && item.end > block.start
-    : item.start >= block.start && item.start < block.end));
+    : (item.start >= block.start && item.start < block.end)
+      || (end !== null && item.start === end && block.end === end)));
 }
-function blockSegments(segments, block) {
+function blockSegments(segments, block, end = null) {
   const scoped = [];
-  for (const item of segmentsInBlock(segments, block)) {
+  for (const item of segmentsInBlock(segments, block, end)) {
     if (item.kind !== 'context') { scoped.push(item); continue; }
     if (item.text.length !== item.end - item.start) { scoped.push(item); continue; }
     const start = Math.max(item.start, block.start);
@@ -177,16 +184,17 @@ function blockNode(block) {
   }
   return null;
 }
-function changedSegmentIds(segments, block) {
-  return new Set(segmentsInBlock(segments, block)
+function changedSegmentIds(segments, block, end = null) {
+  return new Set(segmentsInBlock(segments, block, end)
     .filter((item) => item.kind !== 'context')
-    .map((item) => segments.indexOf(item)));
+    .map((item) => item.operation ?? segments.indexOf(item)));
 }
 function readingRegions(source) {
+  const end = documentEnd(source);
   const regions = [];
   let index = 0;
   while (index < source.blocks.length) {
-    const changed = changedSegmentIds(source.segments, source.blocks[index]);
+    const changed = changedSegmentIds(source.segments, source.blocks[index], end);
     if (changed.size === 0) {
       regions.push({ changed: false, blocks: [source.blocks[index]] });
       index += 1;
@@ -195,7 +203,7 @@ function readingRegions(source) {
     const blocks = [source.blocks[index]];
     let cursor = index + 1;
     while (cursor < source.blocks.length) {
-      const next = changedSegmentIds(source.segments, source.blocks[cursor]);
+      const next = changedSegmentIds(source.segments, source.blocks[cursor], end);
       if (next.size === 0 || [...next].every((id) => !changed.has(id))) break;
       for (const id of next) changed.add(id);
       blocks.push(source.blocks[cursor]);
@@ -208,7 +216,7 @@ function readingRegions(source) {
 }
 function sourceRegion(source, span, label, className = 'md-source-wrap') {
   const exact = node('div', { className: 'md-source' });
-  appendSegments(exact, blockSegments(source.segments, span));
+  appendSegments(exact, blockSegments(source.segments, span, documentEnd(source)));
   return node('div', { className }, [node('p', { className: 'md-source-label', text: label }), exact]);
 }
 function readingBody(source, className = '') {

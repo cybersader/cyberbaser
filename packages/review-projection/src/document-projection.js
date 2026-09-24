@@ -7,6 +7,7 @@ const UNAVAILABLE = Object.freeze({
   unorderedOperations: 'The declared operations are not canonically ordered and non-overlapping, so no document projection is derivable.',
   oldBytesMismatch: 'The declared old bytes do not match the pinned base, so no document projection is derivable.',
   candidateMismatch: 'Replaying the declared operations does not reproduce the declared candidate, so no document projection is derivable.',
+  invalidOffsets: 'The declared byte offsets do not fall on character boundaries inside the pinned base, so no document projection is derivable.',
 });
 
 function charOffset(buffer, byteOffset) {
@@ -29,8 +30,19 @@ function canonicallyOrdered(operations) {
   return true;
 }
 
+// A byte offset is a character boundary when it is inside the buffer and does
+// not point at a UTF-8 continuation byte. Anything else cannot be turned into
+// a string index honestly, so the projection refuses rather than guessing.
+function characterBoundary(buffer, offset) {
+  if (!Number.isSafeInteger(offset) || offset < 0 || offset > buffer.length) return false;
+  return offset === buffer.length || (buffer[offset] & 0xc0) !== 0x80;
+}
+
 function offsets(baseText, operations) {
   const buffer = Buffer.from(baseText, 'utf8');
+  if (!operations.every((operation) => characterBoundary(buffer, operation.start) && characterBoundary(buffer, operation.end))) {
+    return null;
+  }
   return operations.map((operation) => ({
     ...operation,
     charStart: charOffset(buffer, operation.start),
@@ -109,12 +121,58 @@ function unifiedSegments(baseText, operations) {
   return segments;
 }
 
-const view = (available, reason, segments, source = null) => Object.freeze({
-  available,
-  reason,
-  segments: Object.freeze(segments),
-  blocks: source === null ? Object.freeze([]) : markdownBlocks(source),
-});
+/**
+ * Does a segment fall inside a span? A zero-width segment (a pure insertion or
+ * deletion anchor) belongs to the block that contains its position; when that
+ * position is the end of the document, it belongs to the final block, which is
+ * the only reading of an appended change that keeps it visible.
+ */
+export function segmentWithinSpan(segment, span, documentEnd = null) {
+  if (segment.end > segment.start) return segment.start < span.end && segment.end > span.start;
+  if (segment.start >= span.start && segment.start < span.end) return true;
+  return documentEnd !== null && segment.start === documentEnd && span.end === documentEnd;
+}
+
+export function segmentsWithinSpan(segments, span, documentEnd = null) {
+  return segments.filter((segment) => segmentWithinSpan(segment, span, documentEnd));
+}
+
+// Context segments are cut at the edges of every block that holds a change, so
+// a consumer that shows the exact source of a changed block never has to slice
+// exposed text, whose length no longer matches its raw span once invisible
+// characters have been spelled out.
+function alignContextToChangedBlocks(segments, blocks, source) {
+  if (blocks.length === 0) return segments;
+  const documentEnd = blocks.at(-1).end;
+  const changed = blocks.filter((block) => segments.some((item) => item.kind !== 'context' && segmentWithinSpan(item, block, documentEnd)));
+  if (changed.length === 0) return segments;
+  const cuts = [...new Set(changed.flatMap((block) => [block.start, block.end]))].sort((left, right) => left - right);
+  const aligned = [];
+  for (const item of segments) {
+    if (item.kind !== 'context') {
+      aligned.push(item);
+      continue;
+    }
+    let cursor = item.start;
+    for (const cut of cuts) {
+      if (cut <= cursor || cut >= item.end) continue;
+      aligned.push(segment('context', source.slice(cursor, cut), null, cursor, cut));
+      cursor = cut;
+    }
+    aligned.push(cursor === item.start ? item : segment('context', source.slice(cursor, item.end), null, cursor, item.end));
+  }
+  return aligned;
+}
+
+const view = (available, reason, segments, source = null) => {
+  const blocks = source === null ? Object.freeze([]) : markdownBlocks(source);
+  return Object.freeze({
+    available,
+    reason,
+    segments: Object.freeze(source === null ? segments : alignContextToChangedBlocks(segments, blocks, source)),
+    blocks,
+  });
+};
 
 function projectFile(file, operations) {
   const scoped = fileOperations(operations, file.path);
@@ -145,6 +203,7 @@ function projectFile(file, operations) {
   }
 
   const positioned = offsets(file.baseText, scoped);
+  if (positioned === null) return blocked(UNAVAILABLE.invalidOffsets);
   for (const operation of positioned) {
     if (file.baseText.slice(operation.charStart, operation.charEnd) !== operation.oldText) {
       return blocked(UNAVAILABLE.oldBytesMismatch);
