@@ -22,11 +22,17 @@ import {
   prepareStore,
   recoverProposalDecisions,
   startOwnerAlphaServers,
-  validateOwnerAlphaConfig,
 } from '../src/index.js';
+import {
+  CHECKPOINT_PAGES,
+  CHECKPOINT_PROPOSALS,
+  CHECKPOINT_REPOSITORY,
+  checkpointIntent,
+  checkpointOwnerConfig,
+} from './review-checkpoint-corpus.js';
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
-const INTAKE_REPOSITORY = 'https://forge.example:8443/owner/wiki.git';
+const INTAKE_REPOSITORY = CHECKPOINT_REPOSITORY;
 const OWNER_HOST = '127.0.0.1';
 const requestedPort = Number(process.env.CYBERBASER_UI_REVIEW_PORT ?? 4317);
 if (!Number.isSafeInteger(requestedPort) || requestedPort < 1024 || requestedPort > 65534) {
@@ -55,68 +61,6 @@ async function git(cwd, args) {
   return stdout.trim();
 }
 
-function ownerConfig({ checkout, socketPath }) {
-  return validateOwnerAlphaConfig({
-    schemaVersion: 1,
-    listen: { host: OWNER_HOST, port: OWNER_PORT },
-    proposalReview: {
-      enabled: true,
-      socketPath,
-      requestTimeoutMs: 5000,
-      maxListEntries: 100,
-    },
-    repository: {
-      checkout,
-      remote: { name: 'origin', url: INTAKE_REPOSITORY },
-      branch: 'main',
-    },
-    owner: {
-      identity: 'owner',
-      allowedTrustRoutes: ['auto-merge', 'quick-review'],
-    },
-    live: { baseUrl: 'https://published.example/' },
-    workflow: {
-      provider: 'forgejo-actions',
-      apiBaseUrl: 'https://forge.example:8443/api/v1',
-      repository: 'owner/wiki',
-      path: '.forgejo/workflows/publish-site.yml',
-      event: 'push',
-      branch: 'main',
-      jobs: ['build', 'deploy'],
-      deploymentJob: 'deploy',
-    },
-    workspace: {
-      root: '.workspace/owner-alpha',
-      store: '.workspace/owner-alpha/store',
-      site: '.workspace/owner-alpha/site',
-      cache: '.workspace/owner-alpha/cache',
-    },
-    paths: { include: ['**/*.md'], exclude: ['.git/**', '.workspace/**'] },
-    limits: {
-      maxSourceBytes: 2_097_152,
-      maxReplacementBytes: 65_536,
-      maxChangedBytes: 65_536,
-      maxChangedLines: 60,
-      maxArtifactBytes: 8_388_608,
-      requestTimeoutMs: 30_000,
-      networkTimeoutMs: 900_000,
-    },
-    checks: {
-      allowedOfmVerdicts: ['clean'],
-      requirePublishedSource: true,
-      requireProjectionVerification: true,
-      requireNoNewBrokenLinks: true,
-      requireRenderedWitness: true,
-    },
-    git: {
-      autoCommit: true,
-      autoPush: true,
-      useHooks: true,
-      commitMessagePrefix: 'owner-alpha:',
-    },
-  });
-}
-
 async function writeStatus(value) {
   await mkdir(path.dirname(STATUS_FILE), { recursive: true, mode: 0o700 });
   await chmod(path.dirname(STATUS_FILE), 0o700);
@@ -124,12 +68,12 @@ async function writeStatus(value) {
   await chmod(STATUS_FILE, 0o600);
 }
 
-async function submit(service, fixture, overrides) {
+async function submit(service, intent) {
   const response = await service.fetch(intakeRequest('/v1/corrections', {
     method: 'POST',
     origin: FORM_ORIGIN,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(fixture.intent(overrides)),
+    body: JSON.stringify(intent),
   }));
   if (response.status !== 202) {
     throw new Error(`fixture proposal submission failed with status ${response.status}`);
@@ -146,7 +90,7 @@ async function openBrowser(url) {
   if (exitCode !== 0) throw new Error(`browser launch failed: ${stderr.trim() || `exit ${exitCode}`}`);
 }
 
-const fixture = await createFixture();
+const fixture = await createFixture({ pages: CHECKPOINT_PAGES });
 let intake;
 let reviewIpc;
 let servers;
@@ -204,22 +148,12 @@ try {
   intake = await openIntakeService({ config: intakeConfig });
   reviewIpc = await startReviewIpcServer({ config: intakeConfig, review: intake.review });
 
+  // Each checkpoint proposal enters through the real intake as ordinary Lane B
+  // evidence; the launcher never hand-builds review artifacts.
   const receipts = [];
-  receipts.push(await submit(intake, fixture, {
-    replacement: 'the',
-    rationale: 'Correct the obvious spelling error in the published note.',
-    evidence: ['https://www.merriam-webster.com/dictionary/the'],
-  }));
-  receipts.push(await submit(intake, fixture, {
-    replacement: 'that',
-    rationale: 'Prefer a demonstrative determiner for the sentence in this proposal.',
-    evidence: ['https://www.merriam-webster.com/dictionary/that'],
-  }));
-  receipts.push(await submit(intake, fixture, {
-    replacement: 'a',
-    rationale: 'Simplify the phrase by replacing the misspelling with an indefinite article.',
-    evidence: ['https://www.merriam-webster.com/dictionary/a'],
-  }));
+  for (const proposal of CHECKPOINT_PROPOSALS) {
+    receipts.push(await submit(intake, checkpointIntent(fixture, proposal)));
+  }
 
   const checkout = path.join(fixture.root, 'checkout');
   await git(checkout, ['remote', 'set-url', 'origin', INTAKE_REPOSITORY]);
@@ -227,7 +161,7 @@ try {
   await mkdir(ownerProject, { mode: 0o700 });
   await git(ownerProject, ['init', '-q', '--initial-branch=main']);
   await writeFile(path.join(ownerProject, '.gitignore'), '.workspace/\n', { mode: 0o600 });
-  const config = ownerConfig({ checkout, socketPath });
+  const config = checkpointOwnerConfig({ checkout, socketPath, host: OWNER_HOST, port: OWNER_PORT });
   const workspaceRoot = path.join(ownerProject, config.workspace.root);
   const storeRoot = path.join(ownerProject, config.workspace.store);
   const context = defineStoreContext({ projectRoot: ownerProject, workspaceRoot, storeRoot });

@@ -12,7 +12,7 @@ The review fixture runs the real owner-alpha proposal surface, not a static mock
 The fixture is local and disposable. Its only durable effect inside the temporary fixture is the immutable owner decision record being tested. Approval records intent only. Neither approval nor rejection can apply or write source, commit, push, rebuild, deploy, publish, change queue lifecycle, or start an owner job.
 
 :::caution[Mechanical checkpoint, not accepted product direction]
-The runtime is committed on the review branch, not merged or deployed. Earlier maintainer reviews found that proposal identity, Current versus Proposed, the required action, and deployment placement were unclear; a fixed side-by-side static design also made long prose too narrow. The [proposal operating model](/cyberbaser/research/proposal-operating-model/) and four-mode research surface led to the real owner-alpha port described below. The maintainer has not yet reviewed that port, so neither the product-direction checkpoint nor an independent-usability gate has passed.
+The runtime is committed on the review branch, not merged or deployed. Earlier maintainer reviews found that proposal identity, Current versus Proposed, the required action, and deployment placement were unclear; a fixed side-by-side static design also made long prose too narrow. The [proposal operating model](/cyberbaser/research/proposal-operating-model/) and four-mode research surface led to the real owner-alpha port described below. The maintainer has not yet reviewed that port, so neither the product-direction checkpoint nor an independent-usability gate has passed. The launch steps, realistic fixtures, questions, and pass/fail criteria for that checkpoint are in [Owner review maintainer checkpoint](/cyberbaser/development/owner-review-checkpoint/); preparing them did not run it.
 :::
 
 The separate [Proposal review mockup](/cyberbaser/development/proposal-review-mockup/) is the unprivileged static/no-effect research surface. It does not replace this authenticated mechanical baseline and cannot access its privileged origin, queue seam, sessions, source evidence, or decision store.
@@ -35,7 +35,7 @@ The decision surface is a collapsible dock fixed to the bottom of the page. Coll
 
 ## Which surface to use now
 
-Use this authenticated fixture for the next maintainer checkpoint: inspect the real reading modes, decision dock, confirmation, and receipt alongside the same-host security and no-source-effect mechanics. This first port is an implementation for inspection, not accepted product direction. No test or screenshot passes the maintainer checkpoint on their behalf.
+Use this authenticated fixture for the next maintainer checkpoint: inspect the real reading modes, decision dock, confirmation, and receipt alongside the same-host security and no-source-effect mechanics. The [checkpoint pack](/cyberbaser/development/owner-review-checkpoint/) gives the order, the questions, and the pass/fail criteria. This first port is an implementation for inspection, not accepted product direction. No test or screenshot passes the maintainer checkpoint on their behalf.
 
 The separate static mockup remains useful for exploratory fixture comparisons, including long prose, insertion and deletion, blocked evidence, and a single-file multi-operation research target. Those scenarios do not turn into executable privileged proposals merely because they are visible in the mockup.
 
@@ -57,13 +57,15 @@ bun run --cwd docs review:owner-alpha
 
 The launcher:
 
-1. creates a temporary Git repository, exact retained source binding, trust policy, and private proposal queue;
+1. creates a temporary Git repository with seven realistic pages, an exact retained source binding, a trust policy, and a private proposal queue;
 2. starts the real intake writer and retains its lifetime exclusive lock;
 3. starts the private same-host Unix-socket review endpoint;
-4. starts the privileged owner-alpha review routes on loopback;
-5. independently validates three real disposable proposals;
-6. verifies that the content-first proposal inbox contains all three; and
+4. submits the seven disposable checkpoint proposals through the real account-free intake;
+5. starts the privileged owner-alpha review routes on loopback;
+6. verifies that the content-first proposal inbox contains all seven; and
 7. requests an authenticated browser launch without printing or retaining the one-time sign-in capability.
+
+The proposals are the checkpoint corpus in `apps/owner-alpha/bin/review-checkpoint-corpus.js`: a long paragraph rewrite, a sourced number correction, a link inside a list, a deletion, a frontmatter value, one paragraph in a long page, and a sentence on a page with constructs the projection does not interpret. A focused test asserts each one exercises what the checkpoint pack claims.
 
 Enter `b` in the launcher terminal to issue and open a fresh one-time browser sign-in. Press `Ctrl-C` to stop both services and remove the temporary fixture.
 
@@ -85,15 +87,16 @@ The **Decided** section is separate and quieter. Its newest decision appears fir
 
 ### 2. Read the suggestion
 
-A proposal opens in **Proposed** view. Switch among:
+A proposal opens in **Changes**, the current default. Switch among:
 
-- **Proposed:** bounded proposal context with the new wording emphasized;
-- **Current:** the same context with the existing wording emphasized; and
-- **Exact:** complete old and replacement bytes plus the exact operation range.
+- **Changes:** one reading pass over the pinned page with removals struck through and additions marked in place;
+- **Proposed:** the complete page as it would read if the proposal were later applied;
+- **Current:** the complete pinned page as it reads today; and
+- **Compare:** Current and Proposed together.
 
-For quote-bound proposals, the surrounding words come from the exact selector. This is not a complete rendered-page preview. Offset-bound proposals may have no surrounding quote context.
+Each mode is a server-rendered address (`?mode=changes|proposed|current|compare`). Untouched blocks render structurally; any block containing a declared change shows its exact source. When the page cannot be projected, or exceeds the 256 KiB reading bound, the modes say so and show the declared change spans with the quote context instead. No mode is a preview of the published page.
 
-The contributor's rationale and reference links follow the wording comparison. Repository, revision, Git object, digests, trust classification, lane, route, and reason codes remain available under **Technical evidence**.
+The contributor's rationale and reference links follow the reading. Repository, revision, Git object, digests, trust classification, lane, route, and reason codes remain available under **Technical evidence**.
 
 ### 3. Decide deliberately
 
@@ -120,10 +123,12 @@ Exact authority, retention, source, trust, and digest evidence remains under **R
 
 ## What to evaluate
 
-Review the three proposals as if they arrived from an account-free contributor:
+The full maintainer checkpoint, with its order, cold questions, and pass/fail criteria per area, is the [Owner review maintainer checkpoint](/cyberbaser/development/owner-review-checkpoint/). The general checklist below still applies to any pass over the surface.
+
+Review the seven proposals as if they arrived from an account-free contributor:
 
 1. Can you understand the requested wording change before opening technical evidence?
-2. Do Proposed, Current, and Exact provide the right progression from meaning to exact bytes?
+2. Do Changes, Proposed, Current, and Compare provide the right progression from meaning to exact bytes?
 3. Does the contributor note appear at the right point in the reading flow?
 4. Are Approve and Reject understandable without suggesting that approval publishes source?
 5. Does the confirmation make the immutable, decision-only boundary clear?
