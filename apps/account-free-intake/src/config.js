@@ -15,6 +15,7 @@ const TOP_LEVEL_KEYS = Object.freeze([
   'bindingsRoot',
   'gitDir',
   'queue',
+  'reviewIpc',
   'limits',
 ]);
 const LISTEN_KEYS = Object.freeze(['host', 'port']);
@@ -25,6 +26,13 @@ const QUEUE_KEYS = Object.freeze([
   'maxPendingPerSource',
   'pendingRetentionMs',
   'expiredGraceMs',
+]);
+const REVIEW_IPC_KEYS = Object.freeze([
+  'enabled',
+  'socketPath',
+  'requestTimeoutMs',
+  'maxConcurrentRequests',
+  'maxListEntries',
 ]);
 const LIMIT_KEYS = Object.freeze([
   'maxBodyBytes',
@@ -176,6 +184,25 @@ export function validateConfig(input) {
     expiredGraceDays: queueDays(input.queue.expiredGraceMs, 'queue.expiredGraceMs'),
   });
 
+  exactObject(input.reviewIpc, REVIEW_IPC_KEYS, 'reviewIpc');
+  if (typeof input.reviewIpc.enabled !== 'boolean') fail('invalid-config', 'reviewIpc.enabled must be a boolean');
+  let reviewSocketPath = null;
+  if (input.reviewIpc.enabled) {
+    reviewSocketPath = normalizedAbsolutePath(input.reviewIpc.socketPath, 'reviewIpc.socketPath');
+    if (path.dirname(reviewSocketPath) === path.parse(reviewSocketPath).root) {
+      fail('invalid-config', 'reviewIpc.socketPath parent must not be a filesystem root');
+    }
+  } else if (input.reviewIpc.socketPath !== null) {
+    fail('invalid-config', 'reviewIpc.socketPath must be null when reviewIpc is disabled');
+  }
+  const reviewIpc = Object.freeze({
+    enabled: input.reviewIpc.enabled,
+    socketPath: reviewSocketPath,
+    requestTimeoutMs: exactInteger(input.reviewIpc.requestTimeoutMs, 5_000, 'reviewIpc.requestTimeoutMs'),
+    maxConcurrentRequests: exactInteger(input.reviewIpc.maxConcurrentRequests, 4, 'reviewIpc.maxConcurrentRequests'),
+    maxListEntries: exactInteger(input.reviewIpc.maxListEntries, 100, 'reviewIpc.maxListEntries'),
+  });
+
   exactObject(input.limits, LIMIT_KEYS, 'limits');
   const limits = Object.freeze({
     maxBodyBytes: exactInteger(input.limits.maxBodyBytes, 98_304, 'limits.maxBodyBytes'),
@@ -204,6 +231,7 @@ export function validateConfig(input) {
       pendingRetentionDays: queueConfig.pendingRetentionDays,
       expiredGraceDays: queueConfig.expiredGraceDays,
     },
+    reviewIpc,
     limits,
   });
 }
@@ -239,6 +267,9 @@ export async function validateRuntimePaths(config) {
   await assertPathComponents(config.bindingsRoot, { mustExist: true, directory: true }, 'bindingsRoot');
   await assertPathComponents(config.gitDir, { mustExist: true, directory: true }, 'gitDir');
   await assertPathComponents(config.queue.root, { mustExist: false, directory: true }, 'queue.root');
+  if (config.reviewIpc.enabled) {
+    await assertPathComponents(path.dirname(config.reviewIpc.socketPath), { mustExist: true, directory: true }, 'reviewIpc.socketPath parent');
+  }
   return config;
 }
 

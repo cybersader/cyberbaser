@@ -1,0 +1,14 @@
+{
+  "name": "@cyberbaser/review-projection",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pure reading projections of a pinned base and its declared exact operations. No I/O, no authority.",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "test": "bun test test"
+  }
+}

@@ -51,6 +51,13 @@ export function configInput(root, overrides = {}) {
       pendingRetentionMs: 2_592_000_000,
       expiredGraceMs: 604_800_000,
     },
+    reviewIpc: {
+      enabled: false,
+      socketPath: null,
+      requestTimeoutMs: 5_000,
+      maxConcurrentRequests: 4,
+      maxListEntries: 100,
+    },
     limits: {
       maxBodyBytes: 98_304,
       requestTimeoutMs: 5_000,

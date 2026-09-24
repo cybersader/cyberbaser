@@ -91,6 +91,10 @@ describe('owner-alpha container structure', () => {
       '**/.env',
       '**/test-results',
     ]) expect(ignore).toContain(pattern);
+    for (const packageName of ['proposal', 'proposal-queue', 'proposal-review', 'review-projection']) {
+      expect(ignore).toContain(`!packages/${packageName}/package.json`);
+      expect(ignore).toContain(`!packages/${packageName}/src/**`);
+    }
     expect(ignore).toContain('!deploy/owner-alpha/git-credential-owner-alpha-socket.js');
     expect(containerfile).not.toContain('owner-alpha.container.example.json');
     expect(containerfile).not.toMatch(/(?:TOKEN|PASSWORD|SECRET|AUTHORIZATION)=/u);
@@ -211,10 +215,26 @@ describe('owner-alpha container structure', () => {
       'packages/publish',
       'packages/trust',
       'packages/projection',
+      'packages/proposal',
+      'packages/proposal-queue',
+      'packages/proposal-review',
+      'packages/account-free-intake',
+      'apps/account-free-intake',
       'apps/owner-alpha',
     ]) expect(workflow).toContain(`bun install --cwd ${packagePath} --frozen-lockfile`);
     expect(workflow).toContain('bunx playwright install --with-deps chromium');
-    expect(workflow).toContain('OWNER_ALPHA_ACCEPTANCE=1 bun test apps/owner-alpha/test/acceptance.test.js');
+    expect(workflow).toContain('bun test apps/owner-alpha/test');
+    expect(workflow).toContain('OWNER_ALPHA_ACCEPTANCE=1 bun test');
+    expect(workflow).toContain('apps/owner-alpha/test/acceptance.test.js');
+    expect(workflow).toContain('apps/owner-alpha/test/proposal-review-acceptance.test.js');
+    for (const watchedPath of [
+      'apps/account-free-intake/**',
+      'packages/account-free-intake/**',
+      'packages/proposal/**',
+      'packages/proposal-queue/**',
+      'packages/proposal-review/**',
+      'packages/review-projection/**',
+    ]) expect(workflow).toContain(`'${watchedPath}'`);
     expect(workflow).toContain('docker build --progress=plain --file deploy/owner-alpha/Containerfile');
     expect(workflow).toContain("image_id=\"$(docker image inspect --format '{{.Id}}' cyberbaser-owner-alpha:ci)\"");
     expect(workflow).toContain('bun test deploy/owner-alpha/test/runtime-acceptance.test.js');

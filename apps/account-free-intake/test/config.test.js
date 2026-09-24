@@ -14,6 +14,13 @@ describe('strict credential-free configuration', () => {
     expect(config.repository).toBe('https://forge.example:8443/owner/wiki.git');
     expect(config.queue.pendingRetentionDays).toBe(30);
     expect(config.queue.expiredGraceDays).toBe(7);
+    expect(config.reviewIpc).toEqual({
+      enabled: false,
+      socketPath: null,
+      requestTimeoutMs: 5000,
+      maxConcurrentRequests: 4,
+      maxListEntries: 100,
+    });
     expect(Object.isFrozen(config)).toBeTrue();
   });
 
@@ -43,6 +50,46 @@ describe('strict credential-free configuration', () => {
 
   test('requires normalized absolute in-container paths', () => {
     expect(() => validateConfig(configInput(ROOT, { bindingsRoot: '../bindings' }))).toThrow(/normalized absolute path/);
+    expect(() => validateConfig(configInput(ROOT, {
+      reviewIpc: {
+        enabled: true,
+        socketPath: '../review.sock',
+        requestTimeoutMs: 5000,
+        maxConcurrentRequests: 4,
+        maxListEntries: 100,
+      },
+    }))).toThrow(/normalized absolute path/);
+  });
+
+  test('requires the exact bounded review IPC branch', () => {
+    const enabled = validateConfig(configInput(ROOT, {
+      reviewIpc: {
+        enabled: true,
+        socketPath: '/run/cyberbaser/review.sock',
+        requestTimeoutMs: 5000,
+        maxConcurrentRequests: 4,
+        maxListEntries: 100,
+      },
+    }));
+    expect(enabled.reviewIpc.socketPath).toBe('/run/cyberbaser/review.sock');
+    expect(() => validateConfig(configInput(ROOT, {
+      reviewIpc: {
+        enabled: false,
+        socketPath: '/run/cyberbaser/review.sock',
+        requestTimeoutMs: 5000,
+        maxConcurrentRequests: 4,
+        maxListEntries: 100,
+      },
+    }))).toThrow(/must be null/);
+    expect(() => validateConfig(configInput(ROOT, {
+      reviewIpc: {
+        enabled: true,
+        socketPath: '/review.sock',
+        requestTimeoutMs: 5000,
+        maxConcurrentRequests: 4,
+        maxListEntries: 100,
+      },
+    }))).toThrow(/parent must not be a filesystem root/);
   });
 
   test('rejects symlinked runtime path components before opening the service', async () => {

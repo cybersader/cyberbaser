@@ -31,6 +31,28 @@ export {
 } from './artifacts.js';
 export { acquireFileLock, withFileLock } from './flock.js';
 export {
+  PROPOSAL_REVIEW_IPC_SCHEMA_VERSION,
+  PROPOSAL_REVIEW_IPC_REQUEST_MAX_BYTES,
+  PROPOSAL_REVIEW_IPC_RESPONSE_MAX_BYTES,
+  createProposalReviewClient,
+} from './proposal-review-client.js';
+export {
+  defaultProposalReviewGit,
+  validateOwnerReviewEvidence,
+  createOwnerProposalReviewSource,
+} from './proposal-review.js';
+export {
+  PROPOSAL_DECISION_INDEX_SCHEMA_VERSION,
+  PROPOSAL_DECISION_INDEX_ARTIFACT_TYPE,
+  PROPOSAL_DECISION_ROOT,
+  PROPOSAL_DECISION_LOCK,
+  PROPOSAL_DECISION_INDEX,
+  PROPOSAL_DECISION_MAX_INDEX_BYTES,
+  recoverProposalDecisions,
+  recordProposalDecision,
+  createProposalDecisionOverlay,
+} from './proposal-decisions.js';
+export {
   JOB_SCHEMA_VERSION,
   JOB_ARTIFACT_TYPE,
   JOB_STATES,
@@ -135,6 +157,7 @@ export {
 export {
   MAX_OWNER_SESSIONS,
   createMemoryEditSessionStore,
+  createOwnerProposalReviewService,
   createOwnerAlphaHandler,
   createReaderHandler,
   startOwnerAlphaServer,

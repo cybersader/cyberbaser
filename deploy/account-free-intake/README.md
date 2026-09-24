@@ -32,6 +32,7 @@ The build context is allowlisted. The final image contains only:
 - `apps/account-free-intake`;
 - `packages/account-free-intake`;
 - `packages/proposal-queue`;
+- `packages/proposal-review` for strict live snapshot and summary contracts;
 - the proposal, correction, trust, and OFM runtime dependencies;
 - Bun, Node, Git, `flock`, and the small deployment scripts in this directory.
 

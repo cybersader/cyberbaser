@@ -65,6 +65,12 @@ async function fixture() {
   const config = validateOwnerAlphaConfig({
     schemaVersion: 1,
     listen: { host: '127.0.0.1', port: 46317 },
+    proposalReview: {
+      enabled: false,
+      socketPath: null,
+      requestTimeoutMs: 5000,
+      maxListEntries: 100,
+    },
     repository: {
       checkout,
       remote: { name: 'origin', url: 'https://github.com/cybersader/cyberbase.git' },

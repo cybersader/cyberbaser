@@ -313,6 +313,9 @@ async function runtimeResourceIdentity(projectRoot) {
     'packages/linkcheck/src',
     'packages/ofm/src',
     'packages/projection/src',
+    'packages/proposal/src',
+    'packages/proposal-queue/src',
+    'packages/proposal-review/src',
     'packages/publish/src',
     'packages/trust/src',
   ];

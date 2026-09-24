@@ -33,6 +33,9 @@ const RESOURCE_ROOTS = [
   'packages/linkcheck/src',
   'packages/ofm/src',
   'packages/projection/src',
+  'packages/proposal/src',
+  'packages/proposal-queue/src',
+  'packages/proposal-review/src',
   'packages/publish/src',
   'packages/trust/src',
 ];
@@ -78,6 +81,12 @@ function config(checkout) {
   return {
     schemaVersion: 1,
     listen: { host: '127.0.0.1', port: 4317 },
+    proposalReview: {
+      enabled: false,
+      socketPath: null,
+      requestTimeoutMs: 5000,
+      maxListEntries: 100,
+    },
     repository: {
       checkout,
       remote: {

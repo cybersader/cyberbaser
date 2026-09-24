@@ -74,6 +74,12 @@ describe('strict one-Save private owner config', () => {
 
     expect(raw).toEqual(before);
     expect(config.listen).toEqual({ host: '127.0.0.1', port: 4317, readerPort: 4318 });
+    expect(config.proposalReview).toEqual({
+      enabled: false,
+      socketPath: null,
+      requestTimeoutMs: 5000,
+      maxListEntries: 100,
+    });
     expect(config.repository.checkout).toBe('/absolute/path/to/cyberbase');
     expect(config.repository.remote.url).toBe('https://github.com/cybersader/cyberbase.git');
     expect(config.owner).toEqual({
@@ -107,6 +113,7 @@ describe('strict one-Save private owner config', () => {
       commitMessagePrefix: 'owner-alpha:',
     });
     expect(Object.isFrozen(config)).toBe(true);
+    expect(Object.isFrozen(config.proposalReview)).toBe(true);
     expect(Object.isFrozen(config.workflow.jobs)).toBe(true);
     expect(Object.isFrozen(config.checks.allowedOfmVerdicts)).toBe(true);
 
@@ -155,10 +162,56 @@ describe('strict one-Save private owner config', () => {
     expect(loopback).not.toBe(tailnet);
   });
 
+  test('binds proposal review to the exact private local IPC policy without changing Save authority', async () => {
+    const raw = await exampleConfig();
+    const originalRevision = computePolicyRevision(raw);
+    const enabled = validateOwnerAlphaConfig(variant(raw, (copy) => {
+      copy.proposalReview.enabled = true;
+      copy.proposalReview.socketPath = '/run/user/1000/cyberbaser/review.sock';
+    }));
+    expect(enabled.proposalReview).toEqual({
+      enabled: true,
+      socketPath: '/run/user/1000/cyberbaser/review.sock',
+      requestTimeoutMs: 5000,
+      maxListEntries: 100,
+    });
+    expect(computePolicyRevision(enabled)).toBe(originalRevision);
+    expect(policyDocument(enabled)).not.toHaveProperty('proposalReview');
+
+    for (const socketPath of [null, 'review.sock', '/review.sock', '/run/../review.sock', '/run/review.sock/']) {
+      expectCode(
+        () => validateOwnerAlphaConfig(variant(raw, (copy) => {
+          copy.proposalReview.enabled = true;
+          copy.proposalReview.socketPath = socketPath;
+        })),
+        socketPath === null ? 'invalid-config' : 'invalid-config-path',
+      );
+    }
+    expectCode(
+      () => validateOwnerAlphaConfig(variant(raw, (copy) => {
+        copy.proposalReview.socketPath = '/run/user/1000/cyberbaser/review.sock';
+      })),
+      'invalid-review-policy',
+    );
+    for (const [field, value] of [
+      ['enabled', 'true'],
+      ['requestTimeoutMs', 4999],
+      ['maxListEntries', 99],
+    ]) {
+      expectCode(
+        () => validateOwnerAlphaConfig(variant(raw, (copy) => {
+          copy.proposalReview[field] = value;
+        })),
+        field === 'enabled' ? 'invalid-config' : 'invalid-review-policy',
+      );
+    }
+  });
+
   test('rejects unknown and missing keys at every schema boundary', async () => {
     const raw = await exampleConfig();
     const unknownVariants = [
       variant(raw, (copy) => { copy.surprise = true; }),
+      variant(raw, (copy) => { copy.proposalReview.surprise = true; }),
       variant(raw, (copy) => { copy.repository.surprise = true; }),
       variant(raw, (copy) => { copy.repository.remote.surprise = true; }),
       variant(raw, (copy) => { copy.owner.surprise = true; }),
@@ -174,7 +227,9 @@ describe('strict one-Save private owner config', () => {
     }
 
     for (const [section, key] of [
+      [null, 'proposalReview'],
       [null, 'live'],
+      ['proposalReview', 'socketPath'],
       ['repository', 'checkout'],
       ['owner', 'identity'],
       ['workflow', 'name'],

@@ -3,7 +3,17 @@ import { constants } from 'node:fs';
 import { lstat, open, realpath, rename, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { OWNER_DECISION_REASON_MAX_BYTES } from '@cyberbaser/proposal-review';
+import { validateDigest, validateQueueId } from '@cyberbaser/proposal-queue';
 import { loadOwnerAlphaConfig, validateOwnerAlphaConfig } from './config.js';
+import {
+  createProposalDecisionOverlay,
+  recordProposalDecision,
+  recoverProposalDecisions,
+} from './proposal-decisions.js';
+import { createProposalReviewClient } from './proposal-review-client.js';
+import { createOwnerProposalReviewSource } from './proposal-review.js';
+import { documentProjection } from '@cyberbaser/review-projection';
 import { fail, OwnerAlphaError } from './errors.js';
 import { listDurableJobs, loadDurableJob, validateJobId } from './job-state.js';
 import { ensureOwnerSite } from './site.js';
@@ -14,6 +24,7 @@ const COOKIE_NAME = 'owner_alpha_session';
 export const MAX_OWNER_SESSIONS = 64;
 const DEFAULT_EDIT_SESSION_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_MAX_EDIT_SESSIONS = 64;
+const MAX_REVIEW_DECISION_BODY_BYTES = OWNER_DECISION_REASON_MAX_BYTES + 16 * 1024;
 const MAX_STATIC_BYTES = 64 * 1024 * 1024;
 const PUBLIC_ROOT = fileURLToPath(new URL('../public/', import.meta.url));
 const PROJECT_ROOT = path.resolve(fileURLToPath(new URL('../../../', import.meta.url)));
@@ -160,8 +171,9 @@ function textareaText(value) {
   return value.startsWith('\n') ? `\n${escaped}` : escaped;
 }
 
-function pageShell({ title, body, script = null }) {
+function pageShell({ title, body, script = null, bodyClass = null }) {
   const scriptTag = script ? `<script src="${script}" defer></script>` : '';
+  const bodyAttribute = bodyClass === null ? '' : ` class="${escapeHtml(bodyClass)}"`;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -171,22 +183,23 @@ function pageShell({ title, body, script = null }) {
 <link rel="stylesheet" href="/owner/assets/owner.css">
 ${scriptTag}
 </head>
-<body>
+<body${bodyAttribute}>
 ${body}
 </body>
 </html>
 `;
 }
 
-function editPage({ editSessionId, csrfToken, session }) {
+function editPage({ editSessionId, csrfToken, session, reviewEnabled }) {
   return pageShell({
     title: 'Owner edit',
     script: '/owner/assets/editor.js',
     body: `<main class="owner-shell" id="owner-editor" data-edit-session-id="${escapeHtml(editSessionId)}" data-csrf="${escapeHtml(csrfToken)}">
-<header class="owner-header">
-<p class="eyebrow">Owner alpha</p>
+<header class="owner-header review-detail-header">
+<div><p class="eyebrow">Owner alpha</p>
 <h1>Edit Markdown</h1>
-<p class="lede">One bounded Save publishes through the configured owner-controlled pipeline.</p>
+<p class="lede">One bounded Save publishes through the configured owner-controlled pipeline.</p></div>
+${reviewEnabled ? '<a href="/owner/review">Review proposals</a>' : ''}
 </header>
 <form id="edit-form">
 <label for="edited-text">Markdown</label>
@@ -249,6 +262,569 @@ function jobPage(job, readerOrigin) {
   });
 }
 
+function proposalText(bytesBase64) {
+  return Buffer.from(bytesBase64, 'base64').toString('utf8');
+}
+
+function compactReviewText(value, maximum = 160) {
+  const text = String(value).replace(/\s+/gu, ' ').trim();
+  if (text.length <= maximum) return text;
+  return `${text.slice(0, Math.max(1, maximum - 1)).trimEnd()}…`;
+}
+
+function reviewTime(value) {
+  const instant = new Date(value);
+  const visible = Number.isNaN(instant.getTime())
+    ? value
+    : `${new Intl.DateTimeFormat('en', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+        timeZone: 'UTC',
+      }).format(instant)} UTC`;
+  return `<time datetime="${escapeHtml(value)}">${escapeHtml(visible)}</time>`;
+}
+
+function proposalView(entry) {
+  const operation = entry.evidence.proposal.operation;
+  return Object.freeze({
+    operation,
+    oldText: proposalText(operation.expectedOldBytesBase64),
+    replacementText: proposalText(operation.replacementBytesBase64),
+    prefix: operation.selector?.prefix ?? '',
+    suffix: operation.selector?.suffix ?? '',
+    hasContext: operation.selector !== null,
+  });
+}
+
+function changeName(view) {
+  const oldText = compactReviewText(view.oldText, 64);
+  const replacementText = compactReviewText(view.replacementText, 64);
+  if (oldText.length === 0) return `Add “${replacementText}”`;
+  if (replacementText.length === 0) return `Remove “${oldText}”`;
+  return `“${oldText}” to “${replacementText}”`;
+}
+
+function changedText(value) {
+  return value.length === 0
+    ? '<span class="empty-change">nothing</span>'
+    : escapeHtml(value);
+}
+
+function compactContext(value, maximum, { fromEnd = false } = {}) {
+  const text = String(value).replace(/\s+/gu, ' ');
+  if (text.length <= maximum) return text;
+  return fromEnd
+    ? `…${text.slice(-(maximum - 1))}`
+    : `${text.slice(0, maximum - 1)}…`;
+}
+
+function proposalContext(view, mode, { compact = false } = {}) {
+  const prefix = compact ? compactContext(view.prefix, 72, { fromEnd: true }) : view.prefix;
+  const suffix = compact ? compactContext(view.suffix, 72) : view.suffix;
+  const selected = mode === 'current' ? view.oldText : view.replacementText;
+  const bounded = compact ? compactReviewText(selected, 96) : selected;
+  const context = view.hasContext
+    ? `${escapeHtml(prefix)}<mark class="changed-word changed-${mode}">${changedText(bounded)}</mark>${escapeHtml(suffix)}`
+    : `<mark class="changed-word changed-${mode}">${changedText(bounded)}</mark>`;
+  return `<span class="proposal-prose">${context}</span>`;
+}
+
+function decisionEntry(decision, summary) {
+  return Object.freeze({
+    summary: {
+      schemaVersion: 1,
+      artifactType: 'cyberbaser-proposal-review-summary',
+      queueId: summary.queueId,
+      proposalId: summary.proposalId,
+      proposalDigest: summary.proposalDigest,
+      candidateDigest: summary.candidateDigest,
+      reviewEvidenceDigest: summary.reviewEvidenceDigest,
+      source: summary.source,
+      receivedAt: summary.receivedAt,
+      expiresAt: summary.expiresAt,
+      state: decision.reviewEvidence.state.state,
+      lane: summary.lane,
+      tier: summary.tier,
+      route: summary.route,
+    },
+    evidence: decision.reviewEvidence,
+    sourceVerification: null,
+  });
+}
+
+function reviewSummaryCard(entry, href, decision = null) {
+  const view = proposalView(entry);
+  const rationale = compactReviewText(entry.evidence.proposal.submission.rationale, 180);
+  const status = decision === null
+    ? (entry.summary.route === 'reject' ? '<span class="attention-note">Policy recommends rejection</span>' : '')
+    : `<span class="decision-label decision-${escapeHtml(decision.action)}">${decision.action === 'approve' ? 'Approved' : 'Rejected'}</span>`;
+  const timing = decision === null
+    ? `<span>Received ${reviewTime(entry.summary.receivedAt)}</span><span>Expires ${reviewTime(entry.summary.expiresAt)}</span>`
+    : `<span>${reviewTime(decision.decidedAt)}</span><span>${escapeHtml(compactReviewText(decision.reason, 120))}</span>`;
+  return `<article class="proposal-row">
+<a class="proposal-row-link" href="${escapeHtml(href)}">
+<span class="proposal-row-change">${proposalContext(view, 'proposed', { compact: true })}</span>
+<span class="proposal-row-path">${escapeHtml(entry.summary.source.path)}</span>
+<span class="proposal-row-rationale">${escapeHtml(rationale)}</span>
+<span class="proposal-row-meta">${status}${timing}</span>
+</a>
+</article>`;
+}
+
+function reviewListPage({ overlay, nextCursor }) {
+  const actionable = overlay.actionable.length === 0
+    ? '<p class="empty-state">No proposals need your decision.</p>'
+    : overlay.actionable.map((entry) => reviewSummaryCard(
+        entry,
+        `/owner/review/${encodeURIComponent(entry.summary.queueId)}`,
+      )).join('\n');
+  const history = overlay.history.length === 0
+    ? '<p class="empty-state">No decisions have been recorded yet.</p>'
+    : overlay.history.map(({ decision, summary }) => reviewSummaryCard(
+        decisionEntry(decision, summary),
+        `/owner/decisions/${encodeURIComponent(summary.queueId)}`,
+        decision,
+      )).join('\n');
+  const next = nextCursor === null
+    ? ''
+    : `<p class="pagination"><a href="/owner/review?cursor=${encodeURIComponent(nextCursor)}">More proposals</a></p>`;
+  return pageShell({
+    title: 'Proposals',
+    bodyClass: 'proposal-review-page',
+    body: `<main class="owner-shell review-shell" id="owner-review-list">
+<header class="owner-header review-list-header">
+<p class="surface-label">Owner review</p>
+<h1>Proposals</h1>
+<p class="lede">Read each suggested change and record your decision. Approval records intent only; source remains unchanged.</p>
+<nav class="review-jump-links" aria-label="Proposal review sections"><a href="#needs-review">Needs review</a><a href="#decided">Decided</a></nav>
+</header>
+<section class="review-section" id="needs-review" aria-labelledby="actionable-heading">
+<div class="section-heading"><h2 id="actionable-heading">Needs review</h2><span class="section-count">${overlay.actionable.length} on this page</span></div>
+<div class="proposal-list">${actionable}</div>
+${next}
+</section>
+<section class="review-section decided-section" id="decided" aria-labelledby="history-heading">
+<div class="section-heading"><h2 id="history-heading">Decided</h2><span class="section-count">${overlay.history.length} shown</span></div>
+<div class="proposal-list">${history}</div>
+${overlay.historyTruncated ? '<p class="status">Only the newest decisions within the configured review bound are shown here.</p>' : ''}
+</section>
+<p class="review-return"><a href="/">Return to Cyberbase</a></p>
+</main>`,
+  });
+}
+
+function evidenceLinks(urls) {
+  if (urls.length === 0) return '<p class="empty-state">No references were supplied.</p>';
+  return `<ul class="evidence-links">${urls.map((url, index) => {
+    const host = new URL(url).hostname;
+    return `<li><a href="${escapeHtml(url)}" rel="noopener noreferrer">Reference ${index + 1} · ${escapeHtml(host)}</a></li>`;
+  }).join('')}</ul>`;
+}
+
+const REVIEW_MODES = Object.freeze([
+  { key: 'changes', label: 'Changes', view: 'unified', hint: 'Removals and additions marked in place' },
+  { key: 'proposed', label: 'Proposed', view: 'proposed', hint: 'The page as it would read if applied' },
+  { key: 'current', label: 'Current', view: 'current', hint: 'The page as it reads today' },
+  { key: 'compare', label: 'Compare', view: null, hint: 'Both sides at once' },
+]);
+const REVIEW_MODE_KEYS = Object.freeze(REVIEW_MODES.map((mode) => mode.key));
+
+function reviewProjection(entry) {
+  const document = entry.document ?? null;
+  if (document === null) return null;
+  const operation = entry.evidence.proposal.operation;
+  const path = entry.summary.source.path;
+  return documentProjection({
+    files: [{
+      path,
+      exists: document.baseText !== null,
+      baseText: document.baseText,
+      candidateText: document.candidateText,
+    }],
+    operations: [{
+      path,
+      start: operation.start,
+      end: operation.end,
+      oldText: proposalText(operation.expectedOldBytesBase64),
+      replacementText: proposalText(operation.replacementBytesBase64),
+    }],
+  });
+}
+
+function segmentsHtml(segments) {
+  return segments.map((item) => {
+    if (item.kind === 'context') return escapeHtml(item.text);
+    if (item.kind === 'removed') return `<del class="doc-removed">${escapeHtml(item.text)}</del>`;
+    if (item.kind === 'added') return `<ins class="doc-added">${escapeHtml(item.text)}</ins>`;
+    const label = item.kind === 'insertion-point' ? 'insertion point' : 'removed here';
+    return `<span class="doc-point">\u27e8${escapeHtml(label)}\u27e9</span>`;
+  }).join('');
+}
+
+function tokenHtml(token) {
+  if (token.type === 'code') return `<code class="md-code">${escapeHtml(token.text)}</code>`;
+  if (token.type === 'strong') return `<strong>${escapeHtml(token.text)}</strong>`;
+  if (token.type === 'emphasis') return `<em>${escapeHtml(token.text)}</em>`;
+  if (token.type === 'link' || token.type === 'wikilink') {
+    return `<span class="md-link md-${token.type}" title="${escapeHtml(token.target)} \u00b7 not resolved in review">${escapeHtml(token.text)}</span>`;
+  }
+  return escapeHtml(token.text);
+}
+
+function blockHtml(block) {
+  const tokens = (block.tokens ?? []).map(tokenHtml).join('');
+  if (block.kind === 'heading') return `<p class="md-heading md-h${block.level}">${tokens}</p>`;
+  if (block.kind === 'paragraph') return `<p class="md-paragraph">${tokens}</p>`;
+  if (block.kind === 'quote') return `<blockquote class="md-quote">${tokens}</blockquote>`;
+  if (block.kind === 'code') return `<pre class="md-codeblock"><code>${escapeHtml(block.text)}</code></pre>`;
+  if (block.kind === 'rule') return '<hr class="md-rule">';
+  if (block.kind === 'list' || block.kind === 'ordered-list') {
+    const items = block.items.map((item) => `<li${item.depth > 0 ? ' class="md-nested"' : ''}>${item.tokens.map(tokenHtml).join('')}</li>`).join('');
+    return `<${block.kind === 'list' ? 'ul' : 'ol'} class="md-list">${items}</${block.kind === 'list' ? 'ul' : 'ol'}>`;
+  }
+  if (block.kind === 'frontmatter') {
+    const rows = block.entries.map((entry) => `<div><dt>${escapeHtml(entry.name)}</dt><dd>${escapeHtml(entry.value)}</dd></div>`).join('');
+    return `<div class="md-frontmatter"><p class="section-kicker">Page metadata</p><dl>${rows}</dl></div>`;
+  }
+  return '';
+}
+
+function segmentsInBlock(segments, block) {
+  return segments.filter((item) => (item.end > item.start
+    ? item.start < block.end && item.end > block.start
+    : item.start >= block.start && item.start < block.end));
+}
+
+function blockSegments(segments, span) {
+  const scoped = [];
+  for (const item of segmentsInBlock(segments, span)) {
+    if (item.kind !== 'context' || item.text.length !== item.end - item.start) {
+      scoped.push(item);
+      continue;
+    }
+    const start = Math.max(item.start, span.start);
+    const end = Math.min(item.end, span.end);
+    const sliced = item.text.slice(start - item.start, end - item.start);
+    if (sliced.length > 0) scoped.push({ ...item, text: sliced });
+  }
+  return scoped;
+}
+
+function readingRegions(source) {
+  const regions = [];
+  let index = 0;
+  while (index < source.blocks.length) {
+    const changed = new Set(segmentsInBlock(source.segments, source.blocks[index])
+      .filter((item) => item.kind !== 'context')
+      .map((item) => source.segments.indexOf(item)));
+    if (changed.size === 0) {
+      regions.push({ changed: false, blocks: [source.blocks[index]] });
+      index += 1;
+      continue;
+    }
+    const blocks = [source.blocks[index]];
+    let cursor = index + 1;
+    while (cursor < source.blocks.length) {
+      const next = new Set(segmentsInBlock(source.segments, source.blocks[cursor])
+        .filter((item) => item.kind !== 'context')
+        .map((item) => source.segments.indexOf(item)));
+      if (next.size === 0 || [...next].every((id) => !changed.has(id))) break;
+      for (const id of next) changed.add(id);
+      blocks.push(source.blocks[cursor]);
+      cursor += 1;
+    }
+    regions.push({ changed: true, blocks });
+    index = cursor;
+  }
+  return regions;
+}
+
+function sourceRegionHtml(source, span, label, extraClass = '') {
+  return `<div class="md-source-wrap${extraClass}"><p class="md-source-label">${escapeHtml(label)}</p><div class="md-source">${segmentsHtml(blockSegments(source.segments, span))}</div></div>`;
+}
+
+function readingHtml(source, className) {
+  const parts = [];
+  for (const region of readingRegions(source)) {
+    const span = { start: region.blocks[0].start, end: region.blocks.at(-1).end };
+    if (region.changed) {
+      parts.push(sourceRegionHtml(source, span, 'Exact source \u00b7 changed passage'));
+      continue;
+    }
+    const [block] = region.blocks;
+    if (block.uninterpreted.length > 0) {
+      parts.push(sourceRegionHtml(source, span, `Exact source \u00b7 not interpreted here: ${block.uninterpreted.join(', ')}`, ' md-source-uninterpreted'));
+      continue;
+    }
+    parts.push(blockHtml(block));
+  }
+  return `<div class="reading-body ${className}">${parts.join('')}</div>`;
+}
+
+function operationNote(view) {
+  const type = `${view.operation.type[0].toUpperCase()}${view.operation.type.slice(1)}`;
+  return `${type} operation at bytes ${view.operation.start}\u2013${view.operation.end}.`;
+}
+
+function unavailableModeHtml(reason, entry) {
+  const view = proposalView(entry);
+  return `<div class="mode-unavailable">
+<p class="section-kicker">Not derivable</p>
+<p>${escapeHtml(reason)}</p>
+<p class="context-note">This surface never invents a page it cannot derive from the pinned source and the declared exact change. The declared spans are shown instead.</p>
+<div class="exact-change-grid">
+<div><h3>Current bytes</h3><pre><code>${escapeHtml(view.oldText)}</code></pre></div>
+<div><h3>Replacement bytes</h3><pre><code>${escapeHtml(view.replacementText)}</code></pre></div>
+</div>
+<p class="context-note">${escapeHtml(operationNote(view))}</p>
+</div>`;
+}
+
+function comparePanelHtml(projection, entry) {
+  const [file] = projection?.files ?? [];
+  if (file && projection.modes.current.available && projection.modes.proposed.available) {
+    const view = proposalView(entry);
+    const currentNote = view.oldText.length === 0 ? 'No current text' : 'Removed';
+    const proposedNote = view.replacementText.length === 0 ? 'Absent in the proposed result' : 'Added \u00b7 not yet approved';
+    return `<div class="proof-grid">
+<section class="proof proof-current" aria-label="Current source"><div class="proof-heading"><p class="proof-label">Current source</p><span class="semantic-label">${escapeHtml(currentNote)}</span></div>${readingHtml(file.current, 'compare-body')}</section>
+<section class="proof proof-proposed" aria-label="Proposed change"><div class="proof-heading"><p class="proof-label">Proposed change</p><span class="semantic-label">${escapeHtml(proposedNote)}</span></div>${readingHtml(file.proposed, 'compare-body')}</section>
+</div>`;
+  }
+  const view = proposalView(entry);
+  const contextNote = view.hasContext
+    ? 'The surrounding words come from the proposal\u2019s exact quote selector.'
+    : 'This offset-bound proposal does not include surrounding quote context.';
+  return `<div class="proof-grid">
+<section class="proof proof-current" aria-label="Current source"><div class="proof-heading"><p class="proof-label">Current source</p></div><p class="context-copy">${proposalContext(view, 'current')}</p><p class="context-note">${escapeHtml(contextNote)}</p></section>
+<section class="proof proof-proposed" aria-label="Proposed change"><div class="proof-heading"><p class="proof-label">Proposed change</p></div><p class="context-copy">${proposalContext(view, 'proposed')}</p><p class="context-note">${escapeHtml(contextNote)}</p></section>
+</div>
+<p class="context-note">${escapeHtml(operationNote(view))}</p>`;
+}
+
+function reviewModeNav(queueId, activeMode, projection) {
+  const links = REVIEW_MODES.map((mode) => {
+    const active = mode.key === activeMode;
+    const state = mode.view === null ? null : projection?.modes[mode.key] ?? null;
+    const hint = state !== null && state.available === false ? 'Not derivable' : mode.hint;
+    return `<a class="mode-tab${active ? ' active' : ''}" href="/owner/review/${encodeURIComponent(queueId)}?mode=${mode.key}"${active ? ' aria-current="page"' : ''}><strong>${escapeHtml(mode.label)}</strong><small>${escapeHtml(active ? hint : '')}</small></a>`;
+  }).join('');
+  return `<nav class="review-modes" aria-label="Review mode">${links}</nav>`;
+}
+
+function comparisonPanel(entry, activeMode) {
+  const projection = reviewProjection(entry);
+  const mode = REVIEW_MODES.find((item) => item.key === activeMode) ?? REVIEW_MODES[0];
+  const path = entry.summary.source.path;
+  const readingNote = 'Approximate structural reading. Changed passages always show exact source. This is not the published page.';
+  let panel;
+  if (mode.view === null) {
+    panel = comparePanelHtml(projection, entry);
+  } else if (projection === null) {
+    panel = unavailableModeHtml(entry.document?.reason ?? 'The pinned page text is not available in this review evidence.', entry);
+  } else if (!projection.modes[mode.key].available) {
+    panel = unavailableModeHtml(projection.modes[mode.key].reason, entry);
+  } else {
+    panel = readingHtml(projection.files[0][mode.view], `document-${mode.key}`);
+  }
+  return `<section class="comparison-section" aria-labelledby="comparison-heading">
+<h2 id="comparison-heading" class="visually-hidden">Read the change</h2>
+${reviewModeNav(entry.summary.queueId, mode.key, projection)}
+<div class="reader-controls">
+<p class="mark-legend"><span>Removed text is <del>struck through</del>.</span> <span>Added text is <ins>underlined</ins>.</span> <span>Every other byte is unchanged.</span></p>
+<p class="projection-note">${escapeHtml(readingNote)}</p>
+</div>
+<p class="document-heading"><code class="document-path">${escapeHtml(path)}</code></p>
+<div class="mode-panel mode-panel-${mode.key}">${panel}</div>
+</section>`;
+}
+
+function rationalePanel(entry) {
+  const proposal = entry.evidence.proposal;
+  return `<section class="rationale-section" aria-labelledby="rationale-heading">
+<p class="section-kicker">Contributor note</p>
+<h2 id="rationale-heading">Why this change</h2>
+<p class="contributor-rationale">${escapeHtml(proposal.submission.rationale).replaceAll('\n', '<br>')}</p>
+<div class="references"><h3>References</h3>${evidenceLinks(proposal.submission.evidence)}</div>
+</section>`;
+}
+
+function technicalEvidence(entry, { decision = null, queueRetained = null, title = 'Technical evidence' } = {}) {
+  const { evidence, summary, sourceVerification } = entry;
+  const trust = evidence.classification.classification;
+  const trustReasons = trust.reasons.length === 0
+    ? '<p class="empty-state">No classification reason codes were recorded.</p>'
+    : `<ul class="trust-reasons">${trust.reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join('')}</ul>`;
+  let decisionFacts = '';
+  if (decision !== null) {
+    const retained = queueRetained === true
+      ? 'Still retained in the proposal queue.'
+      : queueRetained === false
+        ? 'No longer retained; exact reviewed evidence is embedded here.'
+        : 'Queue retention could not be confirmed.';
+    decisionFacts = `<section><h3>Decision record</h3><dl class="technical-facts">
+<div><dt>Owner</dt><dd>${escapeHtml(decision.decisionAuthority.identity)}</dd></div>
+<div><dt>Authority scope</dt><dd>${escapeHtml(decision.authorityScope)}</dd></div>
+<div><dt>Queue copy</dt><dd>${escapeHtml(retained)}</dd></div>
+</dl></section>`;
+  }
+  return `<details class="technical-evidence">
+<summary>${escapeHtml(title)}</summary>
+<div class="technical-evidence-body">
+<section><h3>Source binding</h3><dl class="technical-facts">
+<div><dt>Path</dt><dd>${escapeHtml(summary.source.path)}</dd></div>
+<div><dt>Repository</dt><dd>${escapeHtml(summary.source.repository)}</dd></div>
+<div><dt>Revision</dt><dd>${escapeHtml(summary.source.revision)}</dd></div>
+<div><dt>Git blob</dt><dd>${escapeHtml(sourceVerification?.gitObjectId ?? 'embedded decision evidence')}</dd></div>
+<div><dt>Base digest</dt><dd>${escapeHtml(evidence.proposal.operation.baseDigest)}</dd></div>
+<div><dt>Candidate digest</dt><dd>${escapeHtml(evidence.proposal.operation.candidateDigest)}</dd></div>
+</dl></section>
+<section><h3>Proposal record</h3><dl class="technical-facts">
+<div><dt>Queue ID</dt><dd>${escapeHtml(summary.queueId)}</dd></div>
+<div><dt>Proposal ID</dt><dd>${escapeHtml(summary.proposalId)}</dd></div>
+<div><dt>Proposal digest</dt><dd>${escapeHtml(summary.proposalDigest)}</dd></div>
+<div><dt>Review evidence</dt><dd>${escapeHtml(summary.reviewEvidenceDigest)}</dd></div>
+<div><dt>Received</dt><dd>${escapeHtml(summary.receivedAt)}</dd></div>
+<div><dt>Expires</dt><dd>${escapeHtml(summary.expiresAt)}</dd></div>
+</dl></section>
+<section><h3>Trust classification</h3><dl class="technical-facts">
+<div><dt>Tier</dt><dd>${escapeHtml(summary.tier)}</dd></div>
+<div><dt>Lane</dt><dd>${escapeHtml(summary.lane)}</dd></div>
+<div><dt>Route</dt><dd>${escapeHtml(summary.route)}</dd></div>
+<div><dt>Verified subject</dt><dd>${escapeHtml(evidence.classification.verifiedSubject ?? 'none')}</dd></div>
+<div><dt>Policy status</dt><dd>${escapeHtml(evidence.classification.policyStatus)}</dd></div>
+<div><dt>Policy digest</dt><dd>${escapeHtml(evidence.classification.policyDigest ?? 'none')}</dd></div>
+</dl><h4>Reason codes</h4>${trustReasons}</section>
+${decisionFacts}
+</div>
+</details>`;
+}
+
+function reviewIdentityHeader(entry, view) {
+  const { summary } = entry;
+  const proposal = entry.evidence.proposal;
+  const references = evidenceLinks(proposal.submission.evidence);
+  return `<header class="owner-header review-detail-header">
+<a class="back-link" href="/owner/review">Back to Proposals</a>
+<p class="attention identity-attention">Needs your decision</p>
+<h1>${escapeHtml(changeName(view))}</h1>
+<p class="proposal-summary">${escapeHtml(compactReviewText(proposal.submission.rationale, 200))}</p>
+<div class="identity-meta">
+<strong>1 exact change in 1 page</strong>
+<span>${escapeHtml(summary.source.path)}</span>
+<span>Received ${reviewTime(summary.receivedAt)}</span>
+<span>Expires ${reviewTime(summary.expiresAt)}</span>
+</div>
+<details class="identity-details">
+<summary>Contributor note and references</summary>
+<p class="contributor-rationale">${escapeHtml(proposal.submission.rationale).replaceAll('\n', '<br>')}</p>
+${references}
+</details>
+</header>`;
+}
+
+function decisionDock({ entry, csrfToken, view }) {
+  const { summary } = entry;
+  const policyAdvisory = summary.route === 'reject'
+    ? '<p class="policy-advisory"><strong>Policy recommends rejection.</strong> Review the wording and evidence before recording your decision.</p>'
+    : '';
+  return `<aside class="decision-dock" aria-label="Your decision">
+<details id="decision-dock-details">
+<summary class="dock-bar">
+<span class="dock-summary"><span class="dock-attention">Owner action required</span><strong>1 exact change in 1 page</strong><span class="dock-labels">${escapeHtml(summary.tier)} \u00b7 ${escapeHtml(summary.route)}</span></span>
+<span class="dock-toggle">Decide this proposal</span>
+</summary>
+<div class="dock-body">
+${policyAdvisory}
+<p class="decision-boundary-copy"><strong>Approval records intent only.</strong> The source and policy are checked again when you confirm. Source remains unchanged.</p>
+<form id="review-decision-form" data-queue-id="${escapeHtml(summary.queueId)}" data-review-evidence-digest="${escapeHtml(summary.reviewEvidenceDigest)}" data-csrf="${escapeHtml(csrfToken)}" data-max-reason-bytes="${OWNER_DECISION_REASON_MAX_BYTES}" data-suggestion-label="${escapeHtml(changeName(view))}">
+<label for="decision-reason">Decision note</label>
+<p class="field-help" id="decision-note-help">Required. This note becomes part of the durable decision receipt.</p>
+<textarea class="decision-reason" id="decision-reason" name="reason" maxlength="${OWNER_DECISION_REASON_MAX_BYTES}" aria-describedby="decision-note-help decision-byte-count" required></textarea>
+<div class="decision-form-footer"><span id="decision-byte-count" class="byte-count">0 of ${OWNER_DECISION_REASON_MAX_BYTES} UTF-8 bytes</span><div class="decision-actions">
+<button type="button" data-action="reject" class="decision-reject">Reject</button>
+<button type="button" data-action="approve" class="decision-approve">Approve</button>
+</div></div>
+<p id="decision-status" class="status" role="status" aria-live="polite" tabindex="-1"></p>
+<dialog id="decision-dialog" aria-labelledby="decision-dialog-title" aria-describedby="decision-dialog-copy">
+<div class="decision-dialog-sheet">
+<p class="section-kicker" id="decision-dialog-kicker">Confirm decision</p>
+<h2 id="decision-dialog-title">Confirm decision</h2>
+<p class="dialog-suggestion" id="decision-dialog-suggestion"></p>
+<p id="decision-dialog-copy">This decision is immutable. Source remains unchanged, and no application or publication begins.</p>
+<div class="dialog-actions"><button type="button" class="dialog-back" data-dialog-cancel>Back</button><button type="button" id="decision-confirm">Confirm decision</button></div>
+</div>
+</dialog>
+</form>
+<ul class="no-effect-list">
+<li>Records an immutable decision and nothing else.</li>
+<li>Changes no queue lifecycle.</li>
+<li>Starts no application or source write.</li>
+<li>Creates no commit or push.</li>
+<li>Starts no rebuild, deployment, or publication.</li>
+</ul>
+</div>
+</details>
+</aside>`;
+}
+
+function reviewDetailPage({ entry, csrfToken, mode = REVIEW_MODE_KEYS[0] }) {
+  const view = proposalView(entry);
+  return pageShell({
+    title: `Review ${changeName(view)}`,
+    script: '/owner/assets/review.js',
+    bodyClass: 'proposal-review-page',
+    body: `<main class="owner-shell review-shell" id="owner-review-detail">
+${reviewIdentityHeader(entry, view)}
+${comparisonPanel(entry, mode)}
+${technicalEvidence(entry)}
+</main>
+${decisionDock({ entry, csrfToken, view })}`,
+  });
+}
+
+function decisionDetailPage({ decision, summary, queueRetained }) {
+  const entry = decisionEntry(decision, summary);
+  const approved = decision.action === 'approve';
+  return pageShell({
+    title: approved ? 'Approval recorded' : 'Proposal rejected',
+    bodyClass: 'proposal-review-page',
+    body: `<main class="owner-shell review-shell" id="owner-decision-detail">
+<header class="owner-header decision-receipt-header">
+<a class="back-link" href="/owner/review">Back to Proposals</a>
+<p class="surface-label">Decision receipt</p>
+<h1>${approved ? 'Approval recorded' : 'Proposal rejected'}</h1>
+<p class="decision-time">${reviewTime(decision.decidedAt)}</p>
+</header>
+<section class="decision-result ${approved ? 'decision-approved' : 'decision-rejected'}" aria-labelledby="decision-result-heading">
+<h2 id="decision-result-heading">${approved ? 'Approved' : 'Rejected'}</h2>
+<blockquote>${escapeHtml(decision.reason)}</blockquote>
+<div class="source-unchanged"><strong>Source unchanged</strong><span>No application, write, commit, push, rebuild, deployment, or publication started.</span></div>
+</section>
+<section class="reviewed-suggestion" aria-labelledby="reviewed-suggestion-heading">
+<p class="section-kicker">Reviewed suggestion</p>
+<h2 id="reviewed-suggestion-heading">${escapeHtml(changeName(proposalView(entry)))}</h2>
+<p class="context-copy">${proposalContext(proposalView(entry), 'proposed')}</p>
+<p class="receipt-path">${escapeHtml(summary.source.path)}</p>
+</section>
+${technicalEvidence(entry, {
+  decision,
+  queueRetained,
+  title: 'Receipt and verification details',
+})}
+</main>`,
+  });
+}
+
+function optionalQueryObject(url, allowed) {
+  const found = new Map();
+  for (const [key, value] of url.searchParams) {
+    if (!allowed.includes(key) || found.has(key)) return null;
+    found.set(key, value);
+  }
+  return Object.fromEntries(found);
+}
+
 function queryObject(url, required) {
   const found = new Map();
   for (const [key, value] of url.searchParams) {
@@ -303,6 +879,181 @@ function validateSaveBody(value, maximumEditedBytes) {
   if (!exactToken(value.editSessionId) || !exactToken(value.csrf) || typeof value.editedText !== 'string') return null;
   if (Buffer.byteLength(value.editedText, 'utf8') > maximumEditedBytes) return null;
   return value;
+}
+
+function reviewQueueId(encoded) {
+  let decoded;
+  try {
+    decoded = decodeURIComponent(encoded);
+    return validateQueueId(decoded);
+  } catch {
+    return null;
+  }
+}
+
+function validateDecisionBody(value, routeQueueId) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  const required = ['queueId', 'reviewEvidenceDigest', 'action', 'reason', 'csrf'];
+  const keys = Object.keys(value);
+  if (keys.length !== required.length || !required.every((key) => keys.includes(key))) return null;
+  if (value.queueId !== routeQueueId
+    || !['approve', 'reject'].includes(value.action)
+    || !exactToken(value.csrf)
+    || typeof value.reason !== 'string'
+    || value.reason.length === 0
+    || value.reason.trim() !== value.reason
+    || /\p{Cc}/u.test(value.reason)
+    || Buffer.byteLength(value.reason, 'utf8') > OWNER_DECISION_REASON_MAX_BYTES) return null;
+  try {
+    validateDigest(value.reviewEvidenceDigest, 'reviewEvidenceDigest');
+  } catch {
+    return null;
+  }
+  return value;
+}
+
+function reviewErrorStatus(error) {
+  const code = error instanceof OwnerAlphaError ? error.code : 'review-failed';
+  if (code === 'lock-busy'
+    || code === 'decision-already-recorded'
+    || code === 'decision-evidence-mismatch'
+    || code === 'decision-evidence-conflict'
+    || code === 'review-ipc-invalid-cursor') return 409;
+  if (code === 'review-expired' || code === 'decision-expired') return 410;
+  if (code === 'review-ipc-not-found' || code === 'review-ipc-queue-entry-not-found') return 404;
+  if (code === 'review-source-timeout' || code === 'review-ipc-timeout') return 504;
+  if (code === 'review-source-unavailable'
+    || code === 'review-ipc-busy'
+    || code === 'review-ipc-internal-error') return 503;
+  if (code.startsWith('invalid-')
+    || code.startsWith('review-before-')
+    || code === 'review-not-actionable') return 400;
+  return 500;
+}
+
+export function createOwnerProposalReviewService({
+  config: configInput,
+  context,
+  source,
+  decisionClock = () => new Date(),
+  recoverDecisions = recoverProposalDecisions,
+  recordDecision = recordProposalDecision,
+} = {}) {
+  const config = validateOwnerAlphaConfig(configInput);
+  if (!config.proposalReview.enabled) return null;
+  if (!context
+    || !source
+    || typeof source.list !== 'function'
+    || typeof source.load !== 'function'
+    || typeof decisionClock !== 'function'
+    || typeof recoverDecisions !== 'function'
+    || typeof recordDecision !== 'function') {
+    throw new TypeError('enabled proposal review requires context, source, clock, recovery, and decision dependencies');
+  }
+
+  let cachedDecisions = null;
+  let recoveryInFlight = null;
+
+  async function recovered({ refresh = false } = {}) {
+    if (refresh && recoveryInFlight !== null) await recoveryInFlight;
+    if (!refresh && cachedDecisions !== null) return cachedDecisions;
+    if (recoveryInFlight !== null) return recoveryInFlight;
+    recoveryInFlight = Promise.resolve(recoverDecisions(context)).then((value) => {
+      cachedDecisions = value;
+      return value;
+    });
+    try {
+      return await recoveryInFlight;
+    } finally {
+      recoveryInFlight = null;
+    }
+  }
+
+  return Object.freeze({
+    async list({ cursor = null } = {}) {
+      const local = await recovered();
+      const seenCursors = new Set();
+      let filteredEntries = 0;
+      let pageCursor = cursor;
+      let page;
+      let complete;
+
+      while (true) {
+        const cursorKey = pageCursor ?? '<first-page>';
+        if (seenCursors.has(cursorKey)) {
+          throw new OwnerAlphaError('review-ipc-invalid-cursor', 'proposal review pagination repeated a cursor');
+        }
+        seenCursors.add(cursorKey);
+        page = await source.list({
+          state: 'pending-review',
+          cursor: pageCursor,
+          limit: config.proposalReview.maxListEntries,
+        });
+        complete = createProposalDecisionOverlay({
+          entries: page.entries,
+          decisions: local.decisions,
+        });
+        if (complete.actionable.length > 0 || page.nextCursor === null) break;
+        if (page.entries.length === 0 || page.nextCursor === pageCursor) {
+          throw new OwnerAlphaError('review-ipc-invalid-cursor', 'proposal review pagination made no forward progress');
+        }
+        filteredEntries += page.entries.length;
+        if (filteredEntries > local.decisions.length) {
+          throw new OwnerAlphaError('review-ipc-invalid-cursor', 'proposal review pagination exceeded the local decision bound');
+        }
+        pageCursor = page.nextCursor;
+      }
+
+      const history = complete.history.slice(0, config.proposalReview.maxListEntries);
+      return Object.freeze({
+        actionable: complete.actionable,
+        history: Object.freeze(history),
+        historyTruncated: complete.history.length > history.length,
+        nextCursor: page.nextCursor,
+      });
+    },
+    async load(queueId) {
+      const local = await recovered();
+      const decision = local.decisions.find((entry) => entry.queueId === queueId) ?? null;
+      if (decision !== null) return Object.freeze({ entry: null, decision });
+      return Object.freeze({ entry: await source.load(queueId), decision: null });
+    },
+    async loadDecision(queueId) {
+      const local = await recovered();
+      const decision = local.decisions.find((entry) => entry.queueId === queueId) ?? null;
+      if (decision === null) return null;
+      let queueRetained = null;
+      try {
+        const current = await source.load(queueId);
+        createProposalDecisionOverlay({ entries: [current], decisions: [decision] });
+        queueRetained = true;
+      } catch (error) {
+        if (error instanceof OwnerAlphaError
+          && ['review-ipc-not-found', 'review-ipc-queue-entry-not-found'].includes(error.code)) {
+          queueRetained = false;
+        } else if (error instanceof OwnerAlphaError
+          && ['review-not-actionable', 'review-expired'].includes(error.code)) {
+          queueRetained = true;
+        } else if (!(error instanceof OwnerAlphaError)
+          || !['review-source-unavailable', 'review-source-timeout'].includes(error.code)) {
+          throw error;
+        }
+      }
+      const overlay = createProposalDecisionOverlay({ entries: [], decisions: [decision] });
+      return Object.freeze({ ...overlay.history[0], queueRetained });
+    },
+    async record(intent) {
+      const result = await recordDecision({
+        context,
+        source,
+        ownerIdentity: config.owner.identity,
+        intent,
+        clock: decisionClock,
+      });
+      await recovered({ refresh: true });
+      return result;
+    },
+  });
 }
 
 function safePathSegments(encodedPath, { directoryIndex = true } = {}) {
@@ -503,6 +1254,7 @@ export function createOwnerAlphaHandler({
   editSessions = createMemoryEditSessionStore(),
   saveEdit,
   lookupJob,
+  proposalReview = null,
   createToken = token,
   createJobId = () => `OA-${randomUUID()}`,
 } = {}) {
@@ -515,6 +1267,14 @@ export function createOwnerAlphaHandler({
   }
   if (!editSessions || typeof editSessions.create !== 'function' || typeof editSessions.get !== 'function' || typeof editSessions.delete !== 'function') {
     throw new TypeError('editSessions must provide create, get, and delete');
+  }
+  if (config.proposalReview.enabled
+    && (!proposalReview
+      || typeof proposalReview.list !== 'function'
+      || typeof proposalReview.load !== 'function'
+      || typeof proposalReview.loadDecision !== 'function'
+      || typeof proposalReview.record !== 'function')) {
+    throw new TypeError('enabled proposal review requires list, load, loadDecision, and record dependencies');
   }
   // Each consumed bootstrap capability becomes one device session with its own
   // cookie and CSRF token, so one captured device secret is not every device's
@@ -618,12 +1378,145 @@ export function createOwnerAlphaHandler({
     const asset = {
       '/owner/assets/editor.js': 'editor.js',
       '/owner/assets/job.js': 'job.js',
+      '/owner/assets/review.js': 'review.js',
       '/owner/assets/owner.css': 'owner.css',
     }[url.pathname];
     if (asset) {
       if (request.method !== 'GET' && request.method !== 'HEAD') return response(null, 405, { Allow: 'GET, HEAD' });
       if (url.search !== '') return errorResponse(400, 'unexpected-query');
       return staticResponse(publicRoot, asset, request, { directoryIndex: false });
+    }
+
+    if (url.pathname === '/owner/review' || url.pathname === '/api/review') {
+      if (!config.proposalReview.enabled) return errorResponse(404, 'proposal-review-disabled');
+      if (request.method !== 'GET' && request.method !== 'HEAD') return response(null, 405, { Allow: 'GET, HEAD' });
+      const query = optionalQueryObject(url, ['cursor']);
+      if (query === null
+        || (query.cursor !== undefined
+          && (query.cursor.length === 0
+            || Buffer.byteLength(query.cursor, 'utf8') > 1024
+            || /\p{Cc}/u.test(query.cursor)))) {
+        return errorResponse(400, 'invalid-review-query');
+      }
+      let review;
+      try {
+        review = await proposalReview.list({ cursor: query.cursor ?? null });
+      } catch (error) {
+        return errorResponse(reviewErrorStatus(error), error instanceof OwnerAlphaError ? error.code : 'review-list-failed');
+      }
+      if (url.pathname === '/api/review') {
+        if (request.method === 'HEAD') return json(null);
+        return json({
+          actionable: review.actionable.map((entry) => ({
+            summary: entry.summary,
+            sourceVerification: entry.sourceVerification,
+          })),
+          history: review.history.map((entry) => ({ summary: entry.summary })),
+          historyTruncated: review.historyTruncated,
+          nextCursor: review.nextCursor,
+        });
+      }
+      if (request.method === 'HEAD') return html(null);
+      return html(reviewListPage({ overlay: review, nextCursor: review.nextCursor }));
+    }
+
+    const reviewDecisionMatch = url.pathname.match(/^\/api\/review\/([^/]+)\/decision$/u);
+    if (reviewDecisionMatch) {
+      if (!config.proposalReview.enabled) return errorResponse(404, 'proposal-review-disabled');
+      if (request.method !== 'POST') return response(null, 405, { Allow: 'POST' });
+      if (url.search !== '') return errorResponse(400, 'unexpected-query');
+      const queueId = reviewQueueId(reviewDecisionMatch[1]);
+      if (queueId === null) return errorResponse(400, 'invalid-queue-id');
+      let body;
+      try {
+        body = await readBoundedJson(request, MAX_REVIEW_DECISION_BODY_BYTES);
+      } catch (error) {
+        return errorResponse(error?.status ?? 400, 'invalid-request-body');
+      }
+      const intent = validateDecisionBody(body, queueId);
+      if (intent === null) return errorResponse(400, 'invalid-decision-request');
+      if (!sameSecret(intent.csrf, csrfToken)) return errorResponse(403, 'invalid-csrf');
+      try {
+        const recorded = await proposalReview.record({
+          queueId,
+          reviewEvidenceDigest: intent.reviewEvidenceDigest,
+          action: intent.action,
+          reason: intent.reason,
+        });
+        const summary = recorded.index.decisions.find((entry) => entry.queueId === queueId);
+        if (!summary) throw new OwnerAlphaError('invalid-decision-result', 'decision index omitted its new immutable decision');
+        return json({
+          queueId,
+          action: recorded.decision.action,
+          decidedAt: recorded.decision.decidedAt,
+          replayed: recorded.replayed,
+          summary,
+          statusUrl: `/owner/decisions/${encodeURIComponent(queueId)}`,
+          jsonUrl: `/api/decisions/${encodeURIComponent(queueId)}`,
+        }, recorded.replayed ? 200 : 201);
+      } catch (error) {
+        return errorResponse(reviewErrorStatus(error), error instanceof OwnerAlphaError ? error.code : 'decision-record-failed');
+      }
+    }
+
+    const reviewDetailMatch = url.pathname.match(/^\/(owner\/review|api\/review)\/([^/]+)$/u);
+    if (reviewDetailMatch) {
+      if (!config.proposalReview.enabled) return errorResponse(404, 'proposal-review-disabled');
+      if (request.method !== 'GET' && request.method !== 'HEAD') return response(null, 405, { Allow: 'GET, HEAD' });
+      let reviewMode = REVIEW_MODE_KEYS[0];
+      if (url.search !== '') {
+        const query = queryObject(url, ['mode']);
+        if (!query || !REVIEW_MODE_KEYS.includes(query.mode) || reviewDetailMatch[1] !== 'owner/review') {
+          return errorResponse(400, 'unexpected-query');
+        }
+        reviewMode = query.mode;
+      }
+      const queueId = reviewQueueId(reviewDetailMatch[2]);
+      if (queueId === null) return errorResponse(400, 'invalid-queue-id');
+      let loaded;
+      try {
+        loaded = await proposalReview.load(queueId);
+      } catch (error) {
+        return errorResponse(reviewErrorStatus(error), error instanceof OwnerAlphaError ? error.code : 'review-load-failed');
+      }
+      if (loaded.decision !== null) {
+        if (reviewDetailMatch[1] === 'owner/review') {
+          return response(null, 303, { Location: `/owner/decisions/${encodeURIComponent(queueId)}` });
+        }
+        return json({
+          error: { code: 'decision-already-recorded' },
+          statusUrl: `/owner/decisions/${encodeURIComponent(queueId)}`,
+        }, 409);
+      }
+      if (reviewDetailMatch[1] === 'api/review') {
+        if (request.method === 'HEAD') return json(null);
+        const { document: _reviewDocument, ...apiEntry } = loaded.entry;
+        return json(apiEntry);
+      }
+      if (request.method === 'HEAD') return html(null);
+      return html(reviewDetailPage({ entry: loaded.entry, csrfToken, mode: reviewMode }));
+    }
+
+    const decisionDetailMatch = url.pathname.match(/^\/(owner\/decisions|api\/decisions)\/([^/]+)$/u);
+    if (decisionDetailMatch) {
+      if (!config.proposalReview.enabled) return errorResponse(404, 'proposal-review-disabled');
+      if (request.method !== 'GET' && request.method !== 'HEAD') return response(null, 405, { Allow: 'GET, HEAD' });
+      if (url.search !== '') return errorResponse(400, 'unexpected-query');
+      const queueId = reviewQueueId(decisionDetailMatch[2]);
+      if (queueId === null) return errorResponse(400, 'invalid-queue-id');
+      let history;
+      try {
+        history = await proposalReview.loadDecision(queueId);
+      } catch (error) {
+        return errorResponse(reviewErrorStatus(error), error instanceof OwnerAlphaError ? error.code : 'decision-load-failed');
+      }
+      if (history === null) return errorResponse(404, 'decision-not-found');
+      if (decisionDetailMatch[1] === 'api/decisions') {
+        if (request.method === 'HEAD') return json(null);
+        return json(history);
+      }
+      if (request.method === 'HEAD') return html(null);
+      return html(decisionDetailPage(history));
     }
 
     if (url.pathname === '/owner/edit') {
@@ -637,7 +1530,12 @@ export function createOwnerAlphaHandler({
         });
         if (typeof session?.source?.text !== 'string') return errorResponse(500, 'invalid-edit-session');
         const stored = editSessions.create(session);
-        const body = editPage({ editSessionId: stored.id, csrfToken, session });
+        const body = editPage({
+          editSessionId: stored.id,
+          csrfToken,
+          session,
+          reviewEnabled: config.proposalReview.enabled,
+        });
         if (request.method === 'HEAD') return html(null, 200);
         return html(body);
       } catch (error) {
@@ -833,6 +1731,11 @@ export async function runOwnerAlphaServer({
   startServers = startOwnerAlphaServers,
   listJobs = listDurableJobs,
   recoverJobs = recoverOwnerAlphaJobs,
+  createReviewClient = createProposalReviewClient,
+  createReviewSource = createOwnerProposalReviewSource,
+  createReviewService = createOwnerProposalReviewService,
+  recoverDecisions = recoverProposalDecisions,
+  recordDecision = recordProposalDecision,
 } = {}) {
   if (typeof rebuildSite !== 'function'
     || typeof loadPipeline !== 'function'
@@ -840,8 +1743,13 @@ export async function runOwnerAlphaServer({
     || typeof createReader !== 'function'
     || typeof startServers !== 'function'
     || typeof listJobs !== 'function'
-    || typeof recoverJobs !== 'function') {
-    throw new TypeError('rebuildSite, pipeline, handlers, servers, and recovery dependencies are required');
+    || typeof recoverJobs !== 'function'
+    || typeof createReviewClient !== 'function'
+    || typeof createReviewSource !== 'function'
+    || typeof createReviewService !== 'function'
+    || typeof recoverDecisions !== 'function'
+    || typeof recordDecision !== 'function') {
+    throw new TypeError('site, pipeline, handlers, servers, review, and recovery dependencies are required');
   }
   const config = await loadOwnerAlphaConfig(configFile);
   const storeContext = storeContextFromConfig(config, projectRoot);
@@ -851,20 +1759,39 @@ export async function runOwnerAlphaServer({
   const lookupJob = pipeline.getJob ?? ((jobId) => loadDurableJob(storeContext, jobId, {
     maxBytes: config.limits.maxArtifactBytes,
   }));
+  let proposalReview = null;
+  if (config.proposalReview.enabled) {
+    const client = createReviewClient({
+      socketPath: config.proposalReview.socketPath,
+      requestTimeoutMs: config.proposalReview.requestTimeoutMs,
+    });
+    const source = createReviewSource({ config, client });
+    proposalReview = createReviewService({
+      config,
+      context: storeContext,
+      source,
+      recoverDecisions,
+      recordDecision,
+    });
+  }
   const ownerFetch = createHandler({
     config,
     projectRoot,
     saveEdit: pipeline.saveEdit,
     lookupJob,
+    proposalReview,
   });
   const readerFetch = createReader({ config, projectRoot });
   const runtime = startServers({ config, ownerFetch, readerFetch, serve });
-  const recovery = Promise.resolve().then(() => recoverJobs({
-    config,
-    context: storeContext,
-    pipeline,
-    listJobs,
-  }));
+  const recovery = Promise.resolve().then(async () => {
+    await recoverDecisions(storeContext);
+    return recoverJobs({
+      config,
+      context: storeContext,
+      pipeline,
+      listJobs,
+    });
+  });
   return Object.freeze({ ...runtime, recovery });
 }
 

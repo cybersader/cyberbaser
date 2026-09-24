@@ -11,6 +11,7 @@ import {
 import { openProposalQueue, ProposalQueueError } from '@cyberbaser/proposal-queue';
 import { createGlobalAbuseLimiter } from './abuse.js';
 import { validateRuntimePaths } from './config.js';
+import { startReviewIpcServer } from './review-ipc.js';
 
 const SECURITY_HEADERS = Object.freeze({
   'Cache-Control': 'no-store',
@@ -493,6 +494,7 @@ export async function openIntakeService({
   return Object.freeze({
     fetch,
     queue,
+    review: queue.review,
     stats: () => queue.stats(),
     setReadyForTest(value) { ready = value === true; },
     async close() {
@@ -510,4 +512,78 @@ export function startBunServer({ config, service }) {
       return service.fetch(request, server.requestIP(request));
     },
   });
+}
+
+async function attemptCleanup(steps) {
+  const errors = [];
+  for (const step of steps) {
+    try {
+      await step();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  return errors;
+}
+
+export async function startIntakeRuntime({
+  config,
+  serviceOptions = {},
+  openService = openIntakeService,
+  startReview = startReviewIpcServer,
+  startPublic = startBunServer,
+} = {}) {
+  const service = await openService({ config, ...serviceOptions });
+  let reviewIpc = null;
+  let server = null;
+  try {
+    reviewIpc = await startReview({ config, review: service.review });
+    server = await startPublic({ config, service });
+  } catch (error) {
+    await attemptCleanup([
+      async () => server?.stop(false),
+      async () => reviewIpc?.close(),
+      async () => service.close(),
+    ]);
+    throw error;
+  }
+
+  const state = {
+    publicClosed: false,
+    reviewClosed: reviewIpc === null,
+    serviceClosed: false,
+  };
+  let closing = null;
+
+  async function close() {
+    if (state.publicClosed && state.reviewClosed && state.serviceClosed) return;
+    if (closing !== null) return closing;
+    closing = (async () => {
+      const errors = await attemptCleanup([
+        async () => {
+          if (state.publicClosed) return;
+          await server.stop(false);
+          state.publicClosed = true;
+        },
+        async () => {
+          if (state.reviewClosed) return;
+          await reviewIpc.close();
+          state.reviewClosed = true;
+        },
+        async () => {
+          if (state.serviceClosed) return;
+          await service.close();
+          state.serviceClosed = true;
+        },
+      ]);
+      if (errors.length > 0) throw new AggregateError(errors, 'intake runtime cleanup failed');
+    })();
+    try {
+      await closing;
+    } finally {
+      closing = null;
+    }
+  }
+
+  return Object.freeze({ service, reviewIpc, server, close });
 }

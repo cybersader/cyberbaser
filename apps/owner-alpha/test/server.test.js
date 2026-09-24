@@ -9,6 +9,7 @@ import { OwnerAlphaError } from '../src/errors.js';
 import {
   createMemoryEditSessionStore,
   createOwnerAlphaHandler,
+  createOwnerProposalReviewService,
   createReaderHandler,
   recoverOwnerAlphaJobs,
   runOwnerAlphaServer,
@@ -54,9 +55,11 @@ function readerRequest(pathname, { method = 'GET', headers = {}, body } = {}) {
   });
 }
 
-async function privateConfigFile(root) {
+async function privateConfigFile(root, change = null) {
   const file = path.join(root, 'owner-alpha.local.json');
-  await writeFile(file, await readFile(EXAMPLE), { mode: 0o600 });
+  const raw = JSON.parse(await readFile(EXAMPLE, 'utf8'));
+  change?.(raw);
+  await writeFile(file, `${JSON.stringify(raw)}\n`, { mode: 0o600 });
   return file;
 }
 
@@ -83,6 +86,128 @@ function fixtureJob(jobId = 'job-1') {
   };
 }
 
+const REVIEW_QUEUE_ID = 'Q-00000000-0000-4000-8000-000000000001';
+const REVIEW_DIGEST = `sha-256=:${Buffer.alloc(32, 7).toString('base64')}:`;
+const REVIEW_SUMMARY = Object.freeze({
+  schemaVersion: 1,
+  artifactType: 'cyberbaser-proposal-review-summary',
+  queueId: REVIEW_QUEUE_ID,
+  proposalId: 'server-review:test',
+  proposalDigest: REVIEW_DIGEST,
+  candidateDigest: REVIEW_DIGEST,
+  reviewEvidenceDigest: REVIEW_DIGEST,
+  source: {
+    repository: 'https://github.com/cybersader/cyberbase.git',
+    revision: 'a'.repeat(40),
+    path: 'docs/example.md',
+  },
+  receivedAt: '2026-08-20T12:00:00Z',
+  expiresAt: '2026-08-21T12:00:00Z',
+  state: 'pending-review',
+  lane: 'lane-b',
+  tier: 'anonymous',
+  route: 'full-review',
+});
+const REVIEW_EVIDENCE = Object.freeze({
+  queueId: REVIEW_QUEUE_ID,
+  proposal: {
+    operation: {
+      type: 'quote',
+      selector: {
+        prefix: 'Correct ',
+        quote: 'teh',
+        suffix: ' safely.',
+      },
+      start: 13,
+      end: 16,
+      baseDigest: REVIEW_DIGEST,
+      candidateDigest: REVIEW_DIGEST,
+      expectedOldBytesBase64: Buffer.from('teh').toString('base64'),
+      replacementBytesBase64: Buffer.from('</pre><script>the</script>').toString('base64'),
+    },
+    submission: {
+      rationale: 'Correct </pre><script>globalThis.pwned = true</script> safely.',
+      evidence: ['https://example.invalid/evidence?x=1&y=2'],
+    },
+  },
+  classification: {
+    verifiedSubject: null,
+    policyStatus: 'valid',
+    policyDigest: REVIEW_DIGEST,
+    classification: {
+      tier: 'anonymous',
+      route: 'full-review',
+      reasons: ['anonymous-contributor'],
+      checks: {},
+    },
+  },
+  state: { state: 'pending-review' },
+});
+const REVIEW_ENTRY = Object.freeze({
+  summary: REVIEW_SUMMARY,
+  evidence: REVIEW_EVIDENCE,
+  sourceVerification: {
+    gitObjectId: 'b'.repeat(40),
+  },
+});
+const DECISION_SUMMARY = Object.freeze({
+  queueId: REVIEW_QUEUE_ID,
+  action: 'approve',
+  reason: 'The exact correction is appropriate.',
+  decidedAt: '2026-08-20T12:00:01Z',
+  reviewEvidenceDigest: REVIEW_DIGEST,
+  proposalId: REVIEW_SUMMARY.proposalId,
+  proposalDigest: REVIEW_SUMMARY.proposalDigest,
+  candidateDigest: REVIEW_SUMMARY.candidateDigest,
+  source: REVIEW_SUMMARY.source,
+  receivedAt: REVIEW_SUMMARY.receivedAt,
+  expiresAt: REVIEW_SUMMARY.expiresAt,
+  lane: REVIEW_SUMMARY.lane,
+  tier: REVIEW_SUMMARY.tier,
+  route: REVIEW_SUMMARY.route,
+});
+const REVIEW_DECISION = Object.freeze({
+  queueId: REVIEW_QUEUE_ID,
+  action: 'approve',
+  reason: DECISION_SUMMARY.reason,
+  decidedAt: DECISION_SUMMARY.decidedAt,
+  decisionAuthority: { type: 'owner-alpha-local', identity: 'cybersader' },
+  authorityScope: 'decision-only',
+  reviewEvidenceDigest: REVIEW_DIGEST,
+  reviewEvidence: REVIEW_EVIDENCE,
+});
+
+function reviewServiceFixture({ decided = false, recordCalls = [] } = {}) {
+  return Object.freeze({
+    async list() {
+      return {
+        actionable: decided ? [] : [REVIEW_ENTRY],
+        history: decided ? [{ decision: REVIEW_DECISION, summary: DECISION_SUMMARY, queueRetained: true }] : [],
+        historyTruncated: false,
+        nextCursor: null,
+      };
+    },
+    async load() {
+      return decided
+        ? { entry: null, decision: REVIEW_DECISION }
+        : { entry: REVIEW_ENTRY, decision: null };
+    },
+    async loadDecision() {
+      return decided
+        ? { decision: REVIEW_DECISION, summary: DECISION_SUMMARY, queueRetained: false }
+        : null;
+    },
+    async record(intent) {
+      recordCalls.push(intent);
+      return {
+        decision: REVIEW_DECISION,
+        replayed: false,
+        index: { decisions: [DECISION_SUMMARY] },
+      };
+    },
+  });
+}
+
 async function handlerFixture({
   source = '---\ntitle: Exact & <source>\n---\n\nBody\n',
   saveEdit = async () => ({ jobId: 'job-1', state: 'accepted' }),
@@ -90,6 +215,7 @@ async function handlerFixture({
   siteRoot,
   publicRoot,
   config: configInput,
+  proposalReview = null,
 } = {}) {
   const config = configInput ?? await exampleConfig();
   const calls = [];
@@ -109,6 +235,7 @@ async function handlerFixture({
     },
     saveEdit,
     lookupJob,
+    proposalReview,
   });
   return { config, fetch, calls };
 }
@@ -129,6 +256,13 @@ async function openEdit(fetch, query = 'relativePath=Notes%2FPage.md&slug=Notes%
   const csrf = body.match(/data-csrf="([^"]+)"/u)?.[1];
   const editSessionId = body.match(/data-edit-session-id="([^"]+)"/u)?.[1];
   return { bootstrap, response, body, cookie, csrf, editSessionId };
+}
+
+async function openReview(fetch, pathname = '/owner/review') {
+  const bootstrap = await fetch(request(`/owner/bootstrap?token=${TOKENS.bootstrap}`));
+  const cookie = bootstrap.headers.get('set-cookie')?.split(';', 1)[0];
+  const response = await fetch(request(pathname, { headers: { Cookie: cookie } }));
+  return { bootstrap, response, body: await response.text(), cookie };
 }
 
 async function saveRequest(fetch, open, overrides = {}, headers = {}) {
@@ -395,6 +529,315 @@ describe('per-device owner sessions', () => {
   });
 });
 
+describe('privileged proposal review routes', () => {
+  async function enabledFixture(options = {}) {
+    const config = await exampleConfig((raw) => {
+      raw.proposalReview.enabled = true;
+      raw.proposalReview.socketPath = '/run/user/1000/cyberbaser/review.sock';
+    });
+    return handlerFixture({ config, ...options });
+  }
+
+  test('keeps every review route unavailable while the exact feature branch is disabled', async () => {
+    const { fetch } = await handlerFixture();
+    const opened = await openEdit(fetch);
+    for (const pathname of [
+      '/owner/review',
+      `/owner/review/${REVIEW_QUEUE_ID}`,
+      `/owner/decisions/${REVIEW_QUEUE_ID}`,
+      '/api/review',
+    ]) {
+      const response = await fetch(request(pathname, { headers: { Cookie: opened.cookie } }));
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({ error: { code: 'proposal-review-disabled' } });
+    }
+  });
+
+  test('renders a content-first inbox and escaped editorial detail under the owner CSP', async () => {
+    const { fetch } = await enabledFixture({ proposalReview: reviewServiceFixture() });
+    const opened = await openReview(fetch);
+    expect(opened.response.status).toBe(200);
+    expect(opened.body).toContain('<h1>Proposals</h1>');
+    expect(opened.body).toContain('Needs review');
+    expect(opened.body).toContain('Decided');
+    expect(opened.body).toContain('docs/example.md');
+    expect(opened.body).toContain('changed-proposed');
+    expect(opened.body).toContain('source remains unchanged');
+    expect(opened.body).not.toContain('<dt>Queue ID</dt>');
+    expect(opened.body).not.toContain('<dt>Trust</dt>');
+    expect(opened.response.headers.get('content-security-policy')).toContain("script-src 'self'");
+    expect(opened.response.headers.get('content-security-policy')).not.toContain("'unsafe-inline'");
+
+    const edit = await fetch(request('/owner/edit?relativePath=Notes%2FPage.md&slug=Notes%2Fpage', {
+      headers: { Cookie: opened.cookie },
+    }));
+    expect(await edit.text()).toContain('<a href="/owner/review">Review proposals</a>');
+
+    const detail = await fetch(request(`/owner/review/${REVIEW_QUEUE_ID}`, {
+      headers: { Cookie: opened.cookie },
+    }));
+    const detailBody = await detail.text();
+    expect(detail.status).toBe(200);
+    expect(detailBody).toContain('Review “teh” to “&lt;/pre&gt;&lt;script&gt;the&lt;/script&gt;”');
+    expect(detailBody).toContain('<nav class="review-modes" aria-label="Review mode">');
+    for (const mode of ['changes', 'proposed', 'current', 'compare']) {
+      expect(detailBody).toContain(`?mode=${mode}"`);
+    }
+    expect(detailBody).toContain('aria-current="page"');
+    expect(detailBody).toContain('<div class="mode-panel mode-panel-changes">');
+    expect(detailBody).toContain('<aside class="decision-dock" aria-label="Your decision">');
+    expect(detailBody).toContain('Decide this proposal');
+    expect(detailBody).toContain('<details class="technical-evidence">');
+    expect(detailBody).toContain('<summary>Technical evidence</summary>');
+    expect(detailBody).toContain('Decision note');
+    expect(detailBody).toContain('type="button" data-action="reject"');
+    expect(detailBody).toContain('type="button" data-action="approve"');
+    expect(detailBody).toContain('<dialog id="decision-dialog"');
+    expect(detailBody).toContain('Source remains unchanged');
+    expect(detailBody).toContain('anonymous-contributor');
+    expect(detailBody).toContain('&lt;/pre&gt;&lt;script&gt;the&lt;/script&gt;');
+    expect(detailBody).toContain('Correct &lt;/pre&gt;&lt;script&gt;globalThis.pwned = true&lt;/script&gt; safely.');
+    expect(detailBody).not.toContain('<script>globalThis.pwned');
+    expect(detailBody).toContain('data-max-reason-bytes="4096"');
+    expect(detailBody).toContain('<script src="/owner/assets/review.js" defer></script>');
+
+    const asset = await fetch(request('/owner/assets/review.js', {
+      headers: { Cookie: opened.cookie },
+    }));
+    expect(asset.status).toBe(200);
+    expect(asset.headers.get('content-type')).toBe('text/javascript; charset=utf-8');
+    const assetBody = await asset.text();
+    expect(assetBody).toContain('reviewEvidenceDigest');
+    expect(assetBody).toContain('showModal');
+    expect(assetBody).toContain("event.key === 'ArrowRight'");
+    expect(assetBody).not.toContain('data-review-tab');
+  });
+
+  test('labels offset-bound proposals honestly when no quote context is available', async () => {
+    const offsetEntry = structuredClone(REVIEW_ENTRY);
+    offsetEntry.evidence.proposal.operation.type = 'offset';
+    offsetEntry.evidence.proposal.operation.selector = null;
+    const service = {
+      ...reviewServiceFixture(),
+      async load() { return { entry: offsetEntry, decision: null }; },
+    };
+    const { fetch } = await enabledFixture({ proposalReview: service });
+    const opened = await openReview(fetch, `/owner/review/${REVIEW_QUEUE_ID}`);
+    expect(opened.response.status).toBe(200);
+    expect(opened.body).toContain('Offset operation at bytes 13–16.');
+    const compared = await fetch(request(`/owner/review/${REVIEW_QUEUE_ID}?mode=compare`, {
+      headers: { Cookie: opened.cookie },
+    }));
+    const comparedBody = await compared.text();
+    expect(compared.status).toBe(200);
+    expect(comparedBody).toContain('This offset-bound proposal does not include surrounding quote context.');
+    expect(comparedBody).toContain('<div class="mode-panel mode-panel-compare">');
+  });
+
+  test('returns bounded review projections and rejects unknown or duplicate list queries', async () => {
+    const { fetch } = await enabledFixture({ proposalReview: reviewServiceFixture() });
+    const opened = await openReview(fetch);
+    const api = await fetch(request('/api/review', { headers: { Cookie: opened.cookie } }));
+    expect(api.status).toBe(200);
+    const body = await api.json();
+    expect(body.actionable).toEqual([{
+      summary: REVIEW_SUMMARY,
+      sourceVerification: REVIEW_ENTRY.sourceVerification,
+    }]);
+    expect(JSON.stringify(body)).not.toContain('globalThis.pwned');
+
+    for (const pathname of ['/owner/review?state=expired', '/owner/review?cursor=a&cursor=b']) {
+      const invalid = await fetch(request(pathname, { headers: { Cookie: opened.cookie } }));
+      expect(invalid.status).toBe(400);
+      expect(await invalid.json()).toEqual({ error: { code: 'invalid-review-query' } });
+    }
+  });
+
+  test('keeps verified reading text out of list and detail JSON projections', async () => {
+    const entry = {
+      ...REVIEW_ENTRY,
+      document: { baseText: 'private-base-sentinel', candidateText: 'private-candidate-sentinel', reason: null },
+    };
+    const service = {
+      ...reviewServiceFixture(),
+      async list() {
+        return { actionable: [entry], history: [], historyTruncated: false, nextCursor: null };
+      },
+      async load() { return { entry, decision: null }; },
+    };
+    const { fetch } = await enabledFixture({ proposalReview: service });
+    const opened = await openReview(fetch);
+    for (const pathname of ['/api/review', `/api/review/${REVIEW_QUEUE_ID}`]) {
+      const result = await fetch(request(pathname, { headers: { Cookie: opened.cookie } }));
+      expect(result.status).toBe(200);
+      const payload = await result.json();
+      expect(JSON.stringify(payload)).not.toContain('private-base-sentinel');
+      expect(JSON.stringify(payload)).not.toContain('private-candidate-sentinel');
+      expect(payload.document).toBeUndefined();
+    }
+  });
+
+  test('requires exact Origin, per-device CSRF, closed JSON, and server-side evidence reload for decisions', async () => {
+    const calls = [];
+    const { fetch } = await enabledFixture({
+      proposalReview: reviewServiceFixture({ recordCalls: calls }),
+    });
+    const opened = await openReview(fetch, `/owner/review/${REVIEW_QUEUE_ID}`);
+    const decisionPath = `/api/review/${REVIEW_QUEUE_ID}/decision`;
+    const body = {
+      queueId: REVIEW_QUEUE_ID,
+      reviewEvidenceDigest: REVIEW_DIGEST,
+      action: 'approve',
+      reason: 'The exact correction is appropriate.',
+      csrf: TOKENS.csrf,
+    };
+
+    const crossOrigin = await fetch(request(decisionPath, {
+      method: 'POST',
+      headers: { Origin: 'https://evil.invalid', Cookie: opened.cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }));
+    expect(crossOrigin.status).toBe(403);
+
+    const badCsrf = await fetch(request(decisionPath, {
+      method: 'POST',
+      headers: { Origin: ORIGIN, Cookie: opened.cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, csrf: 'z'.repeat(43) }),
+    }));
+    expect(badCsrf.status).toBe(403);
+
+    const unknown = await fetch(request(decisionPath, {
+      method: 'POST',
+      headers: { Origin: ORIGIN, Cookie: opened.cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, source: '/tmp/canonical.md' }),
+    }));
+    expect(unknown.status).toBe(400);
+
+    const accepted = await fetch(request(decisionPath, {
+      method: 'POST',
+      headers: { Origin: ORIGIN, Cookie: opened.cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }));
+    expect(accepted.status).toBe(201);
+    expect(await accepted.json()).toMatchObject({
+      queueId: REVIEW_QUEUE_ID,
+      action: 'approve',
+      replayed: false,
+      statusUrl: `/owner/decisions/${REVIEW_QUEUE_ID}`,
+    });
+    expect(calls).toEqual([{
+      queueId: REVIEW_QUEUE_ID,
+      reviewEvidenceDigest: REVIEW_DIGEST,
+      action: 'approve',
+      reason: 'The exact correction is appropriate.',
+    }]);
+  });
+
+  test('maps decision contention and stale snapshot cursors to bounded retry responses', async () => {
+    const config = await exampleConfig((raw) => {
+      raw.proposalReview.enabled = true;
+      raw.proposalReview.socketPath = '/run/user/1000/cyberbaser/review.sock';
+    });
+    const busyService = {
+      ...reviewServiceFixture(),
+      async list() { throw new OwnerAlphaError('review-ipc-invalid-cursor', 'stale'); },
+      async record() { throw new OwnerAlphaError('lock-busy', 'busy'); },
+    };
+    const { fetch } = await handlerFixture({ config, proposalReview: busyService });
+    const bootstrap = await fetch(request(`/owner/bootstrap?token=${TOKENS.bootstrap}`));
+    const cookie = bootstrap.headers.get('set-cookie')?.split(';', 1)[0];
+
+    const stale = await fetch(request('/owner/review?cursor=stale', { headers: { Cookie: cookie } }));
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toEqual({ error: { code: 'review-ipc-invalid-cursor' } });
+
+    const blocked = await fetch(request(`/api/review/${REVIEW_QUEUE_ID}/decision`, {
+      method: 'POST',
+      headers: { Origin: ORIGIN, Cookie: cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        queueId: REVIEW_QUEUE_ID,
+        reviewEvidenceDigest: REVIEW_DIGEST,
+        action: 'reject',
+        reason: 'The proposal requires another review pass.',
+        csrf: TOKENS.csrf,
+      }),
+    }));
+    expect(blocked.status).toBe(409);
+    expect(await blocked.json()).toEqual({ error: { code: 'lock-busy' } });
+  });
+
+  test('redirects decided proposals to a content-first immutable receipt without queue retention', async () => {
+    const { fetch } = await enabledFixture({
+      proposalReview: reviewServiceFixture({ decided: true }),
+    });
+    const opened = await openReview(fetch);
+    expect(opened.body).toContain('<h2 id="history-heading">Decided</h2>');
+    expect(opened.body).toContain('decision-label decision-approve">Approved');
+    expect(opened.body).toContain('The exact correction is appropriate.');
+
+    const staleDetail = await fetch(request(`/owner/review/${REVIEW_QUEUE_ID}`, {
+      headers: { Cookie: opened.cookie },
+      redirect: 'manual',
+    }));
+    expect(staleDetail.status).toBe(303);
+    expect(staleDetail.headers.get('location')).toBe(`/owner/decisions/${REVIEW_QUEUE_ID}`);
+
+    const history = await fetch(request(`/owner/decisions/${REVIEW_QUEUE_ID}`, {
+      headers: { Cookie: opened.cookie },
+    }));
+    const body = await history.text();
+    expect(history.status).toBe(200);
+    expect(body).toContain('<h1>Approval recorded</h1>');
+    expect(body).toContain('<strong>Source unchanged</strong>');
+    expect(body).toContain('No application, write, commit, push, rebuild, deployment, or publication started.');
+    expect(body).toContain('<summary>Receipt and verification details</summary>');
+    expect(body).toContain('No longer retained; exact reviewed evidence is embedded here.');
+    expect(body).not.toContain('data-action="approve"');
+    expect(body).not.toContain('data-action="reject"');
+    expect(body).not.toContain('<dialog');
+  });
+
+  test('constructs a review service only for enabled config and binds recording to the configured owner', async () => {
+    const disabled = await exampleConfig();
+    expect(createOwnerProposalReviewService({ config: disabled })).toBeNull();
+
+    const enabled = await exampleConfig((raw) => {
+      raw.proposalReview.enabled = true;
+      raw.proposalReview.socketPath = '/run/user/1000/cyberbaser/review.sock';
+    });
+    const recordCalls = [];
+    let recoverCalls = 0;
+    const service = createOwnerProposalReviewService({
+      config: enabled,
+      context: { storeRoot: '/private/store' },
+      source: {
+        async list() { return { entries: [], nextCursor: null }; },
+        async load() { throw new Error('a recorded queue ID must not reload source'); },
+      },
+      recoverDecisions: async () => {
+        recoverCalls += 1;
+        return { decisions: [REVIEW_DECISION] };
+      },
+      recordDecision: async (input) => {
+        recordCalls.push(input);
+        return { decision: REVIEW_DECISION };
+      },
+    });
+    expect((await service.load(REVIEW_QUEUE_ID)).decision).toBe(REVIEW_DECISION);
+    expect((await service.load(REVIEW_QUEUE_ID)).decision).toBe(REVIEW_DECISION);
+    expect(recoverCalls).toBe(1);
+    await service.record({ queueId: REVIEW_QUEUE_ID });
+    expect(recoverCalls).toBe(2);
+    await service.load(REVIEW_QUEUE_ID);
+    expect(recoverCalls).toBe(2);
+    expect(recordCalls[0]).toMatchObject({
+      context: { storeRoot: '/private/store' },
+      ownerIdentity: 'cybersader',
+      intent: { queueId: REVIEW_QUEUE_ID },
+    });
+  });
+});
+
 describe('owner-alpha runtime startup', () => {
   test('builds before binding, then serves browse, edit, Save, and status through one runtime', async () => {
     const projectRoot = await mkdtemp(path.join(os.tmpdir(), 'owner-alpha-runtime-'));
@@ -433,6 +876,16 @@ describe('owner-alpha runtime startup', () => {
         createJobId: () => 'job-runtime',
         createEditSession: async () => ({ source: { text: '# Runtime source\n' } }),
       }),
+      recoverDecisions: async (context) => {
+        events.push('recover-decisions');
+        expect(context.storeRoot).toBe(path.join(projectRoot, '.workspace/owner-alpha/store'));
+        return { decisions: [], index: { decisions: [] } };
+      },
+      recoverJobs: async ({ context }) => {
+        events.push('recover-jobs');
+        expect(context.storeRoot).toBe(path.join(projectRoot, '.workspace/owner-alpha/store'));
+        return [];
+      },
       serve(options) {
         events.push(`serve-${options.port}`);
         expect(options.hostname).toBe('127.0.0.1');
@@ -447,7 +900,14 @@ describe('owner-alpha runtime startup', () => {
     expect(started.readerOrigin).toBe(READER_ORIGIN);
     expect(started.bootstrapToken).toBe(TOKENS.bootstrap);
     expect(await started.recovery).toEqual([]);
-    expect(events).toEqual(['rebuild', 'pipeline', 'serve-4317', 'serve-4318']);
+    expect(events).toEqual([
+      'rebuild',
+      'pipeline',
+      'serve-4317',
+      'serve-4318',
+      'recover-decisions',
+      'recover-jobs',
+    ]);
 
     const browsed = await readerFetch(readerRequest('/cyberbase/'));
     expect(browsed.status).toBe(200);
@@ -471,6 +931,76 @@ describe('owner-alpha runtime startup', () => {
     }));
     expect(status.status).toBe(200);
     expect((await status.json()).state).toBe('checking');
+  });
+
+  test('constructs the enabled review client, validation source, decision service, and handler without sharing intake authority', async () => {
+    const projectRoot = await mkdtemp(path.join(os.tmpdir(), 'owner-alpha-review-runtime-'));
+    cleanup.push(projectRoot);
+    await execFileAsync('git', ['init', '-q', projectRoot]);
+    await writeFile(path.join(projectRoot, '.gitignore'), '.workspace/\n');
+    const socketPath = '/run/user/1000/cyberbaser/review.sock';
+    const configFile = await privateConfigFile(projectRoot, (raw) => {
+      raw.proposalReview.enabled = true;
+      raw.proposalReview.socketPath = socketPath;
+    });
+    const client = { list() {}, load() {} };
+    const source = { list() {}, load() {} };
+    const service = reviewServiceFixture();
+    const calls = [];
+
+    const runtime = await runOwnerAlphaServer({
+      configFile,
+      projectRoot,
+      rebuildSite: async () => {},
+      loadPipeline: async () => ({
+        saveEdit: async () => ({ jobId: 'job-runtime', state: 'accepted' }),
+        getJob: async () => null,
+      }),
+      createReviewClient(options) {
+        calls.push(['client', options]);
+        return client;
+      },
+      createReviewSource(options) {
+        calls.push(['source', options.client, options.config.proposalReview]);
+        return source;
+      },
+      createReviewService(options) {
+        calls.push(['service', options.context.storeRoot, options.source]);
+        return service;
+      },
+      createHandler(options) {
+        calls.push(['handler', options.proposalReview]);
+        const handler = async () => new Response('owner');
+        Object.defineProperties(handler, {
+          bootstrapToken: { value: TOKENS.bootstrap },
+          issueBootstrap: { value: () => TOKENS.bootstrap },
+        });
+        return handler;
+      },
+      createReader: () => async () => new Response('reader'),
+      startServers: ({ ownerFetch }) => ({
+        ownerOrigin: ORIGIN,
+        readerOrigin: READER_ORIGIN,
+        bootstrapToken: ownerFetch.bootstrapToken,
+        issueBootstrap: ownerFetch.issueBootstrap,
+        stop() {},
+      }),
+      recoverDecisions: async () => ({ decisions: [], index: { decisions: [] } }),
+      recoverJobs: async () => [],
+    });
+
+    expect(await runtime.recovery).toEqual([]);
+    expect(calls).toEqual([
+      ['client', { socketPath, requestTimeoutMs: 5000 }],
+      ['source', client, {
+        enabled: true,
+        socketPath,
+        requestTimeoutMs: 5000,
+        maxListEntries: 100,
+      }],
+      ['service', path.join(projectRoot, '.workspace/owner-alpha/store'), source],
+      ['handler', service],
+    ]);
   });
 });
 
@@ -528,6 +1058,7 @@ describe('server-side edit sessions and one Save', () => {
     expect(opened.body).toContain(`<textarea id="edited-text" name="editedText" spellcheck="false" autocomplete="off">\n\n&amp;&lt;textarea>\n&lt;/textarea>\n</textarea>`);
     expect(opened.body.match(/<button\b/gu)).toHaveLength(1);
     expect(opened.body).toContain('Save and publish');
+    expect(opened.body).not.toContain('Review proposals');
     expect(opened.body).not.toContain('Apply');
     expect(opened.body).not.toContain('Commit');
     expect(opened.body).not.toContain('Push');

@@ -4,6 +4,12 @@
     "host": "127.0.0.1",
     "port": 4317
   },
+  "proposalReview": {
+    "enabled": false,
+    "socketPath": null,
+    "requestTimeoutMs": 5000,
+    "maxListEntries": 100
+  },
   "repository": {
     "checkout": "/absolute/path/to/repository",
     "remote": {

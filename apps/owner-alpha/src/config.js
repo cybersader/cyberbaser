@@ -384,6 +384,37 @@ function isStrictlyWithin(root, candidate) {
   return relative !== '' && relative !== '..' && !relative.startsWith('../') && !path.posix.isAbsolute(relative);
 }
 
+function validateProposalReview(value) {
+  const input = objectAt(value, '$.proposalReview', [
+    'enabled',
+    'socketPath',
+    'requestTimeoutMs',
+    'maxListEntries',
+  ]);
+  const enabled = requiredBoolean(input.enabled, '$.proposalReview.enabled');
+  if (input.requestTimeoutMs !== 5000) {
+    fail('invalid-review-policy', '$.proposalReview.requestTimeoutMs must be exactly 5000');
+  }
+  if (input.maxListEntries !== 100) {
+    fail('invalid-review-policy', '$.proposalReview.maxListEntries must be exactly 100');
+  }
+  let socketPath = null;
+  if (enabled) {
+    socketPath = exactString(input.socketPath, '$.proposalReview.socketPath');
+    const parent = path.dirname(socketPath);
+    if (!path.isAbsolute(socketPath)
+      || path.normalize(socketPath) !== socketPath
+      || socketPath.endsWith('/')
+      || socketPath === path.parse(socketPath).root
+      || parent === path.parse(parent).root) {
+      fail('invalid-config-path', '$.proposalReview.socketPath must be one normalized absolute path beneath a non-root parent');
+    }
+  } else if (input.socketPath !== null) {
+    fail('invalid-review-policy', '$.proposalReview.socketPath must be null while proposal review is disabled');
+  }
+  return { enabled, socketPath, requestTimeoutMs: 5000, maxListEntries: 100 };
+}
+
 function validateWorkspace(value) {
   const input = objectAt(value, '$.workspace', ['root', 'store', 'site', 'cache']);
   const root = repositoryRelativePath(input.root, '$.workspace.root');
@@ -506,6 +537,7 @@ export function validateOwnerAlphaConfig(value) {
   const input = objectAt(value, '$', [
     'schemaVersion',
     'listen',
+    'proposalReview',
     'repository',
     'owner',
     'live',
@@ -529,6 +561,7 @@ export function validateOwnerAlphaConfig(value) {
   const normalized = {
     schemaVersion: CONFIG_SCHEMA_VERSION,
     listen: validateListen(input.listen),
+    proposalReview: validateProposalReview(input.proposalReview),
     repository,
     owner: validateOwner(input.owner, repositoryWithIdentity, provider),
     live: provider === 'github-actions'

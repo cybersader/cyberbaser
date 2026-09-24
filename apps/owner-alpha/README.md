@@ -16,13 +16,15 @@ The implementation includes:
 - separate private-address Bun origins for the unprivileged Quartz reader and privileged owner editor/API;
 - exact Host/Origin checks, one-time bootstrap capabilities with console re-arm, per-device session and CSRF tokens, strict CSP, bounded requests, and symlink/hard-link-safe static serving;
 - durable-before-acknowledgement Save acceptance and classified startup recovery;
-- an automatic source-check, exact-apply, commit, push, deployment, live-confirmation, and local-rebuild pipeline.
+- optional same-host read-only live proposal review through a private Unix socket, with independent Git/source/policy/trust revalidation;
+- immutable exactly-once `approve` or `reject` records in the private owner store, explicitly limited to decision-only authority;
+- an automatic source-check, exact-apply, commit, push, deployment, live-confirmation, and local-rebuild pipeline for the separate owner-local Save route.
 
 ## Deployment story
 
 The intended topology has three roles. The **server machine** holds everything sensitive: the vault checkout, Git credentials, the durable policy, and job evidence. A **browser client** holds only a session cookie. A configured **deployment provider** observes the exact pushed commit through either GitHub Actions or Forgejo Actions; GitHub remains the current production dogfood authority and Pages host. The Forgejo branch is implemented and accepted for an isolated phase-one fixture only. Its rejected same-UID host runner was replaced by unprivileged run-scoped job containers, and the real Forgejo 16.0.2 gate passed on 2026-08-10. This does not move production remotes, edit links, workflows, hosting, credentials, or authority. Multi-device physical operation is not yet claimed by the automated or container acceptance evidence.
 
-The app has two operator shapes. The bare-metal launchers below remain useful for local development and the established owner workflow. WP2 also packages the same server as a hardened Linux/amd64 OCI image with explicit rootless and rootful Docker Engine profiles. The container path uses Linux host networking, an exact numeric private address, a read-write `/vault` bind, a read-only config bind, a named state volume, and an external HTTPS credential-helper socket. See [`deploy/owner-alpha/README.md`](../../deploy/owner-alpha/README.md) and the canonical [container deployment guide](../../docs/src/content/docs/development/owner-alpha-container-deployment.mdx).
+The app has two operator shapes. The bare-metal launchers below remain useful for local development and the established owner workflow. Same-host proposal review is implemented only for this local-process shape. WP2 also packages the owner server as a hardened Linux/amd64 OCI image with explicit rootless and rootful Docker Engine profiles. The container path uses Linux host networking, an exact numeric private address, a read-write `/vault` bind, a read-only config bind, a named state volume, and an external HTTPS credential-helper socket. Its tracked config keeps proposal review disabled: shared-socket mounts and cross-container UID/GID authorization are not implemented or claimed. See [`deploy/owner-alpha/README.md`](../../deploy/owner-alpha/README.md) and the canonical [container deployment guide](../../docs/src/content/docs/development/owner-alpha-container-deployment.mdx).
 
 Bare-metal day one:
 
@@ -56,6 +58,7 @@ chmod 600 apps/owner-alpha/owner-alpha.local.json
 The schema is closed at every level. Unknown or missing keys fail validation. It requires:
 
 - one exact private numeric IPv4 listener host and owner port; the reader port is derived as owner port + 1. Accepted host ranges are loopback `127.0.0.0/8`, RFC 1918 (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), and RFC 6598 shared address space `100.64.0.0/10`. Hostnames, IPv6, wildcard, public addresses, exact range endpoints, and port 80 on either origin are rejected. `127.0.0.1` remains the default;
+- one exact `proposalReview` branch: disabled with `socketPath: null`, or enabled with one normalized absolute Unix-socket path below a non-root parent, the fixed five-second deadline, and the fixed 100-entry page cap;
 - one exact absolute repository path;
 - one exact credential-free HTTPS remote, remote name, and branch;
 - one exact credential-free live URL;
@@ -80,7 +83,7 @@ const config = await loadOwnerAlphaConfig(
 const policyRevision = computePolicyRevision(config);
 ```
 
-The policy revision covers the exact remote identity, branch, live URL, workflow identity, complete two-origin listen identity, and path/size/check policy. It intentionally excludes only machine-local repository and workspace paths. Changing either loopback port changes the durable policy identity.
+The policy revision covers the exact remote identity, branch, live URL, workflow identity, complete two-origin listen identity, and path/size/check policy. It intentionally excludes machine-local repository and workspace paths plus the `proposalReview` feature toggle and socket path. Review configuration cannot silently change Save-and-publish authority. Changing either loopback port changes the durable policy identity.
 
 ## Ignored store and artifacts
 
@@ -93,6 +96,26 @@ Artifact APIs are JSON-only:
 - `readJsonArtifact()` rejects symlinks, non-regular files, extra hard links, oversized files, and invalid JSON.
 
 All artifact files are created with mode `0600`. Persistent lock files may remain present; their existence never means the lock is held.
+
+## Live proposal review and immutable decisions
+
+When `proposalReview.enabled` is true, owner-alpha connects only to the configured private Unix socket. The intake writer keeps its lifetime exclusive queue lock and exposes a dedicated read-only `list`/`load` snapshot seam. Owner-alpha neither imports the intake app nor reads queue files. It reloads each advertised proposal and independently verifies canonical evidence, exact repository/branch-reachable revision/path/blob, base and candidate bytes, trust policy, classification, and current expiry.
+
+The privileged routes are `/owner/review`, `/owner/review/<queue-id>`, and `/owner/decisions/<queue-id>`, with bounded same-origin APIs under `/api/review` and `/api/decisions`. They reuse the owner Host, session, Origin, CSRF, CSP, body-limit, no-store, and escaping boundary. The browser presents a content-first **Proposals** inbox, Proposed/Current/Exact comparison, contributor rationale, collapsed technical evidence, a required decision note, and deliberate **Approve** or **Reject** confirmation. The immutable receipt leads with the decision and **Source unchanged**.
+
+Both actions create one immutable decision under `proposal-review/decisions/` and rebuild a derived `index.json`. Identical retries return the original record and timestamp; contradictions fail. Approval records intent only. Rejection is terminal only in the local owner decision layer. Every decision records that source application, source writing, commit, push, deploy, publication, and rebuild effects are false. The account-free queue remains only `pending-review` or `expired`, and decision history remains readable after the queue copy is purged.
+
+The same-host acceptance keeps the intake writer lock live, records one rejection and one approval intent through the owner HTTP boundary, restarts owner-alpha, purges one queue copy, accepts a third submission, and compares queue artifact identity, source bytes, Git state, remote state, and owner job storage. The in-process Playwright acceptance covers comparison tabs, decision-note validation, confirmation, retry recovery, both receipts, keyboard focus, mobile reflow, dark mode, reduced motion, and page overflow. The only permitted decision delta is under the private `proposal-review/` store.
+
+### Maintainer UI review fixture
+
+From the canonical docs workspace, one command launches the coherent real review surface:
+
+```bash
+bun run --cwd docs review:owner-alpha
+```
+
+The launcher creates three disposable proposals, starts the real queue writer and private review socket, performs independent owner validation, starts the privileged review routes on loopback, verifies the list, and requests an authenticated browser launch without printing the one-time capability. Enter `b` in its terminal to open a fresh sign-in; `Ctrl-C` stops the services and removes the temporary fixture. The fixture cannot edit or apply source. See [Owner proposal UI review](../../docs/src/content/docs/development/owner-proposal-ui-review.mdx).
 
 ## Child-held `flock`
 

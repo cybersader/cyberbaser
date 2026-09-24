@@ -37,9 +37,12 @@ COPY packages/account-free-intake/package.json packages/account-free-intake/bun.
 COPY packages/account-free-intake/src/ ./packages/account-free-intake/src/
 COPY packages/proposal-queue/package.json packages/proposal-queue/bun.lock ./packages/proposal-queue/
 COPY packages/proposal-queue/src/ ./packages/proposal-queue/src/
+COPY packages/proposal-review/package.json packages/proposal-review/bun.lock ./packages/proposal-review/
+COPY packages/proposal-review/src/ ./packages/proposal-review/src/
+COPY packages/proposal-review/schema/ ./packages/proposal-review/schema/
 COPY apps/account-free-intake/package.json apps/account-free-intake/bun.lock ./apps/account-free-intake/
 RUN set -eux; \
-    for package in ofm trust proposal account-free-intake proposal-queue; do \
+    for package in ofm trust proposal account-free-intake proposal-queue proposal-review; do \
       bun install --cwd "/opt/cyberbaser/packages/$package" --frozen-lockfile --production --ignore-scripts; \
     done; \
     bun install --cwd /opt/cyberbaser/apps/account-free-intake --frozen-lockfile --production --ignore-scripts; \
@@ -55,6 +58,7 @@ COPY --from=dependencies /opt/cyberbaser/packages/trust ./packages/trust
 COPY --from=dependencies /opt/cyberbaser/packages/proposal ./packages/proposal
 COPY --from=dependencies /opt/cyberbaser/packages/account-free-intake ./packages/account-free-intake
 COPY --from=dependencies /opt/cyberbaser/packages/proposal-queue ./packages/proposal-queue
+COPY --from=dependencies /opt/cyberbaser/packages/proposal-review ./packages/proposal-review
 COPY --from=dependencies /opt/cyberbaser/apps/account-free-intake/node_modules ./apps/account-free-intake/node_modules
 COPY apps/account-free-intake/package.json apps/account-free-intake/bun.lock ./apps/account-free-intake/
 COPY apps/account-free-intake/src/ ./apps/account-free-intake/src/
