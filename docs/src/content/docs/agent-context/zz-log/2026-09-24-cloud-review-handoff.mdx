@@ -1,0 +1,44 @@
+---
+title: "2026-09-24 · Cloud review handoff"
+description: "Prepared the local WP5 decision-only and four-mode review wave for a draft branch handoff, checked the publish boundary, and recorded the remaining human gates."
+date: 2026-09-24
+status: implementation
+tags: [contribution, testing, governance]
+---
+
+## Why this handoff exists
+
+Cloud coding sessions start from a GitHub clone, not the maintainer's uncommitted local working tree. The local WP5 queue-review and UI research wave therefore needs a reviewable draft branch before separate cloud sessions can inspect it. This packaging step does not merge, install, deploy, enable an intake lane, or authorize an approved proposal to write source.
+
+The follow-up sessions have distinct bounded jobs: one adversarially inspects whether intake or the decision store can reach canonical writes or publication, and fixes verified defects with tests; the other prepares questions, fixtures, and pass/fail criteria for the maintainer checkpoint. Preparing that checkpoint does not run or pass it.
+
+## Corrections during packaging
+
+- The owner-alpha OCI build-context allowlist omitted the new `@cyberbaser/review-projection` dependency. The allowlist and structural test now include its package and source, and the owner-alpha container workflow watches changes to it.
+- Both review JSON paths were inspected. The list explicitly selects summary and verification fields, while detail explicitly omits the new bounded reading document. A test injects sentinel reading text and checks that neither JSON response exposes it. Authenticated HTML review still presents the reading text by design.
+- Canonical research and chronology now point at `packages/review-projection/src/` after extraction from the static mockup. An earlier unqualified claim that the JSON response was byte-identical is replaced with the specific projection behavior tested above.
+
+## Local checks
+
+```text
+bun test packages/proposal-review/test packages/proposal-queue/test apps/account-free-intake/test
+  71 passed, 0 failed
+bun test apps/owner-alpha/test
+  217 passed, 4 skipped, 0 failed (before the new JSON regression)
+bun test apps/owner-alpha/test/server.test.js deploy/owner-alpha/test/structure.test.js
+  45 passed, 0 failed (after the regression and build-context correction)
+bun test packages/proposal-fixtures/test packages/review-projection/test deploy/account-free-intake/test deploy/owner-alpha/test
+  46 passed, 9 skipped, 0 failed (before the build-context correction)
+bun run --cwd docs test:proposal-mockup
+  fixture: 8 passed; mockup: 28 passed
+OWNER_ALPHA_ACCEPTANCE=1 bun test apps/owner-alpha/test/proposal-review-browser.test.js apps/owner-alpha/test/proposal-review-acceptance.test.js
+  2 passed, 0 failed
+bun run --cwd docs preflight
+  passed before this dated entry
+```
+
+All test commands above used the local contained execution boundary. The skipped tests require separate runtime conditions; they are not acceptance evidence. A production docs build was not run after earlier resource terminations, so partial `docs/dist/` is not evidence. No live deployment, independent-human usability, owner rejection, or external publication was established by these checks. The draft PR and its CI results, if created, must be read separately from these local checks.
+
+## Open boundaries
+
+The maintainer has not reviewed the ported real UI. The default mode, semi-rendered reading quality, decision-dock prominence, and Compare mode remain checkpoint questions. Q09 and Q10 remain open. WP5 decisions still record owner intent only: approval does not apply canonical source, commit, push, rebuild, deploy, publish, or change queue lifecycle. Any outward Lane A authorization, Lane B exposure, shared-socket OCI installation, or approval-to-source application remains separate work. No human gate has passed by committing this branch.

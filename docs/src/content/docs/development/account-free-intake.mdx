@@ -7,9 +7,9 @@ status: research
 tags: [architecture, contribution, governance, testing]
 ---
 
-**Status: implemented and mechanically tested, disabled by default, not offered.** WP4 Lane B now has a strict correction-intent contract, exact retained-source derivation, a local durable proposal queue, an optional HTTP intake app, a disabled-by-default Quartz form, and local-only OCI/Compose packaging. Repository CI is read-only and exercises the package, app, renderer, deployment-structure, image-build, and isolated runtime-acceptance paths.
+**Status: implemented and mechanically tested, disabled by default, not offered.** WP4 Lane B now has a strict correction-intent contract, exact retained-source derivation, a local durable proposal queue, an optional HTTP intake app, a disabled-by-default Quartz form, and local-only OCI/Compose packaging. Its same-host review seam and owner-alpha decision-only consumer are also implemented and mechanically accepted. Repository CI is read-only and exercises the package, app, renderer, deployment-structure, image-build, and isolated runtime-acceptance paths.
 
-This is implementation evidence, not product or human evidence. No public endpoint is deployed. No ordinary reader or independent owner has used the path. No reverse proxy, TLS endpoint, edge DDoS control, service installation, image publication, hosted console, owner decision action, source writer, merge path, or production authority exists. Q09 remains open.
+This is implementation evidence, not product or human evidence. No public endpoint is deployed. No ordinary reader or independent owner has used the path. No reverse proxy, TLS endpoint, edge DDoS control, service installation, image publication, hosted console, source writer, merge path, approval-to-application authority, or production authority exists. Q09 remains open.
 
 ## The implemented path
 
@@ -21,10 +21,11 @@ published source-backed page
   → canonical @cyberbaser/proposal
   → anonymous / full-review classification
   → owner-local durable proposal queue
-  → local inspection only
+  → private same-host read-only review snapshots
+  → independently validated owner decision-only record
 ```
 
-The path stops at retained review evidence. It cannot accept, reject, apply, commit, push, merge, deploy, or authorize publication.
+The implemented same-host path stops at retained owner decision evidence. Approval records intent only, and rejection is terminal only in the owner decision layer. It cannot apply, commit, push, merge, deploy, rebuild, publish, or authorize source writing.
 
 ## WP4 implementation amendment: local queue and sibling service
 
@@ -33,7 +34,7 @@ This is a **no-R-number implementation amendment** to the already ordered WP4 wo
 1. **Use a local filesystem proposal queue, not bot pull requests, for Lane B v1.** `@cyberbaser/proposal-queue` stores exact canonical proposal bytes plus bounded receipt, carrier, trust-classification, and lifecycle artifacts in one private owner-controlled directory. The queue has finite entry, byte, per-source, and retention bounds. Its only lifecycle states are `pending-review` and `expired`. It has no accepted, rejected, merged, applied, or published state.
 2. **Run public intake as a sibling service, not inside owner-alpha.** `apps/account-free-intake` is a separate process and deployment image. Its container receives only credential-free config, retained source-binding manifests, a read-only bare Git object store, and one dedicated writable queue volume. It does not mount the owner-alpha app, vault worktree, owner state, credential socket, renderer output, or publication output.
 
-These choices keep unauthenticated traffic and queue writes outside the owner-authority process. They do not make the local filesystem queue a permanent cross-maintainer protocol, and they do not authorize public exposure. A later WP5 console may inspect the same canonical queue objects, but it must not turn them into a second source authority.
+These choices keep unauthenticated traffic and queue writes outside the owner-authority process. They do not make the local filesystem queue a permanent cross-maintainer protocol, and they do not authorize public exposure. Owner-alpha now inspects the same canonical queue evidence through the private read-only socket and retains decision-only records. Any broader WP5 console must preserve that boundary and must not turn the queue or decision store into a second source authority.
 
 ## Components and boundaries
 
@@ -59,7 +60,9 @@ The optional Bun app refuses to start unless its exact configuration sets `enabl
 
 The app rejects credentials, treats forwarded headers as non-authoritative, enforces an exact public Host and Origin, bounds the body, shares one five-second deadline across body read and derivation, and applies process-wide token and concurrency limits. Those limits are origin protection only, not edge DDoS protection.
 
-The bundled `list` and `show` commands render bounded text or static escaped HTML. They use a nonmutating queue inspector that revalidates exact source and policy evidence but performs no recovery, retention, expiry, purge, temporary cleanup, or state write. The service must be stopped because the inspector's shared lock conflicts with the service's lifetime exclusive lock; a queue that requires recovery fails inspection until normal service startup repairs it. The commands expose no accept, reject, apply, write, or publication operation. They are a pre-WP5 local inspection instrument, not an owner decision surface or hosted review product.
+The bundled `list` and `show` commands render bounded text or static escaped HTML. They use a nonmutating queue inspector that revalidates exact source and policy evidence but performs no recovery, retention, expiry, purge, temporary cleanup, or state write. The service must be stopped because the inspector's shared lock conflicts with the service's lifetime exclusive lock; a queue that requires recovery fails inspection until normal service startup repairs it. The commands expose no accept, reject, apply, write, or publication operation. They remain offline diagnostic instruments, not the live owner decision surface or a hosted review product.
+
+When explicitly enabled, the intake process instead serves bounded read-only `list` and `load` snapshots from its already-open queue over one private same-host Unix socket. The writer keeps its lifetime exclusive lock. The socket exposes no enqueue, expiry, purge, decision, or source operation. Owner-alpha is a separate consumer: it imports neither the intake app nor queue files, independently validates the advertised evidence, and records decisions only in its own private store.
 
 ### Quartz renderer integration
 
@@ -82,7 +85,8 @@ Focused deterministic suites cover:
 - canonical proposal derivation and anonymous trust routing;
 - durable queue writes, locking, crash recovery, capacity, retention, idempotency, and evidence revalidation;
 - exact HTTP Host, Origin, CORS, credential, body, deadline, rate, concurrency, and receipt behavior;
-- safe text and static-HTML inspection rendering;
+- private Unix-socket ownership, modes, schemas, pagination snapshots, concurrency, deadlines, response bounds, cleanup, and nonmutating live queue access;
+- safe text and static-HTML offline inspection rendering;
 - disabled-by-default Quartz configuration, opaque page IDs, strict browser payloads, response bounds, and retry idempotency;
 - local OCI allowlists, pinned bases and packages, off-by-default Compose, internal-only networking, read-only inputs, dedicated queue storage, and explicit owner-authority exclusions; and
 - an opt-in Docker runtime acceptance that builds one local image, starts one isolated internal-only service, enqueues one real anonymous proposal, verifies durable queue artifacts and unchanged inputs, and cleans up its temporary resources.
@@ -105,8 +109,8 @@ They do **not** support these claims:
 - offered as a contribution path;
 - protected by a production reverse proxy, TLS, WAF, or DDoS service;
 - an identity verifier or anything above the anonymous trust floor;
-- an owner acceptance/rejection product;
-- a source writer, merge mechanism, or publication authority; or
+- a publicly deployed, offered, or independently operated owner-review product;
+- approval-to-source application, a source writer, merge mechanism, or publication authority; or
 - closure of Q09.
 
 ## Run the focused checks

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Proposal Review Proof</title>
+<link rel="stylesheet" href="/mockup.css">
+<script id="fixture-model" type="application/json">__CYBERBASER_FIXTURE_MODEL__</script>
+<script src="/mockup.js" defer></script>
+</head>
+<body>
+<div class="static-frame" role="status">Static concept — controls do nothing. No decision is recorded.</div>
+<header class="site-header">
+  <a class="wordmark" href="#inbox" aria-label="Proposal review research inbox"><span>Cyberbaser</span><small>proposal review research</small></a>
+  <nav aria-label="Research surface">
+    <a href="#inbox">Inbox</a><a href="#receipts">Decisions</a><a href="#system">How this works</a><a href="#evidence">What the labels mean</a><a href="#checkpoint">Questions for you</a>
+  </nav>
+</header>
+<main id="app" tabindex="-1"></main>
+<div id="mobile-decision" class="mobile-decision" hidden><button type="button" data-open-mobile-decision>1 change · Decide</button></div>
+<dialog id="decision-sheet" class="decision-sheet" aria-labelledby="decision-sheet-title"><div class="dialog-shell sheet-shell"><div class="sheet-header"><div><p class="kicker">Decision preview</p><h2 id="decision-sheet-title">Decide this proposal</h2><p id="decision-sheet-proposal" class="sheet-proposal-title"></p></div><button type="button" class="button secondary sheet-close" data-close-decision-sheet>Close</button></div><div id="decision-sheet-body"></div></div></dialog>
+<dialog id="confirmation-dialog" aria-labelledby="confirmation-title">
+  <div class="dialog-shell"><p class="kicker" id="confirmation-kicker"></p><h2 id="confirmation-title"></h2><div id="confirmation-body"></div><div class="dialog-actions"><button type="button" class="button secondary" data-cancel-confirmation>Cancel</button><button type="button" class="button" data-confirm-preview></button></div></div>
+</dialog>
+</body>
+</html>

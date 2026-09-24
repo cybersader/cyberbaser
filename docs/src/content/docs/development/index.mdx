@@ -29,10 +29,30 @@ WP4 Lane B is implemented as a strict account-free derivation package, a carrier
 cd docs
 bun install
 bun run dev              # http://localhost:4321/cyberbaser/
-bun run dev:host         # bind to 0.0.0.0 for LAN or Tailscale
+bun run dev:host         # bind to 0.0.0.0 for LAN or a trusted private transport
 ```
 
 The dev server hot-reloads content and component changes. The base path is `/cyberbaser`, so include it in test URLs.
+
+## Proposal review research and mechanical baseline
+
+Two deliberately separate review entry points are available.
+
+Launch the unprivileged, static/no-effect research surface for realistic fixtures, side-by-side Current and Proposed proof, mobile stacking, blocked states, receipt previews, and the eight-frame system walkthrough:
+
+```bash
+bun run review:proposal-mockup
+```
+
+See [Proposal review mockup](/cyberbaser/development/proposal-review-mockup/) for the four review modes, capability labels, screenshot and test commands, the exact no-effect boundary, and the maintainer comprehension checkpoint. The component evaluation behind those modes is in [Reusable components for proposal review](/cyberbaser/research/proposal-review-components/).
+
+Launch the authenticated real same-host mechanical baseline separately:
+
+```bash
+bun run review:owner-alpha
+```
+
+That command starts the live queue writer, private review socket, independent owner validation, immutable decision store, and privileged review routes together. It remains the mechanically accepted decision-only proof and is not replaced or refactored by the mockup. See [Owner proposal UI review](/cyberbaser/development/owner-proposal-ui-review/) for its exact authority, shutdown behavior, and evidence boundary.
 
 ## Docs site: build and tests
 
@@ -66,7 +86,7 @@ bash renderers/quartz-cyberbase/tests/run.sh
 bun test deploy/account-free-intake/test
 ```
 
-`@cyberbaser/correction` is the exact UTF-8 quote/offset and single-splice primitive. `@cyberbaser/proposal` builds the canonical one-file, one-splice external adapter-output contract around it and feeds receiver-verified subjects into the existing trust classifier. Both packages are pure and no-I/O. `@cyberbaser/account-free-intake`, `@cyberbaser/proposal-queue`, the sibling intake app, the disabled Quartz form, and the local deployment bundle implement Lane B through retained review evidence only. None writes source or closes Q09. See [Proposal Contract](/cyberbaser/design/proposal-contract/) and [Account-free intake Lane B](/cyberbaser/development/account-free-intake/).
+`@cyberbaser/correction` is the exact UTF-8 quote/offset and single-splice primitive. `@cyberbaser/proposal` builds the canonical one-file, one-splice external adapter-output contract around it and feeds receiver-verified subjects into the existing trust classifier. Both packages are pure and no-I/O. `@cyberbaser/account-free-intake`, `@cyberbaser/proposal-queue`, the sibling intake app, the disabled Quartz form, the local deployment bundle, and the same-host owner review fixture implement Lane B through immutable decision-only evidence. None writes source or closes Q09. See [Proposal Contract](/cyberbaser/design/proposal-contract/) and [Account-free intake Lane B](/cyberbaser/development/account-free-intake/).
 
 ## Forgejo intake adapter
 

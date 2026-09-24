@@ -31,9 +31,9 @@ Every contribution path the product offers must still work **independently**; th
 | Account-free contribution product | **Unshipped.** Lane B mechanics exist but are disabled, local-only, unexposed, and untested by humans; Q09 remains open | [Open question Q09](/cyberbaser/reference/open-questions/#q09--what-is-the-contribution-path-for-someone-with-no-account) |
 | Concierge human-correction pilot | **Human run not started.** Internal mechanical and operator rehearsals completed; neither counts | [Pilot protocol](/cyberbaser/research/concierge-human-correction-pilot/) |
 | OFM damage check on a PR | **Built, report-only.** `continue-on-error: true`, blocks nothing | `@cyberbaser/ofm` via `ofm-check.yml` |
-| Trust classification on a PR | **Built, decision-only.** Emits a label and a summary table | `@cyberbaser/trust` via `trust-gate.yml` |
-| Decision ledger | **Two-stage capture/record adapter implemented and hermetically tested; live installation separately authorized and still pending; no real fork run; zero live entries** | [Decision ledger](/cyberbaser/design/decision-ledger/) |
-| Auto-merge for the auto-merge route | **Designed, disabled.** The step is commented out in the workflow | `trust-gate.yml` |
+| Trust classification on a PR | **Package built; live workflow currently inactive.** GitHub reports `trust-gate.yml` as deleted/inactive, so the offered GitHub path is not currently applying trust labels or summaries | `@cyberbaser/trust` · retained `trust-gate.yml` file |
+| Decision ledger | **Installed with one valid unclassified maintainer row and zero classified observations.** No real fork, closed-unmerged, or duplicate live case has run | [Decision ledger](/cyberbaser/design/decision-ledger/) |
+| Auto-merge for the auto-merge route | **Designed, disabled, and currently unreachable.** The step is commented out and the containing workflow is inactive | `trust-gate.yml` |
 | Branch protection / required checks | **Does not exist.** No protection rule, no ruleset on `main` | — |
 | Per-PR rendered preview | **Designed, unbuilt** | [Hub BOM · H5](/cyberbaser/research/proposal-hub-bom/#per-pr-rendered-previews) |
 | Link check in the pipeline | **Built as a CLI, wired into no workflow** | `@cyberbaser/linkcheck` |
@@ -81,7 +81,7 @@ That result closes arbitrary whole-file save adapters, not rich authoring as an 
 
 ### What is not enforced on this path
 
-The maintainer pushes to `main` directly, and `ofm-check` and `trust-gate` are both `pull_request`-triggered. The publication workflow now validates projection safety, emitted-path safety, artifact size, and cumulative URL continuity, but it still does not run OFM damage classification or trust routing for direct pushes. The contributor path therefore retains moderation checks the maintainer path lacks. That asymmetry is deliberate for now (requiring PRs for all changes would break daily authoring from Obsidian), but Q10 remains a real gap.
+The maintainer pushes to `main` directly. `ofm-check` remains a pull-request report, while GitHub currently reports `trust-gate.yml` as deleted/inactive even though the workflow file remains in the repository. The publication workflow validates projection safety, emitted-path safety, artifact size, and cumulative URL continuity, but it does not run OFM damage classification or trust routing for direct pushes. The offered contributor path currently lacks active trust classification as well. Restoring and observing that workflow is separate from solving Q10, which still asks how to enforce compatible checks without breaking daily owner authoring from Obsidian.
 
 ## Private owner-alpha wiki: one Save, policy-bound publication
 
@@ -137,7 +137,7 @@ This direct owner route is not an exception to the source-integrity rule. It is 
 2. **GitHub web editor**: opens the raw markdown in GitHub's web UI. The contributor sees `[[wikilinks]]`, `> [!note]` and `%%comments%%` as plain text, with no rendering and no preview
 3. **Auth**: GitHub prompts for an account. There is no way past this step without one
 4. **Commit**: GitHub forks the repo behind the scenes, creates a branch, and opens a PR
-5. **Checks**: `ofm-check` annotates any OFM damage; `trust-gate` applies a `trust:<route>` label. Both are advisory
+5. **Checks**: `ofm-check` annotates OFM damage. The retained `trust-gate` design would apply a `trust:<route>` label, but GitHub currently reports that workflow as deleted/inactive, so active trust classification is not part of the live offered path
 6. **Merge**: the maintainer reads the diff on github.com and clicks Merge
 
 ### Constraints
@@ -210,15 +210,15 @@ The original charter also assigned stale source and ambiguous quote to `OD-02`, 
 
 ### Review model
 
-The trust classifier computes a route for every PR. What happens next is entirely manual.
+The trust package can compute the routes below, but the live Cyberbase `trust-gate.yml` workflow is currently inactive. The table therefore describes classifier behavior and the intended advisory projection, not labels currently applied to every PR. What happens next remains entirely manual.
 
 | PR type | Computed route | What actually happens |
 |---|---|---|
-| Typo fix from trusted contributor | `auto-merge` | Label applied. **Nothing merges.** The auto-merge step is commented out and no required check exists |
+| Typo fix from trusted contributor | `auto-merge` | The package can compute this route. No live label or merge follows while the workflow is inactive; the auto-merge step is also commented out and no required check exists |
 | Typo fix from unverified identity | `full-review` | Classifier behavior exists; no shipped account-free intake produces this route today |
-| Content change from trusted | `quick-review` | Label applied, maintainer merges by hand |
+| Content change from trusted | `quick-review` | The package can compute this route; the maintainer currently reviews and merges by hand without an active trust workflow |
 | Content change from unverified identity | `full-review` | Classifier behavior exists; no shipped account-free intake produces this route today |
-| Structural / navigation change | `full-review` | Label applied, maintainer merges by hand |
+| Structural / navigation change | `full-review` | The package can compute this route; the maintainer currently reviews and merges by hand without an active trust workflow |
 
 Trusted contributors are designated in **`.cyberbaser/trust.yml`** in the vault repo (not `.github/trusted-contributors.yml`; the file moved out of the forge's namespace deliberately, per [dissent §1.4](/cyberbaser/research/dissent/)). Moving someone onto that list is a conscious act, and the policy is read from the base ref, so a PR cannot promote its own author.
 
@@ -230,13 +230,13 @@ The [decision ledger](/cyberbaser/design/decision-ledger/) now has an implemente
 
 Stage B runs through GitHub's [`workflow_run` trust boundary](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_run). It binds the exact source run and artifact, then reconstructs authority from the pull-request, labels, timeline, collaborator-permission, and check-runs APIs plus exact inert base/head Git objects. A closed-unmerged decision uses the unique timeline `closed` event matching `closed_at`; the actor must currently have `maintain` or `admin` permission. The resulting row is the first successfully published Stage B observation, so mutable labels, checks, and permission are observed at record time rather than claimed as a perfect closure-time snapshot.
 
-The composition is hermetically tested for maintainer, fork, closed-unmerged, duplicate, and tampered-artifact scenarios. It is **not installed** in the live vault: the record template still carries a deliberate non-runnable immutable-tooling placeholder, no real fork run has occurred, and the live ledger has zero observations. Installation and the first outward write require separate explicit authorization.
+The composition is hermetically tested for maintainer, fork, closed-unmerged, duplicate, and tampered-artifact scenarios. The two reviewed workflows are installed in the live vault. Two initial recorder attempts failed closed and were repaired; Capture run `31648052403` and Record run `31648065388` then published one valid unclassified maintainer row through one ledger-only commit. The classified count remains zero. No real fork, closed-unmerged, or duplicate live case has run.
 
 ### The policy, concretely (cyberbase's own)
 
 This is the actual moderation policy for the dogfood vault, written out to prove the trust-curve story survives contact with specifics. Any maintainer using cyberbaser would write their own version of these two paragraphs, and the trust dial is exactly which parts they tighten or loosen.
 
-> **Every shipped external proposal lands in the moderation queue; nothing proposed from outside goes live without the owner's policy route.** The owner's local Markdown authoring is a separate direct lane and is not a moderation client. In the current GitHub path, the maintainer reviews **the diff on the PR page**, plus the `ofm-check` annotations and the `trust:<route>` label, and aims to act within a few days; "act" means merge, request changes, or reject with a one-line reason. Accepted proposals make the content more true, current, or clear, and cite a source for factual claims that are not self-evident. The policy intends to welcome account-free corrections on the same editorial terms, but that intake has not shipped; today an outside contributor needs GitHub.
+> **Every shipped external proposal remains owner-reviewed; nothing proposed from outside goes live without the owner's decision.** The owner's local Markdown authoring is a separate direct lane and is not a moderation client. In the current GitHub path, the maintainer reviews **the diff on the PR page** plus `ofm-check` annotations and aims to act within a few days; "act" means merge, request changes, or reject with a one-line reason. The retained trust policy and classifier can compute a route, but the live `trust-gate.yml` workflow is currently inactive, so no current `trust:<route>` label should be assumed. Accepted proposals make the content more true, current, or clear, and cite a source for factual claims that are not self-evident. The policy intends to welcome account-free corrections on the same editorial terms, but that intake has not shipped; today an outside contributor needs GitHub.
 >
 > **Held or rejected without debate:** spam and promotion, edits to the personal folders (out of scope for contribution), factual changes with no source, drive-by rewrites of a page's voice or structure, and anything the maintainer judges to be generated bulk content. Contributors earn the trusted list after roughly three merged, unproblematic edits, and drop off it on the first spam or bad-faith submission; repeat abuse gets blocked at the repo (and, if volumetric, handled at the edge, which is [a separate problem](/cyberbaser/concepts/problem/#contribution-on-your-terms)). The maintainer's call is final; there is no appeals process at this scale, and that's a feature, not a gap.
 
@@ -253,7 +253,7 @@ Three separate claims in the earlier version of this section were false, and the
 |---|---|
 | "Every PR gets a preview deployment from the same pipeline that builds the site" | `publish-site.yml` triggers only on `push` to `main` and `workflow_dispatch`. It deliberately refuses a `pull_request_target` trigger, because that would run fork-authored content in a job holding write scopes on the vault ([pwn-request](https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/)). The refusal is a security decision, not an oversight |
 | "The maintainer reviews the rendered preview before merging" | Nothing renders it. The maintainer reads a raw markdown diff on github.com |
-| "This is the CI gate: if the preview fails to build, the PR can't merge" | `ofm-check.yml` is `continue-on-error: true`, `trust-gate.yml` is decision-only, and `main` has **no branch protection and no rulesets**. No check can block any merge |
+| "This is the CI gate: if the preview fails to build, the PR can't merge" | `ofm-check.yml` is `continue-on-error: true`, `trust-gate.yml` is decision-only and currently inactive, and `main` has **no branch protection and no rulesets**. No check can block any merge |
 
 **The commitment stands; the implementation does not exist.** The design is written and costed: two CI jobs split across a trust boundary, a `pull_request` build job with no secrets producing an artifact, and a `workflow_run` publish job running base-branch code that never checks out the contributor's branch, publishing into a subpath of a second Pages site on its own origin. See [Hub BOM · Per-PR rendered previews](/cyberbaser/research/proposal-hub-bom/#per-pr-rendered-previews) for the full shape and the reason GitHub Pages cannot do it in one repo (one site, one environment, one concurrency group).
 

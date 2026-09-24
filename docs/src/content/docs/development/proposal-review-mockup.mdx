@@ -1,0 +1,206 @@
+---
+title: Proposal review mockup
+description: "Launch and evaluate the separate loopback-only, static/no-effect proposal-review research surface before any richer contract or owner-review product direction is selected."
+sidebar:
+  order: 8
+status: research
+tags: [setup, design, governance, testing]
+---
+
+The proposal review mockup is a coherent, high-fidelity **static research surface**. It uses realistic, typed fixtures to test proposal identity, four selectable review modes, mobile stacking, deliberate decision affordances, blocked states, private receipt previews, and system placement.
+
+It is not the privileged owner review. It has no owner session, queue access, decision authority, source checkout, Git remote, renderer, deployment provider, or publication witness. Every control is memory-only. Reloading clears notes and receipt previews.
+
+:::caution[Static concept, not a product or usability result]
+The persistent frame reads **Static concept — controls do nothing. No decision is recorded.** Approval and rejection create only an in-memory receipt preview. They do not record a decision, change queue lifecycle, apply or write source, commit, push, rebuild, deploy, or publish.
+:::
+
+## Launch the mockup
+
+From the repository root:
+
+```bash
+bun run --cwd docs review:proposal-mockup
+```
+
+The launcher binds only the distinct numeric loopback host `127.0.0.2`, opens `http://127.0.0.2:4328/`, and writes only its PID-and-claim-owned ignored status file at `.workspace/proposal-review-mockup/status.json`. Keeping the static origin off owner-alpha's `127.0.0.1` host prevents host-scoped owner-session cookies from crossing ports into the mockup. The server also rejects every inbound `Cookie` header. Status ownership is claimed with exclusive file creation, a live foreign owner fails closed, and `Ctrl-C` removes the file only when the current launcher still owns the same claim.
+
+Set a different port on the fixed mockup host with `CYBERBASER_PROPOSAL_MOCKUP_PORT`. Set `CYBERBASER_PROPOSAL_MOCKUP_NO_OPEN=1` for a non-opening test run.
+
+In Portagenty, use the separate **proposal-mockup** session. Portagenty is a development launcher, not deployment, installation, public exposure, or service orchestration.
+
+## Review modes
+
+Each proposal opens in one of four modes, selectable with a real tablist and with `ArrowLeft`, `ArrowRight`, `Home`, and `End`. The mode is part of the route, so `#review/v1-access-review-long-page/compare` links directly to one view.
+
+| Mode | What it shows |
+|---|---|
+| **Changes** | One reading pass over the pinned page with removals struck through and additions underlined in place |
+| **Proposed** | The complete page as it would read if the proposal were later applied |
+| **Current** | The complete pinned page as it reads today |
+| **Compare** | Current and Proposed side by side for one focused visual comparison |
+
+Every mode is a **replay of the declared exact operations**, not an inferred diff. When the declared operations are not canonically ordered and non-overlapping, when the declared old bytes do not match the pinned base, or when replaying them does not reproduce the declared candidate, the affected modes say the view is not derivable and offer the declared change spans instead. The reasoning and the component evaluation behind that choice are in [Reusable components for proposal review](/cyberbaser/research/proposal-review-components/).
+
+### Semi-rendered reading
+
+**Rendered reading** is on by default and works the way Obsidian's live preview does: untouched blocks render as headings, paragraphs, lists, quotes, code, and page metadata, while any block containing a declared change reveals its **exact source** under an `Exact source · changed passage` label. Adjacent blocks touched by the same change merge into one source region so a change is never split across boxes.
+
+This keeps the two things that matter in tension honest at the same time. The owner reads the page the way a person reads a page, and the bytes under decision are never paraphrased by a renderer.
+
+This is rung **R1 · structural reading** in the [review projection model](/cyberbaser/design/review-projection-model/): ATX headings, paragraphs, ordered and unordered lists, blockquotes, fenced code, thematic breaks, YAML frontmatter, and inline bold, italic, code, links, and wikilinks.
+
+Anything outside that rung degrades to exact source with a stated reason rather than being rendered wrongly or dropped. A block containing a callout, table, embed, math, task list, footnote, inline HTML, block reference, or renderer-executed fence is shown as `Exact source · not interpreted here: callout`. Raw HTML is escaped and shown as text, never injected. Links and wikilinks render as non-navigating marks, because resolving them is an R2 capability this surface does not have.
+
+Turning **Rendered reading** off returns every mode to Markdown source at reading width.
+
+R1 is **not** a preview of the published page. Vault-semantic resolution (R2) and true published rendering (R3) are specified but unbuilt, and no plugin system for rendering pipelines is selected.
+
+The decision surface is a collapsible dock. Collapsed, it still shows the attention state, the complete atomic scope, the support and evidence labels, and one primary action. Expanded, it adds the affected pages and numbered changes, the required owner note, both actions, and the decision-only boundary. On narrow screens it is replaced by the sticky decision bar and full-width sheet.
+
+## Navigation words
+
+The surface uses plain language rather than internal vocabulary. The routes are unchanged, so links and screenshots still resolve:
+
+| Nav item | Route | What it holds |
+|---|---|---|
+| Inbox | `#inbox` | Proposals waiting on a decision, blocked evidence, and decided examples |
+| Decisions | `#receipts` | What a recorded decision looks like, newest first |
+| How this works | `#system` | The eight boundaries a proposal passes, and where it stops |
+| What the labels mean | `#evidence` | Claim ceilings, plus examples that never became proposals |
+| Questions for you | `#checkpoint` | The comprehension questions only a person can answer |
+
+Naming is still open. If any of these words read as jargon, they are cheap to change.
+
+## Keep the mechanical baseline separate
+
+The existing authenticated same-host proof remains:
+
+```bash
+bun run --cwd docs review:owner-alpha
+```
+
+That command starts the real queue writer, bounded private review seam, independent owner validation, privileged owner origin, and immutable local decision store. It is the mechanically accepted same-host baseline.
+
+The two commands intentionally mean different things:
+
+| Command | Surface | Evidence | Authority |
+|---|---|---|---|
+| `review:proposal-mockup` | Unprivileged static research origin | Static-design and synthetic-mechanical fixture evidence | None |
+| `review:owner-alpha` | Authenticated real same-host fixture | Mechanically accepted review and decision-boundary evidence | Private decision-only authority; no source application |
+
+The mockup does not reuse or refactor the real owner-alpha renderer, routes, CSS, client, queue seam, sessions, source checkout, Git integration, or decision store.
+
+## Run focused tests
+
+```bash
+bun run --cwd docs test:proposal-mockup
+```
+
+The aggregate command runs both the private fixture-package suite and the standalone mockup suite. The checks cover:
+
+- seven canonical executable-v1 cases prepared, serialized, parsed, digested, and reapplied through the real proposal package, with canonical artifact claims cross-checked against the declared file, operation, base, candidate, and digest;
+- two noncanonical single-file multi-operation target-research cases;
+- conceptual multi-file and new-file isolation;
+- blocked and adversarial pre-admission boundaries;
+- exact Host and GET/HEAD-only server behavior;
+- CSP, no-store, inbound-cookie rejection, host-separated owner-cookie isolation, and route containment;
+- document projections replayed from base and operations, including the three fail-closed cases that refuse to synthesize a view;
+- pointer and keyboard mode switching, focus retention across the tablist, and full-width reading geometry;
+- the semi-rendered reading projection, its R1 block and inline subset, contiguous offset coverage, named degradation to exact source for every construct outside the rung, and exact source revealed at every changed passage;
+- collapsing and expanding long unchanged passages;
+- desktop equal-width Current/Proposed geometry in Compare;
+- mobile Current-then-Proposed order and page containment;
+- operation-specific insertion, deletion, and replacement semantics;
+- complete path and numbered-operation scope in confirmation and receipt previews;
+- note limits, confirmation, Escape, visible mobile dismissal, navigation focus, collapsed-by-default dock behavior, and in-memory receipts;
+- exclusive launcher ownership, stale-owner recovery, and PID-and-claim cleanup;
+- zero mutation requests, mockup-origin cookies, browser storage, or service workers; and
+- selectable system-boundary and evidence-lab behavior.
+
+Passing tests establish only their stated synthetic-mechanical or static-design boundary. They cannot pass the maintainer comprehension checkpoint.
+
+## Capture static-design evidence
+
+```bash
+bun run --cwd docs screenshots:proposal-mockup
+```
+
+Each run creates a new ignored UTC directory under:
+
+```text
+.workspace/proposal-review-mockup/screenshots/<UTC-run-id>/
+```
+
+The bounded matrix includes the desktop inbox, all four modes of the long realistic page, the expanded decision dock, the not-derivable state, paragraph light and dark, a later operation in the multi-operation target, insertion, deletion, mobile stacked evidence, the mobile decision sheet, approval and rejection receipt previews, and the selectable system walkthrough. Earlier runs are never deleted or overwritten. Screenshots are review evidence, not usability acceptance.
+
+## Inbox and evidence lab
+
+The editorial inbox is not the fixture catalog. It contains only ready decision-flow previews, retained blocked-review projections, and decided authority projections. Cases that fail before queue admission, adversarial rendering or trust checks, and conceptual multi-file or new-file research live under **What the labels mean** in a separate evidence lab. They never appear as ordinary pending or blocked queue rows.
+
+Conceptual examples say **Conceptual later · no decision available**. Pre-admission failures say that no queue item exists. Neither state is described as an owner rejection.
+
+## Capability labels
+
+Every fixture and every reviewable screen declares a support level:
+
+- **Executable v1:** one existing Markdown file and one real canonical exact splice. This is current executable proposal evidence.
+- **Target capability:** one existing Markdown file with multiple ascending, non-overlapping base-relative operations and one atomic decision concept. It is research only. No proposal-v2 artifact or parser exists.
+- **Conceptual later:** multi-file or new-file examples used to expose unresolved transaction, path, recovery, publication, and authority questions. They have no executable artifact, queue evidence, decision, or controls.
+- **Negative synthetic:** stale, ambiguous, invalid, expired, unavailable, or policy-ineligible evidence placed at its earliest failing boundary. A blocker is never rewritten as an owner rejection.
+- **Future operational design:** static authority-axis illustrations that keep approval, fresh application eligibility, application authority, application result, deployment observation, and publication witness separate.
+
+## Evidence labels and claim ceilings
+
+Fixtures may claim only:
+
+- **Synthetic mechanical:** deterministic package, validation, or safety behavior.
+- **Static design only:** presentation and interaction research with no human result.
+
+The legend also shows evidence levels that the mockup and automated reports explicitly do **not** claim:
+
+- **Maintainer comprehension:** requires the focused unaided checkpoint below.
+- **Independent human:** requires unfamiliar-reader or independent-owner evidence.
+- **Live effect:** requires separately authorized source, Git, deployment, and publication-witness evidence.
+
+Green tests do not imply an offered lane, public Lane B exposure, Lane A installation, shared-socket OCI parity, independent usability, or a contributor-to-live product path.
+
+## Current system truth
+
+Same-host local review is the honest implemented proof. Account-free intake owns the finite queue and its lifetime writer lock. Owner-alpha reads bounded evidence over the private same-host seam, independently validates it, and may retain one immutable decision-only receipt.
+
+External lanes remain proposal-only and have no source-write authority. Lane A is not installed, linked, or offered. Lane B is disabled by default, local-only, unexposed, human-untested, and unoffered. Shared-socket OCI review and public Lane B exposure remain unimplemented.
+
+Approval alone starts nothing. A separate future application-authority gate is still missing and unselected. Canonical Markdown and Git remain source and current version-history authority. Rendering, deployment observation, and live publication witness remain separate disposable or observational spokes. The System view presents these as eight selectable boundaries, not a numbered claim that an automatic successful pipeline exists.
+
+## Focused maintainer comprehension checkpoint
+
+Evaluate the surface without coaching. The maintainer should be able to answer:
+
+1. What is this surface for?
+2. Which proof is Current and which is Proposed?
+3. How many pages and exact changes are in the proposal?
+4. What action is required from the owner?
+5. What does approval record, and what does it not start?
+6. How is blocked evidence different from an owner rejection?
+7. What support level and evidence class are shown?
+8. Where do intake, queue, private review, immutable decision, missing application authority, canonical Markdown, Git, rendering, deployment observation, and publication witness live?
+
+Pass or fail is recorded outside automation. Until this human gate passes, no proposal-v2 schema, taxonomy, operation limit, rendered-context contract, or owner-review product implementation is selected.
+
+### 2026-08-21 first checkpoint result
+
+The first maintainer checkpoint did **not** pass the product-direction gate. The surface made exact evidence visible, but the always-on side-by-side proof plus decision rail compressed long prose into two narrow columns, and it lacked the range of review modes available in mature authoring tools.
+
+The four-mode shell, collapsible dock, and long realistic page above are the response. That work is recorded in the [review modes log](/cyberbaser/agent-context/zz-log/2026-08-21-proposal-review-modes/).
+
+### Questions for the follow-up checkpoint
+
+Beyond the eight comprehension questions, the next session should settle:
+
+1. Which mode is the right default?
+2. Does the semi-rendered reading projection read well enough, and is revealing exact source only at changed passages the right trade?
+3. Is a collapsed dock with one primary action prominent enough?
+4. Does Compare still earn its place once full-width reading exists?
+
+Answers are maintainer direction evidence, not usability acceptance. The proposal contract and the real privileged owner surface remain unchanged until the gate passes.

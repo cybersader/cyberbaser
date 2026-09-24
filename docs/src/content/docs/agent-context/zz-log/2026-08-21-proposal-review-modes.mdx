@@ -1,0 +1,99 @@
+---
+title: "2026-08-21 · Extensible proposal review modes"
+description: "Replaced the fixed side-by-side review composition with a four-mode reading shell derived from declared exact operations, and recorded why no diff or editor component was adopted."
+date: 2026-08-21
+status: research
+tags: [design, research, prior-art, testing, contribution]
+---
+
+## Why this wave happened
+
+The [first maintainer checkpoint](/cyberbaser/agent-context/zz-log/2026-08-21-proposal-review-mockup-implementation/) did not pass the product-direction gate. The static surface made exact Current and Proposed evidence visible, but a permanently split comparison plus a decision rail compressed long editorial prose into two narrow columns. The maintainer asked for the range of views that mature authoring tools offer: read the current text, read the proposed text, read one merged change view, or see both sides together.
+
+The instruction was also to start simple and let the shape evolve, and not to rebuild an editor from first principles.
+
+## The research result that shaped the build
+
+A diff library answers a question this product has already answered.
+
+General diff viewers infer changes between two documents with heuristics that carry thresholds and scan limits. A Cyberbaser proposal instead carries a pinned base, exact base-relative byte ranges, expected old bytes, and replacement bytes. Every reading mode is therefore a **replay of declared operations**, not an inference.
+
+The replay now lives in the shared pure `packages/review-projection/src/document-projection.js`, and it fails closed in three specific ways rather than drawing a confident approximation:
+
+- operations that are not canonically ordered and non-overlapping produce no projection;
+- declared old bytes that do not match the pinned base produce no projection; and
+- a replay that does not reproduce the declared candidate produces no projection.
+
+A differ is still the right tool later, on the authoring side, where a rich surface must derive exact operations from an edited document. The candidate evaluation, including why Monaco and Tiptap Pro are out of scope for this surface, is in [Reusable components for proposal review](/cyberbaser/research/proposal-review-components/). No component is selected.
+
+## What changed in the surface
+
+- Four selectable modes: **Changes** (unified inline), **Proposed**, **Current**, and **Compare**, implemented as a real tablist with `ArrowLeft`, `ArrowRight`, `Home`, and `End`, roving `tabindex`, and focus that survives the re-render.
+- The mode is part of the route (`#review/<fixture>/<mode>`), so a specific view can be linked, screenshotted, and tested.
+- Reading modes render the complete pinned page at reading width instead of a narrow column.
+- The decision surface became a collapsible fixed dock. Collapsed by default, it still shows the attention state, the complete atomic scope, the support and evidence labels, and one primary action. Expanding it reveals the scope list, required note, actions, and the decision-only boundary. Page padding tracks the dock height so no content sits underneath it.
+- Operation navigation now scrolls to and marks the active change inside whichever mode is open, and marks it only when a proposal actually has more than one change.
+- Long unchanged passages can be collapsed on request and expanded in place.
+- The surface labels its own projection on screen and never implies it is the published site rendering.
+- Undecidable evidence keeps its honest state: a stale proposal can still be read in Current, while Proposed and Changes say why they are not derivable and offer the declared change spans instead.
+
+## Semi-rendered reading
+
+The maintainer then asked whether Obsidian-style live preview is possible, and expected it might be architecturally impossible. It is not. Rendering is a display concern; the byte-preservation rule constrains source application, not presentation.
+
+The hard part of marking changes inside rendered output is mapping source offsets onto rendered DOM positions. The same asymmetry that removed the diff library removes that problem too: a block containing a declared change **reveals its exact source**, the way live preview reveals source at the cursor, while untouched blocks render. Adjacent blocks touched by the same change merge into one source region.
+
+`packages/review-projection/src/markdown-projection.js` is a conservative, deterministic block and inline projection: frontmatter, ATX headings, paragraphs, ordered and unordered lists, blockquotes, fenced code, thematic breaks, and inline bold, italic, code, links, and wikilinks. It partitions the document contiguously so no byte is dropped, falls back to plain text for anything unrecognized, never passes raw HTML through, and renders links as non-navigating spans because this surface resolves nothing. Rendered reading is on by default and can be switched off.
+
+It is labelled on screen as an approximate reading projection, not the published site rendering. The published-rendering contract stays open.
+
+## Ontology, honesty, and visual density
+
+The maintainer then raised two things that turned out to be the same gap. First, that this surface is implicitly CMS-shaped territory that has to map to Obsidian and to the renderer, and that no first-principles model had been written. Second, that the surface should be honest about what it can and cannot render, without necessarily committing to pluggable rendering pipelines.
+
+The existing publish **tier contract** in the translation layer was the right anchor, but it describes what survives an edit and what the renderer supports. It says nothing about what a review surface is allowed to claim it is showing. [Review projection model](/cyberbaser/design/review-projection-model/) now covers that layer: the object ontology from bytes up to page, which objects are authoritative and which are derived, the mapping to Obsidian and CMS models, and a four-rung review fidelity ladder from exact source through structural reading, vault-semantic resolution, and published rendering.
+
+The decisive asymmetry it records: a CMS's authoritative unit is the structured record and its file export is derived, while Cyberbaser is the exact inverse. That is the same fact the 4.6% byte-identity measurement established, stated as an ontology rather than as a write-path constraint.
+
+Two behaviours followed directly. The projection now names every construct outside its rung and degrades that block to exact source, so a callout, table, embed, math, task list, footnote, inline HTML, block reference, or renderer-executed fence is labelled rather than silently flattened. And rendering pluggability is answered by specifying the provider seam while shipping one implementation, instead of building a plugin system for a need that does not exist yet.
+
+The maintainer also reported the page as visually busy despite liking the typography. It carried roughly a dozen horizontal rules. The identity block collapsed into one label row, title, summary, quiet rationale, one meta line, and a closed provenance disclosure; the change bar, tablist, controls, and file caption became one grouped control region with a single hairline; and the reading surface now carries its mode colour as an inset edge rather than a border stack. Four rules remain, each carrying meaning.
+
+## Fixture work
+
+The existing fixtures were all short pages, which is exactly why a narrow column was survivable in the previous design and why collapsing long unchanged text could not be exercised. One realistic long-page executable fixture was added, `v1-access-review-long-page`: a multi-section handbook page with one bounded paragraph replacement inside it.
+
+The corpus is now 21 primary fixtures with seven executable v1 cases, all still validated through the real `@cyberbaser/proposal` prepare, serialize, parse, digest, and apply path, and still cross-checked against their declared file, operation, base, candidate, and digest.
+
+## Mechanical evidence
+
+```text
+bun run --cwd docs test:proposal-mockup
+  fixture package: 8 passed, 860 expectations
+  mockup package: 28 passed, 405 expectations
+
+bun run --cwd docs screenshots:proposal-mockup
+  17 static-design images, including all four modes of the long page,
+  the expanded decision dock, and the not-derivable state
+```
+
+Three defects found by the suites were real and were fixed rather than tested around: the expanded dock intercepted clicks on content beneath it, the route handler stole focus back to the main region after a tab switch and broke keyboard mode navigation, and a change spanning several blocks fragmented into separate source boxes. The launcher tests now skip, rather than fail or overwrite the claim, when a maintainer is running the mockup at the same time.
+
+This is **synthetic-mechanical** and **static-design-only** evidence. It establishes no maintainer comprehension, no independent-human usability, no offered lane, and no live effect.
+
+## Boundaries preserved
+
+Proposal v1 canonical bytes, parser, digests, and one-file/one-splice semantics are unchanged. The authenticated owner-alpha surface was not modified. The mockup remains unprivileged: `127.0.0.2`, GET and HEAD only, inbound cookies rejected, no queue, session, source, Git, renderer, deployment, or publication capability, and memory-only controls.
+
+No commit, push, deployment, or publication occurred.
+
+## What remains open
+
+The follow-up maintainer checkpoint is next, and only a person can pass it. Open questions it should settle:
+
+1. Which mode is the right default?
+2. Does the semi-rendered projection read well enough, and is revealing exact source only at changed passages the right trade?
+3. Is a collapsed dock with one primary action prominent enough?
+4. Does Compare still earn its place once full-width reading exists?
+
+Until that evidence exists, no proposal-v2 schema, taxonomy, operation limit, rendered-context contract, default review mode, editor or diff component, or source-application authority artifact is selected, and the real owner-review refactor does not begin.

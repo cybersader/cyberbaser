@@ -1,0 +1,155 @@
+---
+title: Owner proposal UI review
+description: "Launch and evaluate the real same-host, content-first owner proposal-review flow through one disposable, authenticated, no-effect local fixture."
+sidebar:
+  order: 9
+status: research
+tags: [setup, governance, testing]
+---
+
+The review fixture runs the real owner-alpha proposal surface, not a static mockup. It composes the live intake queue writer, private Unix-socket review seam, independent owner validation, immutable decision store, and privileged browser routes.
+
+The fixture is local and disposable. Its only durable effect inside the temporary fixture is the immutable owner decision record being tested. Approval records intent only. Neither approval nor rejection can apply or write source, commit, push, rebuild, deploy, publish, change queue lifecycle, or start an owner job.
+
+:::caution[Mechanical checkpoint, not accepted product direction]
+The runtime is committed on the review branch, not merged or deployed. Earlier maintainer reviews found that proposal identity, Current versus Proposed, the required action, and deployment placement were unclear; a fixed side-by-side static design also made long prose too narrow. The [proposal operating model](/cyberbaser/research/proposal-operating-model/) and four-mode research surface led to the real owner-alpha port described below. The maintainer has not yet reviewed that port, so neither the product-direction checkpoint nor an independent-usability gate has passed.
+:::
+
+The separate [Proposal review mockup](/cyberbaser/development/proposal-review-mockup/) is the unprivileged static/no-effect research surface. It does not replace this authenticated mechanical baseline and cannot access its privileged origin, queue seam, sessions, source evidence, or decision store.
+
+## Reading modes on the privileged surface
+
+As of 2026-08-22 the research shell is ported here. A proposal opens at:
+
+```text
+/owner/review/<queueId>?mode=changes|proposed|current|compare
+```
+
+Each mode is a server-rendered address rather than client state, so it can be bookmarked, reloaded, and read with scripting disabled. **Changes** is the default. **Compare** shows Current and Proposed together.
+
+Every mode replays the declared exact operations over the pinned base that this surface already reads and verifies. Untouched blocks render as structural reading, and any block containing a declared change reveals its exact source. Constructs outside that rung, such as callouts, tables, embeds, math, or renderer-executed fences, degrade to exact source with the reason named on screen. When the base and candidate cannot be reproduced, or the page exceeds the 256 KiB reading bound, the affected modes say so and fall back to the declared change spans.
+
+The model behind those rungs is canonical in [Review projection model](/cyberbaser/design/review-projection-model/).
+
+The decision surface is a collapsible dock fixed to the bottom of the page. Collapsed it shows attention, exact scope, trust tier and route, and one primary action; expanded it holds the required note, both actions, and the decision-only boundary. It opens without JavaScript.
+
+## Which surface to use now
+
+Use this authenticated fixture for the next maintainer checkpoint: inspect the real reading modes, decision dock, confirmation, and receipt alongside the same-host security and no-source-effect mechanics. This first port is an implementation for inspection, not accepted product direction. No test or screenshot passes the maintainer checkpoint on their behalf.
+
+The separate static mockup remains useful for exploratory fixture comparisons, including long prose, insertion and deletion, blocked evidence, and a single-file multi-operation research target. Those scenarios do not turn into executable privileged proposals merely because they are visible in the mockup.
+
+## Launch from the workspace
+
+In Portagenty, open the `cyberbaser` workspace and select the **owner-review** session. It runs the complete review launcher as a visible long-running workspace action. `Ctrl-C` stops the fixture and cleans up.
+
+To launch it manually, keep the normal docs server in one terminal. In a second terminal, from `docs/`, run:
+
+```bash
+bun run review:owner-alpha
+```
+
+From the repository root, the equivalent command is:
+
+```bash
+bun run --cwd docs review:owner-alpha
+```
+
+The launcher:
+
+1. creates a temporary Git repository, exact retained source binding, trust policy, and private proposal queue;
+2. starts the real intake writer and retains its lifetime exclusive lock;
+3. starts the private same-host Unix-socket review endpoint;
+4. starts the privileged owner-alpha review routes on loopback;
+5. independently validates three real disposable proposals;
+6. verifies that the content-first proposal inbox contains all three; and
+7. requests an authenticated browser launch without printing or retaining the one-time sign-in capability.
+
+Enter `b` in the launcher terminal to issue and open a fresh one-time browser sign-in. Press `Ctrl-C` to stop both services and remove the temporary fixture.
+
+The safe post-sign-in review URL is:
+
+```text
+http://127.0.0.1:4317/owner/review
+```
+
+Opening that URL in a browser that did not consume the one-time sign-in correctly returns `403`.
+
+## The review flow
+
+### 1. Proposals
+
+The inbox leads with the suggested wording, source path, and contributor rationale. Intake lane, trust route, queue IDs, revisions, and digests no longer dominate the list.
+
+The **Decided** section is separate and quieter. Its newest decision appears first.
+
+### 2. Read the suggestion
+
+A proposal opens in **Proposed** view. Switch among:
+
+- **Proposed:** bounded proposal context with the new wording emphasized;
+- **Current:** the same context with the existing wording emphasized; and
+- **Exact:** complete old and replacement bytes plus the exact operation range.
+
+For quote-bound proposals, the surrounding words come from the exact selector. This is not a complete rendered-page preview. Offset-bound proposals may have no surrounding quote context.
+
+The contributor's rationale and reference links follow the wording comparison. Repository, revision, Git object, digests, trust classification, lane, route, and reason codes remain available under **Technical evidence**.
+
+### 3. Decide deliberately
+
+Write a required **Decision note**, then choose **Approve** or **Reject**. The first action opens a confirmation sheet; it does not submit the decision.
+
+The confirmation repeats the selected action and states:
+
+- the decision is immutable;
+- source remains unchanged; and
+- no application or publication begins.
+
+The server reloads and independently validates the proposal, source, and policy when the final confirmation is submitted.
+
+### 4. Read the receipt
+
+The immutable receipt leads with:
+
+- Approval recorded or Proposal rejected;
+- the owner decision note;
+- decision time; and
+- **Source unchanged**.
+
+Exact authority, retention, source, trust, and digest evidence remains under **Receipt and verification details**. The receipt has no mutation controls.
+
+## What to evaluate
+
+Review the three proposals as if they arrived from an account-free contributor:
+
+1. Can you understand the requested wording change before opening technical evidence?
+2. Do Proposed, Current, and Exact provide the right progression from meaning to exact bytes?
+3. Does the contributor note appear at the right point in the reading flow?
+4. Are Approve and Reject understandable without suggesting that approval publishes source?
+5. Does the confirmation make the immutable, decision-only boundary clear?
+6. Does the receipt preserve enough context while keeping **Source unchanged** prominent?
+7. Can you complete the flow with keyboard only, including comparison tabs, confirmation, Escape, and focus return?
+8. Does the layout remain calm and readable in light and dark mode and at a narrow mobile width?
+9. Is any remaining implementation detail too prominent, or any required evidence too difficult to find?
+
+The proposals are disposable. It is safe to approve or reject all of them while evaluating the interface.
+
+## Why this is not embedded in Starlight
+
+The docs site is the canonical project knowledge base. It is not the privileged owner authority surface. Owner-alpha deliberately uses a separate exact origin, session cookie, CSRF token, Host and Origin checks, and no-store responses. Embedding its controls into the docs origin would weaken the boundary being reviewed.
+
+The docs provide the durable entry point, launch command, scope, and feedback checklist. The product UI remains on the origin whose security model it is meant to test.
+
+## Evidence boundary
+
+The fixture proves the same-host review seam, independent evidence validation, authenticated decision boundary, and interaction mechanics. It does not establish that the current presentation is coherent or accepted product direction, and it does not prove:
+
+- unfamiliar-reader usability;
+- independent-owner operation;
+- a genuine owner rejection of a real contributor proposal;
+- public Lane B exposure or edge protection;
+- shared-socket OCI parity;
+- approval-to-source application; or
+- a connected contributor-to-live product path.
+
+The design basis is recorded in [Owner proposal review UX](/cyberbaser/research/owner-proposal-review-ux/). The dated [owner proposal review redesign log](/cyberbaser/agent-context/zz-log/2026-08-21-owner-proposal-review-redesign/) records the implementation and verification evidence for this checkpoint.
