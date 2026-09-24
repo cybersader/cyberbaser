@@ -44,11 +44,15 @@ const INTAKE_REPOSITORY = 'https://forge.example:8443/owner/wiki.git';
 const OWNER_ORIGIN = 'http://127.0.0.1:4317';
 const OWNER_HOST = '127.0.0.1:4317';
 
+// These are read-only observations of the checkout and remote. Opening the
+// proposal queue in this process raises the umask, and a racy `git status`
+// would otherwise rewrite `.git/index` with that umask; optional locks stay off
+// so the observation itself can never mutate the tree it is measuring.
 async function git(cwd, args) {
   const child = Bun.spawn(['git', '-C', cwd, ...args], {
     stdout: 'pipe',
     stderr: 'pipe',
-    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0' },
   });
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(child.stdout).text(),
@@ -128,9 +132,8 @@ async function snapshotTree(root, { exclude = [], identity = true } = {}) {
       if (exclude.some((candidate) => relative === candidate || relative.startsWith(`${candidate}/`))) continue;
       const absolute = path.join(directory, entry.name);
       const metadata = await lstat(absolute, { bigint: true });
-      // Git may chmod its internal index during a read-only status refresh; its bytes still must match.
       const common = {
-        ...(relative === '.git/index' ? {} : { mode: Number(metadata.mode & 0o777n) }),
+        mode: Number(metadata.mode & 0o777n),
         nlink: Number(metadata.nlink),
         ...(identity ? {
           dev: metadata.dev.toString(),

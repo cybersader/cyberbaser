@@ -7,6 +7,8 @@ import {
   mkdtemp,
   readFile,
   rm,
+  stat,
+  utimes,
   writeFile,
 } from 'node:fs/promises';
 import os from 'node:os';
@@ -31,6 +33,7 @@ import {
   OwnerAlphaError,
   createOwnerProposalReviewSource,
   createProposalReviewClient,
+  defaultProposalReviewGit,
   validateOwnerReviewEvidence,
 } from '../src/index.js';
 import { canonicalJson } from '../src/json.js';
@@ -278,6 +281,48 @@ describe('independent owner proposal validation', () => {
       policyStatus: 'valid',
     });
     expect(await run(item.checkout, ['status', '--porcelain=v1', '--untracked-files=all'])).toBe('');
+  });
+
+  test('verifies through read-only Git subcommands that never rewrite a racy index', async () => {
+    const item = await fixture();
+    const index = path.join(item.checkout, '.git', 'index');
+    const source = path.join(item.checkout, SOURCE_PATH);
+    const identity = async () => {
+      const metadata = await stat(index, { bigint: true });
+      return { ino: metadata.ino, mode: metadata.mode & 0o777n, bytes: await readFile(index) };
+    };
+    // A racy entry (source mtime equal to the index mtime) makes any
+    // status-style refresh re-hash the file and rewrite the index.
+    const racy = new Date();
+    await utimes(source, racy, racy);
+    await utimes(index, racy, racy);
+    const before = await identity();
+
+    const calls = [];
+    const validated = await validateOwnerReviewEvidence({
+      config: item.config,
+      evidence: item.evidence,
+      clock: () => new Date('2026-08-20T12:00:01Z'),
+      git: (root, args, options) => {
+        calls.push(args);
+        return defaultProposalReviewGit(root, args, options);
+      },
+    });
+    expect(validated.sourceVerification.revision).toBe(item.revision);
+    expect(calls.length).toBeGreaterThan(0);
+    for (const args of calls) {
+      expect(['cat-file', 'ls-tree', 'merge-base', 'remote', 'rev-parse']).toContain(args[0]);
+      expect(args).not.toContain('--git-dir');
+      expect(args).not.toContain('--work-tree');
+    }
+    expect(await identity()).toEqual(before);
+
+    // The adapter disables optional locks, so even a refresh-shaped command
+    // leaves the index alone; the plain environment control rewrites it.
+    await defaultProposalReviewGit(item.checkout, ['status', '--porcelain=v1']);
+    expect(await identity()).toEqual(before);
+    await run(item.checkout, ['status', '--porcelain=v1']);
+    expect((await identity()).ino).not.toBe(before.ino);
   });
 
   test('rejects a valid local commit object that is unreachable from the configured branch', async () => {
