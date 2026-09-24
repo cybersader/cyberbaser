@@ -128,8 +128,9 @@ async function snapshotTree(root, { exclude = [], identity = true } = {}) {
       if (exclude.some((candidate) => relative === candidate || relative.startsWith(`${candidate}/`))) continue;
       const absolute = path.join(directory, entry.name);
       const metadata = await lstat(absolute, { bigint: true });
+      // Git may chmod its internal index during a read-only status refresh; its bytes still must match.
       const common = {
-        mode: Number(metadata.mode & 0o777n),
+        ...(relative === '.git/index' ? {} : { mode: Number(metadata.mode & 0o777n) }),
         nlink: Number(metadata.nlink),
         ...(identity ? {
           dev: metadata.dev.toString(),

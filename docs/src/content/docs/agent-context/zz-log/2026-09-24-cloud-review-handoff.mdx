@@ -17,6 +17,7 @@ The follow-up sessions have distinct bounded jobs: one adversarially inspects wh
 - The owner-alpha OCI build-context allowlist omitted the new `@cyberbaser/review-projection` dependency. The allowlist and structural test now include its package and source, and the owner-alpha container workflow watches changes to it.
 - Both review JSON paths were inspected. The list explicitly selects summary and verification fields, while detail explicitly omits the new bounded reading document. A test injects sentinel reading text and checks that neither JSON response exposes it. Authenticated HTML review still presents the reading text by design.
 - Canonical research and chronology now point at `packages/review-projection/src/` after extraction from the static mockup. An earlier unqualified claim that the JSON response was byte-identical is replaced with the specific projection behavior tested above.
+- The first draft PR CI run found a cross-platform acceptance-test assumption: a read-only Git status refresh may chmod `.git/index` from 0644 to 0600 while leaving its bytes unchanged. The no-effect snapshot now ignores only that internal index mode, still compares its bytes and size, and still compares all canonical file modes, source bytes, Git refs, index entries, and status.
 
 ## Local checks
 
@@ -33,8 +34,10 @@ bun run --cwd docs test:proposal-mockup
   fixture: 8 passed; mockup: 28 passed
 OWNER_ALPHA_ACCEPTANCE=1 bun test apps/owner-alpha/test/proposal-review-browser.test.js apps/owner-alpha/test/proposal-review-acceptance.test.js
   2 passed, 0 failed
+OWNER_ALPHA_ACCEPTANCE=1 bun test apps/owner-alpha/test/acceptance.test.js apps/owner-alpha/test/proposal-review-acceptance.test.js apps/owner-alpha/test/proposal-review-browser.test.js
+  3 passed, 0 failed (after the Git index mode correction)
 bun run --cwd docs preflight
-  passed before this dated entry
+  passed before the CI correction; rerun after it
 ```
 
 All test commands above used the local contained execution boundary. The skipped tests require separate runtime conditions; they are not acceptance evidence. A production docs build was not run after earlier resource terminations, so partial `docs/dist/` is not evidence. No live deployment, independent-human usability, owner rejection, or external publication was established by these checks. The draft PR and its CI results, if created, must be read separately from these local checks.
