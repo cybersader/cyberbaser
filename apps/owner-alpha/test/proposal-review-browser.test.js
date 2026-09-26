@@ -276,6 +276,8 @@ acceptanceTest('browser review is content-first, deliberate, recoverable, and re
     await page.waitForURL(`${fixture.ownerOrigin}/owner/review`);
     await expect(page.locator('h1').textContent()).resolves.toBe('Proposals');
     await expect(page.locator('#needs-review .proposal-row').count()).resolves.toBe(2);
+    await expect(page.locator('#needs-review .proposal-row del').count()).resolves.toBe(2);
+    await expect(page.locator('#needs-review .proposal-row ins').count()).resolves.toBe(2);
     await capture(page, 'inbox-light-desktop');
 
     await Promise.all([
@@ -371,7 +373,7 @@ acceptanceTest('browser review is content-first, deliberate, recoverable, and re
     await page.waitForURL(`${fixture.ownerOrigin}/owner/decisions/**`);
     expect(decisionPosts).toBe(2);
     await expect(page.getByText('Source unchanged', { exact: true }).textContent()).resolves.toBe('Source unchanged');
-    await expect(page.getByText('No application, write, commit, push, rebuild, deployment, or publication started.').count()).resolves.toBe(1);
+    await expect(page.getByText('Nothing on the page changed and nothing was published or scheduled.').count()).resolves.toBe(1);
     await expect(page.locator('[data-action]').count()).resolves.toBe(0);
     await capture(page, 'approval-receipt-dark-mobile');
 
@@ -394,7 +396,7 @@ acceptanceTest('browser review is content-first, deliberate, recoverable, and re
     expect(decisionPosts).toBe(2);
     await page.getByRole('button', { name: 'Reject suggestion' }).click();
     await page.waitForURL(`${fixture.ownerOrigin}/owner/decisions/**`);
-    await expect(page.locator('h1').textContent()).resolves.toBe('Proposal rejected');
+    await expect(page.locator('h1').textContent()).resolves.toBe('You rejected this suggestion');
     await capture(page, 'rejection-receipt-light-desktop');
     await Promise.all([
       page.waitForURL(`${fixture.ownerOrigin}/owner/review`),

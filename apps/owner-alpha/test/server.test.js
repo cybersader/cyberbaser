@@ -562,7 +562,7 @@ describe('privileged proposal review routes', () => {
     expect(opened.body).toContain('Decided');
     expect(opened.body).toContain('docs/example.md');
     expect(opened.body).toContain('changed-proposed');
-    expect(opened.body).toContain('the page itself does not change');
+    expect(opened.body).toContain('deciding changes nothing on the page itself');
     expect(opened.body).not.toContain('<dt>Queue ID</dt>');
     expect(opened.body).not.toContain('<dt>Trust</dt>');
     expect(opened.response.headers.get('content-security-policy')).toContain("script-src 'self'");
@@ -872,10 +872,10 @@ describe('privileged proposal review routes', () => {
     }));
     const body = await history.text();
     expect(history.status).toBe(200);
-    expect(body).toContain('<h1>Approval recorded</h1>');
+    expect(body).toContain('<h1>You approved this suggestion</h1>');
     expect(body).toContain('<strong>Source unchanged</strong>');
-    expect(body).toContain('No application, write, commit, push, rebuild, deployment, or publication started.');
-    expect(body).toContain('<summary>Receipt and verification details</summary>');
+    expect(body).toContain('Nothing on the page changed and nothing was published or scheduled. Applying an approved suggestion is a separate step you take yourself.');
+    expect(body).toContain('<summary>Details for the record</summary>');
     expect(body).toContain('No longer retained; exact reviewed evidence is embedded here.');
     expect(body).not.toContain('data-action="approve"');
     expect(body).not.toContain('data-action="reject"');

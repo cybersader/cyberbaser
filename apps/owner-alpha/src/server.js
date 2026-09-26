@@ -272,16 +272,14 @@ function compactReviewText(value, maximum = 160) {
   return `${text.slice(0, Math.max(1, maximum - 1)).trimEnd()}…`;
 }
 
+// Owners think in days, not minutes: show the date and keep the exact instant
+// on the element for anyone who needs it.
 function reviewTime(value) {
   const instant = new Date(value);
   const visible = Number.isNaN(instant.getTime())
     ? value
-    : `${new Intl.DateTimeFormat('en', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-        timeZone: 'UTC',
-      }).format(instant)} UTC`;
-  return `<time datetime="${escapeHtml(value)}">${escapeHtml(visible)}</time>`;
+    : new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeZone: 'UTC' }).format(instant);
+  return `<time datetime="${escapeHtml(value)}" title="${escapeHtml(value)}">${escapeHtml(visible)}</time>`;
 }
 
 function proposalView(entry) {
@@ -329,6 +327,19 @@ function proposalContext(view, mode, { compact = false } = {}) {
   return `<span class="proposal-prose">${context}</span>`;
 }
 
+function changeSummaryHtml(view, { compact = false } = {}) {
+  const prefix = compact ? compactContext(view.prefix, 60, { fromEnd: true }) : view.prefix;
+  const suffix = compact ? compactContext(view.suffix, 60) : view.suffix;
+  const oldText = compact ? compactReviewText(view.oldText, 80) : view.oldText;
+  const newText = compact ? compactReviewText(view.replacementText, 80) : view.replacementText;
+  const removed = view.oldText.length === 0 ? '' : `<del class="changed-word changed-current">${escapeHtml(oldText)}</del>`;
+  const added = view.replacementText.length === 0 ? '' : `<ins class="changed-word changed-proposed">${escapeHtml(newText)}</ins>`;
+  const marks = `${removed}${removed !== '' && added !== '' ? ' ' : ''}${added}`;
+  return view.hasContext
+    ? `<span class="proposal-prose">${escapeHtml(prefix)}${marks}${escapeHtml(suffix)}</span>`
+    : `<span class="proposal-prose">${marks}</span>`;
+}
+
 function decisionEntry(decision, summary) {
   return Object.freeze({
     summary: {
@@ -355,31 +366,28 @@ function decisionEntry(decision, summary) {
 function reviewSummaryCard(entry, href, decision = null) {
   const view = proposalView(entry);
   const rationale = compactReviewText(entry.evidence.proposal.submission.rationale, 180);
-  const status = decision === null
-    ? (entry.summary.route === 'reject' ? '<span class="attention-note">Policy recommends rejection</span>' : '')
-    : `<span class="decision-label decision-${escapeHtml(decision.action)}">${decision.action === 'approve' ? 'Approved' : 'Rejected'}</span>`;
-  const timing = decision === null
-    ? `<span>Received ${reviewTime(entry.summary.receivedAt)}</span><span>Expires ${reviewTime(entry.summary.expiresAt)}</span>`
-    : `<span>${reviewTime(decision.decidedAt)}</span><span>${escapeHtml(compactReviewText(decision.reason, 120))}</span>`;
+  const path = `<span class="proposal-row-path">${escapeHtml(entry.summary.source.path)}</span>`;
+  const meta = decision === null
+    ? `${path}<span>Received ${reviewTime(entry.summary.receivedAt)}</span><span>Expires ${reviewTime(entry.summary.expiresAt)}</span>${entry.summary.route === 'reject' ? '<span class="attention-note">Your policy suggests rejecting</span>' : ''}`
+    : `<span class="decision-label decision-${escapeHtml(decision.action)}">${decision.action === 'approve' ? 'Approved' : 'Rejected'}</span><span>${reviewTime(decision.decidedAt)}</span>${path}<span class="proposal-row-note">\u201c${escapeHtml(compactReviewText(decision.reason, 120))}\u201d</span>`;
   return `<article class="proposal-row">
 <a class="proposal-row-link" href="${escapeHtml(href)}">
-<span class="proposal-row-change">${proposalContext(view, 'proposed', { compact: true })}</span>
-<span class="proposal-row-path">${escapeHtml(entry.summary.source.path)}</span>
+<span class="proposal-row-change">${changeSummaryHtml(view, { compact: true })}</span>
 <span class="proposal-row-rationale">${escapeHtml(rationale)}</span>
-<span class="proposal-row-meta">${status}${timing}</span>
+<span class="proposal-row-meta">${meta}</span>
 </a>
 </article>`;
 }
 
 function reviewListPage({ overlay, nextCursor }) {
   const actionable = overlay.actionable.length === 0
-    ? '<p class="empty-state">No proposals need your decision.</p>'
+    ? '<p class="empty-state">Nothing is waiting for you.</p>'
     : overlay.actionable.map((entry) => reviewSummaryCard(
         entry,
         `/owner/review/${encodeURIComponent(entry.summary.queueId)}`,
       )).join('\n');
   const history = overlay.history.length === 0
-    ? '<p class="empty-state">No decisions have been recorded yet.</p>'
+    ? '<p class="empty-state">No decisions yet.</p>'
     : overlay.history.map(({ decision, summary }) => reviewSummaryCard(
         decisionEntry(decision, summary),
         `/owner/decisions/${encodeURIComponent(summary.queueId)}`,
@@ -388,25 +396,25 @@ function reviewListPage({ overlay, nextCursor }) {
   const next = nextCursor === null
     ? ''
     : `<p class="pagination"><a href="/owner/review?cursor=${encodeURIComponent(nextCursor)}">More proposals</a></p>`;
+  const waiting = overlay.actionable.length === 1 ? '1 waiting' : `${overlay.actionable.length} waiting`;
+  const decided = overlay.history.length === 0 ? '' : `<span class="section-count">${overlay.history.length} shown</span>`;
   return pageShell({
     title: 'Proposals',
     bodyClass: 'proposal-review-page',
     body: `<main class="owner-shell review-shell" id="owner-review-list">
 <header class="owner-header review-list-header">
-<p class="surface-label">Owner review</p>
 <h1>Proposals</h1>
-<p class="lede">Read each suggestion and decide. Deciding records your call; the page itself does not change.</p>
-<nav class="review-jump-links" aria-label="Proposal review sections"><a href="#needs-review">Needs review</a><a href="#decided">Decided</a></nav>
+<p class="lede">Suggested changes to your pages. Open one to read it in place and decide; deciding changes nothing on the page itself.</p>
 </header>
 <section class="review-section" id="needs-review" aria-labelledby="actionable-heading">
-<div class="section-heading"><h2 id="actionable-heading">Needs review</h2><span class="section-count">${overlay.actionable.length} on this page</span></div>
+<div class="section-heading"><h2 id="actionable-heading">Needs review</h2><span class="section-count">${waiting}</span></div>
 <div class="proposal-list">${actionable}</div>
 ${next}
 </section>
 <section class="review-section decided-section" id="decided" aria-labelledby="history-heading">
-<div class="section-heading"><h2 id="history-heading">Decided</h2><span class="section-count">${overlay.history.length} shown</span></div>
+<div class="section-heading"><h2 id="history-heading">Decided</h2>${decided}</div>
 <div class="proposal-list">${history}</div>
-${overlay.historyTruncated ? '<p class="status">Only the newest decisions within the configured review bound are shown here.</p>' : ''}
+${overlay.historyTruncated ? '<p class="status">Only the newest decisions are shown here.</p>' : ''}
 </section>
 <p class="review-return"><a href="/">Return to Cyberbase</a></p>
 </main>`,
@@ -723,8 +731,7 @@ function reviewIdentityHeader(entry, view) {
 <h1>${escapeHtml(changeName(view))}</h1>
 <p class="proposal-summary">${escapeHtml(compactReviewText(proposal.submission.rationale, 200))}</p>
 <div class="identity-meta">
-<strong>1 exact change in 1 page</strong>
-<span>${escapeHtml(summary.source.path)}</span>
+<span class="identity-path">${escapeHtml(summary.source.path)}</span>
 <span>Received ${reviewTime(summary.receivedAt)}</span>
 <span>Expires ${reviewTime(summary.expiresAt)}</span>
 </div>
@@ -789,32 +796,30 @@ ${decisionStep({ entry, csrfToken, view })}`,
 
 function decisionDetailPage({ decision, summary, queueRetained }) {
   const entry = decisionEntry(decision, summary);
+  const view = proposalView(entry);
   const approved = decision.action === 'approve';
+  const consequence = approved
+    ? 'Nothing on the page changed and nothing was published or scheduled. Applying an approved suggestion is a separate step you take yourself.'
+    : 'Nothing on the page changed and nothing was published or scheduled.';
   return pageShell({
-    title: approved ? 'Approval recorded' : 'Proposal rejected',
+    title: approved ? 'Suggestion approved' : 'Suggestion rejected',
     bodyClass: 'proposal-review-page',
     body: `<main class="owner-shell review-shell" id="owner-decision-detail">
 <header class="owner-header decision-receipt-header">
 <a class="back-link" href="/owner/review">Back to Proposals</a>
-<p class="surface-label">Decision receipt</p>
-<h1>${approved ? 'Approval recorded' : 'Proposal rejected'}</h1>
+<h1>${approved ? 'You approved this suggestion' : 'You rejected this suggestion'}</h1>
 <p class="decision-time">${reviewTime(decision.decidedAt)}</p>
 </header>
-<section class="decision-result ${approved ? 'decision-approved' : 'decision-rejected'}" aria-labelledby="decision-result-heading">
-<h2 id="decision-result-heading">${approved ? 'Approved' : 'Rejected'}</h2>
-<blockquote>${escapeHtml(decision.reason)}</blockquote>
-<div class="source-unchanged"><strong>Source unchanged</strong><span>No application, write, commit, push, rebuild, deployment, or publication started.</span></div>
-</section>
-<section class="reviewed-suggestion" aria-labelledby="reviewed-suggestion-heading">
-<p class="section-kicker">Reviewed suggestion</p>
-<h2 id="reviewed-suggestion-heading">${escapeHtml(changeName(proposalView(entry)))}</h2>
-<p class="context-copy">${proposalContext(proposalView(entry), 'proposed')}</p>
+<section class="decision-result ${approved ? 'decision-approved' : 'decision-rejected'}" aria-label="Your decision">
+<p class="context-copy">${changeSummaryHtml(view)}</p>
 <p class="receipt-path">${escapeHtml(summary.source.path)}</p>
+<blockquote class="decision-note">${escapeHtml(decision.reason)}</blockquote>
+<div class="source-unchanged"><strong>Source unchanged</strong><span>${consequence}</span></div>
 </section>
 ${technicalEvidence(entry, {
   decision,
   queueRetained,
-  title: 'Receipt and verification details',
+  title: 'Details for the record',
 })}
 </main>`,
   });

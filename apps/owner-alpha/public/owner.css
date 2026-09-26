@@ -100,10 +100,10 @@ body.proposal-review-page {
 .proposal-review-page h1 {
   max-width: 46rem;
   color: var(--review-ink);
-  font-size: clamp(2.1rem, 6vw, 3.6rem);
-  font-weight: 720;
-  letter-spacing: -0.035em;
-  line-height: 1.02;
+  font-size: clamp(1.6rem, 4vw, 2.3rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
 }
 
 .proposal-review-page h2 {
@@ -142,14 +142,7 @@ body.proposal-review-page {
   text-transform: uppercase;
 }
 
-.review-jump-links {
-  display: flex;
-  gap: 1.25rem;
-  margin-top: 1.5rem;
-  font-weight: 700;
-}
-
-.review-section { margin-top: 3.5rem; scroll-margin-top: 1.5rem; }
+.review-section { margin-top: 2.75rem; scroll-margin-top: 1.5rem; }
 .section-heading {
   display: flex;
   align-items: baseline;
@@ -169,15 +162,15 @@ body.proposal-review-page {
   text-decoration: none;
 }
 .proposal-row-link:hover .proposal-row-change { color: var(--review-accent); }
-.proposal-row-link:hover .proposal-row-path { text-decoration: underline; }
 .proposal-row-change {
   min-width: 0;
   color: var(--review-ink);
-  font-size: clamp(1.12rem, 2.6vw, 1.3rem);
+  font-size: clamp(1.1rem, 2.6vw, 1.25rem);
   line-height: 1.55;
 }
-.proposal-row-path { color: var(--review-accent); font-size: 0.92rem; font-weight: 680; }
+.proposal-row-path, .identity-path { color: var(--review-muted); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.8rem; }
 .proposal-row-rationale { color: var(--review-muted); line-height: 1.5; }
+.proposal-row-note { flex-basis: 100%; color: var(--review-ink); font-style: italic; }
 .proposal-row-meta {
   display: flex;
   flex-wrap: wrap;
@@ -410,30 +403,34 @@ body.proposal-review-page {
 }
 .trust-reasons { margin: 0; padding-left: 1.2rem; color: var(--review-muted); font-size: 0.85rem; }
 
-.decision-receipt-header { display: grid; gap: 0.7rem; margin-bottom: 2rem !important; }
+.decision-receipt-header { display: grid; gap: 0.5rem; margin-bottom: 1.75rem !important; }
 .decision-time { margin: 0; color: var(--review-muted); }
 .decision-result {
+  max-width: 44rem;
   border-left: 4px solid var(--review-approve);
-  padding: 0.5rem 0 0.5rem 1.25rem;
+  padding: 0.35rem 0 0.35rem 1.25rem;
 }
 .decision-result.decision-rejected { border-left-color: var(--review-reject); }
-.decision-result h2 { color: var(--review-approve); }
-.decision-result.decision-rejected h2 { color: var(--review-reject); }
-.decision-result blockquote {
-  margin: 1rem 0;
+.decision-result .context-copy { margin: 0; font-size: 1.25rem; line-height: 1.6; }
+.receipt-path { margin: 0.35rem 0 0; color: var(--review-muted); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.8rem; }
+.decision-note {
+  margin: 1.25rem 0 0;
+  padding-left: 0.9rem;
+  border-left: 2px solid var(--review-line-strong);
   color: var(--review-ink);
-  font-size: 1.15rem;
+  font-size: 1.05rem;
+  font-style: italic;
   line-height: 1.6;
 }
 .source-unchanged {
   display: grid;
   gap: 0.3rem;
-  margin-top: 1.25rem;
+  max-width: 40rem;
+  margin-top: 1.5rem;
   color: var(--review-muted);
+  line-height: 1.55;
 }
-.source-unchanged strong { color: var(--review-ink); font-size: 1.05rem; }
-.reviewed-suggestion .context-copy { margin-top: 1rem; }
-.receipt-path { color: var(--review-muted); font-size: 0.9rem; }
+.source-unchanged strong { color: var(--review-ink); font-size: 1rem; }
 
 @media (max-width: 700px) {
   .proposal-review-page .review-shell { width: min(100% - 1.25rem, 54rem); }
