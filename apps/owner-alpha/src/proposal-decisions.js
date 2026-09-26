@@ -170,7 +170,7 @@ function createIndex(decisionsInput) {
   });
 }
 
-async function assertPrivateDirectory(directory, label) {
+export async function assertPrivateDirectory(directory, label) {
   const metadata = await lstat(directory);
   if (metadata.isSymbolicLink()
     || !metadata.isDirectory()
@@ -194,7 +194,7 @@ async function prepareDecisionLayout(context) {
   return { root, decisions };
 }
 
-async function readPrivateFile(file, label, maximum, { oversizeAsNull = false } = {}) {
+export async function readPrivateFile(file, label, maximum, { oversizeAsNull = false } = {}) {
   let handle;
   try {
     handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);

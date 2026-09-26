@@ -53,6 +53,20 @@ export {
   createProposalDecisionOverlay,
 } from './proposal-decisions.js';
 export {
+  APPROVED_INPUT_SCHEMA_VERSION,
+  APPROVED_INPUT_ARTIFACT_TYPE,
+  APPROVED_INPUT_ROOT,
+  APPROVED_INPUT_LOCK,
+  APPROVED_INPUT_MAX_BYTES,
+  APPROVED_INPUT_AUTHORIZATION_STATE,
+  APPROVED_INPUT_STALE_REASONS,
+  validateApprovedProposalInput,
+  assessApprovedProposal,
+  prepareApprovedProposalInput,
+  listApprovedProposalInputs,
+  approvedProposalInputPath,
+} from './approved-proposal.js';
+export {
   JOB_SCHEMA_VERSION,
   JOB_ARTIFACT_TYPE,
   JOB_STATES,

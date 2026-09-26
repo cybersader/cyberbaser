@@ -107,22 +107,22 @@ function decodeUtf8(bytes, label) {
   }
 }
 
-function trimFinalLf(bytes, label) {
+export function trimFinalLf(bytes, label) {
   return decodeUtf8(bytes, label).replace(/\r?\n$/u, '');
 }
 
-function exactObjectId(value, label) {
+export function exactObjectId(value, label) {
   if (typeof value !== 'string' || !GIT_OBJECT_ID_RE.test(value)) {
     fail('invalid-review-revision', `${label} must be one lowercase Git object ID`);
   }
   return value;
 }
 
-function literalPathspec(value) {
+export function literalPathspec(value) {
   return `:(literal)${value}`;
 }
 
-function parseTreeEntry(bytes, expectedPath, label, { allowMissing = false } = {}) {
+export function parseTreeEntry(bytes, expectedPath, label, { allowMissing = false } = {}) {
   if (bytes.length === 0 && allowMissing) return null;
   if (bytes.length === 0 || bytes.at(-1) !== 0) {
     fail('invalid-review-tree-entry', `${label} must contain one NUL-terminated tree entry`);
@@ -136,7 +136,7 @@ function parseTreeEntry(bytes, expectedPath, label, { allowMissing = false } = {
   return { mode: match[1], type: match[2], objectId: match[3] };
 }
 
-async function runGit(git, checkout, args, options) {
+export async function runGit(git, checkout, args, options) {
   try {
     return Buffer.from(await git(checkout, args, options));
   } catch (error) {
@@ -148,7 +148,7 @@ async function runGit(git, checkout, args, options) {
   }
 }
 
-async function readBlob(git, checkout, objectIdInput, label, maximum) {
+export async function readBlob(git, checkout, objectIdInput, label, maximum) {
   const objectId = exactObjectId(objectIdInput, `${label} object ID`);
   const type = trimFinalLf(await runGit(git, checkout, ['cat-file', '-t', objectId]), `${label} type`);
   if (type !== 'blob') fail('review-object-not-blob', `${label} must resolve to a blob`);
@@ -166,7 +166,7 @@ async function readBlob(git, checkout, objectIdInput, label, maximum) {
   return bytes;
 }
 
-async function readTrustPolicy(git, checkout, revision) {
+export async function readTrustPolicy(git, checkout, revision) {
   const tree = await runGit(git, checkout, [
     'ls-tree', '-z', revision, '--', literalPathspec(TRUST_POLICY_PATH),
   ]);
@@ -222,7 +222,7 @@ function assertReviewWindow(evidence, now) {
   }
 }
 
-async function validateCheckout(config, git) {
+export async function validateCheckout(config, git) {
   const checkout = config.repository.checkout;
   let resolved;
   try {
