@@ -321,27 +321,31 @@ acceptanceTest('browser review is content-first, deliberate, recoverable, and re
       changesTab.click(),
     ]);
 
-    const dock = page.locator('#decision-dock-details');
-    await expect(dock.evaluate((element) => element.open)).resolves.toBe(false);
-    await page.locator('#decision-dock-details > summary').click();
-    await expect(dock.evaluate((element) => element.open)).resolves.toBe(true);
+    // Approve opens one sheet; the note is asked for there and checked on confirm.
+    const approve = page.getByRole('button', { name: 'Approve', exact: true });
+    const sheet = page.locator('#decision-dialog');
+    await expect(page.locator('.decision-bar-change strong').textContent()).resolves.toContain('“teh” to “the”');
+    await approve.click();
+    await expect(sheet.evaluate((element) => element.open)).resolves.toBe(true);
+    await expect(page.locator('#decision-dialog-title').textContent()).resolves.toBe('Approve this suggestion?');
     const note = page.locator('#decision-reason');
-    await page.getByRole('button', { name: 'Approve', exact: true }).click();
-    await expect(page.locator('#decision-status').textContent()).resolves.toContain('Write a decision note');
-    await expect(page.locator('#decision-dialog').evaluate((element) => element.open)).resolves.toBe(false);
+    await expect(note.evaluate((element) => element === document.activeElement)).resolves.toBe(true);
+    const confirmApproval = page.getByRole('button', { name: 'Approve suggestion' });
+    await confirmApproval.click();
+    await expect(page.locator('#decision-status').textContent()).resolves.toContain('Write a short note');
+    expect(decisionPosts).toBe(0);
 
     await note.fill('🧭'.repeat(1025));
     await expect(page.locator('#decision-byte-count').textContent()).resolves.toContain('4100 of 4096');
-    await page.getByRole('button', { name: 'Approve', exact: true }).click();
+    await expect(page.locator('#decision-byte-count').evaluate((element) => getComputedStyle(element).display)).resolves.toBe('block');
+    await confirmApproval.click();
     await expect(page.locator('#decision-status').textContent()).resolves.toContain('4096 UTF-8 bytes or fewer');
 
     await note.fill('The wording is clear and correct.');
-    const approve = page.getByRole('button', { name: 'Approve', exact: true });
-    await approve.click();
-    await expect(page.locator('#decision-dialog').evaluate((element) => element.open)).resolves.toBe(true);
+    await expect(page.locator('#decision-byte-count').evaluate((element) => getComputedStyle(element).display)).resolves.toBe('none');
     expect(decisionPosts).toBe(0);
     await page.keyboard.press('Escape');
-    await expect(page.locator('#decision-dialog').evaluate((element) => element.open)).resolves.toBe(false);
+    await expect(sheet.evaluate((element) => element.open)).resolves.toBe(false);
     await expect(approve.evaluate((element) => element === document.activeElement)).resolves.toBe(true);
 
     await page.setViewportSize({ width: 390, height: 844 });
@@ -351,17 +355,19 @@ acceptanceTest('browser review is content-first, deliberate, recoverable, and re
     expect(await page.locator('.technical-evidence').evaluate((element) => element.open)).toBe(false);
     await capture(page, 'exact-dark-mobile');
     await approve.click();
+    await expect(note.inputValue()).resolves.toBe('The wording is clear and correct.');
     const dialogBox = await page.locator('#decision-dialog').boundingBox();
     expect(Math.abs((dialogBox.y + dialogBox.height) - 844)).toBeLessThanOrEqual(2);
     await capture(page, 'approval-confirm-dark-mobile');
     expect(decisionPosts).toBe(0);
 
-    await page.getByRole('button', { name: 'Confirm approval' }).click();
-    await page.waitForFunction(() => document.querySelector('#decision-dialog-copy')?.textContent
+    await confirmApproval.click();
+    await page.waitForFunction(() => document.querySelector('#decision-status')?.textContent
       ?.includes('Another owner action is finishing'));
     expect(decisionPosts).toBe(1);
+    await expect(sheet.evaluate((element) => element.open)).resolves.toBe(true);
     await expect(note.inputValue()).resolves.toBe('The wording is clear and correct.');
-    await page.getByRole('button', { name: 'Confirm approval' }).click();
+    await confirmApproval.click();
     await page.waitForURL(`${fixture.ownerOrigin}/owner/decisions/**`);
     expect(decisionPosts).toBe(2);
     await expect(page.getByText('Source unchanged', { exact: true }).textContent()).resolves.toBe('Source unchanged');
@@ -379,14 +385,14 @@ acceptanceTest('browser review is content-first, deliberate, recoverable, and re
       page.waitForURL(`${fixture.ownerOrigin}/owner/review/**`),
       page.locator('#needs-review .proposal-row-link').click(),
     ]);
-    await page.locator('#decision-dock-details > summary').click();
-    await page.locator('#decision-reason').fill('The suggestion changes the intended meaning.');
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'no-preference' });
     await page.getByRole('button', { name: 'Reject', exact: true }).click();
+    await expect(page.locator('#decision-dialog-title').textContent()).resolves.toBe('Reject this suggestion?');
+    await page.locator('#decision-reason').fill('The suggestion changes the intended meaning.');
     await capture(page, 'rejection-confirm-light-desktop');
     expect(decisionPosts).toBe(2);
-    await page.getByRole('button', { name: 'Confirm rejection' }).click();
+    await page.getByRole('button', { name: 'Reject suggestion' }).click();
     await page.waitForURL(`${fixture.ownerOrigin}/owner/decisions/**`);
     await expect(page.locator('h1').textContent()).resolves.toBe('Proposal rejected');
     await capture(page, 'rejection-receipt-light-desktop');

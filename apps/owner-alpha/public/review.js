@@ -4,13 +4,9 @@ const status = document.querySelector('#decision-status');
 const byteCount = document.querySelector('#decision-byte-count');
 const dialog = document.querySelector('#decision-dialog');
 const dialogTitle = document.querySelector('#decision-dialog-title');
-const dialogKicker = document.querySelector('#decision-dialog-kicker');
-const dialogSuggestion = document.querySelector('#decision-dialog-suggestion');
-const dialogCopy = document.querySelector('#decision-dialog-copy');
 const confirmButton = document.querySelector('#decision-confirm');
 const cancelButton = document.querySelector('[data-dialog-cancel]');
 const modeLinks = [...document.querySelectorAll('.review-modes .mode-tab')];
-const dock = document.querySelector('#decision-dock-details');
 
 for (const link of modeLinks) {
   link.addEventListener('keydown', (event) => {
@@ -26,10 +22,9 @@ for (const link of modeLinks) {
   });
 }
 
-if (form && reason && status && byteCount && dialog && dialogTitle && dialogKicker
-  && dialogSuggestion && dialogCopy && confirmButton && cancelButton) {
+if (form && reason && status && byteCount && dialog && dialogTitle && confirmButton && cancelButton) {
   const maximumReasonBytes = Number(form.dataset.maxReasonBytes);
-  const actionButtons = [...form.querySelectorAll('[data-action]')];
+  const actionButtons = [...document.querySelectorAll('.decision-bar [data-action]')];
   let selectedAction = null;
   let actionTrigger = null;
   let inFlight = false;
@@ -38,10 +33,12 @@ if (form && reason && status && byteCount && dialog && dialogTitle && dialogKick
     return new TextEncoder().encode(reason.value).length;
   }
 
+  // The counter stays quiet until the note is close to the limit.
   function updateByteCount() {
     const bytes = reasonBytes();
     byteCount.textContent = `${bytes} of ${maximumReasonBytes} UTF-8 bytes`;
-    byteCount.className = bytes > maximumReasonBytes ? 'byte-count error' : 'byte-count';
+    const near = bytes > maximumReasonBytes - 512;
+    byteCount.className = `byte-count${near ? ' visible' : ''}${bytes > maximumReasonBytes ? ' error' : ''}`;
   }
 
   function showStatus(message, { error = false, focus = false } = {}) {
@@ -52,11 +49,11 @@ if (form && reason && status && byteCount && dialog && dialogTitle && dialogKick
 
   function validateNote() {
     const bytes = reasonBytes();
-    if (!Number.isSafeInteger(maximumReasonBytes)) return 'The decision-note limit is unavailable. Reload the proposal.';
-    if (reason.value.length === 0 || reason.value.trim().length === 0) return 'Write a decision note before choosing Approve or Reject.';
-    if (reason.value.trim() !== reason.value) return 'Remove whitespace from the beginning or end of the decision note.';
-    if (/\p{Cc}/u.test(reason.value)) return 'The decision note cannot contain line breaks or control characters.';
-    if (bytes > maximumReasonBytes) return `Shorten the decision note to ${maximumReasonBytes} UTF-8 bytes or fewer.`;
+    if (!Number.isSafeInteger(maximumReasonBytes)) return 'The note limit is unavailable. Reload the proposal.';
+    if (reason.value.length === 0 || reason.value.trim().length === 0) return 'Write a short note before you approve or reject.';
+    if (reason.value.trim() !== reason.value) return 'Trim the spaces at the start or end of your note.';
+    if (/\p{Cc}/u.test(reason.value)) return 'Keep the note to one paragraph, without line breaks.';
+    if (bytes > maximumReasonBytes) return `Shorten the note to ${maximumReasonBytes} UTF-8 bytes or fewer.`;
     return null;
   }
 
@@ -65,58 +62,46 @@ if (form && reason && status && byteCount && dialog && dialogTitle && dialogKick
     for (const button of [...actionButtons, confirmButton, cancelButton]) button.disabled = pending;
   }
 
-  function openConfirmation(action, trigger) {
-    const validationMessage = validateNote();
-    if (validationMessage !== null) {
-      showStatus(validationMessage, { error: true });
-      reason.focus();
-      return;
-    }
+  function openSheet(action, trigger) {
     selectedAction = action;
     actionTrigger = trigger;
     const approving = action === 'approve';
-    dialogKicker.textContent = approving ? 'Approve suggestion' : 'Reject suggestion';
-    dialogTitle.textContent = approving ? 'Confirm approval' : 'Confirm rejection';
-    dialogSuggestion.textContent = form.dataset.suggestionLabel;
-    dialogCopy.textContent = 'This decision is immutable. Source remains unchanged, and no application or publication begins.';
+    dialogTitle.textContent = approving ? 'Approve this suggestion?' : 'Reject this suggestion?';
     confirmButton.dataset.action = action;
-    confirmButton.textContent = approving ? 'Confirm approval' : 'Confirm rejection';
+    confirmButton.textContent = approving ? 'Approve suggestion' : 'Reject suggestion';
     showStatus('');
     dialog.showModal();
-    confirmButton.focus();
+    reason.focus();
   }
 
   function recoveryMessage(code) {
     if (code === 'lock-busy') return 'Another owner action is finishing. Wait a moment, then try again.';
     if (code === 'decision-evidence-mismatch' || code === 'decision-evidence-conflict') {
-      return 'The proposal evidence changed. No decision was recorded. Reload the proposal before deciding.';
+      return 'This proposal changed while you were reading it. Nothing was recorded. Reload it before deciding.';
     }
     if (code === 'review-expired' || code === 'decision-expired') {
-      return 'This proposal expired before the decision could be recorded. No decision was recorded.';
+      return 'This proposal expired before your decision could be recorded. Nothing was recorded.';
     }
     if (code === 'review-source-timeout' || code === 'review-ipc-timeout') {
-      return 'Source verification took too long. No decision was recorded. Try again when the review service is responsive.';
+      return 'Checking the source took too long. Nothing was recorded. Try again in a moment.';
     }
     if (code === 'review-source-unavailable' || code === 'review-ipc-busy' || code === 'review-ipc-internal-error') {
-      return 'The review service is temporarily unavailable. No decision was recorded. Try again shortly.';
+      return 'The review service is not answering right now. Nothing was recorded. Try again shortly.';
     }
-    return 'The decision was not recorded. Keep this note, reload the proposal, and try again.';
+    return 'Your decision was not recorded. Keep your note, reload the proposal, and try again.';
   }
 
   async function recordDecision() {
     if (inFlight || !['approve', 'reject'].includes(selectedAction)) return;
     const validationMessage = validateNote();
     if (validationMessage !== null) {
-      dialog.close();
       showStatus(validationMessage, { error: true });
       reason.focus();
       return;
     }
 
     setPending(true);
-    dialogCopy.textContent = selectedAction === 'approve'
-      ? 'Recording approval after fresh source and policy checks…'
-      : 'Recording rejection after fresh source and policy checks…';
+    showStatus(selectedAction === 'approve' ? 'Checking the source once more, then recording your approval…' : 'Checking the source once more, then recording your rejection…');
 
     try {
       const response = await fetch(
@@ -151,17 +136,8 @@ if (form && reason && status && byteCount && dialog && dialogTitle && dialogKick
       }
       window.location.assign(statusUrl.href);
     } catch (error) {
-      const message = recoveryMessage(error?.code);
-      const reloadRequired = ['decision-evidence-mismatch', 'decision-evidence-conflict', 'review-expired', 'decision-expired']
-        .includes(error?.code);
       setPending(false);
-      if (reloadRequired) {
-        dialog.close();
-        showStatus(message, { error: true, focus: true });
-      } else {
-        dialogCopy.textContent = message;
-        confirmButton.focus();
-      }
+      showStatus(recoveryMessage(error?.code), { error: true, focus: true });
     }
   }
 
@@ -170,7 +146,7 @@ if (form && reason && status && byteCount && dialog && dialogTitle && dialogKick
   for (const button of actionButtons) {
     button.addEventListener('click', () => {
       if (!['approve', 'reject'].includes(button.dataset.action)) return;
-      openConfirmation(button.dataset.action, button);
+      openSheet(button.dataset.action, button);
     });
   }
   cancelButton.addEventListener('click', () => dialog.close());

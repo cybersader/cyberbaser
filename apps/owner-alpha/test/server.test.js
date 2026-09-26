@@ -562,7 +562,7 @@ describe('privileged proposal review routes', () => {
     expect(opened.body).toContain('Decided');
     expect(opened.body).toContain('docs/example.md');
     expect(opened.body).toContain('changed-proposed');
-    expect(opened.body).toContain('source remains unchanged');
+    expect(opened.body).toContain('the page itself does not change');
     expect(opened.body).not.toContain('<dt>Queue ID</dt>');
     expect(opened.body).not.toContain('<dt>Trust</dt>');
     expect(opened.response.headers.get('content-security-policy')).toContain("script-src 'self'");
@@ -585,15 +585,15 @@ describe('privileged proposal review routes', () => {
     }
     expect(detailBody).toContain('aria-current="page"');
     expect(detailBody).toContain('<div class="mode-panel mode-panel-changes">');
-    expect(detailBody).toContain('<aside class="decision-dock" aria-label="Your decision">');
-    expect(detailBody).toContain('Decide this proposal');
+    expect(detailBody).toContain('<aside class="decision-bar" aria-label="Your decision">');
+    expect(detailBody).toContain('Approve this suggestion?');
     expect(detailBody).toContain('<details class="technical-evidence">');
     expect(detailBody).toContain('<summary>Technical evidence</summary>');
-    expect(detailBody).toContain('Decision note');
+    expect(detailBody).toContain('id="decision-reason"');
+    expect(detailBody).toContain('This records your decision and nothing else. The page stays exactly as it is.');
     expect(detailBody).toContain('type="button" data-action="reject"');
     expect(detailBody).toContain('type="button" data-action="approve"');
     expect(detailBody).toContain('<dialog id="decision-dialog"');
-    expect(detailBody).toContain('Source remains unchanged');
     expect(detailBody).toContain('anonymous-contributor');
     expect(detailBody).toContain('&lt;/pre&gt;&lt;script&gt;the&lt;/script&gt;');
     expect(detailBody).toContain('Correct &lt;/pre&gt;&lt;script&gt;globalThis.pwned = true&lt;/script&gt; safely.');

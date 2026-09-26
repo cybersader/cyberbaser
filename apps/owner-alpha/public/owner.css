@@ -304,90 +304,81 @@ body.proposal-review-page {
 .references h3 { margin: 0; font-size: 0.92rem; }
 .evidence-links { display: grid; gap: 0.45rem; margin: 0.65rem 0 0; padding-left: 1.25rem; }
 
-.decision-section {
-  border-top: 1px solid var(--review-line-strong);
-  padding-top: 2rem;
-}
-.decision-boundary-copy,
 .policy-advisory {
   max-width: 44rem;
-  line-height: 1.65;
-}
-.decision-boundary-copy { color: var(--review-muted); }
-.policy-advisory {
+  margin: 0 0 1rem;
   border-left: 3px solid var(--review-attention);
   padding: 0.65rem 0.9rem;
   background: var(--review-attention-soft);
   color: var(--review-attention);
+  line-height: 1.55;
 }
-.proposal-review-page #review-decision-form {
-  margin-top: 1.4rem;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-.proposal-review-page #review-decision-form label { color: var(--review-ink); }
-.field-help { margin: -0.15rem 0 0.7rem; color: var(--review-muted); font-size: 0.9rem; }
-.proposal-review-page textarea.decision-reason {
-  min-height: 8.5rem;
-  border: 1px solid var(--review-line-strong);
-  border-radius: 0.4rem;
-  background: var(--review-sheet);
-  color: var(--review-ink);
-  font: 1rem/1.6 ui-sans-serif, system-ui, sans-serif;
-}
-.decision-form-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-top: 0.8rem;
-}
-.byte-count { color: var(--review-muted); font-size: 0.8rem; }
-.byte-count.error { color: var(--review-reject); }
-.decision-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.65rem; }
-.proposal-review-page .decision-actions button,
-.proposal-review-page .dialog-actions button {
-  border: 1px solid transparent;
-  border-radius: 0.38rem;
-  padding: 0.72rem 1rem;
-  font-weight: 760;
-}
-.proposal-review-page button.decision-approve { background: var(--review-accent); color: #fff; }
-.proposal-review-page button.decision-reject { border-color: var(--review-line-strong); background: transparent; color: var(--review-reject); }
-.proposal-review-page button:disabled { cursor: wait; opacity: 0.6; }
-.proposal-review-page #decision-status { margin: 0.8rem 0 0; color: var(--review-muted); }
-.proposal-review-page #decision-status.error { color: var(--review-reject); }
 
+/* The decision sheet: one question, one confirmation. */
 #decision-dialog {
-  width: min(32rem, calc(100% - 2rem));
+  width: min(30rem, calc(100% - 2rem));
   max-height: calc(100vh - 2rem);
   margin: auto;
   overflow: auto;
   border: 1px solid var(--review-line-strong);
-  border-radius: 0.6rem;
+  border-radius: 0.7rem;
   padding: 0;
   background: var(--review-sheet);
   color: var(--review-ink);
   box-shadow: 0 1.4rem 4rem rgb(18 27 39 / 24%);
 }
-#decision-dialog::backdrop { background: rgb(18 27 39 / 55%); }
-.decision-dialog-sheet { padding: clamp(1.25rem, 5vw, 2rem); }
-.decision-dialog-sheet h2 { margin-bottom: 0.8rem; }
+#decision-dialog::backdrop { background: rgb(18 27 39 / 50%); }
+.proposal-review-page .decision-sheet {
+  margin: 0;
+  padding: clamp(1.25rem, 5vw, 1.75rem);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.decision-sheet h2 { margin: 0 0 0.9rem; font-size: 1.3rem; line-height: 1.25; }
 .dialog-suggestion {
+  display: grid;
+  gap: 0.15rem;
+  margin: 0 0 1.25rem;
+  padding: 0.7rem 0.9rem;
   border-left: 3px solid var(--review-accent);
-  padding: 0.65rem 0.85rem;
   background: var(--review-accent-soft);
   color: var(--review-ink);
-  font-family: Charter, "Bitstream Charter", Cambria, Georgia, serif;
-  font-size: 1.05rem;
 }
-.dialog-actions { display: flex; justify-content: flex-end; gap: 0.65rem; margin-top: 1.5rem; }
+.dialog-suggestion strong { font-family: Charter, "Bitstream Charter", Cambria, Georgia, serif; font-size: 1.05rem; font-weight: 600; }
+.dialog-suggestion span { color: var(--review-muted); font-size: 0.85rem; }
+.proposal-review-page .decision-sheet label { margin-bottom: 0.2rem; color: var(--review-ink); font-size: 1rem; }
+.field-help { margin: 0 0 0.6rem; color: var(--review-muted); font-size: 0.9rem; }
+.proposal-review-page textarea.decision-reason {
+  min-height: 5.5rem;
+  border: 1px solid var(--review-line-strong);
+  border-radius: 0.45rem;
+  background: var(--review-sheet);
+  color: var(--review-ink);
+  font: 1rem/1.55 ui-sans-serif, system-ui, sans-serif;
+}
+.byte-count { display: none; margin-top: 0.35rem; color: var(--review-muted); font-size: 0.8rem; }
+.byte-count.visible { display: block; }
+.byte-count.error { color: var(--review-reject); }
+.proposal-review-page #decision-status { min-height: 0; margin: 0.6rem 0 0; color: var(--review-muted); line-height: 1.5; }
+.proposal-review-page #decision-status:empty { display: none; }
+.proposal-review-page #decision-status.error { color: var(--review-reject); }
+.decision-boundary { margin: 1.1rem 0 0; color: var(--review-muted); font-size: 0.92rem; line-height: 1.55; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 0.65rem; margin-top: 1.25rem; }
+.proposal-review-page .decision-actions button,
+.proposal-review-page .dialog-actions button {
+  border: 1px solid transparent;
+  border-radius: 0.42rem;
+  padding: 0.68rem 1.05rem;
+  font-weight: 720;
+}
+.proposal-review-page button.decision-approve { background: var(--review-accent); color: #fff; }
+.proposal-review-page button.decision-reject { border-color: var(--review-line-strong); background: transparent; color: var(--review-ink); }
 .proposal-review-page .dialog-back { border-color: var(--review-line-strong); background: transparent; color: var(--review-ink); }
 .proposal-review-page #decision-confirm[data-action="approve"] { background: var(--review-approve); color: #fff; }
 .proposal-review-page #decision-confirm[data-action="reject"] { background: var(--review-reject); color: #fff; }
+.proposal-review-page button:disabled { cursor: wait; opacity: 0.6; }
 
 .technical-evidence {
   margin-top: 3.5rem;
@@ -446,13 +437,10 @@ body.proposal-review-page {
 
 @media (max-width: 700px) {
   .proposal-review-page .review-shell { width: min(100% - 1.25rem, 54rem); }
-  .section-heading,
-  .decision-form-footer { align-items: flex-start; flex-direction: column; }
+  .section-heading { align-items: flex-start; flex-direction: column; }
   .proposal-row-meta { display: grid; }
   .exact-change-grid,
   .technical-evidence-body { grid-template-columns: 1fr; }
-  .decision-actions { width: 100%; }
-  .decision-actions button { flex: 1 1 8rem; }
   #decision-dialog {
     width: 100%;
     max-width: none;
@@ -497,7 +485,7 @@ body.proposal-review-page {
   #decision-dialog { box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 50%); }
 }
 
-/* Review reading modes, semi-rendered projection, and the collapsible decision dock. */
+/* Review reading modes, semi-rendered projection, and the decision bar and sheet. */
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -762,80 +750,57 @@ body.proposal-review-page {
 }
 .mode-unavailable p { margin: 0.3rem 0 0.8rem; line-height: 1.55; }
 
-.decision-dock {
-  position: fixed;
+/* The decision bar: what is being decided, and the two real actions. */
+.decision-bar {
+  position: sticky;
   right: 0;
   bottom: 0;
   left: 0;
   z-index: 26;
-  border-top: 4px solid var(--review-accent);
+  margin-top: 2.5rem;
+  border-top: 1px solid var(--review-line-strong);
   background: var(--review-sheet);
-  box-shadow: 0 -6px 24px rgb(24 32 42 / 18%);
+  box-shadow: 0 -4px 18px rgb(24 32 42 / 10%);
 }
-.decision-dock .dock-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.5rem;
-  width: min(84rem, 100%);
-  margin: 0 auto;
-  padding: 0.85rem clamp(1.15rem, 4.5vw, 3.25rem);
-  cursor: pointer;
-  list-style: none;
-}
-.decision-dock .dock-bar::-webkit-details-marker { display: none; }
-.dock-summary {
+.decision-bar-inner {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.3rem 1.1rem;
-  min-width: 0;
-}
-.dock-attention {
-  color: var(--review-attention);
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.dock-labels {
-  color: var(--review-muted);
-  font-size: 0.74rem;
-  font-weight: 760;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-.dock-toggle {
-  flex: 0 0 auto;
-  padding: 0.7rem 1.15rem;
-  border: 2px solid var(--review-accent);
-  background: var(--review-accent);
-  color: #fff;
-  font-weight: 780;
-}
-.decision-dock[open] .dock-toggle,
-.decision-dock details[open] .dock-toggle { background: transparent; color: var(--review-accent); }
-.dock-body {
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
   width: min(84rem, 100%);
-  max-height: 44vh;
   margin: 0 auto;
-  padding: 0 clamp(1.15rem, 4.5vw, 3.25rem) 1.4rem;
-  overflow-y: auto;
-  border-top: 1px solid var(--review-line);
+  padding: 0.8rem clamp(1.15rem, 4.5vw, 3.25rem);
 }
-.dock-body form { border: 0; box-shadow: none; padding: 1rem 0 0; }
-.no-effect-list {
-  margin: 1rem 0 0;
-  padding-left: 1.15rem;
+.decision-bar-change {
+  display: grid;
+  flex: 1 1 16rem;
+  gap: 0.1rem;
+  min-width: 0;
+  margin: 0;
+}
+.decision-bar-change strong {
+  overflow: hidden;
+  font-family: Charter, "Bitstream Charter", Cambria, Georgia, serif;
+  font-size: 1.02rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.decision-bar-change span {
+  overflow: hidden;
   color: var(--review-muted);
-  font-size: 0.78rem;
-  line-height: 1.5;
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+.decision-actions { display: flex; flex: 0 0 auto; gap: 0.6rem; }
+.decision-noscript { flex-basis: 100%; margin: 0; color: var(--review-muted); font-size: 0.85rem; }
 
 @media (max-width: 720px) {
   .review-modes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .proof-grid { grid-template-columns: minmax(0, 1fr); }
-  .decision-dock .dock-bar { flex-wrap: wrap; gap: 0.75rem; }
-  .dock-toggle { width: 100%; text-align: center; }
-  .dock-body { max-height: 62vh; }
+  .decision-bar-change { flex-basis: 100%; }
+  .decision-actions { width: 100%; }
+  .decision-actions button { flex: 1 1 8rem; }
 }

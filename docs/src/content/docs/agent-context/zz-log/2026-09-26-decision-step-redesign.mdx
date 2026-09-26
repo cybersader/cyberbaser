@@ -1,0 +1,43 @@
+---
+title: "2026-09-26 · Decision step redesign"
+description: "Rebuilt the owner review's decision step from the owner's steps outward after the maintainer named it the weakest part of a surface that still felt generated: a sticky bar with the two actions and one sheet that asks why, states the boundary once, and confirms."
+date: 2026-09-26
+status: implementation
+tags: [design, testing, contribution]
+---
+
+## The verdict this answers
+
+The maintainer said the review UX still feels generated rather than designed, and that the decision dock and confirmation are the worst of it. They asked for good modern UX applied adversarially, reasoning in steps for the audience rather than in what the interface looks like. This pass took the decision step only; the inbox, the reading modes, and the receipt were left alone.
+
+## Reading the old step as an owner
+
+An owner reviewing a wording suggestion wants three things: to understand what changes, to decide with confidence, and to trust that deciding cannot break anything. The old step got in the way of all three:
+
+- A fixed disclosure dock permanently took the bottom of the viewport, shouting **OWNER ACTION REQUIRED** in uppercase under a header that already said **Needs your decision**, and its one button only expanded the dock rather than doing anything.
+- The boundary was restated four times in system vocabulary: "records intent only", "durable decision receipt", "queue lifecycle", "exact change", a five-bullet no-effect list, then the confirmation, then the receipt. Repetition reads as anxiety, and vocabulary from the architecture reads as a machine talking.
+- The note was demanded before the action: clicking Approve with an empty note produced an error, then a second click opened a confirmation. Three steps and an error trap for one decision.
+- Trust labels such as **anonymous · full-review** sat in the dock where they mean nothing to the person deciding, and a byte counter ran at all times.
+
+## What changed
+
+- **A sticky bar** replaces the dock: the change in a few words, the page path, and the two real actions. Nothing expands. The header's attention label is gone; the page is the decision.
+- **One sheet** replaces the note-then-error-then-dialog sequence. Approve or Reject opens it, focus lands in the note, the question is **Why?** with the help "A short note, kept with your decision", the boundary is one plain line ("This records your decision and nothing else. The page stays exactly as it is."), and the confirming button names the act: **Approve suggestion** or **Reject suggestion**. Validation happens on confirm, inside the sheet, and the note survives a retry.
+- **Plain words** throughout the step and in the inbox lede. The byte counter appears only within 512 bytes of the limit. Retry and reload messages say what happened and what to do, never a code.
+- **Same safety.** The note is still required, the confirmation is still a separate deliberate act, the server still reloads and revalidates before recording, the receipt still leads with **Source unchanged**, and no HTTP or authority contract changed.
+
+Visible verbs stay **Approve** and **Reject**: they are precise for a suggestion, they are the decision model's own words, and renaming them would have rippled through the contract, the docs, and the tests for no gain in clarity.
+
+## Checks
+
+```text
+bun test apps/owner-alpha/test
+  230 passed, 4 skipped, 0 failed
+OWNER_ALPHA_ACCEPTANCE=1 bun test apps/owner-alpha/test/proposal-review-browser.test.js
+  1 passed, 48 expectations: bar shows the change, Approve opens the sheet with focus in the
+  note, confirm with an empty note is refused inside the sheet, the counter appears only near
+  the limit, Escape closes and returns focus, the phone layout anchors the sheet to the bottom,
+  a busy retry keeps the note, both receipts render, the inbox moves decided items
+```
+
+Screenshots of the new bar and both sheets were inspected directly during the pass. The checkpoint pack's section C, the UI review page, and the UX research flow now describe the bar and sheet. The maintainer has not reviewed the redesigned step; the checkpoint remains prepared and unrun.

@@ -31,7 +31,7 @@ Every mode replays the declared exact operations over the pinned base that this 
 
 The model behind those rungs is canonical in [Review projection model](/cyberbaser/design/review-projection-model/).
 
-The decision surface is a collapsible dock fixed to the bottom of the page. Collapsed it shows attention, exact scope, trust tier and route, and one primary action; expanded it holds the required note, both actions, and the decision-only boundary. It opens without JavaScript.
+The decision surface is a sticky bar at the bottom of the page holding the change in a few words, the page path, and the Approve and Reject actions. Either action opens one sheet that asks for the owner's note, states in one line that deciding records the decision and changes nothing on the page, and confirms. Recording a decision needs scripting; reading never does.
 
 ## Which surface to use now
 
@@ -100,15 +100,9 @@ The contributor's rationale and reference links follow the reading. Repository, 
 
 ### 3. Decide deliberately
 
-Write a required **Decision note**, then choose **Approve** or **Reject**. The first action opens a confirmation sheet; it does not submit the decision.
+Choose **Approve** or **Reject** in the bar. Neither records anything by itself: each opens a sheet that names the change, asks **Why?** for a short required note, and states that this records your decision and nothing else. **Approve suggestion** or **Reject suggestion** in the sheet is the only step that records.
 
-The confirmation repeats the selected action and states:
-
-- the decision is immutable;
-- source remains unchanged; and
-- no application or publication begins.
-
-The server reloads and independently validates the proposal, source, and policy when the final confirmation is submitted.
+The server reloads and independently validates the proposal, source, and policy when that confirmation is submitted.
 
 ### 4. Read the receipt
 

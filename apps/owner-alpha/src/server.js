@@ -395,7 +395,7 @@ function reviewListPage({ overlay, nextCursor }) {
 <header class="owner-header review-list-header">
 <p class="surface-label">Owner review</p>
 <h1>Proposals</h1>
-<p class="lede">Read each suggested change and record your decision. Approval records intent only; source remains unchanged.</p>
+<p class="lede">Read each suggestion and decide. Deciding records your call; the page itself does not change.</p>
 <nav class="review-jump-links" aria-label="Proposal review sections"><a href="#needs-review">Needs review</a><a href="#decided">Decided</a></nav>
 </header>
 <section class="review-section" id="needs-review" aria-labelledby="actionable-heading">
@@ -720,7 +720,6 @@ function reviewIdentityHeader(entry, view) {
   const references = evidenceLinks(proposal.submission.evidence);
   return `<header class="owner-header review-detail-header">
 <a class="back-link" href="/owner/review">Back to Proposals</a>
-<p class="attention identity-attention">Needs your decision</p>
 <h1>${escapeHtml(changeName(view))}</h1>
 <p class="proposal-summary">${escapeHtml(compactReviewText(proposal.submission.rationale, 200))}</p>
 <div class="identity-meta">
@@ -737,49 +736,40 @@ ${references}
 </header>`;
 }
 
-function decisionDock({ entry, csrfToken, view }) {
+function decisionStep({ entry, csrfToken, view }) {
   const { summary } = entry;
-  const policyAdvisory = summary.route === 'reject'
-    ? '<p class="policy-advisory"><strong>Policy recommends rejection.</strong> Review the wording and evidence before recording your decision.</p>'
+  const advisory = summary.route === 'reject'
+    ? '<p class="policy-advisory">Your policy recommends rejecting this one. Read the wording and references first.</p>'
     : '';
-  return `<aside class="decision-dock" aria-label="Your decision">
-<details id="decision-dock-details">
-<summary class="dock-bar">
-<span class="dock-summary"><span class="dock-attention">Owner action required</span><strong>1 exact change in 1 page</strong><span class="dock-labels">${escapeHtml(summary.tier)} \u00b7 ${escapeHtml(summary.route)}</span></span>
-<span class="dock-toggle">Decide this proposal</span>
-</summary>
-<div class="dock-body">
-${policyAdvisory}
-<p class="decision-boundary-copy"><strong>Approval records intent only.</strong> The source and policy are checked again when you confirm. Source remains unchanged.</p>
-<form id="review-decision-form" data-queue-id="${escapeHtml(summary.queueId)}" data-review-evidence-digest="${escapeHtml(summary.reviewEvidenceDigest)}" data-csrf="${escapeHtml(csrfToken)}" data-max-reason-bytes="${OWNER_DECISION_REASON_MAX_BYTES}" data-suggestion-label="${escapeHtml(changeName(view))}">
-<label for="decision-reason">Decision note</label>
-<p class="field-help" id="decision-note-help">Required. This note becomes part of the durable decision receipt.</p>
-<textarea class="decision-reason" id="decision-reason" name="reason" maxlength="${OWNER_DECISION_REASON_MAX_BYTES}" aria-describedby="decision-note-help decision-byte-count" required></textarea>
-<div class="decision-form-footer"><span id="decision-byte-count" class="byte-count">0 of ${OWNER_DECISION_REASON_MAX_BYTES} UTF-8 bytes</span><div class="decision-actions">
+  const change = escapeHtml(changeName(view));
+  const sourcePath = escapeHtml(summary.source.path);
+  // One sticky bar with the two real actions, and one sheet that asks the only
+  // question the owner has to answer. The boundary is stated once, in the sheet,
+  // in plain words, and again on the receipt.
+  return `<aside class="decision-bar" aria-label="Your decision">
+<div class="decision-bar-inner">
+<p class="decision-bar-change"><strong>${change}</strong><span>${sourcePath}</span></p>
+<div class="decision-actions">
 <button type="button" data-action="reject" class="decision-reject">Reject</button>
 <button type="button" data-action="approve" class="decision-approve">Approve</button>
-</div></div>
+</div>
+<noscript><p class="decision-noscript">Recording a decision needs scripting enabled in this browser.</p></noscript>
+</div>
+</aside>
+<dialog id="decision-dialog" aria-labelledby="decision-dialog-title">
+<form id="review-decision-form" class="decision-sheet" data-queue-id="${escapeHtml(summary.queueId)}" data-review-evidence-digest="${escapeHtml(summary.reviewEvidenceDigest)}" data-csrf="${escapeHtml(csrfToken)}" data-max-reason-bytes="${OWNER_DECISION_REASON_MAX_BYTES}" data-suggestion-label="${change}">
+<h2 id="decision-dialog-title">Approve this suggestion?</h2>
+<p class="dialog-suggestion" id="decision-dialog-suggestion"><strong>${change}</strong><span>${sourcePath}</span></p>
+${advisory}
+<label for="decision-reason">Why?</label>
+<p class="field-help" id="decision-note-help">A short note, kept with your decision.</p>
+<textarea class="decision-reason" id="decision-reason" name="reason" rows="3" maxlength="${OWNER_DECISION_REASON_MAX_BYTES}" aria-describedby="decision-note-help decision-byte-count" required></textarea>
+<span id="decision-byte-count" class="byte-count" aria-live="polite"></span>
 <p id="decision-status" class="status" role="status" aria-live="polite" tabindex="-1"></p>
-<dialog id="decision-dialog" aria-labelledby="decision-dialog-title" aria-describedby="decision-dialog-copy">
-<div class="decision-dialog-sheet">
-<p class="section-kicker" id="decision-dialog-kicker">Confirm decision</p>
-<h2 id="decision-dialog-title">Confirm decision</h2>
-<p class="dialog-suggestion" id="decision-dialog-suggestion"></p>
-<p id="decision-dialog-copy">This decision is immutable. Source remains unchanged, and no application or publication begins.</p>
-<div class="dialog-actions"><button type="button" class="dialog-back" data-dialog-cancel>Back</button><button type="button" id="decision-confirm">Confirm decision</button></div>
-</div>
-</dialog>
+<p id="decision-dialog-copy" class="decision-boundary">This records your decision and nothing else. The page stays exactly as it is.</p>
+<div class="dialog-actions"><button type="button" class="dialog-back" data-dialog-cancel>Cancel</button><button type="button" id="decision-confirm" data-action="approve">Approve suggestion</button></div>
 </form>
-<ul class="no-effect-list">
-<li>Records an immutable decision and nothing else.</li>
-<li>Changes no queue lifecycle.</li>
-<li>Starts no application or source write.</li>
-<li>Creates no commit or push.</li>
-<li>Starts no rebuild, deployment, or publication.</li>
-</ul>
-</div>
-</details>
-</aside>`;
+</dialog>`;
 }
 
 function reviewDetailPage({ entry, csrfToken, mode = REVIEW_MODE_KEYS[0] }) {
@@ -793,7 +783,7 @@ ${reviewIdentityHeader(entry, view)}
 ${comparisonPanel(entry, mode)}
 ${technicalEvidence(entry)}
 </main>
-${decisionDock({ entry, csrfToken, view })}`,
+${decisionStep({ entry, csrfToken, view })}`,
   });
 }
 
