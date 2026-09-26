@@ -1,0 +1,55 @@
+---
+title: "2026-09-24 · Authority boundary audit of the review branch"
+description: "Adversarially inspected the WP5 intake, queue-review, and owner decision-store paths for any route to canonical writes, owner jobs, Git, or publication; corrected the acceptance test's own Git observation instead of tolerating index drift."
+date: 2026-09-24
+status: implementation
+tags: [contribution, testing, governance]
+---
+
+## What this session did
+
+This was the first of the two bounded cloud follow-ups named in the [cloud review handoff](/cyberbaser/agent-context/zz-log/2026-09-24-cloud-review-handoff/): inspect whether a proposal or an owner decision on `feature/live-proposal-review` can write canonical content, start an owner job, or trigger Git or publication, and repair verified defects with tests. It did not merge, deploy, expose a lane, change a roadmap decision, or pass any human gate. The maintainer checkpoint remains unrun.
+
+## CI state and the earlier failure
+
+All six workflows on the draft PR head pass. The one earlier failure (owner-alpha container, run 6) was the same-host acceptance test seeing `.git/index` in the owner checkout change mode from 0644 to 0600 with identical bytes. The head commit tolerated that one mode. Root cause, reproduced locally:
+
+- Opening the proposal queue raises the process umask to exclude group and other bits (`packages/proposal-queue/src/filesystem.js`), and the acceptance test opens the queue in-process.
+- The test's own Git observation helper ran `git status` without `GIT_OPTIONAL_LOCKS=0`. When a checked-out file's mtime equals the index mtime (racy on a fast runner), `git status` re-hashes it and rewrites the index through a lock file, which inherits the raised umask.
+- The review path itself already runs every Git command with optional locks disabled and never issues a status-style command, so it was not the writer.
+
+The correction removes the mode exemption and disables optional locks in the test's observation helper, so the no-effect snapshot compares every mode again, including the index. A new unit test pins the review adapter: verification issues only `cat-file`, `ls-tree`, `merge-base`, `remote`, and `rev-parse`, never passes `--git-dir` or `--work-tree`, and leaves a deliberately racy index byte-, mode-, and inode-identical; the same file's plain-environment `git status` control rewrites that index, which proves the premise rather than assuming it.
+
+## Audit result
+
+No verified authority-boundary defect was found. The specific claims, each checked by reading the code and its tests:
+
+- **Intake writes only inside the queue root.** Every write is an exclusive-create, no-follow, mode 0600 file in `staging/`, committed by directory rename into `pending/`. Only `state.json` is ever replaced. Queue IDs are strict `Q-<uuid v4>`, root entries are allowlisted, and the root must equal its realpath.
+- **Intake Git is read-only with fixed argv.** `rev-parse --is-bare-repository`, `cat-file -t|-s|-p`, `rev-parse --verify <rev>^{commit}`, and `ls-tree -z <rev> -- :(literal)<path>` against the operator's bare `gitDir`, with `protocol.allow=never`, `GIT_OPTIONAL_LOCKS=0`, no system or global config, and no shell. No request string reaches Git arguments or environment.
+- **The review socket accepts only `list` and `load`.** Approve, reject, delete, purge, and every other operation return `unsupported-operation`. The socket and its parent must be private, runtime-owned, and symlink-free.
+- **Owner decisions are create-once and decision-only.** The record is written by hard-linking a private temporary into place under a child-held `flock`, so a second contradictory decision fails with `decision-already-recorded` and an identical retry replays. The contract forbids any `authorityScope` other than `decision-only` and requires all seven effect flags to be false. Decision files live under `proposal-review/decisions/` in the ignored owner store; durable job recovery scans only `jobs/`, so a decision can never be enumerated as a job.
+- **Nothing in the pipeline, apply, Git-publish, checks, or live-confirm modules references proposals or decisions.** The only Save entry is `/api/edits`, which needs an edit session plus the per-device CSRF token. The owner pages carry a strict CSP (`script-src 'self'`, no inline scripts or attributes), every proposal-derived string is HTML-escaped, and evidence links are limited to canonical HTTPS URLs by the proposal contract.
+- **Proposal v1 bytes and digests are unchanged** by review or decision. The acceptance test now compares the queue tree, checkout, remote, and owner store outside `proposal-review/` with every mode included.
+
+## Hardening notes, not fixed here
+
+These are availability or defense-in-depth observations. None reaches canonical content, an owner job, Git mutation, or publication, so they were recorded rather than changed on this branch.
+
+- The intake server never calls the queue's `expireDue` while running; expiry happens only during startup recovery. A flood of valid submissions can therefore hold capacity until restart. Lane B is disabled, local-only, and unexposed, so this is not a live exposure.
+- One queue entry whose evidence can no longer be resolved (pruned binding file, collected Git objects) fails startup recovery and the socket's `list` for the whole queue. Fail-closed, but coarse.
+- The queue's exclusive-create helper removes the target on any failure, including `EEXIST`. Its only callers write into a freshly created stage directory or a UUID-named temporary, so the case is unreachable from intake input, but the helper should not delete a file it did not create.
+- Owner-alpha startup recovers the decision store even when `proposalReview.enabled` is false. That creates the private `proposal-review/` layout and makes a corrupt decision directory block job recovery on a disabled install. Existing tests assert this ordering, so it is left as a documented choice.
+- The review contract's JSON Schema is looser than its runtime validators; the README already says runtime validation is authoritative.
+
+## Local checks
+
+```text
+bun test apps/owner-alpha/test/proposal-decisions.test.js apps/owner-alpha/test/server.test.js apps/owner-alpha/test/proposal-review-client.test.js
+  56 passed, 0 failed (after the new unit test)
+OWNER_ALPHA_ACCEPTANCE=1 bun test apps/owner-alpha/test/proposal-review-acceptance.test.js
+  1 passed, 0 failed (strict index comparison restored)
+bun test packages/proposal-review/test packages/proposal-queue/test apps/account-free-intake/test packages/account-free-intake/test
+  95 passed, 0 failed
+```
+
+Local Git was 2.43; the CI runner uses 2.55. The draft PR's CI must be read separately for the corrected acceptance test.

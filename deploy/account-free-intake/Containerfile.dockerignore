@@ -41,6 +41,13 @@
 !packages/proposal-queue/bun.lock
 !packages/proposal-queue/src/
 !packages/proposal-queue/src/**
+!packages/proposal-review/
+!packages/proposal-review/package.json
+!packages/proposal-review/bun.lock
+!packages/proposal-review/src/
+!packages/proposal-review/src/**
+!packages/proposal-review/schema/
+!packages/proposal-review/schema/**
 
 !deploy/
 !deploy/account-free-intake/

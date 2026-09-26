@@ -92,6 +92,7 @@ describe('WP4 read-only CI structure', () => {
       'packages/trust',
       'packages/proposal',
       'packages/proposal-queue',
+      'packages/proposal-review',
       'packages/account-free-intake',
       'apps/account-free-intake',
     ]);
@@ -152,6 +153,7 @@ describe('WP4 read-only CI structure', () => {
       'packages/trust',
       'packages/proposal',
       'packages/proposal-queue',
+      'packages/proposal-review',
       'packages/account-free-intake',
       'apps/account-free-intake',
     ]);

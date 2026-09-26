@@ -1,0 +1,174 @@
+---
+title: Owner review maintainer checkpoint
+description: "Launch steps, realistic fixtures, questions, and explicit pass/fail criteria for the maintainer checkpoint of the real four-mode owner review. This pack prepares the checkpoint; it does not run or pass it."
+sidebar:
+  order: 10
+status: research
+tags: [setup, governance, testing, contribution]
+---
+
+This is the practical pack for the follow-up maintainer checkpoint named in [Current focus](/cyberbaser/getting-started/). It covers the real authenticated owner review, not the static mockup. The maintainer runs it in one sitting, unprompted, and records the result in a dated log entry using the template at the end.
+
+:::caution[Prepared, not run]
+No checkpoint has been run against the ported four-mode surface, and none has passed. Nothing on this page is evidence. A pass here is maintainer direction evidence for the review presentation only. It does not establish independent usability, does not authorize any intake lane, and does not give approval any source-write authority.
+:::
+
+## What the checkpoint decides
+
+Four open questions, all recorded in the [owner review port log](/cyberbaser/agent-context/zz-log/2026-08-22-owner-review-port/), plus one boundary check that must hold regardless:
+
+1. Which reading mode should be the default.
+2. Whether the semi-rendered reading projection (rung R1) reads well enough, and whether revealing exact source only at changed passages is the right trade.
+3. Whether the decision bar is prominent enough, and whether the single confirmation sheet reads as deliberate rather than obstructive.
+4. Whether Compare earns its place once full-width reading exists.
+5. Whether **Approve** is understood as decision-only before the maintainer confirms it.
+
+Answers to 1 through 4 change defaults and presentation. They do not change the review projection model, the proposal contract, or the decision boundary. Question 5 is a hard gate: if approval is misread as publication, the checkpoint fails whatever else passes.
+
+## Before you start
+
+- Run from a clone of `feature/live-proposal-review` with dependencies installed for `docs/`, `apps/owner-alpha/`, `apps/account-free-intake/`, and the packages they depend on. The [owner-alpha container workflow](https://github.com/cybersader/cyberbaser/blob/main/.github/workflows/owner-alpha-container.yml) lists the exact install commands.
+- Use a desktop browser at roughly 960 pixels wide first, then one narrow pass at about 400 pixels. Note the browser and whether the system was in dark mode.
+- Do the reading and decisions without coaching. Read this page before the session, not during it. The questions below are asked cold and answered in your own words.
+- Budget about twenty minutes. Every proposal in the fixture is disposable, so it is safe to approve or reject all of them.
+
+## Launch
+
+From the repository root:
+
+```bash
+bun run --cwd docs review:owner-alpha
+```
+
+The launcher creates a temporary Git repository with seven pages, a retained source binding, a trust policy, and a private proposal queue; starts the real intake writer and the private review socket; submits the seven proposals below through the real account-free intake; starts the privileged owner routes on loopback; verifies that the inbox lists every proposal; and requests an authenticated browser launch. Enter `b` in the launcher terminal for a fresh one-time sign-in. Press `Ctrl-C` to stop everything and remove the fixture.
+
+The review lives at:
+
+```text
+http://127.0.0.1:4317/owner/review
+```
+
+A browser that did not consume the one-time sign-in gets `403`. Set `CYBERBASER_UI_REVIEW_PORT` if 4317 and 4318 are taken. The launcher writes `.workspace/live-review-ui/status.json` with `state: ready` and the proposal count once the inbox is verified.
+
+In Portagenty, the **owner-review** session runs the same launcher as a visible long-running action.
+
+## The seven proposals
+
+Each proposal is submitted through the real intake as ordinary anonymous Lane B evidence, revalidated independently by owner-alpha, and shown exactly as a real proposal would be. The corpus lives in `apps/owner-alpha/bin/review-checkpoint-corpus.js`, and a focused test asserts that each one exercises what this table claims.
+
+| # | Page | Change | What it exercises |
+|---|---|---|---|
+| 1 | `handbook/backup-retention.md` | One long paragraph rewritten | Changes mode over long prose; the changed passage shown as exact source while the rest reads structurally; Compare with long text on both sides |
+| 2 | `research/2025-contributor-survey.md` | Two numbers and a date corrected in one sentence, with a reference link | A small factual change; whether the changed numbers are findable in Changes and Proposed |
+| 3 | `handbook/onboarding-checklist.md` | A link destination inside an ordered list | Structural list rendering; the link is a non-navigating mark, not a live link |
+| 4 | `guides/migration.md` | An obsolete blockquote notice removed | Pure deletion: struck passage in Changes, absence in Proposed, no invented replacement text |
+| 5 | `handbook/incident-response.md` | The `reviewed` date in YAML frontmatter | Page metadata rendering; a change inside frontmatter reveals exact source |
+| 6 | `handbook/quarterly-access-review.md` | One paragraph in a five-section page | The default-mode question: locating one changed paragraph in a long page |
+| 7 | `handbook/on-call-rota.md` | One sentence on a page with a callout, a table, a task list, a wikilink, and inline code | Semi-rendering limits: unsupported constructs shown as exact source with a stated reason |
+
+Proposal 4 has an empty replacement. Proposals 1 and 6 are the two where Compare could plausibly help. Proposal 7 is the only one where the projection degrades blocks to exact source.
+
+## Suggested order
+
+1. Open the inbox. Before clicking anything, answer questions 1 and 2 below.
+2. Open proposal 6 in whatever mode the surface defaults to. Find the change without opening **Technical evidence**. Then try each of the other modes by tab and by editing `?mode=` in the address.
+3. Open proposal 1 and read it in Changes, Proposed, and Compare.
+4. Open proposal 7 and read the labels on the degraded blocks. Open proposal 5 and find the change in the metadata. Open proposal 3 and try to click the link.
+5. Open proposal 4 and describe what the page will read like if it is later applied.
+6. Answer question 3 below before touching the decision bar. Then reject proposal 4, writing the note in the sheet, and approve proposal 2 the same way. Read each receipt.
+7. Return to the inbox and check where the decided proposals went.
+8. Repeat step 2 with the window at about 400 pixels wide, then in the other color scheme.
+9. Record the result.
+
+## Questions
+
+Asked cold, answered in the maintainer's own words before the surface explains anything.
+
+1. What is this surface for, and who put these proposals here?
+2. In the proposal you have open, which words are current and which are proposed?
+3. What will **Approve** do, and what will it not do?
+4. What is required from you before either action is available?
+5. What does the label **Exact source · not interpreted here** mean, and is the page broken where it appears?
+
+Direction questions, answered after the walkthrough:
+
+6. Which mode should open by default, and why?
+7. Is structural reading with exact source at changed passages good enough for reviewing, or do you need the published page (R3) or resolved vault links (R2) before the next step?
+8. Is the decision bar prominent enough, and did the note and confirmation sheet feel deliberate or obstructive?
+9. Did Compare add anything that the full-width modes did not?
+
+## Pass and fail criteria
+
+Each area is recorded as **pass** or **fail** with a note. The checkpoint passes only when A, B, C, and E pass and D is recorded. One failing area means the checkpoint has not passed; record which and why, then iterate.
+
+### A. Reading modes
+
+**Pass when** the maintainer, on proposals 1, 4, and 6 and without opening Technical evidence, states in one sentence what changes and where; identifies current versus proposed wording correctly in Changes for every proposal opened; switches modes by tab, by keyboard arrows, and by editing the address; and locates the changed paragraph in proposal 6 within about a minute in the default mode.
+
+**Fail when** the direction of any change is misread (removed text taken as added, or the reverse); Technical evidence is needed to learn what changed; or the changed paragraph in proposal 6 cannot be found in the default mode without help.
+
+**Record** the chosen default mode and the reason.
+
+### B. Semi-rendering limits
+
+**Pass when**, on proposal 7, the maintainer reads the degraded blocks as deliberately shown source with a stated reason and does not report them as a rendering bug after reading the label; understands that no mode is a preview of the published page; recognizes the metadata table on proposal 5 and the non-navigating link on proposal 3 for what they are; and finds the exact-source region on proposals 1 and 6 readable enough to decide.
+
+**Fail when** degraded blocks are reported as broken after the label is read; the view is expected to match the published page; or the exact-source passage on proposal 1 or 6 is judged unreadable for a decision.
+
+**Record** whether R1 is enough for the next adapter step, or whether R2 or R3 is required first. Either answer is direction evidence; a request for R2 or R3 is a scope decision for the maintainer, not a fail.
+
+### C. Decision bar and sheet
+
+The step was redesigned on 2026-09-26 after the maintainer named it the weakest part of the surface: a sticky bar holds the change in a few words and the two actions, and either action opens one sheet that asks for the note, states the boundary once in plain words, and confirms. The old expandable dock, its attention label, and the repeated boundary copy are gone.
+
+**Pass when** the maintainer finds the bar without prompting; expects Approve to ask before recording and is not surprised by the sheet; writes the note in the sheet, reads the one boundary line, confirms, and reaches the receipt without help; and rates the bar's prominence as adequate or better.
+
+**Fail when** the actions are not found; the sheet is read as an error or an obstacle rather than the place to decide; the note is read as an error; or the boundary line is missed and the maintainer expects the page to change.
+
+**Record** the prominence rating and any wording that caused hesitation.
+
+### D. Compare
+
+Compare is a keep, rework, or remove decision, and every outcome is a valid record. It counts as a **fail** only when it caused a misreading, for example if the two sides were taken to be different pages or the wrong side was taken as proposed.
+
+**Record** keep, rework, or remove, with the fixture that decided it.
+
+### E. Approve is decision-only
+
+**Pass when**, before confirming, the maintainer says in their own words that approval records an immutable decision and does not write source, commit, push, rebuild, deploy, publish, or change the queue; after the receipt, says that source is unchanged without being prompted; and can say what would have to happen separately for an approved change to reach the page.
+
+**Fail when** approval is believed to publish, schedule application, or change the page; the maintainer expects the page to differ after approval; or the receipt's **Source unchanged** is missed.
+
+This area cannot be traded against the others. A fail here fails the checkpoint.
+
+## Record the result
+
+Copy this into a new dated entry under `docs/src/content/docs/agent-context/zz-log/` and fill it in. Then update the result section of [Owner proposal UI review](/cyberbaser/development/owner-proposal-ui-review/) and `.claude/FOCUS.md` in the same session.
+
+```text
+Checkpoint: real four-mode owner review
+Date · commit · browser · width · color scheme
+
+Cold answers (1–5): verbatim or close paraphrase
+
+| Area | Pass/Fail | Note |
+| A Reading modes | | default mode: |
+| B Semi-rendering | | R1 enough / R2 needed / R3 needed: |
+| C Decision bar and sheet | | prominence: |
+| D Compare | recorded | keep / rework / remove: |
+| E Approve decision-only | | |
+
+Checkpoint: passed / not passed
+Presentation changes requested:
+Next step this unlocks or blocks:
+```
+
+## What a pass does and does not unlock
+
+A pass settles the four presentation questions and lets the next work start: contract selection for the richer change set, then the approved-proposal pipeline adapter described in [Current focus](/cyberbaser/getting-started/). Those remain separate decisions with their own evidence.
+
+A pass does not establish unfamiliar-reader usability or independent-owner operation, does not authorize Lane A installation or Lane B exposure, does not give approval any source-write authority, and does not change the roadmap. A fail records what to change and sends the presentation back for another pass before any of that work begins.
+
+## Evidence boundary
+
+The fixture proves the same-host review seam, independent evidence validation, the authenticated decision boundary, and the interaction mechanics. The corpus test proves that each proposal enters through the real intake, revalidates in owner review, and exercises the projection features this page claims. The maintainer's answers are direction evidence about presentation. Nothing here is a live effect, a shipped lane, or a human usability result.

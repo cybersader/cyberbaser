@@ -1,0 +1,472 @@
+---
+title: Proposal operating model
+description: "A knowledge-base-aligned working model for proposal intent, exact change sets, owner workflow, review UX, realistic fixtures, deployment, and the sequence to implementation."
+status: research
+tags: [research, design, architecture, contribution, governance]
+---
+
+## Why this model is needed
+
+The implemented external proposal path is mechanically strong and product-narrow. A canonical proposal identifies one existing Markdown file and one exact splice. The queue retains that evidence, owner-alpha independently validates it, and the owner can record one immutable Approve or Reject decision with no source or publication effect.
+
+Two maintainer reviews showed that the surrounding product model is not yet coherent:
+
+- a backend-shaped dashboard made technical evidence compete with the content;
+- a content-first redesign still made Current versus Proposed and the required action insufficiently obvious;
+- headings derived from changed words could not identify realistic paragraph, section, page, or multi-operation work; and
+- the interface did not explain where intake, queue, private review, owner decision, later application, Git, rendering, and deployment live.
+
+The answer is not another styling pass and not an isolated schema exercise. Proposal intent, exact operations, workflow, fixtures, UX, and deployment must describe the same product object and preserve the same authority boundaries.
+
+This page is a **working architecture recommendation**, not a locked schema. It synthesizes four context audits, a reconciled project brief, and four coordinated design studies. The planned adversarial subagent lost its API stream, so the main session performed the adversarial reconciliation from the completed evidence. No schema or implementation code changed in this research wave.
+
+## Current-state corrections
+
+The synthesis also found status drift that affects the product mental model:
+
+- at the time of this synthesis, the owner-review implementation, Portagenty action, browser fixture, and related docs were uncommitted local working-tree changes, not merged or deployed product state; current branch state is recorded in the later [cloud handoff log](/cyberbaser/agent-context/zz-log/2026-09-24-cloud-review-handoff/);
+- the public docs page for the local owner-review guide is therefore not live yet;
+- GitHub reports Cyberbase's `trust-gate.yml` workflow in a deleted/inactive state even though the file remains on the default branch, so the offered GitHub path must not currently be described as actively trust-classified;
+- the two-stage decision ledger is installed and has one valid unclassified maintainer row, while older pages still describe it as uninstalled with zero entries; and
+- older architecture sequencing still names the approved-proposal adapter as immediately next, while the maintainer evidence now requires this operating-model and coherent-review gate first.
+
+These are knowledge-ops corrections, not changes to the product essence.
+
+## Local research surface implemented
+
+The realistic fixture corpus and separate static/no-effect review mockup are now implemented locally in the working tree. The truthful editorial inbox contains only ready, retained-blocked, and decided projections; pre-admission failures, adversarial cases, and conceptual examples live in a separate Evidence lab. Wide screens show simultaneous Current and Proposed proof, mobile stacks the same evidence with a visible decision-sheet dismissal, confirmations and receipt previews repeat every affected path and numbered operation, and the eight system locations are selectable authority boundaries rather than an implied automatic pipeline.
+
+Six executable fixtures use the unchanged real proposal-v1 APIs for long-paragraph, sourced-fact, link, insertion, deletion, and frontmatter work. Two single-existing-file multi-operation examples use a separate noncanonical research validator and candidate builder. They deliberately produce no proposal-v2 artifact and are unrepresentable by current v1 lanes or the real same-host review contract. Multi-file and new-file examples remain conceptual and have no queue evidence, decision controls, or application path. Authority-model fixtures illustrate independent decision, application, deployment, and publication axes while causing no effect. The protected authenticated owner-alpha baseline remains byte-identical and mechanically accepted.
+
+Fixture and browser checks are synthetic-mechanical or static-design-only evidence. The focused maintainer comprehension checkpoint remains pending and must be recorded outside automation. No proposal-v2 schema, taxonomy, operation limit, rendered-context contract, owner-review product refactor, application-authority artifact, deployment, or live effect is selected or established by this implementation.
+
+Implementation and repair evidence is recorded in the [proposal review mockup implementation log](/cyberbaser/agent-context/zz-log/2026-08-21-proposal-review-mockup-implementation/). The canonical launch and checkpoint guide is [Proposal review mockup](/cyberbaser/development/proposal-review-mockup/).
+
+## The authority model
+
+```text
+Contributor or authoring spoke
+  │  expresses intent; no source authority
+  ▼
+Lane adapter
+  │  derives exact source-bound operations; no write authority
+  ▼
+Finite private proposal queue
+  │  retains evidence; pending-review or expired only
+  ▼
+Private owner review
+  │  independently revalidates source, policy, integrity, trust, and expiry
+  ▼
+Immutable proposal decision receipt
+  │  Approve or Reject; decision-only; source unchanged
+  ▼
+Future application boundary
+  │  requires a separate owner authority event or explicit durable policy
+  ▼
+Canonical Markdown + version history
+  │  only declared bytes change
+  ▼
+Renderer and deployment spokes
+  │  disposable output and provider observations
+  ▼
+Live publication witness
+```
+
+Four labels should remain understandable throughout the product:
+
+1. **External, proposal only.** A reader, forge, rich editor, CMS-shaped tool, or agent may propose but cannot write or authorize itself.
+2. **Owner server, private evidence.** The queue and review seam retain and validate evidence without becoming source authority.
+3. **Owner decision only.** Approve or Reject records immutable intent and has no source, Git, rebuild, deployment, or publication effect.
+4. **Owner application authority.** A separate event or durable policy may later authorize exact source application after fresh validation.
+
+The docs site explains and launches the system. It is not the privileged review, source, Git, deployment, or publication authority origin.
+
+## The coherent proposal object
+
+The working model has three related but non-interchangeable layers.
+
+### 1. Editorial intent
+
+Editorial intent answers **what is being proposed and why**. It is immutable submitted evidence, not permission.
+
+Recommended core behavior:
+
+- `summary` is required for newly created richer proposals;
+- `title` is optional at the core contract level, because forcing every lane to invent one would repeat the false-authorship problem;
+- native forms should request a title and may require the contributor to confirm or edit a suggestion before submission;
+- `rationale` may be required by a lane or owner policy without being universally required by the core wire contract;
+- category and declared scope remain contributor claims and may only increase scrutiny or expose a mismatch;
+- references are inert contributor-supplied locators, not verified evidence; and
+- provenance records where each accepted field came from without turning carrier identity into trust or authority.
+
+A candidate shape is:
+
+```text
+intent
+├── schemaVersion
+├── title?                  contributor-authored or explicitly adopted
+├── summary                 required concise outcome
+├── rationale?              why the work should happen
+├── categoryClaims          versioned, advisory
+├── declaredScope?          editorial extent and human labels
+├── references[]            inert supporting/context locators
+└── fieldProvenance         direct form, forge title/body, adopted suggestion, etc.
+```
+
+Only text actually supplied or explicitly adopted by the submitter becomes submitted intent. An adapter must not silently summarize, truncate, classify, or generate contributor wording.
+
+### 2. Exact change set
+
+The exact change set answers **which pinned source bytes would change**. It is the enforceable payload but still carries no write authority.
+
+The smallest coherent executable successor to proposal v1 is:
+
+- one repository;
+- one immutable base revision;
+- one existing Markdown file;
+- multiple base-relative, non-overlapping exact operations;
+- one atomic proposal decision; and
+- one candidate constructed in memory by copying every undeclared base slice unchanged.
+
+Multi-file changes and new-file creation are useful conceptual fixtures, but they should not enter the first executable version. They add queue accounting, path authority, workspace locking, recovery, and transactional application questions that do not need to block a truthful single-file multi-operation model.
+
+A working mechanical shape is:
+
+```text
+changeSet
+├── atomic: true
+├── repository
+├── baseRevision
+├── files[]
+│   ├── path
+│   ├── kind: modify
+│   ├── base: byteLength + digest
+│   ├── operations[]
+│   │   ├── operationId
+│   │   ├── anchor
+│   │   ├── start / end
+│   │   ├── expected old bytes
+│   │   └── replacement bytes
+│   └── candidate: byteLength + digest
+└── changeSetDigest
+```
+
+For the first executable profile, `files.length` is exactly one and `kind` is exactly `modify`.
+
+Recommended operation rules:
+
+- all ranges refer to the same immutable base, never an intermediate candidate;
+- operations arrive in canonical ascending range order and are not silently sorted;
+- overlaps and duplicate starts, including two insertions at one boundary, fail closed;
+- dependent or overlapping edits must be combined into one exact bounded replacement;
+- the candidate is built in one left-to-right pass from base slices and replacement bytes;
+- every operation verifies UTF-8 boundaries, exact old bytes, optional context, and individual no-op rejection;
+- the complete set verifies base and candidate lengths and digests;
+- the removed-range union may not cover the complete nonempty existing file; and
+- per-operation, aggregate changed-byte, operation-count, candidate-size, and artifact-size caps must be measured with realistic fixtures before lock.
+
+Paragraph and section work does not require a serializer. A rich adapter may use headings, blocks, or a rendered editor to help a person select content, but it must resolve that interaction to exact source bytes before producing the change set.
+
+### 3. Owner operating evidence
+
+Owner workflow answers **whether the proposal can be reviewed, what the owner decided, and what later effects were separately authorized and observed**.
+
+These axes must remain separate:
+
+| Axis | Authority | Minimum vocabulary | Effect |
+|---|---|---|---|
+| Queue lifecycle | Private queue | `pending-review`, `expired` | Retains or expires evidence only |
+| Exact binding | Deterministic owner validator | verified, stale, ambiguous, invalid, unavailable | Explains whether exact evidence is reviewable |
+| Content fidelity | OFM and policy checks | clean, suspect, damage, not evaluated | Advisory or policy input, never a decision |
+| Trust route | Pinned owner policy | existing tier/route plus reasons | Routes attention; grants no authority |
+| Review attention | Derived owner projection | review, careful review, blocked, none | Explains the current review affordance |
+| Owner decision | Private owner origin | Approve or Reject | Immutable decision-only receipt |
+| Application authority | Future owner event or durable policy | not yet selected | May authorize a later exact application after revalidation |
+| Application result | Owner-controlled application job | exact source and version-control outcomes | Records effects without rewriting the decision |
+| Deployment observation | Read-only provider adapter | pending, succeeded, failed, unavailable | Observes a pushed revision |
+| Publication witness | Read-only live verifier | confirmed, missing, mismatch, unavailable | Supports a live-effect claim |
+
+A single generic `status` would erase the most important distinctions. A stale proposal is not rejected. An approved proposal is not applied. A successful deployment is not necessarily live. A confirmed live page does not retroactively grant source authority.
+
+The exact application-authorization artifact, TTL, revocation model, and durable-policy behavior remain open. Defining that schema now would over-specify the later adapter before the owner has selected the authority event. The locked requirement is narrower: **approval alone can never authorize application**, and any later authority must bind the exact approved evidence and require fresh eligibility checks.
+
+## Proposal identity and presentation metadata
+
+Changed words, operation IDs, file paths, typo heuristics, and proposal IDs are not editorial identity.
+
+The review projection should return a display value together with its provenance:
+
+1. owner-local alias, visibly distinguished and never replacing the original submission;
+2. contributor-authored title;
+3. adapter suggestion, visibly labeled;
+4. a neutral summary-derived label; or
+5. a stable fallback such as `Proposal for <page label>` or `<N>-file proposal · <short digest>`.
+
+Adapter suggestions should be separate content-addressed review evidence keyed to the immutable proposal digest. They may contain one suggested title, summary, category set, or declared scope with generator identity, version, and basis. Regeneration creates a new suggestion artifact. It does not mutate the proposal or become application input.
+
+Owner-local organization should also remain separate and private. A mutable overlay may hold an alias, tags, and private notes. Application policy must ignore it unless an owner explicitly promotes an assessment into a separate immutable evidence artifact.
+
+Existing proposal v1 artifacts remain byte- and digest-stable. A read-only legacy projection may expose absent intent fields and a provenance-marked neutral fallback. Enriching a v1 proposal into true v2 creates a new proposal digest, queue item, review evidence, and decision requirement.
+
+## Editorial taxonomy
+
+The design studies produced two competing taxonomy shapes:
+
+- nine narrow multi-select categories; and
+- six broad primary categories plus local tags.
+
+The adversarial conclusion is to avoid locking either shape before realistic fixtures. The most promising pilot is one broad portable primary category plus optional advisory facets.
+
+Candidate primary categories:
+
+- `correction`
+- `clarification`
+- `expansion`
+- `restructure`
+- `maintenance`
+- `other`
+
+Candidate facets:
+
+- sourcing or citation
+- link repair
+- metadata
+- navigation
+- new content
+
+This avoids forcing citation work, link repair, and metadata into unrelated editorial purposes while keeping the portable core small. The vocabulary should be versioned. Categories remain untrusted claims and may only add requirements or increase scrutiny. Mechanically computed touch facts remain authoritative for policy.
+
+Declared scope also needs separate axes:
+
+- **editorial extent:** fragment, paragraph, section, page, multi-page, or unspecified;
+- **source scope:** actual repository paths and file operations;
+- **operation scope:** operation count, ranges, bytes, lines, and touched constructs; and
+- **publication/policy scope:** visibility, metadata, navigation, or other owner-controlled boundaries.
+
+A mismatch between declared and actual scope is review evidence. It must not silently rewrite the contributor's claim.
+
+## Owner review UX
+
+The next review design should follow the product object instead of exposing the backend model.
+
+### Inbox
+
+Lead with:
+
+- authored proposal title or provenance-marked fallback;
+- concise summary;
+- category and contributor/provenance;
+- actual source scope such as “3 exact changes in 1 page”; and
+- one primary attention condition.
+
+Do not lead with changed text, queue IDs, digests, or trust reason codes.
+
+### Review modes and wide screens
+
+The first static checkpoint showed that simultaneous Current and Proposed columns are useful evidence but are not a sufficient default experience. With a third decision rail, long editorial content collapses into two narrow reading columns. Side-by-side comparison should therefore be one selectable mode inside an extensible review shell, not the only desktop composition.
+
+The next mockups should test at least four content modes against the same exact evidence:
+
+- **Proposed:** the candidate wording at normal reading width;
+- **Current:** the unchanged base wording at normal reading width;
+- **Changes:** a unified or inline editorial change view with additions and removals in shared context; and
+- **Compare:** simultaneous Current and Proposed panes for focused visual comparison.
+
+The default mode remains a measured UX decision, not a schema decision. A first evolvable implementation may begin with fewer modes if its state and component boundary can add the others without changing proposal evidence. The decision surface should collapse, dock, or open as a deliberate sheet so content can use the available width. Its persistent summary should still expose complete atomic scope, reviewability, expiry, plain-language integrity and trust, required owner note, and clear Approve and Reject actions.
+
+The actions remain deliberate. Neither submits immediately. Final confirmation repeats the complete scope and states that the action records intent only and starts no source change, application job, commit, deployment, or publication.
+
+Cyberbaser should not build a general-purpose diff editor or rich-authoring engine from first principles. Research should compare mature reusable source-diff, merge-view, and rendered-authoring primitives against exact-byte preservation, static/no-effect operation, accessibility, long Markdown, mobile behavior, bundle cost, and framework independence before selecting one. No library is selected by this checkpoint.
+
+### Long and multi-operation work
+
+Do not force whole documents into permanently aligned narrow columns. Group by file, provide numbered operation navigation, and let each review mode render bounded shared context or a full-width reading projection. A change-set overview provides file count, operation count, byte totals, and navigation.
+
+Long insertions and replacements may begin with a readable excerpt and offer full proposed text plus exact bytes. Exact content evidence is distinct from technical evidence: old/replacement bytes and ranges belong with the comparison; repository IDs, digests, queue IDs, carrier evidence, and raw reason codes remain under disclosure.
+
+### Mobile
+
+Stack Current then Proposed for each operation and repeat labels. A compact sticky “N changes · Decide” affordance may open a full-width decision sheet. Do not compress desktop columns into miniature panels. Preserve the note across navigation and retry, return focus correctly, and keep raw evidence internally scrollable without page-level horizontal overflow.
+
+### Blocked evidence
+
+Stale, expired, ambiguous, malformed, unavailable, or policy-ineligible evidence is not an owner rejection. Replace decision actions with a precise blocked explanation when the server cannot safely record a decision.
+
+### Receipts
+
+Lead with:
+
+1. the immutable owner decision;
+2. the owner note and time;
+3. the proposal title and complete scope;
+4. **Source unchanged**; and
+5. an explicit statement that no application was requested or started.
+
+Keep the private proposal decision receipt, the commit-backed forge governance ledger, and a future source application job as three distinctly named artifacts.
+
+## Deployment model
+
+### Supported review proof today
+
+The honest current review profile is same-host local processes:
+
+- account-free intake owns the queue and its lifetime write lock;
+- a private Unix socket exposes bounded read-only snapshots;
+- owner-alpha independently validates evidence and owns the private decision store; and
+- neither process inherits the other's authority.
+
+The Portagenty `owner-review` action and Bun command launch a disposable maintainer-review fixture. Portagenty is development coordination, not installation or production orchestration. These local changes are not yet committed or deployed.
+
+### First deployment target
+
+The first reusable review deployment should preserve the split rather than combine services:
+
+- intake remains the sole queue writer;
+- owner-alpha retains its exact private origin and decision store;
+- owner-alpha receives no writable queue mount; and
+- only the bounded review socket seam is shared.
+
+Tracked OCI examples must continue to keep review disabled until shared-socket mounting, exact UID/GID or peer authorization, directory and socket modes, restart ordering, socket replacement, and no-authority acceptance tests pass.
+
+Public Lane B exposure remains separate. It needs an explicitly selected reverse proxy/TLS boundary, Host preservation, rate and abuse controls, retained-binding operations, public deployment authorization, and human evidence. None follows from the local queue or review proof.
+
+## Realistic fixture matrix
+
+One fixture corpus should drive schema tests, review projections, mockups, and later browser acceptance. Every fixture needs explicit `supportLevel`, `laneSupport`, `evidenceClass`, file count, operation count, attention state, and expected authority effects.
+
+| Fixture | Scope | Support label | What it tests |
+|---|---|---|---|
+| Clarify retention wording | One long paragraph replacement | Executable v1 | Side-by-side prose comprehension |
+| Correct a reported number and date | One sourced factual replacement | Executable v1 | Intent, sourcing, numbers, trust advisory |
+| Repair a prerequisites link | One link replacement | Executable v1 | Markdown syntax and maintenance facet |
+| Add a missing limitation | One substantial insertion | Executable v1 within measured caps | Empty-old-byte presentation and long prose |
+| Remove an obsolete notice | One bounded deletion | Executable v1 | Honest Proposed-is-shorter presentation |
+| Update allowed frontmatter | One metadata splice | Core-executable, lane/policy dependent | Category versus computed touch facts |
+| Clarify setup in three places | Three operations in one file | Target v2 research | Operation navigation and atomic decision |
+| Restructure one installation section | Several non-overlapping operations | First executable v2 research | Structural evidence without serialization |
+| Rename a concept across two guides | Multiple files | Conceptual later | Multi-file scope and transaction questions |
+| Add a new page | Absent path plus exact candidate bytes | Conceptual later | Path authority and creation policy |
+| Current source changed | Historical valid proposal, current mismatch | Negative synthetic | Blocked attention, not rejection |
+| Selection ambiguous | Quote resolves more than once | Negative synthetic | Fail-closed intake/review language |
+| Approved, not authorized | Approval receipt only | Authority fixture | Decision is not application |
+| Applied, deployment failed | Separate effect evidence | Future operational fixture | Source, Git, deployment, and witness separation |
+
+Conceptual fixtures must be impossible to mistake for executable product evidence.
+
+## Adversarial findings
+
+The completed designs were useful but overreached in several places. The reconciled program applies these corrections:
+
+1. **Do not lock a large workflow state machine.** Most conditions are projections over evidence, not mutable states. Queue lifecycle remains only pending or expired.
+2. **Do not define application authorization in detail yet.** The separate-authority invariant is locked; TTL, revocation, and event shape wait for the application boundary decision.
+3. **Do not combine multi-operation, multi-file, and new-file work.** Single-file multi-operation support is the smallest coherent successor. Broader source scope needs separate evidence.
+4. **Do not require synthetic titles.** Summary can be core-required while title remains optional and provenance-aware.
+5. **Do not treat categories as truth.** Contributor categories and adapter suggestions cannot reduce scrutiny, grant trust, approve, or authorize application.
+6. **Do not rename historical evidence in place.** Existing proposal, trust, queue, and decision artifacts remain parseable and digest-stable. Product copy may improve through a versioned projection.
+7. **Do not make a rendered preview an authority shortcut.** It may become useful for comprehension, but exact source evidence remains primary and the preview's derivation must be explicit.
+8. **Do not let sticky actions become one-click triage.** The persistent affordance improves clarity, but the note, confirmation, immutable scope, and no-effect copy remain mandatory.
+9. **Do not mistake green browser tests for usability acceptance.** Mechanical acceptance proves interaction and safety properties. The maintainer's failed comprehension reviews are stronger product evidence.
+10. **Do not claim a deployment that does not exist.** Same-host review is locally implemented and verified in the working tree. OCI parity, public exposure, and live contributor-to-source operation remain unbuilt.
+
+## Sequenced program
+
+### Phase 0: align current truth
+
+- correct stale ledger and trust-gate claims;
+- state that owner review is uncommitted local work and not live documentation;
+- update the architecture sequence so the proposal-model and coherent-review gate precedes the application adapter.
+
+### Phase 1: research artifacts before code (implemented locally)
+
+- a realistic typed fixture matrix and capability labels are implemented;
+- the coherent inbox, Evidence lab, side-by-side review, persistent-action, mobile, receipt, and selectable system walkthrough mockups are locally available;
+- adversarial review corrected inbox placement, conceptual attention, operation semantics, atomic-scope confirmation, above-the-fold comparison, mobile dismissal, keyboard focus, authority copy, system selection, lane representability, bidi display, launcher ownership, and browser-test lifecycle; and
+- the fixtures expose taxonomy and title/summary questions without locking either model.
+
+### Phase 2: focused maintainer comprehension checkpoint (pending)
+
+The maintainer should be able to:
+
+- identify the proposal and its purpose;
+- state how many changes and pages are involved;
+- distinguish Current from Proposed at a glance;
+- find the required action without searching or excessive scrolling;
+- explain what Approve does and does not do;
+- distinguish blocked evidence from an owner rejection;
+- identify the support level and evidence class; and
+- place intake, queue, private review, decision, application authority, Git, rendering, deployment observation, and publication witness in the system.
+
+The result is recorded outside automation. Mechanical tests and screenshots remain necessary synthetic-mechanical and static-design evidence, but they do not pass this checkpoint.
+
+### Phase 3: select the first richer contract
+
+Only after the focused checkpoint, decide:
+
+- proposal v2 envelope shape;
+- exact intent fields and bounds;
+- category vocabulary and governance;
+- single-file base-relative multi-operation semantics;
+- operation and aggregate caps;
+- review-evidence and decision versioning; and
+- whether approval is allowed for a historically valid but currently application-ineligible proposal.
+
+### Phase 4: implement the normalized model
+
+- retain dual v1/v2 parsers;
+- add a read-only v1 projection without changing canonical bytes or digests;
+- implement the pure single-file multi-operation candidate builder;
+- add version-aware queue semantics while retaining original proposal bytes;
+- add versioned review evidence and summaries;
+- run the realistic executable fixture subset through queue, restart recovery, owner review, immutable decisions, and explicit zero-effect checks.
+
+### Phase 5: implement and separately evaluate the coherent owner review
+
+- replace changed-byte-derived identity with the provenance-aware proposal view;
+- implement wide-screen side-by-side comparison and the persistent decision rail;
+- implement stacked mobile comparison and decision sheet;
+- keep exact content evidence and technical evidence progressively disclosed at the correct layers;
+- retain the separate privileged origin and existing browser security boundaries; and
+- run a later focused evaluation of the real privileged surface rather than treating the static checkpoint as product usability acceptance.
+
+### Phase 6: resume the approved-proposal adapter
+
+Only after the coherent model and checkpoint:
+
+- consume one exact immutable approval;
+- revalidate source, policy, integrity, trust, expiry, and exact candidate eligibility;
+- produce a bounded input for a separately selected owner application authority; and
+- preserve the rule that approval alone performs no write.
+
+### Phase 7: deployment parity and connected evidence
+
+- add shared-socket OCI authorization and restart evidence before enabling review in tracked container examples;
+- separately select and authorize any public Lane B ingress;
+- connect one contributor proposal through decision and separately authorized application to a live witness;
+- preserve synthetic, maintainer, independent-human, and live-effect evidence labels.
+
+## Decisions still open
+
+- Is proposal v2 the complete envelope, or is intent a separate envelope around a versioned exact change-set artifact?
+- Does core v2 require only summary, or both summary and rationale?
+- Does the broad primary category plus optional facets survive the realistic fixtures?
+- What exact operation and aggregate caps fit paragraph and section work without enabling semantic sharding?
+- Is current full-file base equality required at application, or is a later explicit rebase protocol worth researching? The current recommendation is exact full-base equality.
+- Can the owner record approval for a historical proposal that is no longer application-eligible, or must current conflict block the decision?
+- What exact event or durable policy grants source-application authority after approval?
+- Does the first coherent review require full source-page context or a rendered candidate preview, beyond bounded operation context?
+- Should the existing uncommitted review wave be preserved as a mechanical checkpoint before refactoring, or should it be reshaped around the new view model before merge?
+- When, if ever, do private proposal decisions become portable commit-backed governance history without leaking private evidence or creating a second authority?
+
+## Explicitly deferred
+
+- partial acceptance inside one immutable proposal;
+- overlapping or sequential intermediate-candidate operations;
+- fuzzy patching, automatic rebasing, three-way merge, or semantic relocation;
+- multi-file source application before transaction and recovery evidence exists;
+- rename, delete-file, assets, submodules, directories, and cross-repository proposals;
+- assignments, deadlines, review rounds, throughput metrics, Later/snooze, and contributor discussion;
+- automatic application from category, identity claim, trust route, or approval;
+- public Lane B exposure, outward Lane A installation, image publication, or service installation;
+- rich trusted-contributor editor selection;
+- federation protocol extraction or identity-technology selection; and
+- unfamiliar-reader, independent-owner, or contributor-to-live claims before the required evidence exists.

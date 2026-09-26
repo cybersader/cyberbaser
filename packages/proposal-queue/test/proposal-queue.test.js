@@ -346,6 +346,25 @@ describe('filesystem safety, locking, and crash recovery', () => {
     }
   });
 
+  test('exposes a serialized non-mutating review snapshot while the writer lock remains held', async () => {
+    const fixtureValue = await fixture();
+    const accepted = await fixtureValue.queue.enqueue(laneBInput());
+    expect(Object.keys(fixtureValue.queue.review).sort()).toEqual(['list', 'load']);
+    expect((await fixtureValue.queue.review.list({ state: 'pending-review' }))[0].queueId)
+      .toBe(accepted.receipt.queueId);
+    expect((await fixtureValue.queue.review.load(accepted.receipt.queueId)).state.state)
+      .toBe('pending-review');
+
+    const entryDirectory = path.join(fixtureValue.root, 'pending', accepted.receipt.queueId);
+    const temporary = path.join(entryDirectory, '.state.tmp-review-proof');
+    await writeFile(temporary, '{}\n', { mode: 0o600 });
+    await expectCodeAsync(
+      () => fixtureValue.queue.review.list({ state: 'pending-review' }),
+      'unexpected-queue-artifact',
+    );
+    expect(await readFile(temporary, 'utf8')).toBe('{}\n');
+  });
+
   test('read-only inspection refuses a queue that requires recovery without cleaning it', async () => {
     const fixtureValue = await fixture();
     await closeTracked(fixtureValue.queue);

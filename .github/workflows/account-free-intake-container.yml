@@ -7,6 +7,7 @@ on:
       - 'apps/account-free-intake/**'
       - 'packages/account-free-intake/**'
       - 'packages/proposal-queue/**'
+      - 'packages/proposal-review/**'
       - 'packages/proposal/**'
       - 'packages/correction/**'
       - 'packages/ofm/**'
@@ -18,6 +19,7 @@ on:
       - 'apps/account-free-intake/**'
       - 'packages/account-free-intake/**'
       - 'packages/proposal-queue/**'
+      - 'packages/proposal-review/**'
       - 'packages/proposal/**'
       - 'packages/correction/**'
       - 'packages/ofm/**'
@@ -54,6 +56,7 @@ jobs:
           bun install --cwd packages/trust --frozen-lockfile
           bun install --cwd packages/proposal --frozen-lockfile
           bun install --cwd packages/proposal-queue --frozen-lockfile
+          bun install --cwd packages/proposal-review --frozen-lockfile
           bun install --cwd packages/account-free-intake --frozen-lockfile
           bun install --cwd apps/account-free-intake --frozen-lockfile
 

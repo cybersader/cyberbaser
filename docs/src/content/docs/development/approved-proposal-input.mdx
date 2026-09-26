@@ -1,0 +1,68 @@
+---
+title: Approved proposal input
+description: "The first adapter between an owner's Approve decision and the owner pipeline: a local, create-once input artifact with strict eligibility and an unfilled application gate. Nothing consumes it yet."
+sidebar:
+  order: 11
+status: research
+tags: [design, governance, testing, contribution]
+---
+
+An Approve decision records intent and nothing else. This adapter is the smallest next step: it turns one immutable Approve decision into one durable **input** that a later, separately authorized owner application event could reference. It does not apply source, start a job, open an edit session, commit, push, rebuild, deploy, or publish, and no code consumes what it writes.
+
+:::caution[Decision-only core, not application authority]
+The maintainer chose on 2026-09-26 to start this core before the review checkpoint, on the condition that it stays behind its gate. The artifact carries `applicationGate.state: "not-authorized"` and seven false effect flags, and the source applier rejects it outright. Selecting the owner application-authority event remains separate future work.
+:::
+
+## What it does
+
+Given a queue ID, the adapter:
+
+1. loads the immutable decision from the private owner store and refuses anything that is not an Approve;
+2. re-checks the live checkout with read-only Git: the pinned revision must still be reachable from the configured branch, and the blob at the branch tip for the reviewed path must be the **exact object** the owner reviewed (same object ID, same mode);
+3. re-reads that blob, re-applies the proposal in memory, and requires the reviewed base and candidate digests to reproduce;
+4. re-reads the trust policy at the branch tip and requires the reviewed policy status and digest, then recomputes the classification and requires it to match; and
+5. writes one create-once artifact under `proposal-inputs/<queueId>.json` in the owner store, mode 0600, next to the decision store.
+
+Any other state is **stale** and refuses without writing: `revision-unreachable`, `source-missing`, `source-changed`, or `trust-policy-changed`. Stale proposals are never rebased or re-resolved here. Lenient re-resolution of the quote against a moved file was considered and rejected for now: it is more useful, and it is more authority.
+
+Running it again returns the existing artifact unchanged together with a fresh eligibility check against the current tip, so the owner can see that a prepared input has gone stale without anything being rewritten.
+
+## Run it
+
+There is deliberately no HTTP route. From the repository root:
+
+```bash
+bun apps/owner-alpha/bin/prepare-approved-proposal.js <owner-alpha config> <queueId>
+bun apps/owner-alpha/bin/prepare-approved-proposal.js <owner-alpha config> --list
+```
+
+Exit code 0 means prepared or replayed, 2 means not eligible, 1 means an error. The programmatic entry points are `prepareApprovedProposalInput`, `assessApprovedProposal`, `listApprovedProposalInputs`, and `validateApprovedProposalInput` in `apps/owner-alpha/src/approved-proposal.js`.
+
+## The artifact
+
+```text
+schemaVersion, artifactType: owner-alpha-approved-proposal-input, queueId, preparedAt
+decision      digest of the immutable decision, decidedAt, reviewEvidenceDigest, owner authority
+proposal      proposalId, proposalDigest, lane, tier, route
+source        repository, path, pinned revision, branch, branchTip, gitMode, gitObjectId, baseByteLength, baseDigest
+operation     type, start, end, expectedOldBytesBase64, replacementBytesBase64
+candidate     byteLength, digest
+trustPolicy   status, digest
+applicationGate  state: not-authorized, event: null, note
+effectBoundary   appliesSource, writesSource, commits, pushes, deploys, publishes, rebuilds: all false
+```
+
+The shape is closed. The validator refuses any other gate state, any non-null event, any true effect flag, and any span outside the base. The field is named `applicationGate` rather than authorization because the owner store's credential scanner refuses keys that look like credentials, which is the right instinct.
+
+## Why this shape
+
+- **Durable, not a report.** A report leaves no chain of custody. The artifact pins the decision digest, the reviewed evidence digest, the exact blob, and the branch tip at preparation time, so a future authority event has something exact to reference.
+- **Not an edit session or a job.** Feeding the candidate into the existing Save path would have been the first real authority move. It stays a separate decision.
+- **Strict eligibility.** Identity of the Git object is the simplest honest rule. It never guesses, and it is trivially explainable on a receipt.
+- **Same patterns as the decision store.** Create-once through a hard link, a child-held lock, private directory and file checks, fail-closed listing.
+
+## Evidence
+
+`apps/owner-alpha/test/approved-proposal.test.js` runs the real intake, records real decisions, and checks: an Approve prepares one 0600 artifact whose stored form validates back to the returned value; `applyAcceptedOperation` rejects both the in-memory and the stored artifact with `accepted-operation-required`; replay returns the identical artifact; Reject and unknown queue IDs refuse; an owner commit to the reviewed page yields `source-changed` with no file written while an untouched page stays eligible at the new tip; a trust-policy commit makes even the untouched page stale; and the checkout's HEAD, refs, index, status, and source bytes are identical before and after every call.
+
+This is mechanical evidence for a decision-only adapter. It establishes no application, no authority event, and no contributor-to-live path.

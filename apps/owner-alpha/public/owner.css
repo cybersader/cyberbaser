@@ -63,6 +63,401 @@ dt { color: #4b5664; font-weight: 700; }
 dd { min-width: 0; margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 a { color: #174fbf; }
 
+/* Proposal review is a separate editorial surface. Keep these rules scoped so
+ * the direct editor and durable job pages retain their own operational UI. */
+body.proposal-review-page {
+  --review-ground: #f3f5f8;
+  --review-sheet: #ffffff;
+  --review-ink: #202832;
+  --review-muted: #667180;
+  --review-line: #d7dde5;
+  --review-line-strong: #aab4c1;
+  --review-accent: #2f5ea8;
+  --review-accent-soft: #e8eef8;
+  --review-approve: #2d6a4f;
+  --review-approve-soft: #e5f1eb;
+  --review-reject: #963f45;
+  --review-reject-soft: #f8e9ea;
+  --review-attention: #8a5a12;
+  --review-attention-soft: #fbf1dc;
+  overflow-x: hidden;
+  background: var(--review-ground);
+  color: var(--review-ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.proposal-review-page .review-shell {
+  width: min(54rem, calc(100% - 2rem));
+  padding: clamp(1.5rem, 4vw, 3.5rem) 0 5rem;
+}
+
+.proposal-review-page h1,
+.proposal-review-page h2,
+.proposal-review-page h3,
+.proposal-review-page h4,
+.proposal-review-page p { overflow-wrap: anywhere; }
+
+.proposal-review-page h1 {
+  max-width: 46rem;
+  color: var(--review-ink);
+  font-size: clamp(2.1rem, 6vw, 3.6rem);
+  font-weight: 720;
+  letter-spacing: -0.035em;
+  line-height: 1.02;
+}
+
+.proposal-review-page h2 {
+  margin: 0;
+  color: var(--review-ink);
+  font-size: clamp(1.3rem, 3vw, 1.65rem);
+  line-height: 1.2;
+}
+
+.proposal-review-page h3 { color: var(--review-ink); }
+
+.proposal-review-page a { color: var(--review-accent); }
+.proposal-review-page a:hover { text-decoration-thickness: 0.12em; }
+
+.proposal-review-page :is(a, button, textarea, summary):focus-visible {
+  outline: 3px solid var(--review-accent);
+  outline-offset: 3px;
+}
+
+.proposal-review-page .owner-header { margin-bottom: clamp(2rem, 6vw, 4rem); }
+.proposal-review-page .lede {
+  max-width: 42rem;
+  margin: 1rem 0 0;
+  color: var(--review-muted);
+  font-size: 1.03rem;
+  line-height: 1.65;
+}
+
+.surface-label,
+.section-kicker {
+  margin: 0 0 0.55rem;
+  color: var(--review-muted);
+  font-size: 0.78rem;
+  font-weight: 760;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.review-jump-links {
+  display: flex;
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+  font-weight: 700;
+}
+
+.review-section { margin-top: 3.5rem; scroll-margin-top: 1.5rem; }
+.section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+.section-count { color: var(--review-muted); font-size: 0.85rem; }
+
+.proposal-list { border-top: 1px solid var(--review-line-strong); }
+.proposal-row { border-bottom: 1px solid var(--review-line); }
+.proposal-row-link {
+  display: grid;
+  gap: 0.45rem;
+  padding: 1.3rem 0.25rem;
+  color: inherit !important;
+  text-decoration: none;
+}
+.proposal-row-link:hover .proposal-row-change { color: var(--review-accent); }
+.proposal-row-link:hover .proposal-row-path { text-decoration: underline; }
+.proposal-row-change {
+  min-width: 0;
+  color: var(--review-ink);
+  font-size: clamp(1.12rem, 2.6vw, 1.3rem);
+  line-height: 1.55;
+}
+.proposal-row-path { color: var(--review-accent); font-size: 0.92rem; font-weight: 680; }
+.proposal-row-rationale { color: var(--review-muted); line-height: 1.5; }
+.proposal-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.75rem;
+  color: var(--review-muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+.proposal-row-meta time { white-space: nowrap; }
+
+.proposal-prose,
+.context-copy {
+  font-family: Charter, "Bitstream Charter", "Iowan Old Style", Cambria, Georgia, serif;
+}
+.changed-word {
+  margin: 0 0.08em;
+  border-radius: 0.18em;
+  padding: 0.04em 0.13em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  color: inherit;
+}
+.changed-proposed { background: var(--review-accent-soft); text-decoration: underline; text-decoration-color: var(--review-accent); text-decoration-thickness: 0.12em; text-underline-offset: 0.14em; }
+.changed-current { background: var(--review-reject-soft); text-decoration: line-through; text-decoration-color: var(--review-reject); text-decoration-thickness: 0.1em; }
+.empty-change { color: var(--review-muted); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.78em; font-style: italic; }
+
+.attention-note,
+.decision-label {
+  width: fit-content;
+  border-radius: 0.25rem;
+  padding: 0.16rem 0.38rem;
+  font-weight: 750;
+}
+.attention-note { background: var(--review-attention-soft); color: var(--review-attention); }
+.decision-approve { background: var(--review-approve-soft); color: var(--review-approve); }
+.decision-reject { background: var(--review-reject-soft); color: var(--review-reject); }
+
+.empty-state {
+  margin: 0;
+  border-bottom: 1px solid var(--review-line);
+  padding: 1.4rem 0.25rem;
+  color: var(--review-muted);
+}
+.pagination { margin: 1rem 0 0; }
+.decided-section { margin-top: 4.5rem; }
+.review-return { margin-top: 4rem; }
+
+.review-detail-header { display: grid; gap: 0.7rem; }
+.back-link { width: fit-content; margin-bottom: 0.8rem; font-weight: 700; }
+.comparison-section,
+.rationale-section,
+.decision-section,
+.reviewed-suggestion {
+  margin-top: 3.5rem;
+}
+.comparison-tabs {
+  display: flex;
+  gap: 0.2rem;
+  margin-top: 1.15rem;
+  border-bottom: 1px solid var(--review-line-strong);
+}
+.comparison-tabs button {
+  margin-bottom: -1px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  padding: 0.72rem 0.9rem;
+  background: transparent;
+  color: var(--review-muted);
+  font-weight: 720;
+}
+.comparison-tabs button[aria-selected="true"] {
+  border-bottom-color: var(--review-accent);
+  color: var(--review-ink);
+}
+.comparison-panel {
+  min-width: 0;
+  border-bottom: 1px solid var(--review-line);
+  padding: clamp(1.5rem, 4vw, 2.4rem) 0.25rem;
+}
+.comparison-panel[hidden] { display: none; }
+.context-copy {
+  margin: 0;
+  color: var(--review-ink);
+  font-size: clamp(1.4rem, 4vw, 2rem);
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+.context-note {
+  margin: 1.2rem 0 0;
+  color: var(--review-muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+.exact-change-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.exact-change-grid > * { min-width: 0; }
+.exact-change-grid h3 { margin: 0 0 0.45rem; font-size: 0.86rem; }
+.exact-change-grid pre {
+  max-width: 100%;
+  margin: 0;
+  overflow-x: auto;
+  border: 1px solid var(--review-line);
+  border-radius: 0.35rem;
+  padding: 0.9rem;
+  background: var(--review-sheet);
+  color: var(--review-ink);
+  font: 0.88rem/1.55 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  white-space: pre;
+}
+
+.contributor-rationale {
+  max-width: 46rem;
+  margin: 1rem 0 0;
+  color: var(--review-ink);
+  font-size: 1.08rem;
+  line-height: 1.75;
+}
+.references { margin-top: 1.5rem; }
+.references h3 { margin: 0; font-size: 0.92rem; }
+.evidence-links { display: grid; gap: 0.45rem; margin: 0.65rem 0 0; padding-left: 1.25rem; }
+
+.policy-advisory {
+  max-width: 44rem;
+  margin: 0 0 1rem;
+  border-left: 3px solid var(--review-attention);
+  padding: 0.65rem 0.9rem;
+  background: var(--review-attention-soft);
+  color: var(--review-attention);
+  line-height: 1.55;
+}
+
+/* The decision sheet: one question, one confirmation. */
+#decision-dialog {
+  width: min(30rem, calc(100% - 2rem));
+  max-height: calc(100vh - 2rem);
+  margin: auto;
+  overflow: auto;
+  border: 1px solid var(--review-line-strong);
+  border-radius: 0.7rem;
+  padding: 0;
+  background: var(--review-sheet);
+  color: var(--review-ink);
+  box-shadow: 0 1.4rem 4rem rgb(18 27 39 / 24%);
+}
+#decision-dialog::backdrop { background: rgb(18 27 39 / 50%); }
+.proposal-review-page .decision-sheet {
+  margin: 0;
+  padding: clamp(1.25rem, 5vw, 1.75rem);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.decision-sheet h2 { margin: 0 0 0.9rem; font-size: 1.3rem; line-height: 1.25; }
+.dialog-suggestion {
+  display: grid;
+  gap: 0.15rem;
+  margin: 0 0 1.25rem;
+  padding: 0.7rem 0.9rem;
+  border-left: 3px solid var(--review-accent);
+  background: var(--review-accent-soft);
+  color: var(--review-ink);
+}
+.dialog-suggestion strong { font-family: Charter, "Bitstream Charter", Cambria, Georgia, serif; font-size: 1.05rem; font-weight: 600; }
+.dialog-suggestion span { color: var(--review-muted); font-size: 0.85rem; }
+.proposal-review-page .decision-sheet label { margin-bottom: 0.2rem; color: var(--review-ink); font-size: 1rem; }
+.field-help { margin: 0 0 0.6rem; color: var(--review-muted); font-size: 0.9rem; }
+.proposal-review-page textarea.decision-reason {
+  min-height: 5.5rem;
+  border: 1px solid var(--review-line-strong);
+  border-radius: 0.45rem;
+  background: var(--review-sheet);
+  color: var(--review-ink);
+  font: 1rem/1.55 ui-sans-serif, system-ui, sans-serif;
+}
+.byte-count { display: none; margin-top: 0.35rem; color: var(--review-muted); font-size: 0.8rem; }
+.byte-count.visible { display: block; }
+.byte-count.error { color: var(--review-reject); }
+.proposal-review-page #decision-status { min-height: 0; margin: 0.6rem 0 0; color: var(--review-muted); line-height: 1.5; }
+.proposal-review-page #decision-status:empty { display: none; }
+.proposal-review-page #decision-status.error { color: var(--review-reject); }
+.decision-boundary { margin: 1.1rem 0 0; color: var(--review-muted); font-size: 0.92rem; line-height: 1.55; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 0.65rem; margin-top: 1.25rem; }
+.proposal-review-page .decision-actions button,
+.proposal-review-page .dialog-actions button {
+  border: 1px solid transparent;
+  border-radius: 0.42rem;
+  padding: 0.68rem 1.05rem;
+  font-weight: 720;
+}
+.proposal-review-page button.decision-approve { background: var(--review-accent); color: #fff; }
+.proposal-review-page button.decision-reject { border-color: var(--review-line-strong); background: transparent; color: var(--review-ink); }
+.proposal-review-page .dialog-back { border-color: var(--review-line-strong); background: transparent; color: var(--review-ink); }
+.proposal-review-page #decision-confirm[data-action="approve"] { background: var(--review-approve); color: #fff; }
+.proposal-review-page #decision-confirm[data-action="reject"] { background: var(--review-reject); color: #fff; }
+.proposal-review-page button:disabled { cursor: wait; opacity: 0.6; }
+
+.technical-evidence {
+  margin-top: 3.5rem;
+  border-top: 1px solid var(--review-line-strong);
+  border-bottom: 1px solid var(--review-line-strong);
+}
+.technical-evidence summary {
+  cursor: pointer;
+  padding: 1rem 0.25rem;
+  color: var(--review-accent);
+  font-weight: 720;
+}
+.technical-evidence-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2rem;
+  padding: 0.5rem 0.25rem 1.5rem;
+}
+.technical-evidence-body > * { min-width: 0; }
+.technical-evidence-body h3 { margin: 0 0 0.8rem; font-size: 0.95rem; }
+.technical-evidence-body h4 { margin: 1rem 0 0.5rem; }
+.technical-facts { display: grid; gap: 0.65rem; margin: 0; }
+.technical-facts > div { display: grid; gap: 0.15rem; }
+.technical-facts dt { color: var(--review-muted); font-size: 0.76rem; letter-spacing: 0.04em; text-transform: uppercase; }
+.technical-facts dd {
+  color: var(--review-ink);
+  font: 0.78rem/1.5 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  overflow-wrap: anywhere;
+}
+.trust-reasons { margin: 0; padding-left: 1.2rem; color: var(--review-muted); font-size: 0.85rem; }
+
+.decision-receipt-header { display: grid; gap: 0.7rem; margin-bottom: 2rem !important; }
+.decision-time { margin: 0; color: var(--review-muted); }
+.decision-result {
+  border-left: 4px solid var(--review-approve);
+  padding: 0.5rem 0 0.5rem 1.25rem;
+}
+.decision-result.decision-rejected { border-left-color: var(--review-reject); }
+.decision-result h2 { color: var(--review-approve); }
+.decision-result.decision-rejected h2 { color: var(--review-reject); }
+.decision-result blockquote {
+  margin: 1rem 0;
+  color: var(--review-ink);
+  font-size: 1.15rem;
+  line-height: 1.6;
+}
+.source-unchanged {
+  display: grid;
+  gap: 0.3rem;
+  margin-top: 1.25rem;
+  color: var(--review-muted);
+}
+.source-unchanged strong { color: var(--review-ink); font-size: 1.05rem; }
+.reviewed-suggestion .context-copy { margin-top: 1rem; }
+.receipt-path { color: var(--review-muted); font-size: 0.9rem; }
+
+@media (max-width: 700px) {
+  .proposal-review-page .review-shell { width: min(100% - 1.25rem, 54rem); }
+  .section-heading { align-items: flex-start; flex-direction: column; }
+  .proposal-row-meta { display: grid; }
+  .exact-change-grid,
+  .technical-evidence-body { grid-template-columns: 1fr; }
+  #decision-dialog {
+    width: 100%;
+    max-width: none;
+    max-height: min(85vh, 42rem);
+    margin: auto 0 0;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 0.8rem 0.8rem 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .proposal-review-page .proposal-row-change,
+  .proposal-review-page .comparison-tabs button { transition: color 140ms ease, border-color 140ms ease; }
+}
+
 @media (prefers-color-scheme: dark) {
   :root { background: #10151c; color: #e9edf2; }
   .eyebrow, .lede, .status, dt { color: #aeb9c6; }
@@ -70,4 +465,342 @@ a { color: #174fbf; }
   textarea { border-color: #526172; background: #101820; color: #edf2f7; }
   a { color: #8aadff; }
   .error { color: #ff9d9d; }
+
+  body.proposal-review-page {
+    --review-ground: #11161d;
+    --review-sheet: #19212b;
+    --review-ink: #edf1f5;
+    --review-muted: #aeb8c5;
+    --review-line: #35404d;
+    --review-line-strong: #526172;
+    --review-accent: #8eb4f5;
+    --review-accent-soft: #23364f;
+    --review-approve: #76b89e;
+    --review-approve-soft: #1d3a31;
+    --review-reject: #f09aa0;
+    --review-reject-soft: #43272d;
+    --review-attention: #f0c36e;
+    --review-attention-soft: #3b311d;
+  }
+  #decision-dialog { box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 50%); }
+}
+
+/* Review reading modes, semi-rendered projection, and the decision bar and sheet. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.proposal-review-page .review-shell {
+  width: min(84rem, 100%);
+  padding-inline: clamp(1.15rem, 4.5vw, 3.25rem);
+  padding-bottom: 9rem;
+}
+.proposal-review-page .review-detail-header { margin-bottom: 1.5rem; }
+.proposal-review-page .review-detail-header > * + * { margin-top: 0.8rem; }
+.proposal-review-page .back-link { display: inline-block; font-weight: 680; }
+.identity-attention {
+  margin: 0;
+  color: var(--review-attention);
+  font-size: 0.82rem;
+  font-weight: 780;
+}
+.proposal-review-page .review-detail-header h1 {
+  max-width: 46rem;
+  font-size: clamp(1.7rem, 2.7vw, 2.5rem);
+  line-height: 1.06;
+}
+.proposal-review-page .proposal-summary {
+  max-width: 50rem;
+  margin: 0;
+  color: var(--review-muted);
+  font-size: clamp(1.02rem, 1.35vw, 1.15rem);
+  line-height: 1.55;
+}
+.identity-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.6rem;
+  color: var(--review-muted);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+.identity-meta strong { color: var(--review-ink); }
+.identity-details summary {
+  min-height: 36px;
+  padding: 0.4rem 0;
+  color: var(--review-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.identity-details .contributor-rationale { margin: 0.35rem 0; line-height: 1.55; }
+
+.review-modes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--review-line);
+}
+.proposal-review-page .mode-tab {
+  display: block;
+  min-width: 0;
+  min-height: 52px;
+  padding: 0.65rem 0.85rem 0.7rem 0;
+  border-bottom: 3px solid transparent;
+  color: var(--review-muted);
+  text-decoration: none;
+}
+.proposal-review-page .mode-tab strong { display: block; font-size: 1rem; }
+.proposal-review-page .mode-tab small { display: block; font-size: 0.76rem; line-height: 1.45; }
+.proposal-review-page .mode-tab small:not(:empty) { margin-top: 0.2rem; }
+.proposal-review-page .mode-tab.active { border-bottom-color: var(--review-accent); color: var(--review-ink); }
+
+.reader-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem 2rem;
+  padding-top: 0.9rem;
+}
+.mark-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+  margin: 0;
+  color: var(--review-muted);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+.projection-note {
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--review-muted);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+.document-heading { margin: 0.75rem 0; }
+.document-path { color: var(--review-muted); font-size: 0.82rem; overflow-wrap: anywhere; }
+.mode-panel { min-width: 0; padding-top: 1rem; }
+
+.reading-body {
+  max-width: 46rem;
+  margin: 0 0 2.25rem;
+  padding: clamp(1.5rem, 3vw, 2.75rem) clamp(1.5rem, 3.5vw, 3rem);
+  background: var(--review-sheet);
+  font-family: Charter, "Bitstream Charter", "Iowan Old Style", Cambria, Georgia, serif;
+  font-size: clamp(1.02rem, 1.5vw, 1.14rem);
+  line-height: 1.72;
+}
+.mode-panel-changes .reading-body { box-shadow: inset 3px 0 var(--review-accent); }
+.mode-panel-current .reading-body { box-shadow: inset 3px 0 var(--review-reject); }
+.mode-panel-proposed .reading-body { box-shadow: inset 3px 0 var(--review-approve); }
+.reading-body > :first-child { margin-top: 0; }
+.md-heading {
+  margin: 1.9rem 0 0.7rem;
+  font-weight: 680;
+  line-height: 1.15;
+}
+.md-h1 { font-size: 1.85em; }
+.md-h2 { font-size: 1.4em; }
+.md-h3 { font-size: 1.15em; }
+.md-h4, .md-h5, .md-h6 { font-size: 1em; letter-spacing: 0.06em; text-transform: uppercase; }
+.md-paragraph { margin: 1.05rem 0; }
+.md-quote {
+  margin: 1rem 0;
+  padding-left: 1rem;
+  border-left: 3px solid var(--review-line-strong);
+  color: var(--review-muted);
+}
+.md-list { margin: 1rem 0; padding-left: 1.5rem; }
+.md-list li { margin-bottom: 0.3rem; }
+.md-list .md-nested { margin-left: 1.25rem; }
+.md-codeblock {
+  max-width: 100%;
+  margin: 1rem 0;
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+  border: 1px solid var(--review-line);
+  background: var(--review-ground);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  white-space: pre;
+}
+.md-code { padding: 0.1em 0.3em; background: var(--review-ground); font-size: 0.88em; }
+.md-rule { margin: 1.5rem 0; border: 0; border-top: 1px solid var(--review-line); }
+.md-link {
+  color: var(--review-accent);
+  text-decoration: underline dotted;
+  text-underline-offset: 0.18em;
+  cursor: help;
+}
+.md-wikilink::before { content: "\2016"; }
+.md-wikilink::after { content: "\2016"; }
+.md-frontmatter {
+  margin: 0 0 1.25rem;
+  padding: 0.75rem 1rem;
+  border: 1px dashed var(--review-line-strong);
+}
+.md-frontmatter dl {
+  display: grid;
+  grid-template-columns: minmax(6rem, auto) minmax(0, 1fr);
+  gap: 0.2rem 1rem;
+  margin: 0.4rem 0 0;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.85rem;
+}
+.md-frontmatter dt { color: var(--review-muted); font-weight: 700; }
+.md-frontmatter dd { margin: 0; }
+
+.md-source-wrap {
+  margin: 1.35rem 0;
+  border-left: 3px solid var(--review-accent);
+  background: var(--review-ground);
+}
+.md-source-uninterpreted { border-left-color: var(--review-attention); }
+.md-source-label {
+  margin: 0;
+  padding: 0.65rem 1rem 0.15rem;
+  color: var(--review-muted);
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.7rem;
+  font-weight: 760;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.md-source {
+  padding: 0.35rem 1rem 1rem;
+  font-size: 0.97em;
+  line-height: 1.78;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.doc-removed, .doc-added {
+  padding: 0.06em 0.12em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  color: inherit;
+}
+.doc-removed { background: var(--review-reject-soft); text-decoration-color: var(--review-reject); }
+.doc-added { background: var(--review-approve-soft); text-decoration-color: var(--review-approve); }
+.doc-point {
+  display: inline-block;
+  padding: 0.1rem 0.35rem;
+  border: 1px dashed var(--review-line-strong);
+  color: var(--review-muted);
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.78rem;
+  white-space: normal;
+}
+
+.proof-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: stretch;
+}
+.proof {
+  min-width: 0;
+  padding: clamp(1rem, 2.5vw, 1.6rem);
+  border-top: 6px solid;
+  background: var(--review-sheet);
+}
+.proof-current { border-color: var(--review-reject); }
+.proof-proposed { border-color: var(--review-approve); }
+.proof-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.proof-label {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.semantic-label {
+  max-width: 10rem;
+  color: var(--review-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: right;
+}
+.proof .reading-body {
+  max-width: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 1rem;
+}
+
+.mode-unavailable {
+  max-width: 48rem;
+  padding: 1.5rem;
+  border-left: 5px solid var(--review-attention);
+  background: var(--review-sheet);
+}
+.mode-unavailable p { margin: 0.3rem 0 0.8rem; line-height: 1.55; }
+
+/* The decision bar: what is being decided, and the two real actions. */
+.decision-bar {
+  position: sticky;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 26;
+  margin-top: 2.5rem;
+  border-top: 1px solid var(--review-line-strong);
+  background: var(--review-sheet);
+  box-shadow: 0 -4px 18px rgb(24 32 42 / 10%);
+}
+.decision-bar-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  width: min(84rem, 100%);
+  margin: 0 auto;
+  padding: 0.8rem clamp(1.15rem, 4.5vw, 3.25rem);
+}
+.decision-bar-change {
+  display: grid;
+  flex: 1 1 16rem;
+  gap: 0.1rem;
+  min-width: 0;
+  margin: 0;
+}
+.decision-bar-change strong {
+  overflow: hidden;
+  font-family: Charter, "Bitstream Charter", Cambria, Georgia, serif;
+  font-size: 1.02rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.decision-bar-change span {
+  overflow: hidden;
+  color: var(--review-muted);
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.decision-actions { display: flex; flex: 0 0 auto; gap: 0.6rem; }
+.decision-noscript { flex-basis: 100%; margin: 0; color: var(--review-muted); font-size: 0.85rem; }
+
+@media (max-width: 720px) {
+  .review-modes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .proof-grid { grid-template-columns: minmax(0, 1fr); }
+  .decision-bar-change { flex-basis: 100%; }
+  .decision-actions { width: 100%; }
+  .decision-actions button { flex: 1 1 8rem; }
 }

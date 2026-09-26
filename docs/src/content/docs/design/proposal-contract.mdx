@@ -7,7 +7,7 @@ status: research
 tags: [design, architecture, contribution, governance]
 ---
 
-**Status: the shared WP4 contract is implemented and hermetically tested.** `@cyberbaser/proposal` defines one canonical object for external intake adapters and remains pure, forge-agnostic, and no-I/O. The separate [`@cyberbaser/forgejo-intake`](/cyberbaser/development/forgejo-intake-adapter/) package consumes the contract for one narrow Forgejo pull-request shape. [`@cyberbaser/account-free-intake`](/cyberbaser/development/account-free-intake/) plus the carrier-neutral local proposal queue consume it for one anonymous retained-publication shape. Neither lane is offered: Lane A is not live-validated or installed, and Lane B is disabled, local-only, unexposed, and human-untested. No rich editor, owner decision console, external source writer, or production authority exists. Q09 remains open.
+**Status: the shared WP4 version 1 contract is implemented and hermetically tested.** `@cyberbaser/proposal` defines one canonical object for external intake adapters and remains pure, forge-agnostic, and no-I/O. The separate [`@cyberbaser/forgejo-intake`](/cyberbaser/development/forgejo-intake-adapter/) package consumes the contract for one narrow Forgejo pull-request shape. [`@cyberbaser/account-free-intake`](/cyberbaser/development/account-free-intake/) plus the carrier-neutral local proposal queue consume it for one anonymous retained-publication shape. Neither lane is offered: Lane A is not live-validated or installed, and Lane B is disabled, local-only, unexposed, and human-untested. A same-host owner decision-only surface is implemented and mechanically accepted in the current local working tree, but it is not merged or deployed, and approval cannot apply source. No rich external editor, external source writer, or production authority exists. Q09 remains open.
 
 ## What an intake lane produces
 
@@ -84,6 +84,14 @@ The package delegates preparation and application to [`@cyberbaser/correction`](
 
 Application fails closed on stale source, quote ambiguity, changed old bytes, invalid UTF-8, offset drift, digest drift, or candidate mismatch. Quote uniqueness is rechecked against the pinned base during application, including for proposals produced outside the package. CRLF, tabs, trailing spaces, emoji, and combining characters survive exactly. The package rejects no-ops, spans larger than 64 KiB, and complete nonempty-file replacement or deletion; an existing empty Markdown file may receive one bounded insertion. Version 1 does not support multiple files, multiple splices, create, rename, assets, or structural operations.
 
+## Next-contract research
+
+Maintainer review showed that changed bytes cannot also serve as proposal identity, category, scope, and editorial intent. The [proposal operating model](/cyberbaser/research/proposal-operating-model/) now separates immutable submitted intent, an exact change set, and owner operating evidence.
+
+The recommended first executable successor is deliberately smaller than the complete vision: one existing Markdown file, multiple base-relative non-overlapping exact operations, one atomic decision, and no automatic application authority. Existing version 1 proposal bytes and digests remain unchanged through a read-only compatibility projection. Multi-file changes, new files, renames, assets, and partial decisions remain later research rather than silent extensions to this contract.
+
+No version 2 schema is locked yet. Realistic fixtures and coherent side-by-side review mockups precede implementation.
+
 ## Identity is evidence, not authority
 
 `submission.identityClaim` may be `null` or one bounded `{ type, issuer, subject }` claim. It carries no token, signature, credential blob, role, permission, or verification result. The contract intentionally does not select Forgejo OIDC, signing keys, DIDs, verifiable credentials, ActivityPub, IndieAuth, or another WP6 identity technology.
@@ -124,4 +132,4 @@ All functions are deterministic and operate in memory. The package performs no f
 
 The package tests cover quote and offset preparation, insertions, replacements, deletions, exact CRLF and Unicode preservation, stale and tampered bindings, canonical JSON, source-path and URL safety, size limits, deep immutability, and receiver-verified trust handoff. This establishes a shared adapter-output contract.
 
-It does **not** establish an offered intake product, public edge abuse controls, review usability, identity verification, independent-human evidence, or permission to write canonical source. Separate [Forgejo Lane A](/cyberbaser/development/forgejo-intake-adapter/) and [account-free Lane B](/cyberbaser/development/account-free-intake/) mechanics now exist around this contract, including a finite local queue. Lane A is not live-validated or installed. Lane B is disabled, local-only, unexposed, and has no owner decision or source-application surface. WP5 remains later work. Q09 closes only after a real offered account-free path earns the required evidence.
+It does **not** establish an offered intake product, public edge abuse controls, review usability, identity verification, independent-human evidence, or permission to write canonical source. Separate [Forgejo Lane A](/cyberbaser/development/forgejo-intake-adapter/) and [account-free Lane B](/cyberbaser/development/account-free-intake/) mechanics now exist around this contract, including a finite local queue. Lane A is not live-validated or installed. Lane B is disabled, local-only, and unexposed. Its same-host owner decision-only surface is mechanically accepted, but approval-to-source application and broader WP5 management remain later work. Q09 closes only after a real offered account-free path earns the required evidence.

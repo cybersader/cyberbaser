@@ -17,13 +17,16 @@
 // Runs in ~20ms on the happy path. Reinstall path is as fast as bun install
 // (cached, usually under 10 seconds after the first install on each side).
 
-import { existsSync, readFileSync, writeFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync, statSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const docsRoot = resolve(here, '..');
+const projectRoot = resolve(docsRoot, '..');
+const focusFile = resolve(projectRoot, '.claude/FOCUS.md');
+const logDirectory = resolve(docsRoot, 'src/content/docs/agent-context/zz-log');
 const marker = resolve(docsRoot, 'node_modules/.platform');
 const astroBinLinux = resolve(docsRoot, 'node_modules/.bin/astro');
 const astroBinWin = resolve(docsRoot, 'node_modules/.bin/astro.cmd');
@@ -56,6 +59,26 @@ function needsInstall() {
   return null;
 }
 
+function verifyKnowledgeOpsLog() {
+  const focus = readFileSync(focusFile, 'utf8');
+  const focusDate = focus.match(/^Last updated:\s*(\d{4}-\d{2}-\d{2})\b/m)?.[1];
+  if (!focusDate) {
+    console.error('✗ knowledge ops: .claude/FOCUS.md has no parseable Last updated date');
+    process.exit(1);
+  }
+  const logDates = readdirSync(logDirectory)
+    .map((name) => name.match(/^(\d{4}-\d{2}-\d{2})-[a-z0-9-]+\.mdx$/u)?.[1])
+    .filter(Boolean)
+    .sort();
+  const latestLogDate = logDates.at(-1);
+  if (!latestLogDate || latestLogDate < focusDate) {
+    console.error(`✗ knowledge ops: FOCUS is aligned ${focusDate}, but the newest dated zz-log is ${latestLogDate ?? 'missing'}`);
+    console.error('  Add a dated docs/src/content/docs/agent-context/zz-log/YYYY-MM-DD-slug.mdx entry for the current work.');
+    process.exit(1);
+  }
+  console.log(gray(`⦿ knowledge ops: zz-log ${latestLogDate} covers FOCUS ${focusDate}`));
+}
+
 const reason = needsInstall();
 if (reason) {
   console.log(yellow(`⦿ preflight: ${reason} — running bun install`));
@@ -73,3 +96,5 @@ if (reason) {
 } else {
   console.log(gray(`⦿ preflight: ${currentPlatform} (cached)`));
 }
+
+verifyKnowledgeOpsLog();

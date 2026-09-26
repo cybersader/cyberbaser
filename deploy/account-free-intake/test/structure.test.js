@@ -57,9 +57,11 @@ describe('account-free intake deployment structure', () => {
     for (const pattern of ['.git', '.workspace', '**/node_modules', '**/*.local.json', '**/.env']) {
       expect(ignore).toContain(pattern);
     }
-    for (const runtimePackage of ['correction', 'ofm', 'trust', 'proposal', 'account-free-intake', 'proposal-queue']) {
+    for (const runtimePackage of ['correction', 'ofm', 'trust', 'proposal', 'account-free-intake', 'proposal-queue', 'proposal-review']) {
       expect(containerfile).toContain(`/packages/${runtimePackage}`);
     }
+    expect(containerfile).toContain('COPY packages/proposal-review/schema/ ./packages/proposal-review/schema/');
+    expect(ignore).toContain('!packages/proposal-review/schema/**');
   });
 
   test('defines an off-by-default main service on an internal network with no published port', async () => {
@@ -163,6 +165,7 @@ describe('account-free intake deployment structure', () => {
       'packages/trust',
       'packages/proposal',
       'packages/proposal-queue',
+      'packages/proposal-review',
       'packages/account-free-intake',
       'apps/account-free-intake',
     ]) expect(workflow).toContain(`bun install --cwd ${packagePath} --frozen-lockfile`);

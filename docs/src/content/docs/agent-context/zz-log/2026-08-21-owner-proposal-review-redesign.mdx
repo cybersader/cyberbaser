@@ -1,0 +1,119 @@
+---
+title: "2026-08-21 · Owner proposal review redesign"
+description: "Replaced the backend-shaped owner review dashboard with a content-first editorial flow while preserving exact evidence, immutable decision-only authority, and the no-effect boundary."
+date: 2026-08-21
+status: research
+tags: [design, governance, testing]
+---
+
+## Why this wave happened
+
+The first real maintainer interaction with owner-alpha proved the decision mechanics, but failed the product test. The interface looked like an engineering evidence dashboard rather than normal content review. It exposed queue IDs, source pins, trust routing, timestamps, digests, and classification data at nearly equal visual weight. The maintainer described it as ugly, far too dense, not beautiful, and generic AI dashboard slop.
+
+That feedback was accepted as a first-principles design failure, not a request for nicer colors. The approved-proposal pipeline adapter was paused until the owner decision surface could express the product coherently.
+
+## Research basis
+
+The design review compared documented patterns from Notion and Google Docs suggestions, GitBook and Storyblok contextual review, Confluence approvals, Sanity and Contentful action-adjacent blockers, WordPress pending review, Slite verification states, and Linear queue navigation.
+
+The resulting synthesis is recorded in [Owner proposal review UX](/cyberbaser/research/owner-proposal-review-ux/). Cyberbaser borrows prose-first reading, contextual comparison, explicit decision receipts, and calm queue mechanics. It rejects merge-shaped language, enterprise workflow stages, bulk decisions, identity-heavy trust panels, productivity pressure, and any coupling between approval and publication.
+
+## What changed
+
+The owner review now follows one content-focused sequence:
+
+1. **Proposals:** a one-column inbox leads with the suggested wording, source path, and contributor rationale.
+2. **Review:** Proposed is the default view. Current and Exact remain directly available through an accessible tablist.
+3. **Decide:** a required decision note precedes concise Approve or Reject actions.
+4. **Confirm:** a native confirmation sheet repeats the action, states that the decision is immutable, and says source remains unchanged.
+5. **Receipt:** the durable record leads with the decision, owner note, time, and **Source unchanged**.
+6. **Decided:** newest decisions appear first using the same wording-focused summary.
+
+Technical evidence remains complete under native disclosure. It includes source and repository binding, Git object, all relevant digests, proposal and queue identifiers, lane, tier, route, policy evidence, reason codes, owner authority, and queue-retention status.
+
+The redesign is scoped to proposal-review pages. Direct Markdown editing and durable job pages keep their existing operational presentation.
+
+## Interaction and accessibility work
+
+The browser script now:
+
+- supports ArrowLeft, ArrowRight, Home, and End across Proposed, Current, and Exact;
+- validates blank, untrimmed, control-character, and oversized decision notes before confirmation;
+- reports the real UTF-8 byte count rather than relying on HTML character length;
+- prevents any POST before final confirmation;
+- restores focus after Back or Escape;
+- prevents duplicate in-flight submission;
+- preserves the decision note during retryable failures;
+- translates bounded internal failures into plain recovery guidance; and
+- validates the same-origin receipt URL before navigation.
+
+The review stylesheet uses a narrow reading measure, system typography, restrained semantic color, light and dark tokens, mobile bottom-sheet confirmation, internal exact-evidence scrolling, visible focus, and reduced-motion behavior. It avoids the previous card grid, pill collection, monospaced prose, and equal-weight evidence panels.
+
+## Queue presentation fixes
+
+Two existing presentation problems were corrected with no queue-lifecycle change:
+
+- owner-alpha advances past remote pages containing only proposals already covered by local immutable decisions, while failing closed on repeated or non-progressing cursors;
+- the Decided view is ordered by decision time descending with queue ID as the stable tie break, while rebuildable index ordering remains unchanged.
+
+## Authority boundary preserved
+
+The redesign does not change the proposal or decision contract. The browser still submits only queue ID, review-evidence digest, action, reason, and CSRF. The server reloads and independently validates live evidence before recording one create-once decision.
+
+Approval remains intent only. Rejection remains terminal only in the owner decision layer. Neither action applies or writes source, commits, pushes, rebuilds, deploys, publishes, or changes proposal queue lifecycle.
+
+## Verification evidence
+
+The final verification passed at every stated layer:
+
+- owner-alpha application suite: 217 passed, 4 gated skips, 1,819 assertions;
+- proposal review and queue packages: 38 passed, 350 assertions;
+- focused review server and decision tests: 46 passed, 310 assertions;
+- existing browser Save acceptance: 1 passed, 14 assertions;
+- real same-host proposal no-effect acceptance: 1 passed, 41 assertions;
+- in-process Chromium proposal-review acceptance: 1 passed, 31 assertions, plus three consecutive stability runs;
+- owner workflow structure tests: 9 passed, 155 assertions;
+- docs build: 116 pages, with the knowledge-ops preflight covering `FOCUS.md` on 2026-08-21;
+- docs Playwright suite: 183 passed when run serially against an alternate local preview port;
+- frozen owner-alpha and docs installs: passed;
+- `git diff --check`: clean.
+
+The browser acceptance measured desktop and 390 px mobile layouts, light and dark color schemes, reduced motion, keyboard tab switching, confirmation Escape and focus return, internal exact-evidence scrolling, and zero page-level horizontal overflow. Eight ignored `.workspace` screenshots were inspected for inbox, proposal, exact bytes, both confirmation treatments, both receipts, and mixed active/decided history. One mobile metadata treatment was tightened after inspection, then the focused and browser suites passed again.
+
+The documented launcher was also exercised without issuing a browser capability. It reached `ready` with three proposals, returned `403` to an unauthenticated review request, handled `SIGTERM`, removed the disposable runtime, and recorded `runtimeCleanup: settled`.
+
+A follow-up exposed a discoverability gap: the Bun package script did not automatically appear as a selectable Portagenty workspace action. `cyberbaser.portagenty.toml` now declares an **owner-review** dev-server session that runs `bun run review:owner-alpha` from `docs/`, and the canonical review guide documents both the Portagenty action and manual command.
+
+The normal docs test command could not claim port 4321 because another process already owned it. An initial high-parallel alternate-port run overloaded the local preview and timed out. The same complete 183-test suite then passed with one worker on the alternate port. This was an environment and concurrency condition, not a page failure.
+
+## Second maintainer reaction
+
+The mechanically verified redesign still did not meet the product bar. The typography and reduced evidence density improved, but the owner action remained insufficiently obvious. The maintainer expected a more stylized current-versus-proposed treatment, likely side by side on wide screens, rather than a tabbed single-pane comparison followed by controls lower on the page.
+
+They also could not yet place the surface in an intuitive system and deployment model. The next design pass must explain, visually and in product language, where public or internal intake ends, where the retained queue lives, why owner review is a separate private app, what the immutable decision does, and where later separately authorized source application begins. The current proof is same-host local processes. It is not deployed, and tracked OCI examples keep proposal review disabled because shared-socket mounting and cross-container UID/GID authorization remain unimplemented.
+
+This feedback reopens visual design work without reopening the authority boundary. Further implementation should pause while coherent side-by-side mockups and the deployment mental model are worked through.
+
+A further critique exposed a deeper model problem: the UI derived headings such as “correct the typo” or `“teh” to “the”` from synthetic one-span fixture content. That is not a viable proposal identity. Real proposals may rewrite a paragraph, restructure a section, add substantial page content, or eventually span several exact operations. The changed words cannot carry the title, category, scope, and editorial intent by themselves.
+
+The next scaffolding work must separate three layers:
+
+1. **Proposal intent:** contributor-authored or adapter-assisted title, concise summary, category, declared scope, rationale, and references.
+2. **Exact change set:** source/base bindings and one or more bounded operations that preserve undeclared bytes.
+3. **Owner workflow:** integrity and trust classification, review presentation, immutable decision, and later separately authorized application state.
+
+A controlled editorial taxonomy may include correction, clarification, expansion, restructuring, sourcing, link repair, metadata change, new content, and other, but this is not locked. The taxonomy must support owner policy and useful review without pretending that a category grants authority. Mockups and fixtures must cover varied realistic scopes instead of three typo alternatives.
+
+## Remaining limits
+
+This remains a bounded exact-change review, not a full rendered-page preview. Quote proposals supply selector context; offset proposals may not. There is no Later state, bulk decision, complete history pagination, contributor discussion, source application, or public Lane B exposure.
+
+The next human checkpoint is a focused maintainer review through:
+
+```bash
+bun run --cwd docs review:owner-alpha
+```
+
+Only after that coherent UI checkpoint should work resume on the approved-proposal pipeline adapter.
+
+The broader intent, exact change-set, workflow, fixture, UX, and deployment synthesis is now recorded in [Proposal operating model](/cyberbaser/research/proposal-operating-model/) and the dated [proposal operating model synthesis](/cyberbaser/agent-context/zz-log/2026-08-21-proposal-operating-model-synthesis/). That work confirms that realistic fixtures and mockups precede another UI implementation pass; no version 2 schema or taxonomy is locked yet.

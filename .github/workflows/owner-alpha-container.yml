@@ -4,11 +4,17 @@ on:
   push:
     branches: [main]
     paths:
+      - 'apps/account-free-intake/**'
       - 'apps/owner-alpha/**'
+      - 'packages/account-free-intake/**'
       - 'packages/correction/**'
       - 'packages/linkcheck/**'
       - 'packages/ofm/**'
       - 'packages/projection/**'
+      - 'packages/proposal/**'
+      - 'packages/proposal-queue/**'
+      - 'packages/proposal-review/**'
+      - 'packages/review-projection/**'
       - 'packages/publish/**'
       - 'packages/trust/**'
       - 'renderers/quartz-cyberbase/**'
@@ -16,11 +22,17 @@ on:
       - '.github/workflows/owner-alpha-container.yml'
   pull_request:
     paths:
+      - 'apps/account-free-intake/**'
       - 'apps/owner-alpha/**'
+      - 'packages/account-free-intake/**'
       - 'packages/correction/**'
       - 'packages/linkcheck/**'
       - 'packages/ofm/**'
       - 'packages/projection/**'
+      - 'packages/proposal/**'
+      - 'packages/proposal-queue/**'
+      - 'packages/proposal-review/**'
+      - 'packages/review-projection/**'
       - 'packages/publish/**'
       - 'packages/trust/**'
       - 'renderers/quartz-cyberbase/**'
@@ -56,6 +68,11 @@ jobs:
           bun install --cwd packages/publish --frozen-lockfile
           bun install --cwd packages/trust --frozen-lockfile
           bun install --cwd packages/projection --frozen-lockfile
+          bun install --cwd packages/proposal --frozen-lockfile
+          bun install --cwd packages/proposal-queue --frozen-lockfile
+          bun install --cwd packages/proposal-review --frozen-lockfile
+          bun install --cwd packages/account-free-intake --frozen-lockfile
+          bun install --cwd apps/account-free-intake --frozen-lockfile
           bun install --cwd apps/owner-alpha --frozen-lockfile
 
       - name: Install the locked browser fixture dependencies
@@ -64,11 +81,17 @@ jobs:
           bun install --frozen-lockfile
           bunx playwright install --with-deps chromium
 
+      - name: Run owner-alpha application tests
+        run: bun test apps/owner-alpha/test
+
       - name: Run structural and hermetic script tests
         run: bun test deploy/owner-alpha/test
 
-      - name: Run the hermetic browser Save fixture
-        run: OWNER_ALPHA_ACCEPTANCE=1 bun test apps/owner-alpha/test/acceptance.test.js
+      - name: Run the hermetic owner acceptance fixtures
+        run: |
+          OWNER_ALPHA_ACCEPTANCE=1 bun test apps/owner-alpha/test/acceptance.test.js
+          OWNER_ALPHA_ACCEPTANCE=1 bun test apps/owner-alpha/test/proposal-review-acceptance.test.js
+          OWNER_ALPHA_ACCEPTANCE=1 bun test apps/owner-alpha/test/proposal-review-browser.test.js
 
       - name: Build the local Linux amd64 image
         run: docker build --progress=plain --file deploy/owner-alpha/Containerfile --tag cyberbaser-owner-alpha:ci .

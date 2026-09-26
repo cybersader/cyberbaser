@@ -24,7 +24,11 @@
     "@cyberbaser/linkcheck": "file:../../packages/linkcheck",
     "@cyberbaser/ofm": "file:../../packages/ofm",
     "@cyberbaser/projection": "file:../../packages/projection",
+    "@cyberbaser/proposal": "file:../../packages/proposal",
+    "@cyberbaser/proposal-queue": "file:../../packages/proposal-queue",
+    "@cyberbaser/proposal-review": "file:../../packages/proposal-review",
     "@cyberbaser/publish": "file:../../packages/publish",
+    "@cyberbaser/review-projection": "file:../../packages/review-projection",
     "@cyberbaser/trust": "file:../../packages/trust"
   }
 }

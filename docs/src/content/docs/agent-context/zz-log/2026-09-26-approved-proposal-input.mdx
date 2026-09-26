@@ -1,0 +1,42 @@
+---
+title: "2026-09-26 · Approved proposal input adapter"
+description: "By maintainer direction, started the decision-only core of the approved-proposal adapter: one create-once input artifact per Approve, strict blob-identity eligibility, an unfilled application gate, and a test proving the source applier rejects it. Recorded the maintainer's UX verdict."
+date: 2026-09-26
+status: implementation
+tags: [design, governance, testing, contribution]
+---
+
+## Maintainer direction
+
+Two decisions from the maintainer in this session, both recorded rather than inferred:
+
+- The owner review UX still feels generated rather than designed. The decision dock and confirmation are the weakest step. The ask is an adversarial, modern-UX pass that reasons in steps for the owner audience, not a styling pass. That is pre-checkpoint direction evidence; the checkpoint pack stays prepared and unrun.
+- The approved-proposal adapter's decision-only core may start before the checkpoint, on condition that it stays behind its gate. The plan previously sequenced it after checkpoint and contract selection; the architecture plan and FOCUS now say so.
+
+The maintainer also intends to set up a real Forgejo instance in the near term. Nothing here depends on it; Lane A live validation would become possible as separately authorized work.
+
+## What was built
+
+`apps/owner-alpha/src/approved-proposal.js` and the local script `apps/owner-alpha/bin/prepare-approved-proposal.js`. Canonical page: [Approved proposal input](/cyberbaser/development/approved-proposal-input/).
+
+The shape followed the maintainer's answer to "what should it produce": the most resilient, simplest answer. A durable create-once artifact under `proposal-inputs/` in the owner store, using the decision store's own patterns (hard-link create-once, child-held lock, private directory and file checks, fail-closed listing). Not a report, which leaves no chain of custody; not an edit session or job, which would be the first real authority move.
+
+Eligibility is strict by choice: the blob at the branch tip must be the exact object the owner reviewed, the pinned revision must still be reachable, the trust policy must be unchanged, and the base, candidate, and classification must reproduce. Anything else refuses without writing. Re-resolving a moved quote was rejected as more authority than this step should have.
+
+The artifact's gate field is `applicationGate` rather than `authorization`, because the store's credential scanner refuses keys that look like credentials. The scanner was right to fire.
+
+## Checks
+
+```text
+bun test apps/owner-alpha/test/approved-proposal.test.js
+  1 passed, 33 expectations: real intake, real decisions, 0600 artifact, applier rejects it
+  in memory and from disk, replay identical, Reject and unknown IDs refuse, owner commit to
+  the reviewed page yields source-changed with nothing written, untouched page stays
+  eligible, trust-policy commit makes it stale, Git state identical around every call
+bun test apps/owner-alpha/test deploy/owner-alpha/test/structure.test.js
+  235 passed, 4 skipped, 0 failed
+```
+
+## Boundaries
+
+No source application, job, edit session, commit, push, rebuild, deployment, or publication exists for an approved proposal. No application-authority event is selected. Nothing merged, deployed, or exposed. The review checkpoint has not run.

@@ -1,6 +1,6 @@
 # Cyberbaser Knowledge Base — Index
 
-> **How this KB works (two layers):** the **canonical knowledge base is the docs site** (`docs/src/content/docs/`) — mature, vision-swept, test-covered. This `.claude/` layer is the **orientation + pointer layer** for agents: read `PROJECT_CONTEXT.md` then `FOCUS.md` to get the direction, then follow stub pointers into the docs for depth. The numbered files below are greppable stubs, each summarizing current truth and linking its canonical page. **Locked a decision? Update this layer in the same session** (see `41-QUESTIONS-RESOLVED.md` R07).
+> **How this KB works:** the **canonical knowledge base is the docs site** (`docs/src/content/docs/`) — mature, vision-swept, test-covered. Dated chronology lives in `docs/src/content/docs/agent-context/zz-log/`: one entry per meaningful research, architecture, real acceptance, or implementation wave. This `.claude/` layer is the **orientation + pointer layer** for agents: read `PROJECT_CONTEXT.md` then `FOCUS.md` to get the direction, then follow stub pointers into the docs for depth. The numbered files below are greppable stubs, each summarizing current truth and linking its canonical page. **Meaningful work? Update canonical docs, dated chronology, and this orientation layer in the same session.** Docs preflight fails when `FOCUS.md` is newer than the latest dated log.
 
 ## Meta (read first, in order)
 
@@ -36,4 +36,4 @@
 - ✅ Superseded stub (canonical content lives on the docs page; stub keeps key facts greppable)
 - 🌳 Live in this layer (PROJECT_CONTEXT, FOCUS, 20-ROADMAP, 40/41, RESEARCH_SOURCES)
 
-Current state (2026-06-21): orientation layer fully re-aligned to the locked vision; drift eliminated (was frozen at 2026-04-11).
+Current state (2026-08-21): canonical docs, dated `zz-log` chronology, and the orientation layer are realigned. The April-to-August log gap is explicitly recorded rather than hidden.
