@@ -4,6 +4,11 @@
 
 ## Log
 
+### Direction amendment — connected slice shape and Forgejo first (2026-09-27, no R-number)
+- **Decided by the maintainer:** when the connected contributor-to-live slice is built, the suggestion form appears only on the owner's private local site (the public site keeps no form), and the owner app starts and stops the intake service beside itself. Before that slice, the maintainer sets up their own Forgejo.
+- **Forgejo shape:** the forge as a TrueNAS app (catalog image `forgejo:16.0.5-rootless`, matching this project's Forgejo 16 pins), holding a one-time seeded copy of the vault; no runner and no public exposure until checks or publishing move to Forgejo, which is the authority cutover still outside this arc. When a runner is needed it runs in a VM with its own engine, never with the NAS's Docker socket.
+- **Non-consequences:** no lane is installed, linked, or offered; GitHub remains authority; Q09 remains open; no R-number because these are sequencing and deployment-shape choices inside decided boundaries.
+
 ### Implementation amendment — the owner application event is the Apply act on the receipt (2026-09-27, no R-number)
 - **Selected event:** Putting an approved suggestion on the page is a second, explicit owner act taken from the approved receipt in the private owner app (**Apply to page**, one confirmation sheet). No durable auto-apply policy exists; approval, category, identity claim, and trust route never trigger application. Maintainer direction in the same session: nobody runs commands, people act from the UI, and the backend stays resilient and machine-callable; the same privileged API serves both.
 - **Mechanics:** The act re-checks strict eligibility (exact blob at the branch tip, reproducible digests, unchanged trust policy), resolves the page slug from the rendered owner site, applies the owner pipeline's own rules (edit policy, LF-only, size limits, no frontmatter), requires a clean checkout at that tip, records one create-once event under `proposal-applications/` per attempt, and starts one ordinary owner-alpha Save job with a supplied session and operation. The existing pipeline is the only writer. Attempts are numbered only after a job that never started or stopped before any source effect; once the page changed, no further attempt is accepted.
