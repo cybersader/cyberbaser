@@ -421,14 +421,6 @@ ${overlay.historyTruncated ? '<p class="status">Only the newest decisions are sh
   });
 }
 
-function evidenceLinks(urls) {
-  if (urls.length === 0) return '<p class="empty-state">No references were supplied.</p>';
-  return `<ul class="evidence-links">${urls.map((url, index) => {
-    const host = new URL(url).hostname;
-    return `<li><a href="${escapeHtml(url)}" rel="noopener noreferrer">Reference ${index + 1} · ${escapeHtml(host)}</a></li>`;
-  }).join('')}</ul>`;
-}
-
 const REVIEW_MODES = Object.freeze([
   { key: 'changes', label: 'Changes', view: 'unified', hint: 'Removals and additions marked in place' },
   { key: 'proposed', label: 'Proposed', view: 'proposed', hint: 'The page as it would read if applied' },
@@ -591,9 +583,9 @@ function operationNote(view) {
 function unavailableModeHtml(reason, entry) {
   const view = proposalView(entry);
   return `<div class="mode-unavailable">
-<p class="section-kicker">Not derivable</p>
+<p class="section-kicker">This view cannot be shown</p>
 <p>${escapeHtml(reason)}</p>
-<p class="context-note">This surface never invents a page it cannot derive from the pinned source and the declared exact change. The declared spans are shown instead.</p>
+<p class="context-note">The page is never invented from partial evidence. Here is the exact change instead.</p>
 <div class="exact-change-grid">
 <div><h3>Current bytes</h3><pre><code>${escapeHtml(view.oldText)}</code></pre></div>
 <div><h3>Replacement bytes</h3><pre><code>${escapeHtml(view.replacementText)}</code></pre></div>
@@ -637,8 +629,7 @@ function reviewModeNav(queueId, activeMode, projection) {
 function comparisonPanel(entry, activeMode) {
   const projection = reviewProjection(entry);
   const mode = REVIEW_MODES.find((item) => item.key === activeMode) ?? REVIEW_MODES[0];
-  const path = entry.summary.source.path;
-  const readingNote = 'Approximate structural reading. Changed passages always show exact source. This is not the published page.';
+  const readingNote = 'This is a structural reading, not the published page.';
   let panel;
   if (mode.view === null) {
     panel = comparePanelHtml(projection, entry);
@@ -652,22 +643,8 @@ function comparisonPanel(entry, activeMode) {
   return `<section class="comparison-section" aria-labelledby="comparison-heading">
 <h2 id="comparison-heading" class="visually-hidden">Read the change</h2>
 ${reviewModeNav(entry.summary.queueId, mode.key, projection)}
-<div class="reader-controls">
-<p class="mark-legend"><span>Removed text is <del>struck through</del>.</span> <span>Added text is <ins>underlined</ins>.</span> <span>Every other byte is unchanged.</span></p>
-<p class="projection-note">${escapeHtml(readingNote)}</p>
-</div>
-<p class="document-heading"><code class="document-path">${escapeHtml(path)}</code></p>
+<p class="reading-note"><span>Removed text is <del>struck through</del>, added text is <ins>underlined</ins>, and everything else is the page's exact source.</span> <span>${escapeHtml(readingNote)}</span></p>
 <div class="mode-panel mode-panel-${mode.key}">${panel}</div>
-</section>`;
-}
-
-function rationalePanel(entry) {
-  const proposal = entry.evidence.proposal;
-  return `<section class="rationale-section" aria-labelledby="rationale-heading">
-<p class="section-kicker">Contributor note</p>
-<h2 id="rationale-heading">Why this change</h2>
-<p class="contributor-rationale">${escapeHtml(proposal.submission.rationale).replaceAll('\n', '<br>')}</p>
-<div class="references"><h3>References</h3>${evidenceLinks(proposal.submission.evidence)}</div>
 </section>`;
 }
 
@@ -725,21 +702,31 @@ ${decisionFacts}
 function reviewIdentityHeader(entry, view) {
   const { summary } = entry;
   const proposal = entry.evidence.proposal;
-  const references = evidenceLinks(proposal.submission.evidence);
+  const rationale = proposal.submission.rationale;
+  const references = proposal.submission.evidence;
+  // The contributor's own words are the most useful thing on the page after
+  // the change itself, so they are shown rather than hidden behind a
+  // disclosure. Only an unusually long note folds.
+  const note = rationale.length <= 320
+    ? `<p class="contributor-rationale">${escapeHtml(rationale).replaceAll('\n', '<br>')}</p>`
+    : `<p class="contributor-rationale">${escapeHtml(compactReviewText(rationale, 320))}</p>
+<details class="identity-details"><summary>Read the whole note</summary><p class="contributor-rationale">${escapeHtml(rationale).replaceAll('\n', '<br>')}</p></details>`;
+  const links = references.length === 0
+    ? ''
+    : `<p class="identity-references">References: ${references.map((url, index) => `<a href="${escapeHtml(url)}" rel="noopener noreferrer">${escapeHtml(new URL(url).hostname)}${references.length > 1 ? ` (${index + 1})` : ''}</a>`).join(', ')}</p>`;
   return `<header class="owner-header review-detail-header">
 <a class="back-link" href="/owner/review">Back to Proposals</a>
 <h1>${escapeHtml(changeName(view))}</h1>
-<p class="proposal-summary">${escapeHtml(compactReviewText(proposal.submission.rationale, 200))}</p>
 <div class="identity-meta">
 <span class="identity-path">${escapeHtml(summary.source.path)}</span>
 <span>Received ${reviewTime(summary.receivedAt)}</span>
 <span>Expires ${reviewTime(summary.expiresAt)}</span>
 </div>
-<details class="identity-details">
-<summary>Contributor note and references</summary>
-<p class="contributor-rationale">${escapeHtml(proposal.submission.rationale).replaceAll('\n', '<br>')}</p>
-${references}
-</details>
+<div class="contributor-note">
+<p class="section-kicker">Why the contributor suggests it</p>
+${note}
+${links}
+</div>
 </header>`;
 }
 
@@ -788,7 +775,7 @@ function reviewDetailPage({ entry, csrfToken, mode = REVIEW_MODE_KEYS[0] }) {
     body: `<main class="owner-shell review-shell" id="owner-review-detail">
 ${reviewIdentityHeader(entry, view)}
 ${comparisonPanel(entry, mode)}
-${technicalEvidence(entry)}
+${technicalEvidence(entry, { title: 'Details for the record' })}
 </main>
 ${decisionStep({ entry, csrfToken, view })}`,
   });

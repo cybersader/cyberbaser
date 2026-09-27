@@ -588,7 +588,7 @@ describe('privileged proposal review routes', () => {
     expect(detailBody).toContain('<aside class="decision-bar" aria-label="Your decision">');
     expect(detailBody).toContain('Approve this suggestion?');
     expect(detailBody).toContain('<details class="technical-evidence">');
-    expect(detailBody).toContain('<summary>Technical evidence</summary>');
+    expect(detailBody).toContain('<summary>Details for the record</summary>');
     expect(detailBody).toContain('id="decision-reason"');
     expect(detailBody).toContain('This records your decision and nothing else. The page stays exactly as it is.');
     expect(detailBody).toContain('type="button" data-action="reject"');

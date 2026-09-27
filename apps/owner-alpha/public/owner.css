@@ -529,6 +529,10 @@ body.proposal-review-page {
   line-height: 1.5;
 }
 .identity-meta strong { color: var(--review-ink); }
+.contributor-note { max-width: 44rem; margin-top: 0.4rem; }
+.contributor-note .section-kicker { margin-bottom: 0.35rem; }
+.contributor-note .contributor-rationale { margin: 0; font-size: 1.05rem; line-height: 1.6; }
+.identity-references { margin: 0.5rem 0 0; color: var(--review-muted); font-size: 0.88rem; }
 .identity-details summary {
   min-height: 36px;
   padding: 0.4rem 0;
@@ -558,32 +562,13 @@ body.proposal-review-page {
 .proposal-review-page .mode-tab small:not(:empty) { margin-top: 0.2rem; }
 .proposal-review-page .mode-tab.active { border-bottom-color: var(--review-accent); color: var(--review-ink); }
 
-.reader-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.55rem 2rem;
-  padding-top: 0.9rem;
-}
-.mark-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem 1.25rem;
-  margin: 0;
+.reading-note {
+  margin: 0.8rem 0 1rem;
   color: var(--review-muted);
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   line-height: 1.6;
 }
-.projection-note {
-  flex: 1 1 100%;
-  margin: 0;
-  color: var(--review-muted);
-  font-size: 0.8rem;
-  line-height: 1.6;
-}
-.document-heading { margin: 0.75rem 0; }
-.document-path { color: var(--review-muted); font-size: 0.82rem; overflow-wrap: anywhere; }
+.reading-note span + span { margin-left: 0.35rem; }
 .mode-panel { min-width: 0; padding-top: 1rem; }
 
 .reading-body {
