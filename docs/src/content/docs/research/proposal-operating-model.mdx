@@ -60,8 +60,8 @@ Private owner review
 Immutable proposal decision receipt
   │  Approve or Reject; decision-only; source unchanged
   ▼
-Future application boundary
-  │  requires a separate owner authority event or explicit durable policy
+Owner application act (Apply to page on the receipt)
+  │  a separate owner event; re-checks the exact page, then one ordinary Save job
   ▼
 Canonical Markdown + version history
   │  only declared bytes change
@@ -77,7 +77,7 @@ Four labels should remain understandable throughout the product:
 1. **External, proposal only.** A reader, forge, rich editor, CMS-shaped tool, or agent may propose but cannot write or authorize itself.
 2. **Owner server, private evidence.** The queue and review seam retain and validate evidence without becoming source authority.
 3. **Owner decision only.** Approve or Reject records immutable intent and has no source, Git, rebuild, deployment, or publication effect.
-4. **Owner application authority.** A separate event or durable policy may later authorize exact source application after fresh validation.
+4. **Owner application authority.** A separate owner act, **Apply to page** on the approved receipt, authorizes exact source application after fresh validation. It was selected and built on 2026-09-27; see [Owner application event](/cyberbaser/design/owner-application-event/).
 
 The docs site explains and launches the system. It is not the privileged review, source, Git, deployment, or publication authority origin.
 
@@ -181,14 +181,14 @@ These axes must remain separate:
 | Trust route | Pinned owner policy | existing tier/route plus reasons | Routes attention; grants no authority |
 | Review attention | Derived owner projection | review, careful review, blocked, none | Explains the current review affordance |
 | Owner decision | Private owner origin | Approve or Reject | Immutable decision-only receipt |
-| Application authority | Future owner event or durable policy | not yet selected | May authorize a later exact application after revalidation |
+| Application authority | Owner application event (Apply to page) | eligible, stale, unapplicable, applied | Authorizes one exact application after revalidation; built 2026-09-27 |
 | Application result | Owner-controlled application job | exact source and version-control outcomes | Records effects without rewriting the decision |
 | Deployment observation | Read-only provider adapter | pending, succeeded, failed, unavailable | Observes a pushed revision |
 | Publication witness | Read-only live verifier | confirmed, missing, mismatch, unavailable | Supports a live-effect claim |
 
 A single generic `status` would erase the most important distinctions. A stale proposal is not rejected. An approved proposal is not applied. A successful deployment is not necessarily live. A confirmed live page does not retroactively grant source authority.
 
-The exact application-authorization artifact, TTL, revocation model, and durable-policy behavior remain open. Defining that schema now would over-specify the later adapter before the owner has selected the authority event. The locked requirement is narrower: **approval alone can never authorize application**, and any later authority must bind the exact approved evidence and require fresh eligibility checks.
+The application event artifact is now defined on [Owner application event](/cyberbaser/design/owner-application-event/): create-once per attempt, binding the exact approved evidence, with fresh eligibility checks at the moment of the act and no durable auto-apply policy. The locked requirement holds: **approval alone can never authorize application**.
 
 ## Proposal identity and presentation metadata
 
@@ -452,7 +452,7 @@ Only after the coherent model and checkpoint:
 - What exact operation and aggregate caps fit paragraph and section work without enabling semantic sharding?
 - Is current full-file base equality required at application, or is a later explicit rebase protocol worth researching? The current recommendation is exact full-base equality.
 - Can the owner record approval for a historical proposal that is no longer application-eligible, or must current conflict block the decision?
-- What exact event or durable policy grants source-application authority after approval? A written proposal now exists at [Owner application event](/cyberbaser/design/owner-application-event/); it is not yet accepted.
+- ~~What exact event or durable policy grants source-application authority after approval?~~ Answered 2026-09-27: the owner's separate Apply act on the receipt, with no durable policy; see [Owner application event](/cyberbaser/design/owner-application-event/).
 - Does the first coherent review require full source-page context or a rendered candidate preview, beyond bounded operation context?
 - Should the existing uncommitted review wave be preserved as a mechanical checkpoint before refactoring, or should it be reshaped around the new view model before merge?
 - When, if ever, do private proposal decisions become portable commit-backed governance history without leaking private evidence or creating a second authority?

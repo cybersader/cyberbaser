@@ -138,6 +138,7 @@ function statefulReviewService() {
     }),
   ];
   const decisions = new Map();
+  const applications = new Map();
   let failNextRecord = true;
 
   function history() {
@@ -147,6 +148,23 @@ function statefulReviewService() {
 
   return Object.freeze({
     entries,
+    applications,
+    applicationAvailable: true,
+    async applicationStatus(queueId) {
+      // Like the real service, report the job's current stage, not the stage at the act.
+      const recorded = applications.get(queueId) ?? null;
+      const applied = recorded === null ? null : { ...recorded, jobState: 'pushing' };
+      const attempts = applied === null ? [] : [applied];
+      return { queueId, state: applied === null ? 'eligible' : 'applied', reason: null, details: {}, branchTip: 'c'.repeat(40), input: null, attempts, latest: applied };
+    },
+    async apply(queueId) {
+      if (applications.has(queueId)) {
+        return { applied: false, status: await this.applicationStatus(queueId), event: null, job: null };
+      }
+      const attempt = { attempt: 1, appliedAt: '2026-08-21T12:20:00Z', jobId: `OA-browser-${applications.size + 1}`, jobState: 'accepted', failure: null, retryable: false };
+      applications.set(queueId, attempt);
+      return { applied: true, status: await this.applicationStatus(queueId), event: { attempt: 1 }, job: { jobId: attempt.jobId, state: 'accepted' } };
+    },
     async list() {
       return {
         actionable: entries.filter((entry) => !decisions.has(entry.summary.queueId)),
@@ -232,7 +250,19 @@ async function browserFixture() {
     proposalReview,
     createEditSession: async () => { throw new Error('not available'); },
     saveEdit: async () => { throw new Error('not available'); },
-    lookupJob: async () => null,
+    lookupJob: async (jobId) => {
+      const applied = [...proposalReview.applications.values()].find((attempt) => attempt.jobId === jobId);
+      if (!applied) return null;
+      return {
+        jobId,
+        state: 'pushing',
+        revision: 7,
+        createdAt: '2026-08-21T12:20:00.000Z',
+        updatedAt: '2026-08-21T12:20:09.000Z',
+        recovery: { classification: 'restart-safe', automatic: true, instruction: 'Resume the exact push.' },
+        failure: null,
+      };
+    },
   });
   const ownerOrigin = `http://127.0.0.1:${ownerPort}`;
   const readerOrigin = `http://127.0.0.1:${readerPort}`;
@@ -267,7 +297,7 @@ acceptanceTest('browser review is content-first, deliberate, recoverable, and re
     const page = await context.newPage();
     let decisionPosts = 0;
     page.on('request', (request) => {
-      if (request.method() === 'POST' && request.url().includes('/api/review/')) decisionPosts += 1;
+      if (request.method() === 'POST' && request.url().includes('/api/review/') && request.url().endsWith('/decision')) decisionPosts += 1;
     });
 
     await page.goto(`${fixture.ownerOrigin}/owner/bootstrap?token=${fixture.servers.bootstrapToken}`);
@@ -373,9 +403,34 @@ acceptanceTest('browser review is content-first, deliberate, recoverable, and re
     await page.waitForURL(`${fixture.ownerOrigin}/owner/decisions/**`);
     expect(decisionPosts).toBe(2);
     await expect(page.getByText('Source unchanged', { exact: true }).textContent()).resolves.toBe('Source unchanged');
-    await expect(page.getByText('Nothing on the page changed and nothing was published or scheduled.').count()).resolves.toBe(1);
+    await expect(page.getByText('Nothing on the page changed when you approved. Putting it on the page is the separate step below.').count()).resolves.toBe(1);
     await expect(page.locator('[data-action]').count()).resolves.toBe(0);
+    // The separate step: put it on the page. One button, one sheet, then the job.
+    await expect(page.locator('#application-heading').textContent()).resolves.toBe('Put it on the page');
+    const applyButton = page.getByRole('button', { name: 'Apply to page', exact: true });
+    await expect(applyButton.count()).resolves.toBe(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await capture(page, 'approval-receipt-dark-mobile');
+    const receiptUrl = page.url();
+    await applyButton.click();
+    await expect(page.locator('#apply-dialog-title').textContent()).resolves.toBe('Apply this suggestion to the page?');
+    await expect(page.locator('#apply-confirm').evaluate((element) => element === document.activeElement)).resolves.toBe(true);
+    await capture(page, 'apply-confirm-dark-mobile');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#decision-dialog').evaluate((element) => element.open)).resolves.toBe(false);
+    await expect(applyButton.evaluate((element) => element === document.activeElement)).resolves.toBe(true);
+    await applyButton.click();
+    await page.locator('#apply-confirm').click();
+    await page.waitForURL(`${fixture.ownerOrigin}/owner/jobs/OA-browser-1`);
+    await expect(page.locator('h1').textContent()).resolves.toBe('Save job');
+    await capture(page, 'apply-job-dark-mobile');
+    await page.goto(receiptUrl);
+    await expect(page.locator('#application-heading').textContent()).resolves.toBe('On its way to the page');
+    await expect(page.locator('.application-stage strong').textContent()).resolves.toBe('Pushed. Waiting for the site to build');
+    await expect(page.getByRole('link', { name: 'Follow it' }).getAttribute('href')).resolves.toBe('/owner/jobs/OA-browser-1');
+    await expect(page.getByText('Applied', { exact: true }).count()).resolves.toBe(1);
+    await expect(page.getByRole('button', { name: 'Apply to page', exact: true }).count()).resolves.toBe(0);
+    await capture(page, 'applied-receipt-dark-mobile');
 
     await Promise.all([
       page.waitForURL(`${fixture.ownerOrigin}/owner/review`),

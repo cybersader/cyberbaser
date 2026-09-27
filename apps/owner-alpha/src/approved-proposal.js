@@ -103,7 +103,7 @@ function digestField(value, label) {
   }
 }
 
-function decisionDigest(decision) {
+export function decisionDigest(decision) {
   return digestBytes(Buffer.from(serializeOwnerDecision(decision), 'utf8'));
 }
 
@@ -395,6 +395,16 @@ async function readInput(context, queueId) {
   const input = validateApprovedProposalInput(parsed);
   if (input.queueId !== queueId) fail('invalid-approved-input', 'approved proposal input filename does not match its queue ID');
   return input;
+}
+
+/** Read one prepared input without writing anything; null when none exists. */
+export async function readApprovedProposalInput(context, queueIdInput) {
+  if (!context) fail('invalid-input-dependency', 'reading an approved proposal input requires a store context');
+  const queueId = validateQueueId(queueIdInput);
+  return withFileLock(context, APPROVED_INPUT_LOCK, async () => {
+    await prepareInputLayout(context);
+    return readInput(context, queueId);
+  });
 }
 
 /**

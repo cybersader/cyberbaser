@@ -786,3 +786,26 @@ body.proposal-review-page {
   .decision-actions { width: 100%; }
   .decision-actions button { flex: 1 1 8rem; }
 }
+
+/* The step after approval: put it on the page, or why not. */
+#apply-status:empty { display: none; min-height: 0; }
+.application-step {
+  margin-top: 1.5rem;
+  padding: 1.25rem 1.4rem;
+  border: 1px solid var(--review-line);
+  border-radius: 0.75rem;
+  background: var(--review-sheet);
+}
+.application-step h2 { margin: 0 0 0.6rem; font-size: 1.2rem; line-height: 1.3; }
+.application-step p { margin: 0 0 0.6rem; line-height: 1.55; }
+.application-step p:last-child { margin-bottom: 0; }
+.application-ready { border-color: var(--review-accent); }
+.application-blocked { border-left: 4px solid var(--review-reject); }
+.application-applied { border-left: 4px solid var(--review-approve); }
+.application-actions { display: flex; gap: 0.6rem; margin: 0.9rem 0 0.2rem; }
+.proposal-review-page .application-actions button.decision-approve { background: var(--review-accent); color: #fff; }
+.application-stage { font-size: 1.05rem; }
+.application-stage strong { margin-right: 0.5rem; }
+.application-meta { color: var(--review-muted); font-size: 0.9rem; }
+.application-job-link { color: var(--review-accent); font-weight: 600; }
+.source-unchanged.source-applied strong { color: var(--review-approve); }

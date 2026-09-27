@@ -1,133 +1,116 @@
 ---
 title: Owner application event
-description: "A written proposal for how an owner applies an approved suggestion to the page: one separate, explicit owner act that names one prepared input, re-checks the exact page, and starts one ordinary owner-alpha Save job. No code exists for it yet."
+description: "How an approved suggestion gets onto the page: a second, explicit owner act, taken from the receipt, that re-checks the exact page, records one event, and runs one ordinary Save job. Accepted and built on 2026-09-27."
 sidebar:
   order: 23.6
 status: research
 tags: [design, governance, architecture, contribution]
 ---
 
-This page proposes the answer to the one authority question the operating model left open: **what exact event grants source-application authority after an owner approves a suggestion?** It is written for the maintainer to accept, amend, or reject before any code is written.
+This page answers the one authority question the operating model had left open: **what act puts an approved suggestion on the page?** The answer was proposed, accepted by the maintainer, and built on 2026-09-27. The working guide for the owner is [Applying an approved suggestion](/cyberbaser/development/applying-approved-suggestion/).
 
-:::caution[Proposal, not a decision]
-Nothing on this page is implemented, selected, or locked. Approve remains decision-only. The [approved proposal input](/cyberbaser/development/approved-proposal-input/) remains a never-consumed artifact with an unfilled gate. The decisions this page asks for are listed at the end.
+:::note[What was decided]
+The maintainer accepted the core shape as proposed and made two corrections to the first draft: nobody runs commands, so the act is a button on the receipt in the owner's private app, not a terminal script; and the backend under it stays resilient and machine-callable, which the same privileged API provides. On the three follow-up questions the maintainer expressed no preference, so the recommended answers were taken and are recorded below.
 :::
 
 ## The shape in one paragraph
 
-Applying an approved suggestion is a **second, separate owner act**, not a consequence of approving it. The owner names one prepared input. The system checks that the page is still the exact object the owner reviewed and that the owner's durable policy allows applications at all. It then records one create-once **application event** and starts one ordinary owner-alpha Save job carrying the proposal's exact operation. Everything after that is the existing pipeline: preflight, checks, atomic exact apply, one-path commit, normal push, deployment monitoring, live witness, local rebuild, and durable restart recovery. There is no new writer, no second application path, and no automatic step between the approval and the event.
+Applying is a **second, separate owner act**, not a consequence of approving. On the receipt of an approved suggestion the owner sees whether the page is still exactly as reviewed and, if so, one button: **Apply to page**. Confirming it records one create-once **application event** and starts one ordinary owner-alpha Save job carrying the suggestion's exact operation. Everything after that is the existing pipeline: preflight, checks, atomic exact apply, one-path commit, normal push, deployment monitoring, live witness, local rebuild, and durable restart recovery. There is no new writer, no second application path, and no automatic step between the approval and the act.
 
 ## Why a second act, and why not a policy
 
 Approve and Apply answer different questions, and the owner asks them at different times.
 
-- **Approve** asks: is this a good change? It is answered while reading, often on a phone, sometimes weeks before anything happens. It should be cheap, reversible in spirit, and recordable even when the page has since moved on.
+- **Approve** asks: is this a good change? It is answered while reading, often on a phone, sometimes weeks before anything happens. It should be cheap and recordable even when the page has since moved on.
 - **Apply** asks: put this on the page now? It is answered when the owner is ready for a commit, a push, and a public change. It needs the current page, the current policy, and a moment of attention.
 
-Folding the two together, or letting a policy answer the second question from the first, would make reading dangerous. The owner would hesitate to approve because approval publishes. The operating model already rules out automatic application from approval, category, identity claim, or trust route. This proposal keeps that rule and adds only one thing: the explicit act.
+Letting a policy answer the second question from the first would make reading dangerous: the owner would hesitate to approve because approval publishes. The operating model already rules out automatic application from approval, category, identity claim, or trust route. This design keeps that rule and adds only the explicit act.
 
-The event also mirrors how the owner's own edits already work. Clicking **Save and publish** is the edit-specific authority event for a direct owner edit. Applying an approved suggestion is the same kind of event for a change that arrived from outside. Same boundary, same pipeline, same evidence.
+The act mirrors how the owner's own edits already work. **Save and publish** is the authority event for a direct owner edit. **Apply to page** is the same kind of event for a change that arrived from outside. Same boundary, same pipeline, same evidence.
 
-## The steps
+## What the owner sees
 
-What the owner does, and what the system does in response.
+1. **Approve.** The receipt says the page has not changed and that putting it on the page is the separate step below.
+2. **Below that, one of four things.** *Put it on the page*, with the button, when the page is still exactly as reviewed. *Cannot be applied as it is*, with the reason in plain words, when the page moved since the review. *The page pipeline cannot apply this yet*, with the reason, when the change is one the owner's own Save path would refuse. *On its way to the page*, with the stage in plain words and a link to follow it, once the act has been taken.
+3. **Confirm.** The sheet names the change and the page and says once what will happen: the page changes and is published, in the background, and the next screen follows it step by step.
+4. **Follow it.** The job page shows the durable pipeline state, exactly as for a Save. The receipt keeps showing the stage afterwards, and the inbox's decided list can tell approved from applied.
 
-1. **The owner approves a suggestion.** Exists today. An immutable decision is recorded. Source is unchanged.
-2. **An input is prepared.** Exists today, by local script. The input pins the decision digest, the reviewed evidence digest, the exact blob, and the branch tip. It grants nothing.
-3. **The owner applies it.** Proposed. From the server machine, as the owner user:
+The button appears only in the eligible state. Nothing on the review page itself changes: Approve stays decision-only, and the checkpoint question about that stays a hard gate.
 
-   ```bash
-   bun apps/owner-alpha/bin/apply-approved-proposal.js <owner-alpha config> <queueId>
-   ```
+## What the act checks before anything happens
 
-   The script loads the prepared input and re-runs the same strict eligibility check at this moment: the pinned revision is still reachable, the blob at the branch tip is the exact reviewed object, the base and candidate digests reproduce, and the trust policy is unchanged. It also requires that the checkout is clean, that its HEAD is that branch tip, and that the durable policy has applications enabled. If any of that fails, nothing is written and the reason is printed.
-4. **One event is recorded, create-once.** The event names the input by digest, the branch tip it saw, and the job it is about to start. A second event for the same suggestion is refused unless the earlier job failed before any source effect (see retries below).
-5. **One Save job runs.** The event supplies the job's edit session and source operation directly, derived from the input rather than from an editor. The pipeline treats it exactly like an owner Save. At `ready-to-apply` it still requires HEAD to equal the bound base. Only the declared bytes change.
-6. **The receipt shows what happened.** The approved suggestion's receipt gains one line: not yet applied and eligible now, not yet applied and no longer eligible, or applied in job so-and-so with the job's current state. The inbox's decided list distinguishes approved from applied. No button appears in this first version.
+In this order, refusing without effect at the first failure:
+
+1. An Approve decision exists for the suggestion.
+2. No earlier attempt reached the page. An attempt that never started or stopped before any source effect does not count, so the owner can try again; one that changed the page blocks any further attempt forever.
+3. The prepared input exists or can be prepared: the pinned revision is still reachable, the blob at the branch tip is the exact reviewed object, base and candidate digests reproduce, the trust policy is unchanged.
+4. The rendered owner site carries the page, so it has a slug and a live URL to verify against.
+5. The owner pipeline's own rules hold: the path is inside the edit policy, the source is LF-only UTF-8, the change is within the owner's size limits, and it does not touch YAML frontmatter.
+6. The checkout is clean and its HEAD equals the branch tip that was just checked.
+
+Only then is the event recorded and the job started. The job re-runs its own checks against the supplied session and operation, including the HEAD equality gate immediately before apply.
 
 ## The event artifact
 
 Create-once under `proposal-applications/<queueId>.<attempt>.json` in the private owner store, mode 0600, with the same hard-link create-once, child-held lock, and private directory checks the decision and input stores use.
 
 ```text
-schemaVersion, artifactType: owner-alpha-application-event, queueId, attempt, appliedAt
-authority        type: owner-alpha-local, identity (the same owner identity the decision carries)
+schemaVersion, artifactType: owner-alpha-proposal-application-event, queueId, attempt, appliedAt
+authority        type: owner-alpha-local, identity (the configured owner identity)
 input            digest of the prepared input artifact, preparedAt
 decision         digest, decidedAt, reviewEvidenceDigest
-source           repository, path, revision, branch, branchTip (must equal checkout HEAD), gitObjectId, gitMode, baseDigest
+source           repository, path, revision, branch, branchTip, gitObjectId, gitMode, baseDigest, slug, liveUrl
 candidate        byteLength, digest
 policyRevision   the durable owner policy revision the job is bound to
 job              jobId of the Save job this event started
 ```
 
-The event does not repeat the operation bytes. They live in the input, and the job's own immutable operation artifact repeats them at bind time with digests that must match. The input artifact stays untouched: its `applicationGate.state` remains `not-authorized` because the input itself never authorizes anything. Authority lives in the event, and the event references the input.
+The event does not repeat the operation bytes; the input and the job's own immutable operation artifact carry them with digests that must match. The input artifact stays untouched and its gate stays `not-authorized`, because the input itself never authorizes anything. Authority lives in the act, the act is recorded by the event, and the event references the input.
 
 ## How the job binds to the existing pipeline
 
-The pipeline already accepts a supplied `session` and `operation` instead of deriving them from editor text. The event fills both from the input and the blob it re-read.
+The pipeline accepts a supplied session and operation instead of deriving them from editor text. The act fills both from the input and the blob it re-read.
 
 | Job artifact | Filled from |
 |---|---|
-| Edit session `relativePath`, `source.bytesBase64`, `digest`, `gitMode`, `gitObjectId`, `frontmatter` | The exact blob re-read at the branch tip |
-| Edit session `baseCommit`, `policyRevision` | Checkout HEAD at event time; current durable policy |
-| Edit session `slug`, `liveUrl` | Resolved read-only from the local rendered site's content index for that path (see findings) |
-| Source operation `start`, `end`, `expectedOldBytesBase64`, `replacementBytesBase64`, `baseDigest`, `candidateDigest` | The proposal's operation, unchanged |
-| Commit message | Owner prefix plus path, with a `Cyberbaser-Proposal` trailer carrying the proposal ID and queue ID |
+| Edit session source bytes, digest, Git mode and object ID, frontmatter range | The exact blob re-read at the branch tip |
+| Edit session `baseCommit`, `policyRevision` | Checkout HEAD at the moment of the act; the current durable policy |
+| Edit session `slug`, `liveUrl` | The owner edit link the rendered owner site carries for that path |
+| Edit session `origin` | `approved-proposal`, with the queue ID, proposal ID, and input digest |
+| Source operation span and bytes, base and candidate digests | The proposal's operation, unchanged |
 
-The pipeline then reruns its own checks against these inputs: candidate reproduction, LF-only candidate, unchanged bytes outside the operation, OFM classification, render check, link delta, and the HEAD equality gate before apply. The job's session artifact additionally records `origin: approved-proposal` with the event digest, so a job started from a suggestion is distinguishable from a direct owner edit in the durable evidence. That is a small, optional addition to the session schema.
+The commit message is the owner's configured prefix plus the path, exactly as for a Save. A provenance trailer was considered and deferred: the pipeline reconstructs the expected message from policy when it recovers a commit after a crash, so a custom message would break that recovery path. Provenance is durable in the event and in the job's session artifact instead.
 
-## The durable policy gate
+## Findings recorded with the build
 
-A new owner-alpha config block, off by default:
-
-```json
-"applications": { "enabled": false }
-```
-
-Turning it on changes the policy revision, exactly as activating automatic commit and push did before the first real Save on 2026-08-02. The event script refuses while it is off. This is the only policy this proposal adds. It gates whether the act is possible; it never performs the act.
-
-## Retries and failure
-
-The pipeline is durable. If the job fails in a restart-safe state, the owner resumes it through the existing resume path, and the event stays the single record. If the job fails terminally **before** durable source-applied evidence exists, the owner may record a new attempt for the same suggestion; the script refuses otherwise. Once any attempt has source-applied evidence, no further attempt is ever accepted for that suggestion: the change is on the page, and push or deployment recovery belongs to the job.
-
-Undoing an applied suggestion is a normal owner edit, not a proposal operation.
-
-## Findings that need a decision
-
-These came out of reading the pipeline against the proposal corpus, and each one changes what the first version can promise.
-
-1. **Frontmatter changes cannot be applied by the current pipeline.** The owner Save path refuses any operation that intersects YAML frontmatter. Checkpoint proposal 5, the `reviewed` date change, can be approved but not applied. Options: keep the rule and show "this pipeline cannot apply frontmatter changes" on the receipt, or relax the rule for approved proposals under the same byte-exact checks. Recommendation: keep the rule in the first version and record the case as measured friction.
-2. **Only published pages have a live witness.** The pipeline confirms the change on the live page, so the target must have a slug in the rendered site. A proposal against an unpublished or unrendered path would fail at slug resolution before any effect. Recommendation: fail closed with a clear reason; do not add a witness-free mode.
-3. **Owner limits and intake limits differ.** The owner Save path caps changed bytes and lines through its own config; the intake caps proposals through its own. A proposal within intake limits could exceed owner limits. Recommendation: the event applies the owner limits, since the owner pipeline is the one writing, and the receipt names the limit when it refuses.
-4. **Authorship and credit.** The commit is made by the owner on the owner's machine. The proposal ID and queue ID go in a trailer. The contributor's note and the owner's decision note stay private. Visible credit for anonymous or pseudonymous contributors remains open under challenge 07 and is not settled here.
-5. **Approve for a no-longer-eligible suggestion stays recordable.** Today the owner can approve a suggestion whose page has since changed; the input adapter then reports stale. This proposal keeps that: approval is intent, eligibility is checked at each later act. The receipt should say plainly that the page changed since the review.
-6. **Script first, button later.** The privileged owner origin already holds Save authority, so an **Apply** control on the receipt would not be new authority in principle. It would, however, put the second act one tap from the first, on the same screen where the maintainer just decided that Approve must read as decision-only. Recommendation: first version is script-only, like the input adapter; a receipt control is a separate later decision after one real application and after the review checkpoint has been run.
+1. **Frontmatter changes cannot be applied by the current pipeline.** The owner Save path refuses any operation that intersects YAML frontmatter. Checkpoint proposal 5 can be approved but not applied; the receipt says so. Kept as measured friction.
+2. **Only rendered pages can be applied.** The live witness needs a page URL. A path the owner site does not carry is refused with a plain reason. No witness-free mode was added.
+3. **Owner limits govern.** The intake's limits and the owner pipeline's limits differ; the pipeline that writes is the one whose limits apply, and the receipt names the limit when it refuses.
+4. **Authorship and credit.** The commit is the owner's, on the owner's machine. The contributor's note and the owner's decision note stay private. Visible contributor credit stays open under challenge 07.
+5. **Approve stays recordable for a stale suggestion.** Eligibility is checked at each later act, never at approval.
+6. **No separate policy switch.** A first draft proposed a new off-by-default config block. It was dropped: the act already runs only under the durable policy that lets a Save commit and push, and a second switch for the same effect would be a knob without a boundary behind it.
 
 ## What stays out
 
 - No application from approval, category, identity claim, trust route, or timer.
-- No HTTP route, no button, and no queue lifecycle change in the first version.
+- No queue lifecycle change; the intake never learns that a suggestion was applied.
 - No rebase, re-resolution of a moved quote, three-way merge, or partial application.
 - No multi-file or new-file application; the input contract is one file, one splice.
 - No contributor notification; nothing leaves the owner host.
 - No change to Lane A or Lane B exposure, which remain separately authorized.
 
-## Evidence plan, if accepted
+## Evidence
 
-1. Adapter tests at the store layer: refuses while the policy gate is off; refuses when stale, dirty, or HEAD differs from the tip; event is create-once and attempt-numbered; session and operation reproduce the reviewed candidate digest; the checkout is byte-identical after every refusal.
-2. One fixture application end to end, the way the two-browser fixture Save was proved: temporary repository, bare remote, real intake, real decision, real event, real job through push, with the local rebuild in place of deployment and live witness where those adapters need a provider.
-3. One real Cyberbase application as a separately authorized owner run, recorded in a dated log with the job ID, commit, deployment, and live witness. That run is the first contributor-to-live evidence and must be labelled as a maintainer-operated run, not independent evidence.
+Mechanical, recorded on 2026-09-27 and described on [Applying an approved suggestion](/cyberbaser/development/applying-approved-suggestion/): real intake, real decisions, a real local bare remote, and the real pipeline changing exact bytes, committing once, pushing once, refusing a second act, allowing a retry after a job that never started, and refusing frontmatter and stale suggestions with nothing written. No real Cyberbase application has been run; that is a separately authorized owner run and the first contributor-to-live evidence when it happens.
 
-## Decisions requested
+## Decisions recorded
 
-| # | Decision | Recommendation |
+| # | Decision | Outcome |
 |---|---|---|
-| 1 | Is the application a separate explicit owner act, with no durable auto-apply policy? | Yes |
-| 2 | Does the first version reuse the owner Save pipeline through a supplied session and operation, adding no second writer? | Yes |
-| 3 | Is the trigger a local script only, with any receipt control deferred to a later decision? | Yes |
-| 4 | Is the act gated by a new durable config block, off by default? | Yes |
-| 5 | Are events create-once per suggestion with attempt numbering only after a terminal pre-effect failure? | Yes |
-| 6 | Do frontmatter proposals stay unapplicable in the first version? | Yes, recorded as friction |
-| 7 | Does the commit carry the proposal and queue IDs in a trailer, with notes kept private? | Yes |
-
-Accepting these does not run the review checkpoint, change the roadmap, expose a lane, or apply anything. It authorizes writing the adapter and its tests, and nothing else.
+| 1 | Applying is a separate explicit owner act, with no auto-apply policy | Accepted |
+| 2 | The act reuses the owner Save pipeline through a supplied session and operation, adding no second writer | Accepted |
+| 3 | The act is taken from the receipt in the owner's app, over a privileged API a machine can also call | Maintainer's correction; built |
+| 4 | Events are create-once per suggestion, attempt-numbered only after a failure with no source effect | Accepted |
+| 5 | Frontmatter suggestions stay unapplicable, with an honest receipt | No preference stated; recommended answer taken |
+| 6 | Owner limits govern application; the receipt names the limit | Recommended answer taken |
+| 7 | Commit message stays the owner's prefix plus path; provenance lives in the event and session | Changed from the draft, for crash-recovery reasons above |

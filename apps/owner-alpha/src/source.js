@@ -75,14 +75,14 @@ function validateRendererRequest(value) {
   };
 }
 
-function liveUrlForSlug(baseUrl, slug) {
+export function liveUrlForSlug(baseUrl, slug) {
   const segments = slug.split('/');
   if (segments.at(-1) === 'index') segments.pop();
   const encoded = segments.map((segment) => encodeURIComponent(segment)).join('/');
   return new URL(encoded === '' ? './' : encoded, baseUrl).toString();
 }
 
-function pathMatchesPolicy(relativePath, policy) {
+export function pathMatchesPolicy(relativePath, policy) {
   let included;
   let excluded;
   try {

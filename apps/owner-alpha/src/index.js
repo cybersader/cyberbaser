@@ -63,6 +63,8 @@ export {
   validateApprovedProposalInput,
   assessApprovedProposal,
   prepareApprovedProposalInput,
+  readApprovedProposalInput,
+  decisionDigest,
   listApprovedProposalInputs,
   approvedProposalInputPath,
 } from './approved-proposal.js';
@@ -109,6 +111,23 @@ export {
   runPreApplyChecks,
 } from './checks.js';
 export { applyAcceptedOperation, applyExactAcceptedOperation } from './apply.js';
+export {
+  PROPOSAL_APPLICATION_SCHEMA_VERSION,
+  PROPOSAL_APPLICATION_ARTIFACT_TYPE,
+  PROPOSAL_APPLICATION_ROOT,
+  PROPOSAL_APPLICATION_LOCK,
+  PROPOSAL_APPLICATION_MAX_BYTES,
+  PROPOSAL_APPLICATION_MAX_ATTEMPTS,
+  PROPOSAL_APPLICATION_UNAPPLICABLE_REASONS,
+  PROPOSAL_APPLICATION_STATES,
+  validateProposalApplicationEvent,
+  listProposalApplicationEvents,
+  proposalApplicationEventPath,
+  resolveRenderedPageSlug,
+  deriveProposalApplication,
+  assessProposalApplication,
+  applyApprovedProposal,
+} from './proposal-application.js';
 export {
   verifyExactCommit,
   commitAppliedCandidate,

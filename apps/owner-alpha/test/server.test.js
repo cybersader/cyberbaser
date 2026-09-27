@@ -851,6 +851,167 @@ describe('privileged proposal review routes', () => {
     expect(await blocked.json()).toEqual({ error: { code: 'lock-busy' } });
   });
 
+  function applicationServiceFixture({ status, applyResult = null, applyError = null, applyCalls = [] }) {
+    return Object.freeze({
+      ...reviewServiceFixture({ decided: true }),
+      applicationAvailable: true,
+      async applicationStatus(queueId) {
+        return { queueId, attempts: [], latest: null, reason: null, details: {}, branchTip: null, input: null, ...status };
+      },
+      async apply(queueId) {
+        applyCalls.push(queueId);
+        if (applyError) throw applyError;
+        return applyResult;
+      },
+    });
+  }
+
+  test('the receipt offers the separate apply step only while the page is still exactly as reviewed', async () => {
+    const eligible = await enabledFixture({ proposalReview: applicationServiceFixture({ status: { state: 'eligible' } }) });
+    const opened = await openReview(eligible.fetch);
+    const ready = await eligible.fetch(request(`/owner/decisions/${REVIEW_QUEUE_ID}`, { headers: { Cookie: opened.cookie } }));
+    const readyBody = await ready.text();
+    expect(ready.status).toBe(200);
+    expect(readyBody).toContain('<h2 id="application-heading">Put it on the page</h2>');
+    expect(readyBody).toContain('data-apply>Apply to page</button>');
+    expect(readyBody).toContain('<script src="/owner/assets/apply.js" defer></script>');
+    expect(readyBody).toContain(`data-queue-id="${REVIEW_QUEUE_ID}" data-csrf="${TOKENS.csrf}"`);
+    expect(readyBody).toContain('This changes the page and publishes it.');
+    const asset = await eligible.fetch(request('/owner/assets/apply.js', { headers: { Cookie: opened.cookie } }));
+    expect(asset.status).toBe(200);
+    expect(await asset.text()).toContain("/apply`");
+    const api = await eligible.fetch(request(`/api/decisions/${REVIEW_QUEUE_ID}`, { headers: { Cookie: opened.cookie } }));
+    expect((await api.json()).application).toMatchObject({ queueId: REVIEW_QUEUE_ID, state: 'eligible' });
+
+    const stale = await enabledFixture({ proposalReview: applicationServiceFixture({ status: { state: 'stale', reason: 'source-changed' } }) });
+    const staleOpened = await openReview(stale.fetch);
+    const staleBody = await (await stale.fetch(request(`/owner/decisions/${REVIEW_QUEUE_ID}`, { headers: { Cookie: staleOpened.cookie } }))).text();
+    expect(staleBody).toContain('<h2 id="application-heading">Cannot be applied as it is</h2>');
+    expect(staleBody).toContain('The page changed after you reviewed this suggestion');
+    expect(staleBody).not.toContain('data-apply');
+    expect(staleBody).not.toContain('/owner/assets/apply.js');
+
+    const blocked = await enabledFixture({ proposalReview: applicationServiceFixture({ status: { state: 'unapplicable', reason: 'frontmatter-change' } }) });
+    const blockedOpened = await openReview(blocked.fetch);
+    const blockedBody = await (await blocked.fetch(request(`/owner/decisions/${REVIEW_QUEUE_ID}`, { headers: { Cookie: blockedOpened.cookie } }))).text();
+    expect(blockedBody).toContain('<h2 id="application-heading">The page pipeline cannot apply this yet</h2>');
+    expect(blockedBody).toContain('metadata block at the top of the page');
+    expect(blockedBody).not.toContain('data-apply');
+
+    const latest = { attempt: 1, appliedAt: '2026-09-27T09:00:00Z', jobId: 'OA-applied', jobState: 'pushing', failure: null, retryable: false };
+    const applied = await enabledFixture({ proposalReview: applicationServiceFixture({ status: { state: 'applied', attempts: [latest], latest } }) });
+    const appliedOpened = await openReview(applied.fetch);
+    const appliedBody = await (await applied.fetch(request(`/owner/decisions/${REVIEW_QUEUE_ID}`, { headers: { Cookie: appliedOpened.cookie } }))).text();
+    expect(appliedBody).toContain('<h2 id="application-heading">On its way to the page</h2>');
+    expect(appliedBody).toContain('<strong>Pushed. Waiting for the site to build</strong>');
+    expect(appliedBody).toContain('href="/owner/jobs/OA-applied">Follow it</a>');
+    expect(appliedBody).toContain('<strong>Applied</strong>');
+    expect(appliedBody).not.toContain('<strong>Source unchanged</strong>');
+    expect(appliedBody).not.toContain('data-apply');
+  });
+
+  test('the apply route needs the session, the CSRF token, and an exact body, then hands the owner to the job', async () => {
+    const applyCalls = [];
+    const { fetch } = await enabledFixture({
+      proposalReview: applicationServiceFixture({
+        status: { state: 'eligible' },
+        applyResult: { applied: true, status: { state: 'applied' }, event: { attempt: 1 }, job: { jobId: 'OA-started', state: 'accepted' } },
+        applyCalls,
+      }),
+    });
+    const opened = await openReview(fetch);
+    const anonymous = await fetch(request(`/api/review/${REVIEW_QUEUE_ID}/apply`, {
+      method: 'POST',
+      headers: { Origin: ORIGIN, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queueId: REVIEW_QUEUE_ID, csrf: TOKENS.csrf }),
+    }));
+    expect(anonymous.status).toBe(403);
+    const badCsrf = await fetch(request(`/api/review/${REVIEW_QUEUE_ID}/apply`, {
+      method: 'POST',
+      headers: { Origin: ORIGIN, Cookie: opened.cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queueId: REVIEW_QUEUE_ID, csrf: TOKENS.process }),
+    }));
+    expect(badCsrf.status).toBe(403);
+    const badBody = await fetch(request(`/api/review/${REVIEW_QUEUE_ID}/apply`, {
+      method: 'POST',
+      headers: { Origin: ORIGIN, Cookie: opened.cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queueId: REVIEW_QUEUE_ID, csrf: TOKENS.csrf, action: 'apply' }),
+    }));
+    expect(badBody.status).toBe(400);
+    expect(await badBody.json()).toEqual({ error: { code: 'invalid-apply-request' } });
+    expect(applyCalls).toEqual([]);
+
+    const started = await fetch(request(`/api/review/${REVIEW_QUEUE_ID}/apply`, {
+      method: 'POST',
+      headers: { Origin: ORIGIN, Cookie: opened.cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queueId: REVIEW_QUEUE_ID, csrf: TOKENS.csrf }),
+    }));
+    expect(started.status).toBe(202);
+    expect(await started.json()).toEqual({
+      queueId: REVIEW_QUEUE_ID,
+      attempt: 1,
+      jobId: 'OA-started',
+      state: 'accepted',
+      statusUrl: '/owner/jobs/OA-started',
+      jsonUrl: '/api/jobs/OA-started',
+    });
+    expect(applyCalls).toEqual([REVIEW_QUEUE_ID]);
+  });
+
+  test('the apply route refuses without effect when the page moved, when already applied, or when applying is unavailable', async () => {
+    const staleFixture = await enabledFixture({
+      proposalReview: applicationServiceFixture({
+        status: { state: 'eligible' },
+        applyResult: { applied: false, status: { queueId: REVIEW_QUEUE_ID, state: 'stale', reason: 'source-changed', attempts: [] }, event: null, job: null },
+      }),
+    });
+    const opened = await openReview(staleFixture.fetch);
+    const stale = await staleFixture.fetch(request(`/api/review/${REVIEW_QUEUE_ID}/apply`, {
+      method: 'POST',
+      headers: { Origin: ORIGIN, Cookie: opened.cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queueId: REVIEW_QUEUE_ID, csrf: TOKENS.csrf }),
+    }));
+    expect(stale.status).toBe(422);
+    expect(await stale.json()).toMatchObject({ error: { code: 'application-stale', reason: 'source-changed' }, statusUrl: `/owner/decisions/${REVIEW_QUEUE_ID}` });
+
+    const appliedFixture = await enabledFixture({
+      proposalReview: applicationServiceFixture({
+        status: { state: 'applied' },
+        applyResult: { applied: false, status: { queueId: REVIEW_QUEUE_ID, state: 'applied', reason: null, attempts: [] }, event: null, job: null },
+      }),
+    });
+    const appliedOpened = await openReview(appliedFixture.fetch);
+    const twice = await appliedFixture.fetch(request(`/api/review/${REVIEW_QUEUE_ID}/apply`, {
+      method: 'POST',
+      headers: { Origin: ORIGIN, Cookie: appliedOpened.cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queueId: REVIEW_QUEUE_ID, csrf: TOKENS.csrf }),
+    }));
+    expect(twice.status).toBe(409);
+    expect(await twice.json()).toMatchObject({ error: { code: 'application-applied' } });
+
+    const busyFixture = await enabledFixture({
+      proposalReview: applicationServiceFixture({ status: { state: 'eligible' }, applyError: new OwnerAlphaError('lock-busy', 'busy') }),
+    });
+    const busyOpened = await openReview(busyFixture.fetch);
+    const busy = await busyFixture.fetch(request(`/api/review/${REVIEW_QUEUE_ID}/apply`, {
+      method: 'POST',
+      headers: { Origin: ORIGIN, Cookie: busyOpened.cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queueId: REVIEW_QUEUE_ID, csrf: TOKENS.csrf }),
+    }));
+    expect(busy.status).toBe(409);
+    expect(await busy.json()).toEqual({ error: { code: 'lock-busy' } });
+
+    const unavailable = await enabledFixture({ proposalReview: reviewServiceFixture({ decided: true }) });
+    const unavailableOpened = await openReview(unavailable.fetch);
+    const refused = await unavailable.fetch(request(`/api/review/${REVIEW_QUEUE_ID}/apply`, {
+      method: 'POST',
+      headers: { Origin: ORIGIN, Cookie: unavailableOpened.cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queueId: REVIEW_QUEUE_ID, csrf: TOKENS.csrf }),
+    }));
+    expect(refused.status).toBe(404);
+    expect(await refused.json()).toEqual({ error: { code: 'application-unavailable' } });
+  });
+
   test('redirects decided proposals to a content-first immutable receipt without queue retention', async () => {
     const { fetch } = await enabledFixture({
       proposalReview: reviewServiceFixture({ decided: true }),
@@ -874,7 +1035,10 @@ describe('privileged proposal review routes', () => {
     expect(history.status).toBe(200);
     expect(body).toContain('<h1>You approved this suggestion</h1>');
     expect(body).toContain('<strong>Source unchanged</strong>');
-    expect(body).toContain('Nothing on the page changed and nothing was published or scheduled. Applying an approved suggestion is a separate step you take yourself.');
+    expect(body).toContain('Nothing on the page changed when you approved. Putting it on the page is the separate step below.');
+    expect(body).toContain('<h2 id="application-heading">Putting it on the page</h2>');
+    expect(body).toContain('Not available in this setup.');
+    expect(body).not.toContain('/owner/assets/apply.js');
     expect(body).toContain('<summary>Details for the record</summary>');
     expect(body).toContain('No longer retained; exact reviewed evidence is embedded here.');
     expect(body).not.toContain('data-action="approve"');

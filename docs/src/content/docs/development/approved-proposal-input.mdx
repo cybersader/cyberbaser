@@ -1,16 +1,16 @@
 ---
 title: Approved proposal input
-description: "The first adapter between an owner's Approve decision and the owner pipeline: a local, create-once input artifact with strict eligibility and an unfilled application gate. Nothing consumes it yet."
+description: "The adapter between an owner's Approve decision and the owner pipeline: a create-once input artifact with strict eligibility and an unfilled application gate. Since 2026-09-27 the separate Apply act references it."
 sidebar:
   order: 11
 status: research
 tags: [design, governance, testing, contribution]
 ---
 
-An Approve decision records intent and nothing else. This adapter is the smallest next step: it turns one immutable Approve decision into one durable **input** that a later, separately authorized owner application event could reference. It does not apply source, start a job, open an edit session, commit, push, rebuild, deploy, or publish, and no code consumes what it writes.
+An Approve decision records intent and nothing else. This adapter is the smallest next step: it turns one immutable Approve decision into one durable **input** that a later, separately authorized owner application event could reference. It does not apply source, start a job, open an edit session, commit, push, rebuild, deploy, or publish. Since 2026-09-27 the owner's separate **Apply to page** act, described on [Applying an approved suggestion](/cyberbaser/development/applying-approved-suggestion/), reads this artifact and records its own event; the artifact itself still grants nothing.
 
 :::caution[Decision-only core, not application authority]
-The maintainer chose on 2026-09-26 to start this core before the review checkpoint, on the condition that it stays behind its gate. The artifact carries `applicationGate.state: "not-authorized"` and seven false effect flags, and the source applier rejects it outright. Selecting the owner application-authority event remains separate future work; a written proposal for it is at [Owner application event](/cyberbaser/design/owner-application-event/) and awaits the maintainer's decision.
+The maintainer chose on 2026-09-26 to start this core before the review checkpoint, on the condition that it stays behind its gate. The artifact carries `applicationGate.state: "not-authorized"` and seven false effect flags, and the source applier rejects it outright. The owner application event was selected and built on 2026-09-27 as a separate act; see [Owner application event](/cyberbaser/design/owner-application-event/). That act references this artifact and never mutates it.
 :::
 
 ## What it does
@@ -29,7 +29,7 @@ Running it again returns the existing artifact unchanged together with a fresh e
 
 ## Run it
 
-There is deliberately no HTTP route. From the repository root:
+The owner app prepares inputs itself when the owner applies a suggestion. For inspection, the local script remains:
 
 ```bash
 bun apps/owner-alpha/bin/prepare-approved-proposal.js <owner-alpha config> <queueId>
@@ -65,4 +65,4 @@ The shape is closed. The validator refuses any other gate state, any non-null ev
 
 `apps/owner-alpha/test/approved-proposal.test.js` runs the real intake, records real decisions, and checks: an Approve prepares one 0600 artifact whose stored form validates back to the returned value; `applyAcceptedOperation` rejects both the in-memory and the stored artifact with `accepted-operation-required`; replay returns the identical artifact; Reject and unknown queue IDs refuse; an owner commit to the reviewed page yields `source-changed` with no file written while an untouched page stays eligible at the new tip; a trust-policy commit makes even the untouched page stale; and the checkout's HEAD, refs, index, status, and source bytes are identical before and after every call.
 
-This is mechanical evidence for a decision-only adapter. It establishes no application, no authority event, and no contributor-to-live path.
+This is mechanical evidence for a decision-only adapter. The application act that consumes it has its own evidence on [Applying an approved suggestion](/cyberbaser/development/applying-approved-suggestion/).

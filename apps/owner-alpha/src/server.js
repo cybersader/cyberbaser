@@ -13,6 +13,7 @@ import {
 } from './proposal-decisions.js';
 import { createProposalReviewClient } from './proposal-review-client.js';
 import { createOwnerProposalReviewSource } from './proposal-review.js';
+import { applyApprovedProposal, assessProposalApplication } from './proposal-application.js';
 import { documentProjection, segmentsWithinSpan } from '@cyberbaser/review-projection';
 import { fail, OwnerAlphaError } from './errors.js';
 import { listDurableJobs, loadDurableJob, validateJobId } from './job-state.js';
@@ -781,16 +782,122 @@ ${decisionStep({ entry, csrfToken, view })}`,
   });
 }
 
-function decisionDetailPage({ decision, summary, queueRetained }) {
+const STALE_REASON_COPY = Object.freeze({
+  'source-changed': 'The page changed after you reviewed this suggestion, so the exact change no longer fits.',
+  'source-missing': 'The page no longer exists at that path.',
+  'revision-unreachable': 'The version of the page this suggestion was written against is no longer on your branch.',
+  'trust-policy-changed': 'Your trust policy changed after the review. Look at the suggestion again before applying it.',
+  'checkout-moved': 'The page changed just now. Reload this screen and try again.',
+});
+const UNAPPLICABLE_REASON_COPY = Object.freeze({
+  'frontmatter-change': 'The change touches the metadata block at the top of the page, which the page pipeline does not edit yet.',
+  'page-not-rendered': 'The page is not part of the published site, so there would be no live page to check after publishing.',
+  'path-not-editable': 'The page is outside the paths your policy allows edits on.',
+  'source-not-lf-only': 'The page uses line endings the page pipeline does not accept.',
+  'source-too-large': 'The page is larger than your policy allows for one save.',
+  'changed-bytes-limit': 'The change is larger than your policy allows for one save.',
+  'replacement-limit': 'The new text is longer than your policy allows for one save.',
+  'changed-lines-limit': 'The change spans more lines than your policy allows for one save.',
+  'attempt-limit': 'Too many attempts have been made on this suggestion.',
+  'derivation-failed': 'The change could not be prepared for the page pipeline.',
+});
+const JOB_STAGE_COPY = Object.freeze([
+  [['accepted', 'preflighting', 'checking', 'rendering', 'ready-to-apply'], 'Checking the page before changing it'],
+  [['applying', 'source-applied', 'committing', 'committed'], 'Changing the page and saving the commit'],
+  [['pushing', 'pushed', 'discovering-run', 'run-bound', 'monitoring-deployment', 'deployment-succeeded'], 'Pushed. Waiting for the site to build'],
+  [['verifying-live'], 'Checking the live page'],
+  [['live-confirmed', 'rebuilding-local'], 'Live. Refreshing your local copy'],
+  [['completed'], 'Live on the page'],
+  [['blocked-pre-apply'], 'Stopped before changing the page'],
+  [['deployment-failed'], 'The page changed, but the site build failed'],
+  [['live-verification-failed'], 'Published, but the live page has not shown the change yet'],
+  [['manual-intervention'], 'Stopped partway and needs your attention'],
+  [['failed'], 'Stopped'],
+  [['cancelled'], 'Cancelled'],
+]);
+
+function jobStageCopy(state) {
+  if (state === null || state === undefined) return 'Never started';
+  for (const [states, copy] of JOB_STAGE_COPY) if (states.includes(state)) return copy;
+  return state;
+}
+
+// The step after approval, in the owner's words: whether the change can go on
+// the page now, why not, or how far along it is. One button, one sheet.
+function applicationStep({ application, view, summary, csrfToken }) {
+  const change = escapeHtml(changeName(view));
+  const sourcePath = escapeHtml(summary.source.path);
+  const jobLink = (attempt) => `<a class="application-job-link" href="/owner/jobs/${encodeURIComponent(attempt.jobId)}">Follow it</a>`;
+  if (application === null) {
+    return `<section class="application-step application-unavailable" aria-labelledby="application-heading">
+<h2 id="application-heading">Putting it on the page</h2>
+<p>Not available in this setup. Your approval is recorded; the page is unchanged.</p>
+</section>`;
+  }
+  const { state } = application;
+  if (state === 'applied') {
+    const latest = application.latest;
+    return `<section class="application-step application-applied" aria-labelledby="application-heading">
+<h2 id="application-heading">On its way to the page</h2>
+<p class="application-stage"><strong>${escapeHtml(jobStageCopy(latest.jobState))}</strong> ${jobLink(latest)}</p>
+<p class="application-meta">Applied ${reviewTime(latest.appliedAt)}${latest.attempt > 1 ? ` · attempt ${latest.attempt}` : ''}</p>
+</section>`;
+  }
+  const earlier = application.attempts.length === 0
+    ? ''
+    : `<p class="application-meta">An earlier attempt stopped before changing the page. ${jobLink(application.attempts.at(-1))}</p>`;
+  if (state === 'stale') {
+    return `<section class="application-step application-blocked" aria-labelledby="application-heading">
+<h2 id="application-heading">Cannot be applied as it is</h2>
+<p>${escapeHtml(STALE_REASON_COPY[application.reason] ?? 'The page is no longer exactly what you reviewed.')}</p>
+<p>Your approval stays recorded. To make this change now, edit the page yourself.</p>
+${earlier}</section>`;
+  }
+  if (state === 'unapplicable') {
+    return `<section class="application-step application-blocked" aria-labelledby="application-heading">
+<h2 id="application-heading">The page pipeline cannot apply this yet</h2>
+<p>${escapeHtml(UNAPPLICABLE_REASON_COPY[application.reason] ?? 'The change could not be prepared for the page pipeline.')}</p>
+<p>Your approval stays recorded. To make this change now, edit the page yourself.</p>
+${earlier}</section>`;
+  }
+  if (state === 'eligible') {
+    return `<section class="application-step application-ready" aria-labelledby="application-heading">
+<h2 id="application-heading">Put it on the page</h2>
+<p>The page is still exactly as you reviewed it. Applying changes <span class="identity-path">${sourcePath}</span>, commits it, pushes it, and publishes it, the same way your own saves do.</p>
+<div class="application-actions"><button type="button" class="decision-approve" data-apply>Apply to page</button></div>
+<noscript><p class="decision-noscript">Applying needs scripting enabled in this browser.</p></noscript>
+${earlier}</section>
+<dialog id="decision-dialog" aria-labelledby="apply-dialog-title">
+<form id="apply-form" class="decision-sheet" data-queue-id="${escapeHtml(summary.queueId)}" data-csrf="${escapeHtml(csrfToken)}">
+<h2 id="apply-dialog-title">Apply this suggestion to the page?</h2>
+<p class="dialog-suggestion"><strong>${change}</strong><span>${sourcePath}</span></p>
+<p id="apply-status" class="status" role="status" aria-live="polite" tabindex="-1"></p>
+<p class="decision-boundary">This changes the page and publishes it. It runs in the background, and the next screen follows it step by step.</p>
+<div class="dialog-actions"><button type="button" class="dialog-back" data-dialog-cancel>Cancel</button><button type="button" id="apply-confirm" class="decision-approve">Apply to page</button></div>
+</form>
+</dialog>`;
+  }
+  return `<section class="application-step application-blocked" aria-labelledby="application-heading">
+<h2 id="application-heading">Putting it on the page</h2>
+<p>Could not check the page just now${application.reason ? ` (${escapeHtml(application.reason)})` : ''}. Reload to try again.</p>
+</section>`;
+}
+
+function decisionDetailPage({ decision, summary, queueRetained, application = null, csrfToken = '' }) {
   const entry = decisionEntry(decision, summary);
   const view = proposalView(entry);
   const approved = decision.action === 'approve';
+  const applied = approved && application?.state === 'applied';
   const consequence = approved
-    ? 'Nothing on the page changed and nothing was published or scheduled. Applying an approved suggestion is a separate step you take yourself.'
+    ? 'Nothing on the page changed when you approved. Putting it on the page is the separate step below.'
     : 'Nothing on the page changed and nothing was published or scheduled.';
+  const boundary = applied
+    ? `<div class="source-unchanged source-applied"><strong>Applied</strong><span>Approving changed nothing. The change reached the page through the step below, by your own action.</span></div>`
+    : `<div class="source-unchanged"><strong>Source unchanged</strong><span>${consequence}</span></div>`;
   return pageShell({
     title: approved ? 'Suggestion approved' : 'Suggestion rejected',
     bodyClass: 'proposal-review-page',
+    script: application?.state === 'eligible' ? '/owner/assets/apply.js' : null,
     body: `<main class="owner-shell review-shell" id="owner-decision-detail">
 <header class="owner-header decision-receipt-header">
 <a class="back-link" href="/owner/review">Back to Proposals</a>
@@ -801,8 +908,9 @@ function decisionDetailPage({ decision, summary, queueRetained }) {
 <p class="context-copy">${changeSummaryHtml(view)}</p>
 <p class="receipt-path">${escapeHtml(summary.source.path)}</p>
 <blockquote class="decision-note">${escapeHtml(decision.reason)}</blockquote>
-<div class="source-unchanged"><strong>Source unchanged</strong><span>${consequence}</span></div>
+${boundary}
 </section>
+${approved ? applicationStep({ application, view, summary, csrfToken }) : ''}
 ${technicalEvidence(entry, {
   decision,
   queueRetained,
@@ -908,6 +1016,14 @@ function validateDecisionBody(value, routeQueueId) {
   return value;
 }
 
+function validateApplyBody(value, routeQueueId) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  const keys = Object.keys(value).sort();
+  if (keys.length !== 2 || keys[0] !== 'csrf' || keys[1] !== 'queueId') return null;
+  if (value.queueId !== routeQueueId || !exactToken(value.csrf)) return null;
+  return { queueId: value.queueId, csrf: value.csrf };
+}
+
 function reviewErrorStatus(error) {
   const code = error instanceof OwnerAlphaError ? error.code : 'review-failed';
   if (code === 'lock-busy'
@@ -934,9 +1050,23 @@ export function createOwnerProposalReviewService({
   decisionClock = () => new Date(),
   recoverDecisions = recoverProposalDecisions,
   recordDecision = recordProposalDecision,
+  application = null,
+  assessApplication = assessProposalApplication,
+  applyApplication = applyApprovedProposal,
 } = {}) {
   const config = validateOwnerAlphaConfig(configInput);
   if (!config.proposalReview.enabled) return null;
+  // Applying an approved suggestion needs the owner pipeline's Save entry, a
+  // way to find the rendered page, and a job ID factory. Without them the
+  // service still reviews and decides, and the receipt says applying is not
+  // available here.
+  if (application !== null
+    && (typeof application.saveEdit !== 'function'
+      || typeof application.createJobId !== 'function'
+      || (typeof application.resolveSlug !== 'function'
+        && (typeof application.siteRoot !== 'string' || typeof application.ownerOrigin !== 'string')))) {
+    throw new TypeError('proposal application requires saveEdit, createJobId, and a slug resolver or siteRoot plus ownerOrigin');
+  }
   if (!context
     || !source
     || typeof source.list !== 'function'
@@ -1048,6 +1178,35 @@ export function createOwnerProposalReviewService({
       });
       await recovered({ refresh: true });
       return result;
+    },
+    applicationAvailable: application !== null,
+    async applicationStatus(queueId) {
+      if (application === null) return null;
+      return assessApplication({
+        context,
+        config,
+        queueId,
+        git: application.git,
+        resolveSlug: application.resolveSlug ?? null,
+        siteRoot: application.siteRoot ?? null,
+        ownerOrigin: application.ownerOrigin ?? null,
+      });
+    },
+    async apply(queueId) {
+      if (application === null) fail('application-unavailable', 'applying suggestions is not available in this runtime');
+      return applyApplication({
+        context,
+        config,
+        queueId,
+        saveEdit: application.saveEdit,
+        createJobId: application.createJobId,
+        checkoutReady: application.checkoutReady,
+        git: application.git,
+        resolveSlug: application.resolveSlug ?? null,
+        siteRoot: application.siteRoot ?? null,
+        ownerOrigin: application.ownerOrigin ?? null,
+        clock: application.clock,
+      });
     },
   });
 }
@@ -1375,6 +1534,7 @@ export function createOwnerAlphaHandler({
       '/owner/assets/editor.js': 'editor.js',
       '/owner/assets/job.js': 'job.js',
       '/owner/assets/review.js': 'review.js',
+      '/owner/assets/apply.js': 'apply.js',
       '/owner/assets/owner.css': 'owner.css',
     }[url.pathname];
     if (asset) {
@@ -1455,6 +1615,47 @@ export function createOwnerAlphaHandler({
       }
     }
 
+    const reviewApplyMatch = url.pathname.match(/^\/api\/review\/([^/]+)\/apply$/u);
+    if (reviewApplyMatch) {
+      if (!config.proposalReview.enabled) return errorResponse(404, 'proposal-review-disabled');
+      if (request.method !== 'POST') return response(null, 405, { Allow: 'POST' });
+      if (url.search !== '') return errorResponse(400, 'unexpected-query');
+      const queueId = reviewQueueId(reviewApplyMatch[1]);
+      if (queueId === null) return errorResponse(400, 'invalid-queue-id');
+      if (typeof proposalReview.apply !== 'function' || proposalReview.applicationAvailable !== true) {
+        return errorResponse(404, 'application-unavailable');
+      }
+      let body;
+      try {
+        body = await readBoundedJson(request, MAX_REVIEW_DECISION_BODY_BYTES);
+      } catch (error) {
+        return errorResponse(error?.status ?? 400, 'invalid-request-body');
+      }
+      const intent = validateApplyBody(body, queueId);
+      if (intent === null) return errorResponse(400, 'invalid-apply-request');
+      if (!sameSecret(intent.csrf, csrfToken)) return errorResponse(403, 'invalid-csrf');
+      try {
+        const result = await proposalReview.apply(queueId);
+        if (!result.applied) {
+          return json({
+            error: { code: `application-${result.status.state}`, reason: result.status.reason },
+            status: result.status,
+            statusUrl: `/owner/decisions/${encodeURIComponent(queueId)}`,
+          }, result.status.state === 'applied' ? 409 : 422);
+        }
+        return json({
+          queueId,
+          attempt: result.event.attempt,
+          jobId: result.job.jobId,
+          state: result.job.state,
+          statusUrl: `/owner/jobs/${encodeURIComponent(result.job.jobId)}`,
+          jsonUrl: `/api/jobs/${encodeURIComponent(result.job.jobId)}`,
+        }, 202);
+      } catch (error) {
+        return errorResponse(reviewErrorStatus(error), error instanceof OwnerAlphaError ? error.code : 'application-failed');
+      }
+    }
+
     const reviewDetailMatch = url.pathname.match(/^\/(owner\/review|api\/review)\/([^/]+)$/u);
     if (reviewDetailMatch) {
       if (!config.proposalReview.enabled) return errorResponse(404, 'proposal-review-disabled');
@@ -1507,12 +1708,24 @@ export function createOwnerAlphaHandler({
         return errorResponse(reviewErrorStatus(error), error instanceof OwnerAlphaError ? error.code : 'decision-load-failed');
       }
       if (history === null) return errorResponse(404, 'decision-not-found');
+      let application = null;
+      if (history.decision.action === 'approve' && typeof proposalReview.applicationStatus === 'function') {
+        try {
+          application = await proposalReview.applicationStatus(queueId);
+        } catch (error) {
+          application = {
+            queueId,
+            state: 'unknown',
+            reason: error instanceof OwnerAlphaError ? error.code : 'application-status-failed',
+          };
+        }
+      }
       if (decisionDetailMatch[1] === 'api/decisions') {
         if (request.method === 'HEAD') return json(null);
-        return json(history);
+        return json({ ...history, application });
       }
       if (request.method === 'HEAD') return html(null);
-      return html(decisionDetailPage(history));
+      return html(decisionDetailPage({ ...history, application, csrfToken }));
     }
 
     if (url.pathname === '/owner/edit') {
@@ -1768,6 +1981,12 @@ export async function runOwnerAlphaServer({
       source,
       recoverDecisions,
       recordDecision,
+      application: {
+        saveEdit: pipeline.saveEdit,
+        createJobId: () => `OA-${randomUUID()}`,
+        siteRoot: path.resolve(projectRoot, config.workspace.site),
+        ownerOrigin: `http://${config.listen.host}:${config.listen.port}`,
+      },
     });
   }
   const ownerFetch = createHandler({
