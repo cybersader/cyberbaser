@@ -10,7 +10,7 @@ tags: [design, governance, testing, contribution]
 An Approve decision records intent and nothing else. This adapter is the smallest next step: it turns one immutable Approve decision into one durable **input** that a later, separately authorized owner application event could reference. It does not apply source, start a job, open an edit session, commit, push, rebuild, deploy, or publish, and no code consumes what it writes.
 
 :::caution[Decision-only core, not application authority]
-The maintainer chose on 2026-09-26 to start this core before the review checkpoint, on the condition that it stays behind its gate. The artifact carries `applicationGate.state: "not-authorized"` and seven false effect flags, and the source applier rejects it outright. Selecting the owner application-authority event remains separate future work.
+The maintainer chose on 2026-09-26 to start this core before the review checkpoint, on the condition that it stays behind its gate. The artifact carries `applicationGate.state: "not-authorized"` and seven false effect flags, and the source applier rejects it outright. Selecting the owner application-authority event remains separate future work; a written proposal for it is at [Owner application event](/cyberbaser/design/owner-application-event/) and awaits the maintainer's decision.
 :::
 
 ## What it does
