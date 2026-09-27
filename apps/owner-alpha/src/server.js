@@ -13,7 +13,7 @@ import {
 } from './proposal-decisions.js';
 import { createProposalReviewClient } from './proposal-review-client.js';
 import { createOwnerProposalReviewSource } from './proposal-review.js';
-import { applyApprovedProposal, assessProposalApplication } from './proposal-application.js';
+import { applyApprovedProposal, assessProposalApplication, listProposalApplicationProgress } from './proposal-application.js';
 import { documentProjection, segmentsWithinSpan } from '@cyberbaser/review-projection';
 import { fail, OwnerAlphaError } from './errors.js';
 import { listDurableJobs, loadDurableJob, validateJobId } from './job-state.js';
@@ -235,30 +235,85 @@ function publicJob(job) {
   } else {
     result.failure = null;
   }
+  if (job.origin && typeof job.origin === 'object' && typeof job.origin.type === 'string') {
+    result.origin = { type: job.origin.type };
+    if (typeof job.origin.relativePath === 'string') result.origin.relativePath = job.origin.relativePath;
+    if (job.origin.type === 'approved-proposal' && typeof job.origin.queueId === 'string') {
+      result.origin.queueId = job.origin.queueId;
+    }
+  }
   return result;
+}
+
+// The job in the owner's words: five things that happen to a change on its way
+// to the page, which one is happening now, and what stopped if something did.
+// Raw pipeline states stay available under the plain-words stage.
+const JOB_STEPS = Object.freeze([
+  { key: 'check', label: 'Checking the page', states: ['accepted', 'preflighting', 'checking', 'rendering', 'ready-to-apply'] },
+  { key: 'change', label: 'Changing the page and saving the commit', states: ['applying', 'source-applied', 'committing', 'committed'] },
+  { key: 'push', label: 'Pushing to your repository', states: ['pushing', 'pushed'] },
+  { key: 'build', label: 'Waiting for the site to build', states: ['discovering-run', 'run-bound', 'monitoring-deployment', 'deployment-succeeded'] },
+  { key: 'live', label: 'Checking the live page', states: ['verifying-live', 'live-verification-failed'] },
+  { key: 'refresh', label: 'Refreshing your local copy', states: ['live-confirmed', 'rebuilding-local'] },
+]);
+const JOB_STOPS = Object.freeze({
+  completed: { step: 6, copy: 'Live on the page.' },
+  'blocked-pre-apply': { step: 0, copy: 'Stopped before changing the page. Nothing changed.' },
+  'deployment-failed': { step: 3, copy: 'The page changed and was pushed, but the site build failed.' },
+  'live-verification-failed': { step: 4, copy: 'Published, but the live page has not shown the change yet. Checking again.' },
+  'manual-intervention': { step: 1, copy: 'Stopped partway and needs your attention.' },
+  failed: { step: 0, copy: 'Stopped.' },
+  cancelled: { step: 0, copy: 'Cancelled.' },
+});
+
+function jobStepIndex(state) {
+  const index = JOB_STEPS.findIndex((step) => step.states.includes(state));
+  if (index !== -1) return index;
+  return JOB_STOPS[state]?.step ?? 0;
+}
+
+function jobStageCopy(state) {
+  if (state === null || state === undefined) return 'Never started';
+  if (JOB_STOPS[state]) return JOB_STOPS[state].copy;
+  const step = JOB_STEPS.find((item) => item.states.includes(state));
+  return step ? step.label : state;
 }
 
 function jobPage(job, readerOrigin) {
   const safe = publicJob(job);
+  const fromSuggestion = safe.origin?.type === 'approved-proposal';
+  const current = jobStepIndex(safe.state);
+  const done = safe.state === 'completed';
+  const stopped = Object.hasOwn(JOB_STOPS, safe.state) && !done;
+  const steps = JOB_STEPS.map((step, index) => {
+    const status = done || index < current ? 'done' : index === current ? (stopped ? 'stopped' : 'current') : 'pending';
+    return `<li class="job-step job-step-${status}" data-step="${step.key}" data-status="${status}">${escapeHtml(step.label)}</li>`;
+  }).join('\n');
+  const back = fromSuggestion
+    ? `<a href="/owner/decisions/${encodeURIComponent(safe.origin.queueId)}">Back to the suggestion</a>`
+    : `<a href="${escapeHtml(readerOrigin)}/cyberbase/">Return to Cyberbase</a>`;
+  const stageJson = escapeHtml(JSON.stringify({
+    steps: JOB_STEPS.map((step) => ({ key: step.key, label: step.label, states: step.states })),
+    stops: JOB_STOPS,
+  }));
   return pageShell({
-    title: `Owner job ${safe.jobId}`,
+    title: fromSuggestion ? 'Putting the suggestion on the page' : 'Saving your change',
     script: '/owner/assets/job.js',
-    body: `<main class="owner-shell" id="owner-job" data-job-id="${escapeHtml(safe.jobId)}">
+    body: `<main class="owner-shell" id="owner-job" data-job-id="${escapeHtml(safe.jobId)}" data-stages="${stageJson}">
 <header class="owner-header">
-<p class="eyebrow">Owner alpha</p>
-<h1>Save job</h1>
-<p class="lede">This page reports the durable pipeline state. It has no mutation controls.</p>
+<h1>${fromSuggestion ? 'Putting the suggestion on the page' : 'Saving your change'}</h1>
+<p class="lede">${safe.origin?.relativePath ? `<span class="identity-path">${escapeHtml(safe.origin.relativePath)}</span>. ` : ''}This runs on the server in the background. You can close this page and come back; nothing here needs a click.</p>
 </header>
 <section class="job-card" aria-live="polite">
-<dl>
-<div><dt>Job</dt><dd id="job-id">${escapeHtml(safe.jobId)}</dd></div>
-<div><dt>State</dt><dd id="job-state">${escapeHtml(safe.state)}</dd></div>
-<div><dt>Updated</dt><dd id="job-updated">${escapeHtml(safe.updatedAt ?? '')}</dd></div>
-</dl>
+<p class="job-stage"><strong id="job-stage">${escapeHtml(jobStageCopy(safe.state))}</strong></p>
+<ol class="job-steps" id="job-steps">
+${steps}
+</ol>
 <p id="job-recovery" class="status">${escapeHtml(safe.recovery?.instruction ?? '')}</p>
-<p id="job-error" class="error" role="alert"></p>
+<p id="job-error" class="error" role="alert">${safe.failure ? `Stopped (${escapeHtml(safe.failure.code)}).` : ''}</p>
+<p class="job-technical">Job <span id="job-id">${escapeHtml(safe.jobId)}</span> · state <span id="job-state">${escapeHtml(safe.state)}</span> · updated <span id="job-updated">${escapeHtml(safe.updatedAt ?? '')}</span></p>
 </section>
-<p><a href="${escapeHtml(readerOrigin)}/cyberbase/">Return to Cyberbase</a></p>
+<p class="job-links">${back}${fromSuggestion ? ` · <a href="${escapeHtml(readerOrigin)}/cyberbase/">Return to Cyberbase</a>` : ''}</p>
 </main>`,
   });
 }
@@ -364,13 +419,23 @@ function decisionEntry(decision, summary) {
   });
 }
 
-function reviewSummaryCard(entry, href, decision = null) {
+// Decided rows say how far a suggestion got: Rejected, Approved (not yet on
+// the page), Applied (on its way), or Live (confirmed on the page).
+function decisionLabel(decision, application) {
+  if (decision.action !== 'approve') return { key: 'reject', text: 'Rejected', at: decision.decidedAt };
+  if (application?.state === 'live') return { key: 'live', text: 'Live', at: application.appliedAt };
+  if (application?.state === 'applied') return { key: 'applied', text: 'Applied', at: application.appliedAt };
+  return { key: 'approve', text: 'Approved', at: decision.decidedAt };
+}
+
+function reviewSummaryCard(entry, href, decision = null, application = null) {
   const view = proposalView(entry);
   const rationale = compactReviewText(entry.evidence.proposal.submission.rationale, 180);
   const path = `<span class="proposal-row-path">${escapeHtml(entry.summary.source.path)}</span>`;
+  const label = decision === null ? null : decisionLabel(decision, application);
   const meta = decision === null
     ? `${path}<span>Received ${reviewTime(entry.summary.receivedAt)}</span><span>Expires ${reviewTime(entry.summary.expiresAt)}</span>${entry.summary.route === 'reject' ? '<span class="attention-note">Your policy suggests rejecting</span>' : ''}`
-    : `<span class="decision-label decision-${escapeHtml(decision.action)}">${decision.action === 'approve' ? 'Approved' : 'Rejected'}</span><span>${reviewTime(decision.decidedAt)}</span>${path}<span class="proposal-row-note">\u201c${escapeHtml(compactReviewText(decision.reason, 120))}\u201d</span>`;
+    : `<span class="decision-label decision-${label.key}">${label.text}</span><span>${reviewTime(label.at)}</span>${path}<span class="proposal-row-note">\u201c${escapeHtml(compactReviewText(decision.reason, 120))}\u201d</span>`;
   return `<article class="proposal-row">
 <a class="proposal-row-link" href="${escapeHtml(href)}">
 <span class="proposal-row-change">${changeSummaryHtml(view, { compact: true })}</span>
@@ -389,10 +454,11 @@ function reviewListPage({ overlay, nextCursor }) {
       )).join('\n');
   const history = overlay.history.length === 0
     ? '<p class="empty-state">No decisions yet.</p>'
-    : overlay.history.map(({ decision, summary }) => reviewSummaryCard(
+    : overlay.history.map(({ decision, summary, application = null }) => reviewSummaryCard(
         decisionEntry(decision, summary),
         `/owner/decisions/${encodeURIComponent(summary.queueId)}`,
         decision,
+        application,
       )).join('\n');
   const next = nextCursor === null
     ? ''
@@ -801,27 +867,6 @@ const UNAPPLICABLE_REASON_COPY = Object.freeze({
   'attempt-limit': 'Too many attempts have been made on this suggestion.',
   'derivation-failed': 'The change could not be prepared for the page pipeline.',
 });
-const JOB_STAGE_COPY = Object.freeze([
-  [['accepted', 'preflighting', 'checking', 'rendering', 'ready-to-apply'], 'Checking the page before changing it'],
-  [['applying', 'source-applied', 'committing', 'committed'], 'Changing the page and saving the commit'],
-  [['pushing', 'pushed', 'discovering-run', 'run-bound', 'monitoring-deployment', 'deployment-succeeded'], 'Pushed. Waiting for the site to build'],
-  [['verifying-live'], 'Checking the live page'],
-  [['live-confirmed', 'rebuilding-local'], 'Live. Refreshing your local copy'],
-  [['completed'], 'Live on the page'],
-  [['blocked-pre-apply'], 'Stopped before changing the page'],
-  [['deployment-failed'], 'The page changed, but the site build failed'],
-  [['live-verification-failed'], 'Published, but the live page has not shown the change yet'],
-  [['manual-intervention'], 'Stopped partway and needs your attention'],
-  [['failed'], 'Stopped'],
-  [['cancelled'], 'Cancelled'],
-]);
-
-function jobStageCopy(state) {
-  if (state === null || state === undefined) return 'Never started';
-  for (const [states, copy] of JOB_STAGE_COPY) if (states.includes(state)) return copy;
-  return state;
-}
-
 // The step after approval, in the owner's words: whether the change can go on
 // the page now, why not, or how far along it is. One button, one sheet.
 function applicationStep({ application, view, summary, csrfToken }) {
@@ -1053,6 +1098,7 @@ export function createOwnerProposalReviewService({
   application = null,
   assessApplication = assessProposalApplication,
   applyApplication = applyApprovedProposal,
+  listProgress = listProposalApplicationProgress,
 } = {}) {
   const config = validateOwnerAlphaConfig(configInput);
   if (!config.proposalReview.enabled) return null;
@@ -1130,7 +1176,12 @@ export function createOwnerProposalReviewService({
         pageCursor = page.nextCursor;
       }
 
-      const history = complete.history.slice(0, config.proposalReview.maxListEntries);
+      let history = complete.history.slice(0, config.proposalReview.maxListEntries);
+      if (application !== null && history.length > 0) {
+        // Applied and Live come from events and job state only; no Git here.
+        const progress = await listProgress(context, config);
+        history = history.map((entry) => Object.freeze({ ...entry, application: progress.get(entry.summary.queueId) ?? null }));
+      }
       return Object.freeze({
         actionable: complete.actionable,
         history: Object.freeze(history),
@@ -1567,7 +1618,7 @@ export function createOwnerAlphaHandler({
             summary: entry.summary,
             sourceVerification: entry.sourceVerification,
           })),
-          history: review.history.map((entry) => ({ summary: entry.summary })),
+          history: review.history.map((entry) => ({ summary: entry.summary, application: entry.application ?? null })),
           historyTruncated: review.historyTruncated,
           nextCursor: review.nextCursor,
         });

@@ -10,7 +10,7 @@ tags: [setup, governance, testing, contribution]
 Approving a suggestion changes nothing on the page. Putting it on the page is a second step the owner takes from the receipt. This page is the practical guide to that step. The reasoning behind its shape is on [Owner application event](/cyberbaser/design/owner-application-event/).
 
 :::caution[Mechanically proven, not yet used for real]
-The step is implemented and tested against a throwaway repository. No approved suggestion has been applied to the real Cyberbase yet. That first real run is a separately authorized owner action and will be recorded in its own dated log entry.
+The step is implemented and tested against a throwaway repository. No approved suggestion has been applied to the real Cyberbase yet. The [first real application run](/cyberbaser/development/first-real-application/) has a run sheet, and it names what still has to exist before the run is possible without a terminal.
 :::
 
 ## The steps
@@ -22,8 +22,8 @@ The step is implemented and tested against a throwaway repository. No approved s
    - **The page pipeline cannot apply this yet.** The change is one your own Save path would refuse, for example a change inside the metadata block at the top of the page, or one larger than your policy allows for a single save. Again the reason is spelled out and your approval stays recorded.
    - **On its way to the page.** You already applied it. The stage is in plain words, with a link to follow the job.
 3. **Tap Apply to page.** A sheet names the change and the page and says what happens next: the page changes and is published, in the background, the same way your own saves are.
-4. **Confirm.** You land on the job page, which shows each stage as it completes: checking, changing the page, committing, pushing, waiting for the site build, checking the live page, refreshing your local copy.
-5. **Come back to the receipt any time.** It shows the current stage and keeps the link.
+4. **Confirm.** You land on the job page, titled **Putting the suggestion on the page**. It shows six steps in order, with the current one marked: checking the page, changing the page and saving the commit, pushing to your repository, waiting for the site to build, checking the live page, refreshing your local copy. It ends with **Live on the page**, or says in plain words where it stopped. The page links back to the suggestion.
+5. **Come back to the receipt any time.** It shows the current stage and keeps the link. In the inbox's Decided list, the row reads **Approved** until you apply, **Applied** while the job runs, and **Live** once the change is confirmed on the page.
 
 In the checkpoint fixture launched by `bun run --cwd docs review:owner-alpha`, the receipt says applying is not available in that setup, because the fixture has no pipeline behind it. The step works in the real owner app.
 
@@ -68,6 +68,6 @@ The programmatic entry points are `assessProposalApplication` and `applyApproved
 - an attempt whose job never started is retryable, and the retry is attempt 2 and completes;
 - the rendered-site slug resolver reads the owner edit link back from the site, returns nothing for a page the site does not carry, and refuses when two pages disagree.
 
-`apps/owner-alpha/test/server.test.js` covers the receipt in every state, the apply route's session, CSRF, and body checks, the hand-off to the job page, and the refusals when the page moved, when already applied, and when applying is unavailable.
+`apps/owner-alpha/test/server.test.js` covers the receipt in every state, the apply route's session, CSRF, and body checks, the hand-off to the job page, the job page in owner words for both a Save and a suggestion, the Applied and Live labels in the Decided list, and the refusals when the page moved, when already applied, and when applying is unavailable. The browser acceptance clicks through approve, apply, the job page, and the Decided list on a phone-sized dark viewport.
 
 This is mechanical evidence. It establishes that the act exists and holds its boundary. It does not establish independent usability, a shipped lane, or a real contributor-to-live result.

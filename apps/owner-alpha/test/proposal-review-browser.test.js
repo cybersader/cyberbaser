@@ -168,7 +168,10 @@ function statefulReviewService() {
     async list() {
       return {
         actionable: entries.filter((entry) => !decisions.has(entry.summary.queueId)),
-        history: history(),
+        history: history().map((entry) => {
+          const recorded = applications.get(entry.decision.queueId) ?? null;
+          return { ...entry, application: recorded === null ? null : { state: 'applied', jobId: recorded.jobId, jobState: 'pushing', appliedAt: recorded.appliedAt } };
+        }),
         historyTruncated: false,
         nextCursor: null,
       };
@@ -256,6 +259,7 @@ async function browserFixture() {
       return {
         jobId,
         state: 'pushing',
+        origin: { type: 'approved-proposal', queueId: [...proposalReview.applications.keys()][0], relativePath: 'docs/notes.md' },
         revision: 7,
         createdAt: '2026-08-21T12:20:00.000Z',
         updatedAt: '2026-08-21T12:20:09.000Z',
@@ -422,15 +426,28 @@ acceptanceTest('browser review is content-first, deliberate, recoverable, and re
     await applyButton.click();
     await page.locator('#apply-confirm').click();
     await page.waitForURL(`${fixture.ownerOrigin}/owner/jobs/OA-browser-1`);
-    await expect(page.locator('h1').textContent()).resolves.toBe('Save job');
+    await expect(page.locator('h1').textContent()).resolves.toBe('Putting the suggestion on the page');
+    await page.waitForFunction(() => document.querySelector('#job-stage')?.textContent === 'Pushing to your repository');
+    await expect(page.locator('.job-step[data-status="done"]').count()).resolves.toBe(2);
+    await expect(page.locator('.job-step[data-status="current"]').textContent()).resolves.toBe('Pushing to your repository');
+    await expect(page.getByRole('link', { name: 'Back to the suggestion' }).count()).resolves.toBe(1);
     await capture(page, 'apply-job-dark-mobile');
     await page.goto(receiptUrl);
     await expect(page.locator('#application-heading').textContent()).resolves.toBe('On its way to the page');
-    await expect(page.locator('.application-stage strong').textContent()).resolves.toBe('Pushed. Waiting for the site to build');
+    await expect(page.locator('.application-stage strong').textContent()).resolves.toBe('Pushing to your repository');
     await expect(page.getByRole('link', { name: 'Follow it' }).getAttribute('href')).resolves.toBe('/owner/jobs/OA-browser-1');
     await expect(page.getByText('Applied', { exact: true }).count()).resolves.toBe(1);
     await expect(page.getByRole('button', { name: 'Apply to page', exact: true }).count()).resolves.toBe(0);
     await capture(page, 'applied-receipt-dark-mobile');
+    await Promise.all([
+      page.waitForURL(`${fixture.ownerOrigin}/owner/review`),
+      page.getByRole('link', { name: 'Back to Proposals' }).click(),
+    ]);
+    await expect(page.locator('#decided .decision-label').first().textContent()).resolves.toBe('Applied');
+    await Promise.all([
+      page.waitForURL(`${fixture.ownerOrigin}/owner/decisions/**`),
+      page.locator('#decided .proposal-row-link').first().click(),
+    ]);
 
     await Promise.all([
       page.waitForURL(`${fixture.ownerOrigin}/owner/review`),

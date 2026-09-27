@@ -770,8 +770,17 @@ export async function getOwnerAlphaJob({ config: configInput, projectRoot, conte
     config,
     projectRoot ?? DEFAULT_OWNER_ALPHA_PROJECT_ROOT,
   );
+  const paths = pipelineArtifactPaths(jobId);
   const state = await loadDurableJob(store, jobId, artifactOptions(config));
-  return pipelineSummary(state, pipelineArtifactPaths(jobId));
+  // Where the change came from: the owner's own edit, or an approved suggestion.
+  const session = await optionalArtifact(store, paths.session, artifactOptions(config));
+  let origin = null;
+  if (session && typeof session.relativePath === 'string') {
+    origin = session.origin?.type === 'approved-proposal' && typeof session.origin.queueId === 'string'
+      ? { type: 'approved-proposal', queueId: session.origin.queueId, relativePath: session.relativePath }
+      : { type: 'owner-edit', relativePath: session.relativePath };
+  }
+  return deepFreeze({ ...pipelineSummary(state, paths), origin });
 }
 
 /** Narrow server adapter: durable acceptance precedes the automatic effect pipeline. */

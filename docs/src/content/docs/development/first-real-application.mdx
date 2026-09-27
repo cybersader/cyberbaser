@@ -1,0 +1,59 @@
+---
+title: First real application run
+description: "The run sheet for the first outside suggestion to reach the real Cyberbase through Approve and Apply, what still has to exist before it can be run, and what gets recorded. Prepared 2026-09-27; not run."
+sidebar:
+  order: 11.6
+status: research
+tags: [setup, governance, testing, contribution]
+---
+
+This is the sheet for the first time a suggestion goes all the way to the live Cyberbase through the owner's own app: submitted from a page, reviewed, approved, applied, published, confirmed. It is the first contributor-to-live evidence. The maintainer runs it; nothing here is automated on their behalf.
+
+:::caution[Prepared, not run, and not yet runnable]
+Two links are missing before this can be run without a terminal. They are named below. Until they exist, the only way to get a real suggestion into the owner's queue is test-style scripting, which is not how this product is meant to be used, so the sheet waits.
+:::
+
+## What has to exist first
+
+The apply step, the receipt, the job page, and the Decided list are built and proven on a throwaway repository. What is not built is the way a suggestion about a real page reaches the owner's queue without commands:
+
+1. **The owner's local site does not yet offer the suggestion form.** The **Suggest a correction** form is disabled in every build. The owner's own private site, which the owner app rebuilds after each save, needs to be built with the form enabled and pointed at a local intake. Nothing public changes: the public site keeps no form.
+2. **The site build does not yet emit the binding the intake needs.** The intake accepts a suggestion only against a retained publication binding: one small file naming the exact source revision, the published pages with their digests, and the trust policy. The owner site build already knows all of that and writes its own manifest; it needs to write the binding file too, into the folder the intake reads.
+3. **The intake is not started with the owner app.** The intake service runs separately today and needs its own config and start command. For the owner, it should start and stop with the owner app, on the same machine, with its private review socket already wired to the app.
+
+Each is small and sits inside boundaries already decided: the form stays off the public site, the intake stays local and unexposed, the owner app stays the only writer. Together they are the connected slice the roadmap names.
+
+## The run, once those exist
+
+Budget half an hour. Have the job page open on the server machine and the receipt on whichever device you approve from.
+
+1. **Start the owner app** the usual way. It starts the local intake beside it. Note the commit your vault is at.
+2. **Pick one small change** on a published Cyberbase page: a typo, a date, a sentence. Not frontmatter, not a page you intend to edit today.
+3. **Suggest it from the page**, in your local site, as a reader would: select the text, write the replacement and a one-line reason, submit. You get a receipt with a queue ID.
+4. **Open Proposals** in the owner app. The suggestion is in Needs review. Open it, read it in whichever mode you like, and **Approve** with a note. The receipt says Source unchanged.
+5. **Tap Apply to page** on that receipt and confirm. You land on the job page. Watch the six steps: checking, changing the page, pushing, site build, live check, local refresh.
+6. **Wait for Live on the page.** Three to five minutes for the GitHub build and deploy. Open the public page and see the change.
+7. **Go back to Proposals.** The row reads Live.
+
+## What gets recorded
+
+Copy this into a dated entry under `docs/src/content/docs/agent-context/zz-log/` and fill it in:
+
+```text
+First real application run
+Date · vault commit before · page · queue ID
+
+Approve: receipt read Source unchanged (yes/no) · anything unclear:
+Apply: time from confirm to Live on the page · anything that stalled:
+Commit · pushed commit on origin/main · Actions run · public page confirmed at (time)
+Decided list read Live (yes/no)
+
+Friction noticed, in order of annoyance:
+Anything you would not want a contributor to see:
+```
+
+Then update the result section on [Applying an approved suggestion](/cyberbaser/development/applying-approved-suggestion/), the roadmap line about the connected slice, and `.claude/FOCUS.md` in the same session.
+
+## What this run does and does not prove
+
+It proves that one real suggestion can travel the whole boundary: proposal-only intake, owner review, decision-only approval, a separate owner act, the owner pipeline, and a live witness. It is maintainer-operated evidence: the maintainer wrote the suggestion and the maintainer applied it. It does not prove that a stranger can use the form, that the public site should carry the form, or that any lane is offered. Those stay separate decisions with their own evidence.

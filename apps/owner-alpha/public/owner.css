@@ -207,6 +207,8 @@ body.proposal-review-page {
 }
 .attention-note { background: var(--review-attention-soft); color: var(--review-attention); }
 .decision-approve { background: var(--review-approve-soft); color: var(--review-approve); }
+.decision-applied { background: var(--review-accent-soft, var(--review-approve-soft)); color: var(--review-accent); }
+.decision-live { background: var(--review-approve); color: #fff; }
 .decision-reject { background: var(--review-reject-soft); color: var(--review-reject); }
 
 .empty-state {
@@ -809,3 +811,33 @@ body.proposal-review-page {
 .application-meta { color: var(--review-muted); font-size: 0.9rem; }
 .application-job-link { color: var(--review-accent); font-weight: 600; }
 .source-unchanged.source-applied strong { color: var(--review-approve); }
+
+/* The job page: what is happening to the change, step by step. */
+.job-stage { margin: 0 0 1rem; font-size: 1.25rem; line-height: 1.4; }
+.job-steps { display: grid; gap: 0.45rem; margin: 0 0 1rem; padding: 0; list-style: none; counter-reset: job-step; }
+.job-step { position: relative; padding-left: 2.1rem; color: #4b5664; line-height: 1.5; }
+.job-step::before {
+  content: '';
+  position: absolute;
+  top: 0.3rem;
+  left: 0;
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 2px solid #9ca8b6;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+.job-step-done { color: #18202a; }
+.job-step-done::before { border-color: #1f8a4c; background: #1f8a4c; }
+.job-step-current { color: #18202a; font-weight: 700; }
+.job-step-current::before { border-color: #1f5bd7; background: #fff; }
+.job-step-stopped { color: #a32121; font-weight: 700; }
+.job-step-stopped::before { border-color: #a32121; background: #a32121; }
+.job-technical { margin: 0.75rem 0 0; color: #6b7684; font-size: 0.82rem; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
+.job-links { margin-top: 1.25rem; }
+@media (prefers-color-scheme: dark) {
+  .job-step { color: #aeb9c6; }
+  .job-step-done, .job-step-current { color: #e6edf5; }
+  .job-step-current::before { background: #18212b; }
+  .job-technical { color: #8b97a6; }
+}

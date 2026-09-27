@@ -122,6 +122,7 @@ export {
   PROPOSAL_APPLICATION_STATES,
   validateProposalApplicationEvent,
   listProposalApplicationEvents,
+  listProposalApplicationProgress,
   proposalApplicationEventPath,
   resolveRenderedPageSlug,
   deriveProposalApplication,

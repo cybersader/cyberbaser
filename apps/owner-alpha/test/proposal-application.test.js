@@ -27,8 +27,10 @@ import {
   defaultGitRunner,
   defaultProposalReviewGit,
   defineStoreContext,
+  getOwnerAlphaJob,
   listApprovedProposalInputs,
   listProposalApplicationEvents,
+  listProposalApplicationProgress,
   loadDurableJob,
   prepareStore,
   proposalApplicationEventPath,
@@ -280,6 +282,13 @@ test('an approved suggestion reaches the page only through the separate apply ac
   expect(await git(fixture.checkout, ['diff', '--name-only', 'HEAD^', 'HEAD'])).toBe(retention.proposal.path);
   expect(await git(fixture.bare, ['rev-parse', 'refs/heads/main'])).toBe(after.head);
 
+  // The cheap list view: applied and completed reads Live; nothing else is listed.
+  const progress = await listProposalApplicationProgress(context, config);
+  expect([...progress.keys()]).toEqual([retention.queueId]);
+  expect(progress.get(retention.queueId)).toMatchObject({ state: 'live', jobId: 'OA-retention-1', jobState: 'completed', appliedAt: '2026-09-27T12:00:00Z' });
+  const job = await getOwnerAlphaJob({ config, context, jobId: 'OA-retention-1' });
+  expect(job.origin).toEqual({ type: 'approved-proposal', queueId: retention.queueId, relativePath: retention.proposal.path });
+
   // Exactly once: a second act on the same suggestion is refused, with nothing written.
   const twice = await applyApprovedProposal({ context, config, queueId: retention.queueId, saveEdit, createJobId: () => 'OA-retention-2', checkoutReady, git: policyGit, resolveSlug });
   expect(twice).toMatchObject({ applied: false, status: { state: 'applied', latest: { attempt: 1, jobId: 'OA-retention-1', jobState: 'completed', retryable: false } }, event: null, job: null });
@@ -292,6 +301,7 @@ test('an approved suggestion reaches the page only through the separate apply ac
   const failingSave = async () => { throw new OwnerAlphaError('lock-busy', 'another owner action holds the store'); };
   await expectCode(() => applyApprovedProposal({ context, config, queueId: rota.queueId, saveEdit: failingSave, createJobId: () => 'OA-rota-1', checkoutReady, git: policyGit, resolveSlug, clock }), 'lock-busy');
   expect(await assess(rota.queueId)).toMatchObject({ state: 'eligible', attempts: [{ attempt: 1, jobId: 'OA-rota-1', jobState: null, retryable: true }] });
+  expect((await listProposalApplicationProgress(context, config)).has(rota.queueId)).toBe(false);
   expect(await gitState(fixture.checkout)).toEqual(after);
   const retried = await applyApprovedProposal({ context, config, queueId: rota.queueId, saveEdit, createJobId: () => 'OA-rota-2', checkoutReady, git: policyGit, resolveSlug, clock });
   expect(retried.applied).toBe(true);

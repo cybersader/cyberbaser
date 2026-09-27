@@ -244,6 +244,33 @@ async function readEventsUnlocked(context, queueIdFilter = null) {
   return events;
 }
 
+/**
+ * Cheap progress for lists: which approved suggestions have been applied and
+ * how far their job got. Reads only events and durable job state, never Git,
+ * so an inbox can show Applied or Live without touching the checkout.
+ * Returns a Map from queueId to `{ state: 'applied' | 'live', jobId, jobState, appliedAt }`;
+ * suggestions with no effective attempt are absent.
+ */
+export async function listProposalApplicationProgress(context, configInput) {
+  if (!context) fail('invalid-application-dependency', 'listing application progress requires a store context');
+  const config = validateOwnerAlphaConfig(configInput);
+  return withFileLock(context, PROPOSAL_APPLICATION_LOCK, async () => {
+    const events = await readEventsUnlocked(context);
+    const progress = new Map();
+    for (const event of events) {
+      const effect = await jobEffect(context, config, event.job.jobId);
+      if (effect.retryable) continue;
+      progress.set(event.queueId, Object.freeze({
+        state: effect.jobState === 'completed' ? 'live' : 'applied',
+        jobId: event.job.jobId,
+        jobState: effect.jobState,
+        appliedAt: event.appliedAt,
+      }));
+    }
+    return progress;
+  });
+}
+
 /** List every recorded application event, optionally for one suggestion. */
 export async function listProposalApplicationEvents(context, { queueId = null } = {}) {
   if (!context) fail('invalid-application-dependency', 'listing application events requires a store context');

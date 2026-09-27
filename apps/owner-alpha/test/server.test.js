@@ -851,9 +851,14 @@ describe('privileged proposal review routes', () => {
     expect(await blocked.json()).toEqual({ error: { code: 'lock-busy' } });
   });
 
-  function applicationServiceFixture({ status, applyResult = null, applyError = null, applyCalls = [] }) {
+  function applicationServiceFixture({ status, applyResult = null, applyError = null, applyCalls = [], listApplication = null }) {
+    const base = reviewServiceFixture({ decided: true });
     return Object.freeze({
-      ...reviewServiceFixture({ decided: true }),
+      ...base,
+      async list() {
+        const listed = await base.list();
+        return { ...listed, history: listed.history.map((entry) => ({ ...entry, application: listApplication })) };
+      },
       applicationAvailable: true,
       async applicationStatus(queueId) {
         return { queueId, attempts: [], latest: null, reason: null, details: {}, branchTip: null, input: null, ...status };
@@ -899,11 +904,18 @@ describe('privileged proposal review routes', () => {
     expect(blockedBody).not.toContain('data-apply');
 
     const latest = { attempt: 1, appliedAt: '2026-09-27T09:00:00Z', jobId: 'OA-applied', jobState: 'pushing', failure: null, retryable: false };
-    const applied = await enabledFixture({ proposalReview: applicationServiceFixture({ status: { state: 'applied', attempts: [latest], latest } }) });
+    const applied = await enabledFixture({ proposalReview: applicationServiceFixture({ status: { state: 'applied', attempts: [latest], latest }, listApplication: { state: 'applied', jobId: 'OA-applied', jobState: 'pushing', appliedAt: '2026-09-27T09:00:00Z' } }) });
     const appliedOpened = await openReview(applied.fetch);
+    expect(appliedOpened.body).toContain('decision-label decision-applied">Applied');
+    expect(appliedOpened.body).not.toContain('decision-label decision-approve">Approved');
+    const live = await enabledFixture({ proposalReview: applicationServiceFixture({ status: { state: 'applied', attempts: [latest], latest }, listApplication: { state: 'live', jobId: 'OA-applied', jobState: 'completed', appliedAt: '2026-09-27T09:00:00Z' } }) });
+    const liveOpened = await openReview(live.fetch);
+    expect(liveOpened.body).toContain('decision-label decision-live">Live');
+    const liveApi = await live.fetch(request('/api/review', { headers: { Cookie: liveOpened.cookie } }));
+    expect((await liveApi.json()).history[0].application).toMatchObject({ state: 'live', jobId: 'OA-applied' });
     const appliedBody = await (await applied.fetch(request(`/owner/decisions/${REVIEW_QUEUE_ID}`, { headers: { Cookie: appliedOpened.cookie } }))).text();
     expect(appliedBody).toContain('<h2 id="application-heading">On its way to the page</h2>');
-    expect(appliedBody).toContain('<strong>Pushed. Waiting for the site to build</strong>');
+    expect(appliedBody).toContain('<strong>Pushing to your repository</strong>');
     expect(appliedBody).toContain('href="/owner/jobs/OA-applied">Follow it</a>');
     expect(appliedBody).toContain('<strong>Applied</strong>');
     expect(appliedBody).not.toContain('<strong>Source unchanged</strong>');
@@ -1615,6 +1627,41 @@ describe('configured Quartz static site', () => {
 });
 
 describe('job status routes', () => {
+  test('a job started from an approved suggestion says so, links back to it, and reports its stage in plain words', async () => {
+    const { fetch } = await handlerFixture({
+      lookupJob: async (jobId) => ({
+        ...fixtureJob(jobId),
+        state: 'pushing',
+        origin: { type: 'approved-proposal', queueId: REVIEW_QUEUE_ID, relativePath: 'docs/example.md', secret: 'must-not-leak' },
+      }),
+    });
+    const opened = await openEdit(fetch);
+    const api = await fetch(request('/api/jobs/OA-from-suggestion', { headers: { Cookie: opened.cookie } }));
+    const body = await api.json();
+    expect(body.origin).toEqual({ type: 'approved-proposal', queueId: REVIEW_QUEUE_ID, relativePath: 'docs/example.md' });
+    expect(JSON.stringify(body)).not.toContain('must-not-leak');
+    const page = await fetch(request('/owner/jobs/OA-from-suggestion', { headers: { Cookie: opened.cookie } }));
+    const pageBody = await page.text();
+    expect(page.status).toBe(200);
+    expect(pageBody).toContain('<h1>Putting the suggestion on the page</h1>');
+    expect(pageBody).toContain('<strong id="job-stage">Pushing to your repository</strong>');
+    expect(pageBody).toContain('data-step="check" data-status="done"');
+    expect(pageBody).toContain('data-step="change" data-status="done"');
+    expect(pageBody).toContain('data-step="push" data-status="current"');
+    expect(pageBody).toContain(`href="/owner/decisions/${REVIEW_QUEUE_ID}">Back to the suggestion</a>`);
+    expect(pageBody).not.toContain('must-not-leak');
+
+    const stopped = await handlerFixture({
+      lookupJob: async (jobId) => ({ ...fixtureJob(jobId), state: 'blocked-pre-apply', failure: { code: 'ofm-damage', retryable: false, secret: 'must-not-leak' } }),
+    });
+    const stoppedOpened = await openEdit(stopped.fetch);
+    const stoppedBody = await (await stopped.fetch(request('/owner/jobs/OA-stopped', { headers: { Cookie: stoppedOpened.cookie } }))).text();
+    expect(stoppedBody).toContain('<strong id="job-stage">Stopped before changing the page. Nothing changed.</strong>');
+    expect(stoppedBody).toContain('data-step="check" data-status="stopped"');
+    expect(stoppedBody).toContain('Stopped (ofm-damage).');
+    expect(stoppedBody).not.toContain('must-not-leak');
+  });
+
   test('returns a redacted job projection as JSON and a control-free status page', async () => {
     const { fetch } = await handlerFixture();
     const opened = await openEdit(fetch);
@@ -1640,7 +1687,13 @@ describe('job status routes', () => {
     const page = await fetch(request('/owner/jobs/job-1', { headers: { Cookie: opened.cookie } }));
     const pageBody = await page.text();
     expect(page.status).toBe(200);
-    expect(pageBody).toContain('This page reports the durable pipeline state. It has no mutation controls.');
+    expect(pageBody).toContain('<h1>Saving your change</h1>');
+    expect(pageBody).toContain('<strong id="job-stage">Checking the page</strong>');
+    expect(pageBody).toContain('data-step="check" data-status="current"');
+    expect(pageBody).toContain('data-step="push" data-status="pending"');
+    expect(pageBody).toContain('<span id="job-state">checking</span>');
+    expect(pageBody).toContain('Return to Cyberbase');
+    expect(pageBody).not.toContain('Back to the suggestion');
     expect(pageBody).not.toContain('<button');
     expect(pageBody).not.toContain('/private/cyberbase');
     expect(pageBody).not.toContain('must-not-leak');
