@@ -1,0 +1,89 @@
+---
+title: Forgejo Lane A live validation
+description: "The prepared check for the first real Forgejo pull request read by the Lane A adapter: what the maintainer does in Forgejo's own screens, what the check reads, what pass and fail mean, and what it does not prove. Prepared 2026-09-30; waits on the maintainer's Forgejo."
+sidebar:
+  order: 14.5
+status: research
+tags: [setup, testing, governance, contribution]
+---
+
+The Lane A adapter turns one open Forgejo pull request into one exact proposal, read-only. It has only ever run against injected metadata. This page prepares the first read against the maintainer's real Forgejo, set up as described on [Forgejo on TrueNAS](/cyberbaser/development/forgejo-on-truenas/).
+
+:::caution[Prepared, not run]
+The maintainer's Forgejo is not up yet. Nothing here has been run against a live instance. When it is, the result is recorded in a dated log entry and this page's result section is filled in. A pass validates one adapter against one instance; it does not install, link, or offer a contribution lane.
+:::
+
+## What the maintainer does, in Forgejo's screens
+
+1. **Open the vault copy** in Forgejo, on the private network, signed in as the owner account.
+2. **Find one sentence to improve** on one published page. Open the file, click the edit pencil. Change the sentence. Do not touch the metadata block at the top.
+3. **Commit as a new branch with a pull request.** At the bottom of the editor, choose the option that creates a new branch and starts a pull request. Give it a title that says what changed and one line of why. Create the pull request. Note its number.
+4. **Leave it open.** Do not merge it. The check reads it; nothing here merges anything.
+
+That is the whole contributor side, done in a browser. It is exactly what a colleague with a Forgejo account would do.
+
+## What the check reads
+
+The check reads the pull request through the same adapter code the package tests exercise, with the real network and a real local copy of the Forgejo repository instead of fakes:
+
+- four read-only requests to the forge: version, repository, the pull request, and the author;
+- the exact base and head commits, fetched into private temporary refs of a local clone whose remote is the Forgejo repository, then removed;
+- the one changed Markdown file, from which it derives one exact splice and proves that applying the splice to the base reproduces the head byte for byte;
+- the trust policy at the base commit, and the route it gives this author.
+
+It writes nothing: no queue entry, no decision, no source, no ref left behind, no comment on the pull request. It prints one bounded report and exits.
+
+## Running it
+
+This first validation is a one-time check run on the machine that holds the local clone. It is an instrument, not the product shape; the product shape, pull requests appearing in the owner's inbox by themselves, is the next design decision and is asked about below.
+
+The check needs a small config naming the forge and the repository, and a local clone whose `origin` is the Forgejo repository:
+
+```json
+{
+  "schemaVersion": 1,
+  "forgejo": { "apiBaseUrl": "https://forge.home.arpa:8443/api/v1" },
+  "repository": {
+    "url": "https://forge.home.arpa:8443/owner/cyberbase.git",
+    "owner": "owner",
+    "name": "cyberbase",
+    "baseBranch": "main"
+  }
+}
+```
+
+```bash
+bun packages/forgejo-intake/bin/forgejo-live-check.js \
+  --config lane-a.json --checkout /path/to/forgejo-clone --pull <number>
+```
+
+Add `--token-file <mode 0600 file>` only if the repository is private; the token is read per request and never printed. Exit code 0 means reconstructed, 2 means the adapter refused and the report says why, 1 means an error before the adapter ran.
+
+## Pass and fail
+
+**Pass when** the report says `RECONSTRUCTED as one exact proposal`, names the page and the exact bytes changed, shows the before and after previews that match what was typed in the browser, names the author as `forgejo:<origin>#user=<id>`, and reports the trust route the base policy gives that account. The clone's branch and status are unchanged afterwards.
+
+**Fail when** the adapter refuses a pull request that met the version 1 shape (one open, non-draft pull request from one active human account, one modified existing Markdown file, one hunk). The refusal code is the finding. A refusal for a pull request that broke the shape, for example two files or a draft, is the adapter working, not a fail.
+
+**Also record**: the Forgejo version the forge reports (the adapter requires 16), how long the check took, and anything in Forgejo's screens that would confuse a contributor.
+
+## Record the result
+
+```text
+Lane A live validation
+Date · forge version · repository · pull request number
+Report: reconstructed / refused (code)
+Page · bytes changed · route
+Clone unchanged afterwards (yes/no)
+Friction in Forgejo's screens:
+```
+
+Then update this page's result section, [Forgejo on TrueNAS](/cyberbaser/development/forgejo-on-truenas/), and `.claude/FOCUS.md` in the same session.
+
+## What a pass does not prove
+
+Not that a stranger can use Forgejo unaided, not that the lane is offered, not that pull requests reach the owner's inbox, not that anything reaches the page. Those are separate steps, and the first of them, pull requests appearing in the same inbox as form suggestions, is the design decision this validation unblocks.
+
+## Evidence
+
+`packages/forgejo-intake/test/live-check.test.js` runs the check against a fake Forgejo and a real local Git fixture: a real-shaped pull request reconstructs and reports in plain words with the token never echoed; a draft pull request and an unsupported forge version are reported as refusals, not thrown, and the unsupported version stops after one request; config and token files are read strictly; the command line requires its three inputs. This is hermetic evidence that the instrument works, not live evidence.

@@ -36,12 +36,12 @@ So the near-term install is small: the forge, on the private network, holding a 
 2. **Apps, Discover, Forgejo.** Install from the community train. Choose Postgres 18. Set the root URL to the exact address you will type in a browser, with the port, for example `https://forge.home.arpa:8443`; the app refuses anything that is not a full URL. Keep the web port published on the NAS's private address only. Keep SSH published too if you want SSH clones; HTTPS is enough for this project.
 3. **Certificate.** Pick a TrueNAS certificate for the app so the forge speaks HTTPS. This project's adapters require HTTPS and a canonical origin, and reject credentials in URLs.
 4. **First sign-in.** The first account created is the administrator. Make one owner account, and turn off open registration in Site Administration.
-5. **The vault repository.** Create an empty repository, then push the vault into it once from the machine that already has the checkout. This is the one step that touches a Git client; it is a one-time seed, the same shape the phase-one gate used. Do not enable mirroring for it.
+5. **The vault repository.** In Forgejo, choose **New Migration**, pick Git or GitHub, paste the public vault address, and leave **This repository will be a mirror** unchecked. Forgejo copies the repository once, in the browser, with no Git client. A mirror would be read-only and could not take pull requests; a plain copy can. Authority stays with GitHub until a separate decision, so this copy will drift and is only for suggestions and validation.
 6. **Write down** the origin, the repository slug, and the Forgejo version shown in the footer. The intake adapter's configuration needs the first two.
 
 ## What to do with it first
 
-- **Validate Lane A live.** Open one pull request against the vault copy that changes one sentence on one page, and run the Forgejo intake adapter against it. That validation is separately authorized work with its own pass and fail, recorded in a dated log. It does not install a lane or offer one.
+- **Validate Lane A live.** Open one pull request against the vault copy that changes one sentence on one page and read it through the adapter. The prepared check, its pass and fail, and its record are on [Forgejo Lane A live validation](/cyberbaser/development/forgejo-lane-a-live-validation/). It does not install a lane or offer one.
 - **Do not** install workflows, register a runner, mirror to or from GitHub, or link the forge from the public site. Each of those is a later decision.
 
 ## When a runner becomes worth it
