@@ -2,6 +2,13 @@ export { IntakeConfigError, loadConfig, validateConfig, validateRuntimePaths } f
 export { createGlobalAbuseLimiter } from './abuse.js';
 export { openIntakeService, startBunServer, startIntakeRuntime } from './server.js';
 export {
+  ForgejoWatcherError,
+  createForgejoWatcher,
+  laneAConfig,
+  laneARequestDigest,
+  prepareForgejoClone,
+} from './forgejo-watcher.js';
+export {
   IntakeReviewIpcError,
   REVIEW_IPC_REQUEST_MAX_BYTES,
   REVIEW_IPC_RESPONSE_MAX_BYTES,

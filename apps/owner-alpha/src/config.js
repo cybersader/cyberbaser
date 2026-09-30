@@ -202,8 +202,38 @@ function validateListen(value) {
   return { host, port, readerPort };
 }
 
+// Other repository identities the owner declares to be the same vault, for
+// example a Forgejo copy that exists only to take pull requests. A proposal
+// bound to an alias passes the repository identity check at review and Apply;
+// every exact check (base reachable from the owner branch, exact blob) still
+// applies. The list is part of the durable policy.
+const MAX_REPOSITORY_ALIASES = 8;
+
+function validateRepositoryAliases(value, remoteUrl) {
+  if (value === undefined) return [];
+  const aliases = uniqueStrings(value, '$.repository.aliases', (entry, location) => {
+    const url = exactHttpsUrl(entry, location, { allowPort: true });
+    if (!url.pathname.endsWith('.git') || url.pathname.split('/').length !== 3 || url.pathname.includes('//')) {
+      fail('invalid-config-url', `${location} must be an exact https://HOST/OWNER/REPOSITORY.git URL`);
+    }
+    if (url.toString() === remoteUrl) fail('invalid-config', `${location} repeats $.repository.remote.url`);
+    return url.toString();
+  });
+  if (aliases.length > MAX_REPOSITORY_ALIASES) {
+    fail('invalid-config', `$.repository.aliases may name at most ${MAX_REPOSITORY_ALIASES} repositories`);
+  }
+  return aliases;
+}
+
+/** True when a proposal bound to `repositoryUrl` belongs to this owner's vault. */
+export function repositoryMatchesPolicy(config, repositoryUrl) {
+  return repositoryUrl === config.repository.remote.url || config.repository.aliases.includes(repositoryUrl);
+}
+
 function validateRepository(value, provider) {
-  const input = objectAt(value, '$.repository', ['checkout', 'remote', 'branch']);
+  const keys = ['checkout', 'remote', 'branch'];
+  if (isPlainObject(value) && Object.hasOwn(value, 'aliases')) keys.push('aliases');
+  const input = objectAt(value, '$.repository', keys);
   const remoteInput = objectAt(input.remote, '$.repository.remote', ['name', 'url']);
   const name = exactString(remoteInput.name, '$.repository.remote.name', { max: 255 });
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(name)) {
@@ -225,6 +255,7 @@ function validateRepository(value, provider) {
     checkout: absoluteCheckout(input.checkout, '$.repository.checkout'),
     remote: { name, url: remoteUrl.toString() },
     branch: branchName(input.branch, '$.repository.branch'),
+    aliases: validateRepositoryAliases(input.aliases, remoteUrl.toString()),
     identity,
   };
 }
@@ -557,6 +588,7 @@ export function validateOwnerAlphaConfig(value) {
     checkout: repositoryWithIdentity.checkout,
     remote: repositoryWithIdentity.remote,
     branch: repositoryWithIdentity.branch,
+    aliases: repositoryWithIdentity.aliases,
   };
   const normalized = {
     schemaVersion: CONFIG_SCHEMA_VERSION,
@@ -587,6 +619,8 @@ export function policyDocument(configInput) {
     repository: {
       remote: config.repository.remote,
       branch: config.repository.branch,
+      // Only present when declared, so the pinned GitHub policy revision is unchanged.
+      ...(config.repository.aliases.length > 0 ? { aliases: config.repository.aliases } : {}),
     },
     owner: config.owner,
     live: config.live,

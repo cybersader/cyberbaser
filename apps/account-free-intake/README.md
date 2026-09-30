@@ -31,6 +31,10 @@ bun apps/account-free-intake/bin/server.js --config /absolute/account-free-intak
 
 Startup validates the input paths, performs proposal-queue recovery and retention, acquires the queue's kernel lock, and only then starts the Bun listener. `SIGINT` and `SIGTERM` stop the listener and release the queue lock.
 
+## Forge watcher
+
+An optional `forgejo` block makes the same process watch one Forgejo repository for open pull requests and enqueue each new head as a Lane A entry through the queue's one writer. It is read-only towards the forge. When the block is enabled, the public form may be off: set `listen` and `publicOrigin` to `null` and `allowedFormOrigins` to `[]`. The watcher keeps a private clone at `forgejo.cloneDir`, retains the base commit of every entry it enqueued, and proves Lane A entries from that clone on recovery. `forgejo.tokenFile` names a mode-0600 file for a private repository; the token is read per request and never logged. A disabled block is `{ "enabled": false }`.
+
 ## Read-only review commands
 
 The CLI exposes no accept, reject, apply, write, or publication operation:

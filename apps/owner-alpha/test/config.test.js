@@ -7,6 +7,7 @@ import {
   computePolicyRevision,
   loadOwnerAlphaConfig,
   policyDocument,
+  repositoryMatchesPolicy,
   validateOwnerAlphaConfig,
 } from '../src/index.js';
 
@@ -272,6 +273,40 @@ describe('strict one-Save private owner config', () => {
           copy.workflow.branch = branch;
         })),
         'invalid-config-ref',
+      );
+    }
+  });
+
+  test('accepts a short list of repository aliases that count as the same vault, without moving the pinned revision', async () => {
+    const raw = await exampleConfig();
+    const plain = validateOwnerAlphaConfig(raw);
+    expect(plain.repository.aliases).toEqual([]);
+    expect(computePolicyRevision(raw)).toBe(GITHUB_POLICY_REVISION);
+    expect(policyDocument(raw).repository).toEqual({ remote: plain.repository.remote, branch: 'main' });
+
+    const aliased = variant(raw, (copy) => {
+      copy.repository.aliases = ['https://forge.home.arpa:8443/cybersader/cyberbase.git'];
+    });
+    const config = validateOwnerAlphaConfig(aliased);
+    expect(config.repository.aliases).toEqual(['https://forge.home.arpa:8443/cybersader/cyberbase.git']);
+    expect(repositoryMatchesPolicy(config, 'https://forge.home.arpa:8443/cybersader/cyberbase.git')).toBe(true);
+    expect(repositoryMatchesPolicy(config, 'https://github.com/cybersader/cyberbase.git')).toBe(true);
+    expect(repositoryMatchesPolicy(config, 'https://forge.home.arpa:8443/cybersader/other.git')).toBe(false);
+    expect(computePolicyRevision(aliased)).not.toBe(GITHUB_POLICY_REVISION);
+    expect(policyDocument(aliased).repository.aliases).toEqual(config.repository.aliases);
+
+    for (const [code, aliases] of [
+      ['invalid-config-url', ['http://forge.home.arpa/cybersader/cyberbase.git']],
+      ['invalid-config-url', ['https://forge.home.arpa/cybersader/cyberbase']],
+      ['invalid-config-url', ['https://forge.home.arpa/deep/cybersader/cyberbase.git']],
+      ['invalid-config', ['https://github.com/cybersader/cyberbase.git']],
+      ['invalid-config', ['https://forge.home.arpa/a/b.git', 'https://forge.home.arpa/a/b.git']],
+      ['invalid-config', Array.from({ length: 9 }, (_, index) => `https://forge.home.arpa/a/b${index}.git`)],
+      ['invalid-config', 'https://forge.home.arpa/a/b.git'],
+    ]) {
+      expectCode(
+        () => validateOwnerAlphaConfig(variant(raw, (copy) => { copy.repository.aliases = aliases; })),
+        code,
       );
     }
   });

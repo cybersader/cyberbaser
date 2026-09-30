@@ -419,6 +419,60 @@ function decisionEntry(decision, summary) {
   });
 }
 
+// A suggestion that arrived as a pull request on the owner's forge says so:
+// which request, where, and which forge account opened it. The link is built
+// from the repository the proposal is bound to, never from contributor text.
+function forgeOrigin(entry) {
+  const carrier = entry.evidence?.carrier;
+  if (carrier?.lane !== 'lane-a' || !carrier.metadata) return null;
+  const repository = String(entry.summary.source.repository);
+  let base;
+  try {
+    const url = new URL(repository);
+    if (url.protocol !== 'https:') return null;
+    base = url.toString().replace(/\.git$/u, '');
+  } catch {
+    return null;
+  }
+  const number = carrier.metadata.pullRequestNumber;
+  if (!Number.isSafeInteger(number) || number < 1) return null;
+  const subject = entry.evidence.classification?.verifiedSubject?.author;
+  const account = typeof subject === 'string' ? (/#user=(\d{1,20})$/u.exec(subject)?.[1] ?? null) : null;
+  return Object.freeze({
+    number,
+    url: `${base}/pulls/${number}`,
+    account,
+    headSha: carrier.metadata.headSha,
+    key: `${carrier.metadata.repositoryId}:${number}`,
+  });
+}
+
+function forgeOriginHtml(origin, { compact = false } = {}) {
+  if (origin === null) return '';
+  const account = origin.account === null ? '' : ` by forge account #${escapeHtml(origin.account)}`;
+  return `<span class="forge-origin">From <a href="${escapeHtml(origin.url)}" rel="noopener noreferrer">pull request #${origin.number}</a> on your forge${compact ? '' : account}</span>`;
+}
+
+// Several heads of one request are one suggestion in the owner's eyes: the
+// newest is the row, earlier heads fold beneath it.
+function groupActionable(entries) {
+  const groups = new Map();
+  const order = [];
+  for (const entry of entries) {
+    const origin = forgeOrigin(entry);
+    const key = origin === null ? `queue:${entry.summary.queueId}` : `forge:${origin.key}`;
+    if (!groups.has(key)) {
+      groups.set(key, []);
+      order.push(key);
+    }
+    groups.get(key).push(entry);
+  }
+  return order.map((key) => {
+    const members = [...groups.get(key)].sort((left, right) => right.summary.receivedAt.localeCompare(left.summary.receivedAt));
+    return { entry: members[0], earlier: members.slice(1) };
+  });
+}
+
 // Decided rows say how far a suggestion got: Rejected, Approved (not yet on
 // the page), Applied (on its way), or Live (confirmed on the page).
 function decisionLabel(decision, application) {
@@ -428,29 +482,37 @@ function decisionLabel(decision, application) {
   return { key: 'approve', text: 'Approved', at: decision.decidedAt };
 }
 
-function reviewSummaryCard(entry, href, decision = null, application = null) {
+function reviewSummaryCard(entry, href, decision = null, application = null, earlier = []) {
   const view = proposalView(entry);
   const rationale = compactReviewText(entry.evidence.proposal.submission.rationale, 180);
   const path = `<span class="proposal-row-path">${escapeHtml(entry.summary.source.path)}</span>`;
   const label = decision === null ? null : decisionLabel(decision, application);
+  const origin = forgeOrigin(entry);
+  const forge = forgeOriginHtml(origin, { compact: true });
   const meta = decision === null
-    ? `${path}<span>Received ${reviewTime(entry.summary.receivedAt)}</span><span>Expires ${reviewTime(entry.summary.expiresAt)}</span>${entry.summary.route === 'reject' ? '<span class="attention-note">Your policy suggests rejecting</span>' : ''}`
-    : `<span class="decision-label decision-${label.key}">${label.text}</span><span>${reviewTime(label.at)}</span>${path}<span class="proposal-row-note">\u201c${escapeHtml(compactReviewText(decision.reason, 120))}\u201d</span>`;
+    ? `${path}<span>Received ${reviewTime(entry.summary.receivedAt)}</span><span>Expires ${reviewTime(entry.summary.expiresAt)}</span>${forge}${entry.summary.route === 'reject' ? '<span class="attention-note">Your policy suggests rejecting</span>' : ''}`
+    : `<span class="decision-label decision-${label.key}">${label.text}</span><span>${reviewTime(label.at)}</span>${path}${forge}<span class="proposal-row-note">\u201c${escapeHtml(compactReviewText(decision.reason, 120))}\u201d</span>`;
+  const folded = earlier.length === 0
+    ? ''
+    : `<p class="earlier-versions">Earlier ${earlier.length === 1 ? 'version' : 'versions'} of this request: ${earlier.map((item) => `<a href="/owner/review/${encodeURIComponent(item.summary.queueId)}">received ${reviewTime(item.summary.receivedAt)}</a>`).join(', ')}</p>`;
   return `<article class="proposal-row">
 <a class="proposal-row-link" href="${escapeHtml(href)}">
 <span class="proposal-row-change">${changeSummaryHtml(view, { compact: true })}</span>
 <span class="proposal-row-rationale">${escapeHtml(rationale)}</span>
 <span class="proposal-row-meta">${meta}</span>
 </a>
-</article>`;
+${folded}</article>`;
 }
 
 function reviewListPage({ overlay, nextCursor }) {
   const actionable = overlay.actionable.length === 0
     ? '<p class="empty-state">Nothing is waiting for you.</p>'
-    : overlay.actionable.map((entry) => reviewSummaryCard(
+    : groupActionable(overlay.actionable).map(({ entry, earlier }) => reviewSummaryCard(
         entry,
         `/owner/review/${encodeURIComponent(entry.summary.queueId)}`,
+        null,
+        null,
+        earlier,
       )).join('\n');
   const history = overlay.history.length === 0
     ? '<p class="empty-state">No decisions yet.</p>'
@@ -463,7 +525,8 @@ function reviewListPage({ overlay, nextCursor }) {
   const next = nextCursor === null
     ? ''
     : `<p class="pagination"><a href="/owner/review?cursor=${encodeURIComponent(nextCursor)}">More proposals</a></p>`;
-  const waiting = overlay.actionable.length === 1 ? '1 waiting' : `${overlay.actionable.length} waiting`;
+  const waitingCount = groupActionable(overlay.actionable).length;
+  const waiting = waitingCount === 1 ? '1 waiting' : `${waitingCount} waiting`;
   const decided = overlay.history.length === 0 ? '' : `<span class="section-count">${overlay.history.length} shown</span>`;
   return pageShell({
     title: 'Proposals',
@@ -788,6 +851,7 @@ function reviewIdentityHeader(entry, view) {
 <span class="identity-path">${escapeHtml(summary.source.path)}</span>
 <span>Received ${reviewTime(summary.receivedAt)}</span>
 <span>Expires ${reviewTime(summary.expiresAt)}</span>
+${forgeOriginHtml(forgeOrigin(entry))}
 </div>
 <div class="contributor-note">
 <p class="section-kicker">Why the contributor suggests it</p>
@@ -869,7 +933,7 @@ const UNAPPLICABLE_REASON_COPY = Object.freeze({
 });
 // The step after approval, in the owner's words: whether the change can go on
 // the page now, why not, or how far along it is. One button, one sheet.
-function applicationStep({ application, view, summary, csrfToken }) {
+function applicationStep({ application, view, summary, csrfToken, entry = null }) {
   const change = escapeHtml(changeName(view));
   const sourcePath = escapeHtml(summary.source.path);
   const jobLink = (attempt) => `<a class="application-job-link" href="/owner/jobs/${encodeURIComponent(attempt.jobId)}">Follow it</a>`;
@@ -882,11 +946,15 @@ function applicationStep({ application, view, summary, csrfToken }) {
   const { state } = application;
   if (state === 'applied') {
     const latest = application.latest;
+    const origin = entry === null ? null : forgeOrigin(entry);
+    const forgeFollowUp = origin === null
+      ? ''
+      : `<p class="forge-followup"><a href="${escapeHtml(origin.url)}" rel="noopener noreferrer">Pull request #${origin.number}</a> on your forge is still open. Close it there; this app never writes to your forge.</p>`;
     return `<section class="application-step application-applied" aria-labelledby="application-heading">
 <h2 id="application-heading">On its way to the page</h2>
 <p class="application-stage"><strong>${escapeHtml(jobStageCopy(latest.jobState))}</strong> ${jobLink(latest)}</p>
 <p class="application-meta">Applied ${reviewTime(latest.appliedAt)}${latest.attempt > 1 ? ` · attempt ${latest.attempt}` : ''}</p>
-</section>`;
+${forgeFollowUp}</section>`;
   }
   const earlier = application.attempts.length === 0
     ? ''
@@ -955,7 +1023,7 @@ function decisionDetailPage({ decision, summary, queueRetained, application = nu
 <blockquote class="decision-note">${escapeHtml(decision.reason)}</blockquote>
 ${boundary}
 </section>
-${approved ? applicationStep({ application, view, summary, csrfToken }) : ''}
+${approved ? applicationStep({ application, view, summary, csrfToken, entry }) : ''}
 ${technicalEvidence(entry, {
   decision,
   queueRetained,

@@ -64,6 +64,21 @@ The bundled `list` and `show` commands render bounded text or static escaped HTM
 
 When explicitly enabled, the intake process instead serves bounded read-only `list` and `load` snapshots from its already-open queue over one private same-host Unix socket. The writer keeps its lifetime exclusive lock. The socket exposes no enqueue, expiry, purge, decision, or source operation. Owner-alpha is a separate consumer: it imports neither the intake app nor queue files, independently validates the advertised evidence, and records decisions only in its own private store.
 
+### The forge watcher (Lane A into the same queue)
+
+Since 2026-09-30 the same service can watch one Forgejo repository for open pull requests and enqueue each new head as a Lane A entry, read-only towards the forge. The `forgejo` config block is optional; when it is enabled the public form may be off (`listen`, `publicOrigin` null, `allowedFormOrigins` empty), so the service can run for the review socket and the watcher alone. The watcher keeps a private clone, retains each base commit it enqueued, and proves Lane A entries from that clone on recovery. Design and evidence: [Pull requests in the inbox](/cyberbaser/design/pull-requests-in-the-inbox/).
+
+```json
+"forgejo": {
+  "enabled": true,
+  "apiBaseUrl": "https://forge.home.arpa:8443/api/v1",
+  "repository": { "url": "https://forge.home.arpa:8443/owner/cyberbase.git", "owner": "owner", "name": "cyberbase", "baseBranch": "main" },
+  "cloneDir": "/srv/cyberbaser/forge-clone",
+  "pollIntervalMs": 60000,
+  "tokenFile": null
+}
+```
+
 ### Quartz renderer integration
 
 `renderers/quartz-cyberbase` contains a source-backed **Suggest a correction** component and browser client. The component is absent unless build-time configuration explicitly sets `CYBERBASER_ACCOUNT_FREE_INTAKE=enabled` and supplies every retained-publication input. Normal and current public builds leave it disabled.
@@ -110,7 +125,8 @@ They do **not** support these claims:
 - protected by a production reverse proxy, TLS, WAF, or DDoS service;
 - an identity verifier or anything above the anonymous trust floor;
 - a publicly deployed, offered, or independently operated owner-review product;
-- approval-to-source application, a source writer, merge mechanism, or publication authority; or
+- a watched live forge (the watcher is proven hermetically only);
+- a source writer, merge mechanism, or publication authority (approval-to-source application exists separately as the owner's own Apply act); or
 - closure of Q09.
 
 ## Run the focused checks
@@ -118,6 +134,7 @@ They do **not** support these claims:
 ```bash
 bun test packages/proposal-queue/test
 bun test packages/account-free-intake/test
+bun test packages/forgejo-intake/test
 bun test apps/account-free-intake/test
 bash renderers/quartz-cyberbase/tests/run.sh
 bun test deploy/account-free-intake/test

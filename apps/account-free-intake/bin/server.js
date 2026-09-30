@@ -11,7 +11,13 @@ let runtime;
 try {
   const config = await loadConfig(args[1]);
   runtime = await startIntakeRuntime({ config });
-  process.stdout.write(`account-free intake ready on ${runtime.server.hostname}:${runtime.server.port}\n`);
+  const listening = runtime.server === null
+    ? 'public form off'
+    : `public form on ${runtime.server.hostname}:${runtime.server.port}`;
+  const watching = runtime.service.forgejo === null
+    ? 'no forge watcher'
+    : `watching ${config.forgejo.repository.url} for pull requests`;
+  process.stdout.write(`account-free intake ready: ${listening}; ${watching}\n`);
 
   let stopping = false;
   const stop = async () => {

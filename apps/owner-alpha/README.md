@@ -60,7 +60,7 @@ The schema is closed at every level. Unknown or missing keys fail validation. It
 - one exact private numeric IPv4 listener host and owner port; the reader port is derived as owner port + 1. Accepted host ranges are loopback `127.0.0.0/8`, RFC 1918 (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), and RFC 6598 shared address space `100.64.0.0/10`. Hostnames, IPv6, wildcard, public addresses, exact range endpoints, and port 80 on either origin are rejected. `127.0.0.1` remains the default;
 - one exact `proposalReview` branch: disabled with `socketPath: null`, or enabled with one normalized absolute Unix-socket path below a non-root parent, the fixed five-second deadline, and the fixed 100-entry page cap;
 - one exact absolute repository path;
-- one exact credential-free HTTPS remote, remote name, and branch;
+- one exact credential-free HTTPS remote, remote name, and branch, plus an optional `repository.aliases` list of at most eight other repository identities the owner declares to be the same vault (for example a Forgejo copy that takes pull requests); a proposal bound to an alias passes the repository check at review and Apply while every exact check still applies, and an empty list leaves the pinned policy revision unchanged;
 - one exact credential-free live URL;
 - one strict provider branch: the existing GitHub Actions repository/name/path/environment contract, or a Forgejo Actions API origin, repository slug, `.forgejo/workflows/*.yml` path, job set, terminal deployment job, and matching branch;
 - one project-relative ignored workspace and a store strictly below it;

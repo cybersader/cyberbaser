@@ -13,7 +13,7 @@ import {
 } from '@cyberbaser/proposal-review';
 import { digestBytes } from '@cyberbaser/proposal-queue';
 import { parseConfig } from '@cyberbaser/trust';
-import { validateOwnerAlphaConfig } from './config.js';
+import { validateOwnerAlphaConfig, repositoryMatchesPolicy } from './config.js';
 import { fail, OwnerAlphaError } from './errors.js';
 import { canonicalJson, deepFreeze } from './json.js';
 
@@ -280,7 +280,7 @@ export async function validateOwnerReviewEvidence({
     fail('review-not-actionable', 'owner review requires exact pending-review queue evidence');
   }
   assertReviewWindow(evidence, startedAt);
-  if (evidence.proposal.source.repository !== config.repository.remote.url) {
+  if (!repositoryMatchesPolicy(config, evidence.proposal.source.repository)) {
     fail('review-repository-mismatch', 'proposal repository does not match owner policy');
   }
   pathMatchesPolicy(evidence.proposal.source.path, config.paths);

@@ -41,7 +41,7 @@ So the near-term install is small: the forge, on the private network, holding a 
 
 ## What to do with it first
 
-- **Validate Lane A live.** Open one pull request against the vault copy that changes one sentence on one page and read it through the adapter. The prepared check, its pass and fail, and its record are on [Forgejo Lane A live validation](/cyberbaser/development/forgejo-lane-a-live-validation/). It does not install a lane or offer one.
+- **Let pull requests reach your inbox.** Turn on the forge watcher in the intake service's config, pointing at the vault copy, and list the copy in your owner app's `repository.aliases`. Then open one pull request against the copy that changes one sentence on one page, and watch it appear in Proposals. The check, its pass and fail, and its record are on [Forgejo Lane A live validation](/cyberbaser/development/forgejo-lane-a-live-validation/); the design is [Pull requests in the inbox](/cyberbaser/design/pull-requests-in-the-inbox/). Only accounts you create can open a request. It does not offer a lane to anyone else.
 - **Do not** install workflows, register a runner, mirror to or from GitHub, or link the forge from the public site. Each of those is a later decision.
 
 ## When a runner becomes worth it

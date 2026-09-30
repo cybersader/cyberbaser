@@ -871,6 +871,79 @@ describe('privileged proposal review routes', () => {
     });
   }
 
+  // A suggestion that arrived as a pull request on the owner's forge.
+  function forgeEntry({ queueId, headSha, receivedAt }) {
+    const summary = {
+      ...REVIEW_SUMMARY,
+      queueId,
+      proposalId: `forgejo-pr:731:42:${headSha}`,
+      source: { ...REVIEW_SUMMARY.source, repository: 'https://forge.home.arpa:8443/cybersader/cyberbase.git' },
+      receivedAt,
+      lane: 'lane-a',
+      tier: 'trusted-human',
+      route: 'auto-merge',
+    };
+    const evidence = {
+      ...REVIEW_EVIDENCE,
+      queueId,
+      carrier: { schemaVersion: 1, artifactType: 'cyberbaser-proposal-queue-carrier', lane: 'lane-a', replayScope: REVIEW_DIGEST, metadata: { repositoryId: '731', pullRequestNumber: 42, headSha } },
+      classification: {
+        ...REVIEW_EVIDENCE.classification,
+        verifiedSubject: { author: 'forgejo:https://forge.home.arpa:8443#user=123', authorType: 'human' },
+        classification: { tier: 'trusted-human', route: 'auto-merge', reasons: ['trusted-typo-class'], checks: {} },
+      },
+    };
+    return { summary, evidence, sourceVerification: { gitObjectId: 'b'.repeat(40) } };
+  }
+
+  test('a forge pull request reads as one suggestion: forge line on the row and header, earlier heads folded, and a close reminder once applied', async () => {
+    const older = forgeEntry({ queueId: 'Q-00000000-0000-4000-8000-0000000000a1', headSha: 'a'.repeat(40), receivedAt: '2026-09-30T09:00:00Z' });
+    const newer = forgeEntry({ queueId: 'Q-00000000-0000-4000-8000-0000000000a2', headSha: 'b'.repeat(40), receivedAt: '2026-09-30T10:00:00Z' });
+    const decision = {
+      ...REVIEW_DECISION,
+      queueId: newer.summary.queueId,
+      reviewEvidence: newer.evidence,
+    };
+    const decisionSummary = { ...DECISION_SUMMARY, queueId: newer.summary.queueId, proposalId: newer.summary.proposalId, source: newer.summary.source, lane: 'lane-a', tier: 'trusted-human', route: 'auto-merge' };
+    const latest = { attempt: 1, appliedAt: '2026-09-30T11:00:00Z', jobId: 'OA-forge', jobState: 'pushing', failure: null, retryable: false };
+    const service = Object.freeze({
+      async list() {
+        return { actionable: [older, newer, REVIEW_ENTRY], history: [], historyTruncated: false, nextCursor: null };
+      },
+      async load(queueId) {
+        const entry = [older, newer, REVIEW_ENTRY].find((item) => item.summary.queueId === queueId);
+        return { entry, decision: null };
+      },
+      async loadDecision(queueId) {
+        return queueId === newer.summary.queueId ? { decision, summary: decisionSummary, queueRetained: true } : null;
+      },
+      async record() { throw new Error('not used'); },
+      applicationAvailable: true,
+      async applicationStatus() {
+        return { queueId: newer.summary.queueId, state: 'applied', reason: null, details: {}, branchTip: null, input: null, attempts: [latest], latest };
+      },
+      async apply() { throw new Error('not used'); },
+    });
+    const { fetch } = await enabledFixture({ proposalReview: service });
+    const opened = await openReview(fetch);
+    expect(opened.body).toContain('<span class="section-count">2 waiting</span>');
+    expect(opened.body).toContain('From <a href="https://forge.home.arpa:8443/cybersader/cyberbase/pulls/42" rel="noopener noreferrer">pull request #42</a> on your forge');
+    expect(opened.body).toContain(`<a class="proposal-row-link" href="/owner/review/${newer.summary.queueId}">`);
+    expect(opened.body).not.toContain(`<a class="proposal-row-link" href="/owner/review/${older.summary.queueId}">`);
+    expect(opened.body).toContain(`Earlier version of this request: <a href="/owner/review/${older.summary.queueId}">received`);
+
+    const detail = await fetch(request(`/owner/review/${newer.summary.queueId}`, { headers: { Cookie: opened.cookie } }));
+    const detailBody = await detail.text();
+    expect(detail.status).toBe(200);
+    expect(detailBody).toContain('pull request #42</a> on your forge by forge account #123');
+
+    const receipt = await fetch(request(`/owner/decisions/${newer.summary.queueId}`, { headers: { Cookie: opened.cookie } }));
+    const receiptBody = await receipt.text();
+    expect(receipt.status).toBe(200);
+    expect(receiptBody).toContain('<h2 id="application-heading">On its way to the page</h2>');
+    expect(receiptBody).toContain('Pull request #42</a> on your forge is still open. Close it there; this app never writes to your forge.');
+  });
+
   test('the receipt offers the separate apply step only while the page is still exactly as reviewed', async () => {
     const eligible = await enabledFixture({ proposalReview: applicationServiceFixture({ status: { state: 'eligible' } }) });
     const opened = await openReview(eligible.fetch);

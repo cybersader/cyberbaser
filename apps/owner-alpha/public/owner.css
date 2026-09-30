@@ -841,3 +841,9 @@ body.proposal-review-page {
   .job-step-current::before { background: #18212b; }
   .job-technical { color: #8b97a6; }
 }
+
+/* Suggestions that arrived as pull requests on the owner's forge. */
+.forge-origin a, .forge-followup a { color: var(--review-accent); font-weight: 600; }
+.earlier-versions { margin: 0.35rem 0 0 0.25rem; color: var(--review-muted); font-size: 0.85rem; }
+.earlier-versions a { color: var(--review-muted); text-decoration: underline; }
+.forge-followup { margin: 0.6rem 0 0; color: var(--review-ink); line-height: 1.55; }

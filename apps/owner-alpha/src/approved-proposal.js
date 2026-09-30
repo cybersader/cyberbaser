@@ -15,7 +15,7 @@ import { applyProposal, classifyProposal } from '@cyberbaser/proposal';
 import { serializeOwnerDecision, validateOwnerDecision } from '@cyberbaser/proposal-review';
 import { digestBytes, validateDigest, validateQueueId } from '@cyberbaser/proposal-queue';
 import { createJsonArtifactOnce } from './artifacts.js';
-import { validateOwnerAlphaConfig } from './config.js';
+import { repositoryMatchesPolicy, validateOwnerAlphaConfig } from './config.js';
 import { fail, OwnerAlphaError } from './errors.js';
 import { withFileLock } from './flock.js';
 import { canonicalJson, deepFreeze, isPlainObject } from './json.js';
@@ -234,7 +234,7 @@ export async function assessApprovedProposal({
   if (decision.action !== 'approve') fail('decision-not-approval', 'only an Approve decision can prepare an input', { queueId: decision.queueId });
   const evidence = decision.reviewEvidence;
   const { proposal } = evidence;
-  if (proposal.source.repository !== config.repository.remote.url) {
+  if (!repositoryMatchesPolicy(config, proposal.source.repository)) {
     fail('input-repository-mismatch', 'approved proposal repository does not match owner policy');
   }
 

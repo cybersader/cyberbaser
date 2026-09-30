@@ -24,6 +24,7 @@ The step is implemented and tested against a throwaway repository. No approved s
 3. **Tap Apply to page.** A sheet names the change and the page and says what happens next: the page changes and is published, in the background, the same way your own saves are.
 4. **Confirm.** You land on the job page, titled **Putting the suggestion on the page**. It shows six steps in order, with the current one marked: checking the page, changing the page and saving the commit, pushing to your repository, waiting for the site to build, checking the live page, refreshing your local copy. It ends with **Live on the page**, or says in plain words where it stopped. The page links back to the suggestion.
 5. **Come back to the receipt any time.** It shows the current stage and keeps the link. In the inbox's Decided list, the row reads **Approved** until you apply, **Applied** while the job runs, and **Live** once the change is confirmed on the page.
+6. **If the suggestion came from a pull request on your forge**, the receipt also reminds you that the request is still open there and that you close it yourself; this app never writes to your forge.
 
 In the checkpoint fixture launched by `bun run --cwd docs review:owner-alpha`, the receipt says applying is not available in that setup, because the fixture has no pipeline behind it. The step works in the real owner app.
 

@@ -57,6 +57,7 @@ jobs:
           bun install --cwd packages/ofm --frozen-lockfile
           bun install --cwd packages/trust --frozen-lockfile
           bun install --cwd packages/proposal --frozen-lockfile
+          bun install --cwd packages/forgejo-intake --frozen-lockfile
           bun install --cwd packages/proposal-queue --frozen-lockfile
           bun install --cwd packages/proposal-review --frozen-lockfile
           bun install --cwd packages/account-free-intake --frozen-lockfile

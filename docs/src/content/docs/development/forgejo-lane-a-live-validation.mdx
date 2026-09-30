@@ -35,7 +35,7 @@ It writes nothing: no queue entry, no decision, no source, no ref left behind, n
 
 ## Running it
 
-This first validation is a one-time check run on the machine that holds the local clone. It is an instrument, not the product shape; the product shape, pull requests appearing in the owner's inbox by themselves, is the next design decision and is asked about below.
+Two ways to run it. The product way, built on 2026-09-30: enable the forge watcher in the intake service and list the forge copy in the owner app's `repository.aliases`; the request appears in Proposals within a minute and the pass is simply that it reads there correctly, with the forge line and the right trust route. The instrument way, for a first look before the watcher is configured: the one-time command below, on the machine that holds a local clone. Either way the record below is filled in.
 
 The check needs a small config naming the forge and the repository, and a local clone whose `origin` is the Forgejo repository:
 
@@ -82,7 +82,7 @@ Then update this page's result section, [Forgejo on TrueNAS](/cyberbaser/develop
 
 ## What a pass does not prove
 
-Not that a stranger can use Forgejo unaided, not that the lane is offered, not that pull requests reach the owner's inbox, not that anything reaches the page. Those are separate steps. The first of them, pull requests appearing in the same inbox as form suggestions, is proposed on [Pull requests in the inbox](/cyberbaser/design/pull-requests-in-the-inbox/) and awaits the maintainer's decision.
+Not that a stranger can use Forgejo unaided, not that the lane is offered to anyone but the owner's invited accounts, not that anything reaches the page. Pull requests reaching the inbox is built and proven hermetically ([Pull requests in the inbox](/cyberbaser/design/pull-requests-in-the-inbox/)); this validation is its first live evidence when it runs.
 
 ## Evidence
 

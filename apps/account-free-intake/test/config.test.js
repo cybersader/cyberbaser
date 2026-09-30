@@ -107,3 +107,52 @@ describe('strict credential-free configuration', () => {
     }
   });
 });
+
+describe('forge watcher configuration', () => {
+  const forgejo = {
+    enabled: true,
+    apiBaseUrl: 'https://forge.home.arpa:8443/api/v1',
+    repository: { url: 'https://forge.home.arpa:8443/owner/wiki.git', owner: 'owner', name: 'wiki', baseBranch: 'main' },
+    cloneDir: '/srv/cyberbaser/forge-clone',
+    pollIntervalMs: 60_000,
+    tokenFile: null,
+  };
+
+  test('is optional, may be disabled with one key, and normalizes the enabled block', () => {
+    expect(validateConfig(configInput(ROOT)).forgejo).toBeNull();
+    expect(validateConfig(configInput(ROOT, { forgejo: null })).forgejo).toBeNull();
+    expect(validateConfig(configInput(ROOT, { forgejo: { enabled: false } })).forgejo).toEqual({ enabled: false });
+    const config = validateConfig(configInput(ROOT, { forgejo }));
+    expect(config.forgejo).toEqual(forgejo);
+    expect(config.listen).toEqual({ host: '0.0.0.0', port: 8080 });
+  });
+
+  test('lets the public form be off when the watcher is on, and refuses a service with no input at all', () => {
+    const formOff = validateConfig(configInput(ROOT, { listen: null, publicOrigin: null, allowedFormOrigins: [], forgejo }));
+    expect(formOff.listen).toBeNull();
+    expect(formOff.publicOrigin).toBeNull();
+    expect(formOff.publicHost).toBeNull();
+    expect(formOff.allowedFormOrigins).toEqual([]);
+    expect(() => validateConfig(configInput(ROOT, { listen: null, publicOrigin: null, allowedFormOrigins: [] }))).toThrow(/listen may be null only/);
+    expect(() => validateConfig(configInput(ROOT, { listen: null, allowedFormOrigins: [], forgejo }))).toThrow(/publicOrigin must be null/);
+    expect(() => validateConfig(configInput(ROOT, { listen: null, publicOrigin: null, forgejo }))).toThrow(/allowedFormOrigins must be empty/);
+  });
+
+  test('rejects an inconsistent or unsafe watcher block', () => {
+    const cases = [
+      [{ ...forgejo, apiBaseUrl: 'https://other.example/api/v1' }, /same-origin/],
+      [{ ...forgejo, apiBaseUrl: 'https://forge.home.arpa:8443/api/v2' }, /same-origin/],
+      [{ ...forgejo, repository: { ...forgejo.repository, name: 'other' } }, /match forgejo.repository.owner/],
+      [{ ...forgejo, repository: { ...forgejo.repository, url: 'http://forge.home.arpa:8443/owner/wiki.git' } }, /HTTPS/],
+      [{ ...forgejo, repository: { ...forgejo.repository, baseBranch: 'main..x' } }, /baseBranch/],
+      [{ ...forgejo, pollIntervalMs: 1000 }, /pollIntervalMs/],
+      [{ ...forgejo, cloneDir: 'relative/clone' }, /cloneDir/],
+      [{ ...forgejo, tokenFile: 'token' }, /tokenFile/],
+      [{ ...forgejo, extra: true }, /unknown field/],
+      [{ enabled: 'yes' }, /forgejo/],
+    ];
+    for (const [block, pattern] of cases) {
+      expect(() => validateConfig(configInput(ROOT, { forgejo: block }))).toThrow(pattern);
+    }
+  });
+});

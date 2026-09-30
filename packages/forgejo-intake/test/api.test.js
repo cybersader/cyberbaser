@@ -55,6 +55,44 @@ describe('createForgejoApi', () => {
     expect(JSON.stringify(snapshot)).not.toContain('top-secret-token');
   });
 
+  test('lists one bounded page of open pull requests read-only, preflighting the version first', async () => {
+    const calls = [];
+    const api = createForgejoApi({ fetch: queueFetch([
+      jsonResponse({ version: '16.0.5' }),
+      jsonResponse([
+        pullRequestPayload(),
+        pullRequestPayload({ number: 43, draft: true, head: { ...pullRequestPayload().head, sha: 'c'.repeat(40) } }),
+      ]),
+    ], calls) });
+    const listed = await api.listOpenPullRequests({ config: CONFIG });
+    expect(calls.map((call) => call.url)).toEqual([
+      'https://forge.example:8443/api/v1/version',
+      'https://forge.example:8443/api/v1/repos/owner/wiki/pulls?state=open&sort=oldest&page=1&limit=50',
+    ]);
+    expect(calls.every((call) => call.options.method === 'GET')).toBe(true);
+    expect(listed).toEqual({
+      instanceVersion: '16.0.5',
+      truncated: false,
+      pullRequests: [
+        { number: 42, open: true, draft: false, headSha: '2'.repeat(40), baseSha: '1'.repeat(40), baseRef: 'main' },
+        { number: 43, open: true, draft: true, headSha: 'c'.repeat(40), baseSha: '1'.repeat(40), baseRef: 'main' },
+      ],
+    });
+    expect(Object.isFrozen(listed.pullRequests)).toBe(true);
+
+    await expectCode(() => createForgejoApi({ fetch: queueFetch([
+      jsonResponse({ version: '17.0.0' }),
+    ]) }).listOpenPullRequests({ config: CONFIG }), 'unsupported-forgejo-version');
+    await expectCode(() => createForgejoApi({ fetch: queueFetch([
+      jsonResponse({ version: '16.0.5' }),
+      jsonResponse({ not: 'a list' }),
+    ]) }).listOpenPullRequests({ config: CONFIG }), 'invalid-forgejo-pull-request-list');
+    await expectCode(() => createForgejoApi({ fetch: queueFetch([
+      jsonResponse({ version: '16.0.5' }),
+      jsonResponse([{ number: 1, head: { sha: 'not-a-sha' }, base: { sha: '1'.repeat(40), ref: 'main' } }]),
+    ]) }).listOpenPullRequests({ config: CONFIG }), 'invalid-git-sha');
+  });
+
   test('preflights Forgejo major before repository requests', async () => {
     const calls = [];
     const api = createForgejoApi({

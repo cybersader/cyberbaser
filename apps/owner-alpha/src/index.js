@@ -13,6 +13,7 @@ export {
   loadOwnerAlphaConfig,
   policyDocument,
   computePolicyRevision,
+  repositoryMatchesPolicy,
 } from './config.js';
 export {
   defineStoreContext,
