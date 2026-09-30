@@ -10,8 +10,23 @@
 !apps/owner-alpha/src/**
 !apps/owner-alpha/public/
 !apps/owner-alpha/public/**
+!apps/account-free-intake/
+!apps/account-free-intake/package.json
+!apps/account-free-intake/bun.lock
+!apps/account-free-intake/src/
+!apps/account-free-intake/src/**
+!apps/account-free-intake/bin/
+!apps/account-free-intake/bin/**
 
 !packages/
+!packages/account-free-intake/
+!packages/account-free-intake/package.json
+!packages/account-free-intake/src/
+!packages/account-free-intake/src/**
+!packages/forgejo-intake/
+!packages/forgejo-intake/package.json
+!packages/forgejo-intake/src/
+!packages/forgejo-intake/src/**
 !packages/correction/
 !packages/correction/package.json
 !packages/correction/src/

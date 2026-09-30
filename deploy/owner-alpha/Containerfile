@@ -43,6 +43,15 @@ COPY packages/ /opt/cyberbaser/packages/
 RUN bun install --frozen-lockfile --production --ignore-scripts \
     && bun pm cache rm
 
+# The owner app starts the suggestion intake beside itself from settings it
+# derives; the intake stays its own process with its own locked dependency closure.
+FROM runtime-base AS intake-dependencies
+WORKDIR /opt/cyberbaser/apps/account-free-intake
+COPY apps/account-free-intake/package.json apps/account-free-intake/bun.lock ./
+COPY packages/ /opt/cyberbaser/packages/
+RUN bun install --frozen-lockfile --production --ignore-scripts \
+    && bun pm cache rm
+
 FROM runtime-base AS final
 WORKDIR /opt/cyberbaser
 
@@ -50,10 +59,14 @@ COPY .gitignore ./.gitignore
 COPY apps/owner-alpha/package.json apps/owner-alpha/bun.lock ./apps/owner-alpha/
 COPY apps/owner-alpha/src/ ./apps/owner-alpha/src/
 COPY apps/owner-alpha/public/ ./apps/owner-alpha/public/
+COPY apps/account-free-intake/package.json apps/account-free-intake/bun.lock ./apps/account-free-intake/
+COPY apps/account-free-intake/src/ ./apps/account-free-intake/src/
+COPY apps/account-free-intake/bin/ ./apps/account-free-intake/bin/
 COPY packages/ ./packages/
 COPY renderers/quartz-cyberbase/ ./renderers/quartz-cyberbase/
 COPY deploy/owner-alpha/entrypoint.sh deploy/owner-alpha/stage-config.js deploy/owner-alpha/state-init.sh deploy/owner-alpha/git-credential-owner-alpha-socket.js deploy/owner-alpha/healthcheck.js ./deploy/owner-alpha/
 COPY --from=owner-dependencies /opt/cyberbaser/apps/owner-alpha/node_modules ./apps/owner-alpha/node_modules
+COPY --from=intake-dependencies /opt/cyberbaser/apps/account-free-intake/node_modules ./apps/account-free-intake/node_modules
 COPY --from=quartz-seed /seed/quartz ./vendor/quartz
 COPY --chmod=0555 deploy/owner-alpha/entrypoint.sh /usr/local/bin/owner-alpha-entrypoint
 COPY --chmod=0555 deploy/owner-alpha/state-init.sh /usr/local/bin/owner-alpha-state-init

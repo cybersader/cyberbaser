@@ -20,6 +20,7 @@ import { listDurableJobs, loadDurableJob, validateJobId } from './job-state.js';
 import { ensureOwnerSite } from './site.js';
 import { createEditSession as createSourceEditSession } from './source.js';
 import { prepareStore, storeContextFromConfig } from './store.js';
+import { startSuggestionIntake, suggestionFormOrigin } from './suggestions.js';
 
 const COOKIE_NAME = 'owner_alpha_session';
 export const MAX_OWNER_SESSIONS = 64;
@@ -61,6 +62,14 @@ const READER_CSP = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net",
   "worker-src 'self' blob:",
 ].join('; ');
+
+// The reader site may post suggestions only to the intake the owner app runs
+// beside it, and only when the owner turned the form on.
+function readerCsp(config) {
+  const formOrigin = suggestionFormOrigin(config);
+  if (formOrigin === null) return READER_CSP;
+  return READER_CSP.replace("connect-src 'self'", `connect-src 'self' ${formOrigin}`);
+}
 
 const CONTENT_TYPES = Object.freeze({
   '.avif': 'image/avif',
@@ -1442,7 +1451,7 @@ async function staticResponse(root, encodedPath, request, options = {}) {
   }
   if (result.status !== 200) return errorResponse(result.status, result.status === 404 ? 'not-found' : 'static-unavailable');
   const bytes = result.bytes;
-  const csp = options.reader === true ? READER_CSP : OWNER_CSP;
+  const csp = options.csp ?? (options.reader === true ? READER_CSP : OWNER_CSP);
   const headers = securityHeaders({ cache: 'private, max-age=0, must-revalidate', csp });
   headers.set('Content-Type', result.contentType);
   headers.set('Content-Length', String(bytes.length));
@@ -1458,6 +1467,7 @@ export function createReaderHandler({
   const expectedHost = `${config.listen.host}:${config.listen.readerPort}`;
   const expectedOrigin = `http://${expectedHost}`;
   const resolvedSiteRoot = siteRoot ?? path.resolve(projectRoot, config.workspace.site);
+  const csp = readerCsp(config);
 
   return async function ownerAlphaReaderFetch(request) {
     if (!(request instanceof Request)) return errorResponse(400, 'invalid-request');
@@ -1478,6 +1488,7 @@ export function createReaderHandler({
     return staticResponse(resolvedSiteRoot, url.pathname.slice('/cyberbase/'.length), request, {
       cleanHtml: true,
       reader: true,
+      csp,
     });
   };
 }
@@ -2064,6 +2075,7 @@ export async function runOwnerAlphaServer({
   createReviewService = createOwnerProposalReviewService,
   recoverDecisions = recoverProposalDecisions,
   recordDecision = recordProposalDecision,
+  startSuggestions = startSuggestionIntake,
 } = {}) {
   if (typeof rebuildSite !== 'function'
     || typeof loadPipeline !== 'function'
@@ -2076,14 +2088,24 @@ export async function runOwnerAlphaServer({
     || typeof createReviewSource !== 'function'
     || typeof createReviewService !== 'function'
     || typeof recoverDecisions !== 'function'
-    || typeof recordDecision !== 'function') {
-    throw new TypeError('site, pipeline, handlers, servers, review, and recovery dependencies are required');
+    || typeof recordDecision !== 'function'
+    || typeof startSuggestions !== 'function') {
+    throw new TypeError('site, pipeline, handlers, servers, review, recovery, and suggestion dependencies are required');
   }
   const config = await loadOwnerAlphaConfig(configFile);
   const storeContext = storeContextFromConfig(config, projectRoot);
   await prepareStore(storeContext);
+  // The site build retains the publication binding the form needs, so the
+  // intake starts after it and before anything reads the review socket.
   await rebuildSite({ config, projectRoot });
-  const pipeline = await loadPipeline({ config, projectRoot, context: storeContext });
+  const suggestions = await startSuggestions({ config, projectRoot });
+  let pipeline;
+  try {
+    pipeline = await loadPipeline({ config, projectRoot, context: storeContext });
+  } catch (error) {
+    await suggestions?.close().catch(() => {});
+    throw error;
+  }
   const lookupJob = pipeline.getJob ?? ((jobId) => loadDurableJob(storeContext, jobId, {
     maxBytes: config.limits.maxArtifactBytes,
   }));
@@ -2116,7 +2138,13 @@ export async function runOwnerAlphaServer({
     proposalReview,
   });
   const readerFetch = createReader({ config, projectRoot });
-  const runtime = startServers({ config, ownerFetch, readerFetch, serve });
+  let runtime;
+  try {
+    runtime = startServers({ config, ownerFetch, readerFetch, serve });
+  } catch (error) {
+    await suggestions?.close().catch(() => {});
+    throw error;
+  }
   const recovery = Promise.resolve().then(async () => {
     await recoverDecisions(storeContext);
     return recoverJobs({
@@ -2126,7 +2154,17 @@ export async function runOwnerAlphaServer({
       listJobs,
     });
   });
-  return Object.freeze({ ...runtime, recovery });
+  return Object.freeze({
+    ...runtime,
+    suggestions: suggestions === null
+      ? null
+      : Object.freeze({ formOrigin: suggestions.formOrigin, forge: suggestions.forge }),
+    recovery,
+    stop(closeActiveConnections) {
+      runtime.stop?.(closeActiveConnections);
+      return suggestions?.close() ?? Promise.resolve(null);
+    },
+  });
 }
 
 export const OWNER_ALPHA_READY_CONTENT = 'owner-alpha-ready-v1\n';
@@ -2192,7 +2230,7 @@ if (import.meta.main) {
     if (stopping) return;
     stopping = true;
     disposeConsole?.();
-    runtime?.stop(true);
+    await runtime?.stop(true);
     try {
       await removeOwnerAlphaReadyMarker(readyFile);
     } finally {
@@ -2212,6 +2250,16 @@ if (import.meta.main) {
     await runtime.recovery;
     if (readyFile) await writeOwnerAlphaReadyMarker(readyFile);
     console.log(`Owner alpha reader: ${runtime.readerOrigin}/cyberbase/`);
+    if (runtime.suggestions === null) {
+      console.log('Suggestions: off (turn them on under "suggestions" in the owner config)');
+    } else {
+      console.log(runtime.suggestions.formOrigin === null
+        ? 'Suggestions: form off'
+        : `Suggestions: form on for pages served from ${runtime.readerOrigin}/cyberbase/`);
+      console.log(runtime.suggestions.forge === null
+        ? 'Suggestions: no forge watched'
+        : `Suggestions: watching ${runtime.suggestions.forge} for pull requests`);
+    }
     console.log(`Owner alpha bootstrap: ${formatBootstrapUrl(runtime.ownerOrigin, runtime.bootstrapToken)}`);
     if (typeof runtime.issueBootstrap === 'function' && process.stdin.readable) {
       console.log("Enter 'b' for a one-time sign-in link for another device.");

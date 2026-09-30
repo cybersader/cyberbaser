@@ -1,6 +1,6 @@
 ---
 title: First real application run
-description: "The run sheet for the first outside suggestion to reach the real Cyberbase through Approve and Apply, what still has to exist before it can be run, and what gets recorded. Prepared 2026-09-27; not run."
+description: "The run sheet for the first outside suggestion to reach the real Cyberbase through Approve and Apply, what the owner turns on first, and what gets recorded. Prepared 2026-09-27, runnable since 2026-09-30; not run."
 sidebar:
   order: 11.6
 status: research
@@ -9,19 +9,18 @@ tags: [setup, governance, testing, contribution]
 
 This is the sheet for the first time a suggestion goes all the way to the live Cyberbase through the owner's own app: submitted from a page, reviewed, approved, applied, published, confirmed. It is the first contributor-to-live evidence. The maintainer runs it; nothing here is automated on their behalf.
 
-:::caution[Prepared, not run, and not yet runnable]
-Two links are missing before this can be run without a terminal. They are named below. Until they exist, the only way to get a real suggestion into the owner's queue is test-style scripting, which is not how this product is meant to be used, so the sheet waits.
+:::caution[Prepared, not run]
+Since 2026-09-30 every link this run needs exists and is proven on a throwaway vault. The run itself is the maintainer's; nothing here is automated on their behalf.
 :::
 
-## What has to exist first
+## What the owner turns on first
 
-The apply step, the receipt, the job page, and the Decided list are built and proven on a throwaway repository. What is not built is the way a suggestion about a real page reaches the owner's queue without commands:
+The apply step, the receipt, the job page, and the Decided list are built and proven on a throwaway repository. So is the way a suggestion about a real page reaches the owner's queue without commands, described on [Suggestions on the private site](/cyberbaser/development/suggestions-on-the-private-site/). Before the run, in the owner app's config:
 
-1. **The owner's local site does not yet offer the suggestion form.** The **Suggest a correction** form is disabled in every build. The owner's own private site, which the owner app rebuilds after each save, needs to be built with the form enabled and pointed at a local intake. Nothing public changes: the public site keeps no form.
-2. **The site build does not yet emit the binding the intake needs.** The intake accepts a suggestion only against a retained publication binding: one small file naming the exact source revision, the published pages with their digests, and the trust policy. The owner site build already knows all of that and writes its own manifest; it needs to write the binding file too, into the folder the intake reads.
-3. **The intake is not started with the owner app.** The intake service runs separately today and needs its own config and start command. For the owner, it should start and stop with the owner app, on the same machine, with its private review socket already wired to the app.
+1. **Turn proposal review on** with a private socket path, if it is not already on.
+2. **Turn the form on**: `"suggestions": { "form": { "enabled": true }, "forge": { "enabled": false } }`.
 
-Each is small and sits inside boundaries already decided: the form stays off the public site, the intake stays local and unexposed, the owner app stays the only writer. Together they are the connected slice the roadmap names.
+That is all. The owner's private site then shows **Suggest a correction** on every published page, the site build writes the binding the intake needs, and the owner app starts the intake beside itself. The public site keeps no form, nothing is exposed, and the owner app stays the only writer.
 
 ## The run, once those exist
 

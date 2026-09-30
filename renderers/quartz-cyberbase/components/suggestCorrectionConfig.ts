@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto"
+import { isPrivateNetworkIpv4Host } from "./editLink"
 
 export const SUGGEST_CORRECTION_ENABLE_VALUE = "enabled"
 export const ACCOUNT_FREE_INTAKE_PATH = "/v1/corrections"
@@ -82,19 +83,26 @@ function canonicalHttpsUrl(value: string, name: string, repository = false): str
   return value
 }
 
+/**
+ * One exact canonical HTTPS origin (public deployments), or one private-network
+ * IPv4 HTTP origin with an explicit port (the owner's local site talking to the
+ * intake the owner app starts beside it). Same private ranges as owner mode.
+ */
 export function resolveIntakeOrigin(value: string | undefined): string {
   const origin = required(value, "CYBERBASER_ACCOUNT_FREE_INTAKE_ORIGIN")
+  const message = "CYBERBASER_ACCOUNT_FREE_INTAKE_ORIGIN must be one exact canonical HTTPS origin or one private-network IPv4 HTTP origin with an explicit port"
   if (Buffer.byteLength(origin, "utf8") > 2 * 1024 || Buffer.from(origin, "utf8").toString("utf8") !== origin) {
-    throw new Error("CYBERBASER_ACCOUNT_FREE_INTAKE_ORIGIN must be one exact canonical HTTPS origin")
+    throw new Error(message)
   }
   let url: URL
   try {
     url = new URL(origin)
   } catch {
-    throw new Error("CYBERBASER_ACCOUNT_FREE_INTAKE_ORIGIN must be one exact canonical HTTPS origin")
+    throw new Error(message)
   }
+  const privateHttp = url.protocol === "http:" && isPrivateNetworkIpv4Host(url.hostname) && url.port !== ""
   if (
-    url.protocol !== "https:"
+    !(url.protocol === "https:" || privateHttp)
     || url.username !== ""
     || url.password !== ""
     || url.hostname.endsWith(".")
@@ -103,7 +111,7 @@ export function resolveIntakeOrigin(value: string | undefined): string {
     || url.hash !== ""
     || url.origin !== origin
   ) {
-    throw new Error("CYBERBASER_ACCOUNT_FREE_INTAKE_ORIGIN must be one exact canonical HTTPS origin")
+    throw new Error(message)
   }
   return origin
 }

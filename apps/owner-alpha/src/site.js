@@ -25,6 +25,11 @@ import {
   renderPinnedQuartz,
 } from './quartz-renderer.js';
 import { assertCheckoutReady } from './source.js';
+import {
+  retainPublication as retainPublicationDefault,
+  suggestionFormOrigin,
+  verifyRetainedPublication as verifyRetainedPublicationDefault,
+} from './suggestions.js';
 
 export const OWNER_SITE_SCHEMA_VERSION = 1;
 export const OWNER_SITE_ARTIFACT_TYPE = 'owner-alpha-site-manifest';
@@ -504,6 +509,16 @@ async function publishCandidate({ projectRoot, workspaceRoot, candidateSite, sit
   return { replacedExisting: hadExisting };
 }
 
+// The built pages either carry no form, or carry the form bound to exactly the
+// intake origin the current config would use plus one retained binding digest.
+function suggestionsMatch(value, formOrigin) {
+  if (!isPlainObject(value)) return false;
+  if (formOrigin === null) return value.form === false;
+  return value.form === true
+    && value.intakeOrigin === formOrigin
+    && typeof value.bindingDigest === 'string';
+}
+
 function reusableManifest(value, config, checkout, htmlPages, resources, outputTree) {
   if (!isPlainObject(value)
     || value.schemaVersion !== OWNER_SITE_SCHEMA_VERSION
@@ -525,6 +540,7 @@ function reusableManifest(value, config, checkout, htmlPages, resources, outputT
     || value.renderer.resources?.digest !== resources.digest
     || value.renderer.resources?.files !== resources.files
     || value.renderer.resources?.bytes !== resources.bytes
+    || !suggestionsMatch(value.suggestions, suggestionFormOrigin(config))
     || value.site.manifest !== OWNER_SITE_MANIFEST_FILENAME
     || value.site.htmlPages !== htmlPages
     || value.site.outputTree?.digest !== outputTree.digest
@@ -556,8 +572,9 @@ export async function reuseOwnerSite({
     code: 'site-path-outside-workspace',
   });
   const checkCheckout = dependencyOverrides.assertCheckoutReady ?? assertCheckoutReady;
-  if (typeof checkCheckout !== 'function') {
-    fail('invalid-site-dependency', 'assertCheckoutReady must be an injected function');
+  const verifyRetained = dependencyOverrides.verifyRetainedPublication ?? verifyRetainedPublicationDefault;
+  if (typeof checkCheckout !== 'function' || typeof verifyRetained !== 'function') {
+    fail('invalid-site-dependency', 'assertCheckoutReady and verifyRetainedPublication must be injected functions');
   }
 
   const before = checkoutSnapshot(await checkCheckout(config), config);
@@ -590,6 +607,15 @@ export async function reuseOwnerSite({
     outputTree,
   );
   if (accepted === null) return null;
+  if (accepted.suggestions.form === true && !(await verifyRetained({
+    config,
+    projectRoot: project,
+    head: before.head,
+    bindingDigest: accepted.suggestions.bindingDigest,
+  }))) {
+    // The pages point at a binding the intake can no longer resolve: rebuild.
+    return null;
+  }
   const after = checkoutSnapshot(await checkCheckout(config), config);
   if (!sameCheckout(before, after)) {
     fail('site-checkout-changed', 'canonical checkout changed while the cached owner site was validated');
@@ -650,6 +676,7 @@ export async function rebuildOwnerSite({
   const verifyPublic = dependencyOverrides.verifyProjection ?? verifyProjection;
   const render = dependencyOverrides.renderPinnedQuartz ?? renderer;
   const checkLinks = dependencyOverrides.checkSite ?? checkSite;
+  const retain = dependencyOverrides.retainPublication ?? retainPublicationDefault;
   const now = dependencyOverrides.now ?? (() => new Date());
   const createBuildId = dependencyOverrides.createBuildId ?? randomUUID;
 
@@ -659,6 +686,7 @@ export async function rebuildOwnerSite({
     || typeof verifyPublic !== 'function'
     || typeof render !== 'function'
     || typeof checkLinks !== 'function'
+    || typeof retain !== 'function'
     || typeof now !== 'function'
     || typeof createBuildId !== 'function') {
     const types = {
@@ -668,6 +696,7 @@ export async function rebuildOwnerSite({
       verifyPublic: typeof verifyPublic,
       render: typeof render,
       checkLinks: typeof checkLinks,
+      retain: typeof retain,
       now: typeof now,
       createBuildId: typeof createBuildId,
     };
@@ -776,6 +805,46 @@ export async function rebuildOwnerSite({
       selection.published,
     );
 
+    // When the form is on, the pages must point at one retained binding for
+    // exactly this publication, and the intake must be able to read these
+    // exact page bytes: retain both before rendering.
+    const formOrigin = suggestionFormOrigin(config);
+    let suggestions = { form: false };
+    let rendererSuggestions = null;
+    if (formOrigin !== null) {
+      let retained;
+      try {
+        retained = await retain({
+          config,
+          projectRoot: project,
+          checkout: { root: before.root, head: before.head },
+          publishedPaths: selection.published,
+          selectedTreeDigest: byteVerification.sourceDigest,
+        });
+      } catch (error) {
+        if (error instanceof OwnerAlphaError) throw error;
+        fail('site-suggestion-binding-failed', 'the publication binding for the suggestion form could not be retained', {
+          cause: error?.code ?? error?.message ?? 'unknown',
+        });
+      }
+      if (!isPlainObject(retained) || typeof retained.bindingDigest !== 'string') {
+        fail('site-suggestion-binding-failed', 'retainPublication did not return one binding digest');
+      }
+      rendererSuggestions = {
+        intakeOrigin: formOrigin,
+        bindingDigest: retained.bindingDigest,
+        sourceRepository: config.repository.remote.url,
+        sourceRevision: before.head,
+      };
+      suggestions = {
+        form: true,
+        intakeOrigin: formOrigin,
+        bindingDigest: retained.bindingDigest,
+        pages: safeCount(retained.pages, 'retained pages'),
+        trustPolicy: jsonSafe(retained.trustPolicy ?? null, 'retained trust policy'),
+      };
+    }
+
     let rendererResult;
     try {
       rendererResult = await render({
@@ -784,6 +853,7 @@ export async function rebuildOwnerSite({
         workspaceDir: rendererWorkspace,
         editLinkMode: 'owner',
         ownerOrigin: `http://${config.listen.host}:${config.listen.port}`,
+        suggestions: rendererSuggestions,
       });
     } catch (error) {
       if (error instanceof OwnerAlphaError) throw error;
@@ -868,6 +938,7 @@ export async function rebuildOwnerSite({
         ownerOrigin: `http://${config.listen.host}:${config.listen.port}`,
         resources,
       },
+      suggestions,
       links,
       site: {
         htmlPages: html.pages,

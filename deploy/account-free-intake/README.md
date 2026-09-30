@@ -80,7 +80,7 @@ Edit the copy before making it read-only. Replace every `.invalid` origin and re
 }
 ```
 
-`enabled` must remain literal `true`, `listen.host` must remain `0.0.0.0`, and the application schema keeps the HTTP body, deadline, concurrency, and token-bucket limits fixed. The file must be one regular, singly linked, non-symlink file with no write permission bits. Startup copies it without following symlinks into a mode-`0600` private tmpfs file, validates the complete application schema and runtime paths, then starts the listener from that staged copy.
+`enabled` must remain literal `true`, `listen.host` must remain `0.0.0.0` for this container bundle (only the owner app's private-site mode binds a private address directly), and the application schema keeps the HTTP body, deadline, concurrency, and token-bucket limits fixed. The file must be one regular, singly linked, non-symlink file with no write permission bits. Startup copies it without following symlinks into a mode-`0600` private tmpfs file, validates the complete application schema and runtime paths, then starts the listener from that staged copy.
 
 The config is credential-free. Never put a token, password, private key, authorization header, credential-helper setting, SSH path, or engine endpoint in it.
 

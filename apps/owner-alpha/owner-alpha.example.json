@@ -10,6 +10,10 @@
     "requestTimeoutMs": 5000,
     "maxListEntries": 100
   },
+  "suggestions": {
+    "form": { "enabled": false },
+    "forge": { "enabled": false }
+  },
   "repository": {
     "checkout": "/absolute/path/to/cyberbase",
     "remote": {

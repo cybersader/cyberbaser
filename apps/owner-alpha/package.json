@@ -20,6 +20,7 @@
     "test:container": "bun test ../../deploy/owner-alpha/test"
   },
   "dependencies": {
+    "@cyberbaser/account-free-intake": "file:../../packages/account-free-intake",
     "@cyberbaser/correction": "file:../../packages/correction",
     "@cyberbaser/linkcheck": "file:../../packages/linkcheck",
     "@cyberbaser/ofm": "file:../../packages/ofm",

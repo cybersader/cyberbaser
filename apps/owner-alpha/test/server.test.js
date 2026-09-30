@@ -1267,6 +1267,88 @@ describe('owner-alpha runtime startup', () => {
     expect((await status.json()).state).toBe('checking');
   });
 
+  test('starts the suggestion intake after the site build and stops it with the runtime', async () => {
+    const projectRoot = await mkdtemp(path.join(os.tmpdir(), 'owner-alpha-suggest-runtime-'));
+    cleanup.push(projectRoot);
+    await execFileAsync('git', ['init', '-q', projectRoot]);
+    await writeFile(path.join(projectRoot, '.gitignore'), '.workspace/\n');
+    const configFile = await privateConfigFile(projectRoot, (raw) => {
+      raw.proposalReview.enabled = true;
+      raw.proposalReview.socketPath = '/run/user/1000/cyberbaser/review.sock';
+      raw.suggestions.form.enabled = true;
+    });
+    const events = [];
+    let closed = 0;
+    const runtime = await runOwnerAlphaServer({
+      configFile,
+      projectRoot,
+      rebuildSite: async () => { events.push('rebuild'); },
+      startSuggestions: async ({ config, projectRoot: receivedRoot }) => {
+        events.push('suggestions');
+        expect(config.suggestions.form.enabled).toBe(true);
+        expect(receivedRoot).toBe(projectRoot);
+        return {
+          formOrigin: 'http://127.0.0.1:4319',
+          forge: null,
+          async close() { closed += 1; return 0; },
+        };
+      },
+      loadPipeline: async () => {
+        events.push('pipeline');
+        return { saveEdit: async () => ({ jobId: 'job-runtime', state: 'accepted' }), getJob: async () => null };
+      },
+      createReviewClient: () => ({ list() {}, load() {} }),
+      createReviewSource: () => ({ list() {}, load() {} }),
+      createReviewService: () => reviewServiceFixture(),
+      createHandler() {
+        const handler = async () => new Response('owner');
+        Object.defineProperties(handler, {
+          bootstrapToken: { value: TOKENS.bootstrap },
+          issueBootstrap: { value: () => TOKENS.bootstrap },
+        });
+        return handler;
+      },
+      createReader: () => async () => new Response('reader'),
+      startServers: ({ ownerFetch }) => ({
+        ownerOrigin: ORIGIN,
+        readerOrigin: READER_ORIGIN,
+        bootstrapToken: ownerFetch.bootstrapToken,
+        issueBootstrap: ownerFetch.issueBootstrap,
+        stop() { events.push('stop'); },
+      }),
+      recoverDecisions: async () => ({ decisions: [], index: { decisions: [] } }),
+      recoverJobs: async () => [],
+    });
+    expect(events).toEqual(['rebuild', 'suggestions', 'pipeline']);
+    expect(runtime.suggestions).toEqual({ formOrigin: 'http://127.0.0.1:4319', forge: null });
+    expect(await runtime.stop(true)).toBe(0);
+    expect(closed).toBe(1);
+    expect(events.at(-1)).toBe('stop');
+
+    // Off means nothing to start and nothing reported.
+    const plainFile = await privateConfigFile(projectRoot);
+    const plain = await runOwnerAlphaServer({
+      configFile: plainFile,
+      projectRoot,
+      rebuildSite: async () => {},
+      loadPipeline: async () => ({ saveEdit: async () => ({}), getJob: async () => null }),
+      createHandler() {
+        const handler = async () => new Response('owner');
+        Object.defineProperties(handler, {
+          bootstrapToken: { value: TOKENS.bootstrap },
+          issueBootstrap: { value: () => TOKENS.bootstrap },
+        });
+        return handler;
+      },
+      createReader: () => async () => new Response('reader'),
+      startServers: () => ({ ownerOrigin: ORIGIN, readerOrigin: READER_ORIGIN, stop() {} }),
+      recoverDecisions: async () => ({ decisions: [], index: { decisions: [] } }),
+      recoverJobs: async () => [],
+    });
+    expect(plain.suggestions).toBeNull();
+    expect(await plain.stop(true)).toBeNull();
+  });
+
   test('constructs the enabled review client, validation source, decision service, and handler without sharing intake authority', async () => {
     const projectRoot = await mkdtemp(path.join(os.tmpdir(), 'owner-alpha-review-runtime-'));
     cleanup.push(projectRoot);
@@ -1630,6 +1712,25 @@ describe('configured Quartz static site', () => {
 
     const privilegedRoute = await fetch(readerRequest('/owner/assets/editor.js'));
     expect(privilegedRoute.status).toBe(404);
+  });
+
+  test('lets reader pages talk to the suggestion intake only when the owner turned the form on', async () => {
+    const siteRoot = await mkdtemp(path.join(os.tmpdir(), 'owner-alpha-form-csp-'));
+    cleanup.push(siteRoot);
+    await writeFile(path.join(siteRoot, 'index.html'), '<h1>Quartz home</h1>');
+    const off = await readerFixture({ siteRoot });
+    const offCsp = (await off.fetch(readerRequest('/cyberbase/'))).headers.get('content-security-policy');
+    expect(offCsp).toContain("connect-src 'self';");
+    expect(offCsp).not.toContain('4319');
+
+    const raw = JSON.parse(await readFile(EXAMPLE, 'utf8'));
+    raw.proposalReview.enabled = true;
+    raw.proposalReview.socketPath = '/run/user/1000/cyberbaser/review.sock';
+    raw.suggestions.form.enabled = true;
+    const on = await readerFixture({ siteRoot, config: raw });
+    const onCsp = (await on.fetch(readerRequest('/cyberbase/'))).headers.get('content-security-policy');
+    expect(onCsp).toContain("connect-src 'self' http://127.0.0.1:4319;");
+    expect(onCsp).toContain("form-action 'none'");
   });
 
   test('serves Quartz scripts only on the unprivileged reader origin', async () => {

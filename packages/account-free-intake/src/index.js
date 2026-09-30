@@ -26,6 +26,8 @@ export {
   correctionIntentDigest,
 } from './intent.js';
 
+export { sha256Digest } from './contract.js';
+
 export {
   computePageId,
   prepareSourceBindingManifest,

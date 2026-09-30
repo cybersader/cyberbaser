@@ -91,10 +91,18 @@ describe('owner-alpha container structure', () => {
       '**/.env',
       '**/test-results',
     ]) expect(ignore).toContain(pattern);
-    for (const packageName of ['proposal', 'proposal-queue', 'proposal-review', 'review-projection']) {
+    for (const packageName of ['account-free-intake', 'forgejo-intake', 'proposal', 'proposal-queue', 'proposal-review', 'review-projection']) {
       expect(ignore).toContain(`!packages/${packageName}/package.json`);
       expect(ignore).toContain(`!packages/${packageName}/src/**`);
     }
+    // The suggestion intake ships beside the owner app: code, launcher, and its own locked closure.
+    for (const entry of ['package.json', 'bun.lock', 'src/**', 'bin/**']) {
+      expect(ignore).toContain(`!apps/account-free-intake/${entry}`);
+    }
+    expect(containerfile).toContain('COPY apps/account-free-intake/package.json apps/account-free-intake/bun.lock ./');
+    expect(containerfile).toContain('COPY apps/account-free-intake/bin/ ./apps/account-free-intake/bin/');
+    expect(containerfile).toContain('COPY --from=intake-dependencies /opt/cyberbaser/apps/account-free-intake/node_modules ./apps/account-free-intake/node_modules');
+    expect(ignore).not.toContain('!apps/account-free-intake/test');
     expect(ignore).toContain('!deploy/owner-alpha/git-credential-owner-alpha-socket.js');
     expect(containerfile).not.toContain('owner-alpha.container.example.json');
     expect(containerfile).not.toMatch(/(?:TOKEN|PASSWORD|SECRET|AUTHORIZATION)=/u);
@@ -216,6 +224,7 @@ describe('owner-alpha container structure', () => {
       'packages/trust',
       'packages/projection',
       'packages/proposal',
+      'packages/forgejo-intake',
       'packages/proposal-queue',
       'packages/proposal-review',
       'packages/account-free-intake',

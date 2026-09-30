@@ -40,13 +40,22 @@ case "$PROJECT_ROOT" in
     fi
 
     rsync -a --delete --chmod=Du=rwx,Dgo=,Fu=rw,Fgo= --exclude 'owner-alpha.local.json' "$APP_DIR/" "$RUNTIME_ROOT/apps/owner-alpha/"
-    for package in correction linkcheck ofm projection publish trust; do
+    # The owner app starts the suggestion intake beside itself, so its app and
+    # the shared package closure travel with the runtime mirror.
+    mkdir -p "$RUNTIME_ROOT/apps/account-free-intake"
+    chmod 700 "$RUNTIME_ROOT/apps/account-free-intake"
+    rsync -a --delete --chmod=Du=rwx,Dgo=,Fu=rw,Fgo= --exclude '*.local.json' "$PROJECT_ROOT/apps/account-free-intake/" "$RUNTIME_ROOT/apps/account-free-intake/"
+    for package in account-free-intake correction forgejo-intake linkcheck ofm projection proposal proposal-queue proposal-review publish review-projection trust; do
       rsync -a --delete --chmod=Du=rwx,Dgo=,Fu=rw,Fgo= --exclude 'node_modules' \
         "$PROJECT_ROOT/packages/$package/" \
         "$RUNTIME_ROOT/packages/$package/"
-      rsync -a --delete --chmod=Du=rwx,Dgo=,Fu=rw,Fgo= --exclude 'node_modules' \
-        "$PROJECT_ROOT/packages/$package/" \
-        "$RUNTIME_ROOT/apps/owner-alpha/node_modules/@cyberbaser/$package/"
+      for app in owner-alpha account-free-intake; do
+        if [ -d "$PROJECT_ROOT/apps/$app/node_modules/@cyberbaser/$package" ]; then
+          rsync -a --delete --chmod=Du=rwx,Dgo=,Fu=rw,Fgo= --exclude 'node_modules' \
+            "$PROJECT_ROOT/packages/$package/" \
+            "$RUNTIME_ROOT/apps/$app/node_modules/@cyberbaser/$package/"
+        fi
+      done
     done
     rsync -a --delete --chmod=Du=rwx,Dgo=,Fu=rw,Fgo= "$PROJECT_ROOT/renderers/quartz-cyberbase/" "$RUNTIME_ROOT/renderers/quartz-cyberbase/"
     install -m 600 "$PROJECT_ROOT/.gitignore" "$RUNTIME_ROOT/.gitignore"

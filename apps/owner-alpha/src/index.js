@@ -14,6 +14,8 @@ export {
   policyDocument,
   computePolicyRevision,
   repositoryMatchesPolicy,
+  forgeIdentity,
+  suggestionsEnabled,
 } from './config.js';
 export {
   defineStoreContext,
@@ -205,3 +207,15 @@ export {
   formatBootstrapUrl,
   startBootstrapConsole,
 } from './bootstrap-console.js';
+export {
+  SUGGESTIONS_DIRECTORY,
+  SUGGESTION_INTAKE_CONFIG_FILENAME,
+  SUGGESTION_PUBLICATION_REF_PREFIX,
+  suggestionPaths,
+  suggestionFormOrigin,
+  deriveIntakeConfig,
+  ensureSuggestionWorkspace,
+  retainPublication,
+  verifyRetainedPublication,
+  startSuggestionIntake,
+} from './suggestions.js';

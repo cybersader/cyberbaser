@@ -160,12 +160,14 @@ Quartz exit code. Useful env vars:
   `/owner/edit?relativePath=…&slug=…` with both exact values percent-encoded.
   Owner mode is same-origin, local-only, and rejected when `CI` is true.
 - `CYBERBASER_ACCOUNT_FREE_INTAKE=enabled` — explicit opt-in for the account-free
-  form. Unset is the fail-closed default. Enabling also requires one exact HTTPS
-  intake origin, retained binding digest, credential-free source repository,
-  and immutable source revision through the corresponding
-  `CYBERBASER_ACCOUNT_FREE_*` variables. The browser receives only the intake
-  action, binding digest, and opaque page ID. Current public builds leave this
-  unset; the form is not offered.
+  form. Unset is the fail-closed default. Enabling also requires one exact
+  intake origin (canonical HTTPS, or a private-network IPv4 HTTP origin with an
+  explicit port for the owner's local site), retained binding digest,
+  credential-free source repository, and immutable source revision through the
+  corresponding `CYBERBASER_ACCOUNT_FREE_*` variables. The browser receives
+  only the intake action, binding digest, and opaque page ID. Current public
+  builds leave this unset; the form is not offered publicly. The owner app sets
+  these itself for the private local site when its `suggestions.form` is on.
 - `QUARTZ_REF=…` — override the pin in `setup.sh` (for evaluating a bump only).
 
 ## How CI uses it

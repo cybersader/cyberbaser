@@ -1,0 +1,41 @@
+---
+title: "2026-09-30 · Suggestions on the private site, one config, one launch"
+description: "The maintainer chose to build the form-suggestion slice next and wanted one config and one launch: the owner app's config gains a suggestions section, and the app derives the intake's settings and starts and stops it with itself. Built with the site build retaining the publication binding and object store, proven with a real intake process and one real submission."
+date: 2026-09-30
+status: implementation
+tags: [design, governance, testing, contribution]
+---
+
+## Maintainer direction
+
+Asked as a funnel after the forge connection landed: build the form-suggestion slice (form on the private local site, binding written by the site build, intake started by the owner app); and one config, one launch: "Your owner app's config gains a section for suggestions: form on or off, forge on or off. The app derives the intake's settings and starts and stops it with itself. You never see a second config file."
+
+## What was built
+
+- **Owner config.** An optional `suggestions` block: `form.enabled`, and `forge` as `{ enabled: false }` or `{ enabled, repository, tokenFile, pollIntervalMs }`, with the forge repository required to be the remote or a declared alias. Either lane on requires proposal review on (the socket is how suggestions reach the inbox) and enters the policy document; both off leaves the pinned revision unchanged. A normalized config re-validates to itself; the forge API base, owner, and name derive from the URL when needed.
+- **Derived intake settings.** `apps/owner-alpha/src/suggestions.js` produces the complete intake config from the owner config: form on the owner address at owner port + 2, the reader origin as the only allowed form origin, repository, bindings root, bare object store, queue, review socket, and fixed limits, plus the `forgejo` block when the forge lane is on. Written privately as `intake.json` under the suggestions workspace; tests validate every derived shape against the intake's own validator.
+- **Retained publication.** The site build, when the form is on, fetches the branch tip into a bare store with garbage collection off, checks it equals the publication HEAD, reads every published page blob and the trust policy through `ls-tree` plus one `cat-file --batch`, prepares the source binding manifest with the publish policy digest and the byte-verified tree digest, and writes it content-addressed into the bindings root (idempotent; a different manifest at the same digest fails). The renderer receives the intake origin, binding digest, repository, and revision as its existing form environment. The site manifest records `suggestions`; reuse requires a still-retained binding.
+- **Intake beside the owner app.** The owner app starts the intake as a child process from the derived settings after the site build and before the review client exists, waits for its ready line, fails closed if it exits first, and stops it with the runtime. The launcher prints the lane status. The reader page policy allows `connect-src` to exactly the form origin when the form is on.
+- **Origins.** The intake config and the renderer both accept one exact private numeric IPv4 HTTP origin with an explicit port (same ranges as owner mode); the intake then binds exactly that address. HTTPS-only remains for every public shape.
+- **Packaging.** The owner container image and the WSL runtime mirror carry the intake app and its locked closure; the owner app depends on `@cyberbaser/account-free-intake` for the manifest contract.
+
+Canonical page: [Suggestions on the private site](/cyberbaser/development/suggestions-on-the-private-site/). The [first real application run](/cyberbaser/development/first-real-application/) sheet no longer waits on missing links.
+
+## Findings during the build
+
+- The intake's Git resolver requires a bare repository, so the site build maintains a private bare store fetched from the owner's checkout rather than pointing the intake at the checkout's `.git`.
+- Reading page bytes from that store, not the working tree, makes the binding exactly what the intake will compare against.
+- Fetching by branch ref and then checking it equals the publication HEAD avoids relying on unadvertised-object fetch rules and fails closed if the checkout moved.
+- The normalized owner config is re-validated by every module, so the normalized `forge` block must carry only declared values.
+- Running two Bun test processes at once made an unrelated five-second pipeline test time out; alone it passes.
+
+## Checks
+
+```text
+bun test apps/owner-alpha/test apps/account-free-intake/test deploy/owner-alpha/test/structure.test.js
+bash renderers/quartz-cyberbase/tests/run.sh
+```
+
+## Boundaries
+
+Nothing public changes; nothing is exposed, offered, merged, or deployed. Suggestions gain no authority: Approve and Apply to page remain the owner's acts through the owner pipeline. No real Cyberbase suggestion has been made this way yet; no live forge is watched. Q09 remains open.

@@ -5,6 +5,7 @@
     "": {
       "name": "@cyberbaser/owner-alpha",
       "dependencies": {
+        "@cyberbaser/account-free-intake": "file:../../packages/account-free-intake",
         "@cyberbaser/correction": "file:../../packages/correction",
         "@cyberbaser/linkcheck": "file:../../packages/linkcheck",
         "@cyberbaser/ofm": "file:../../packages/ofm",
@@ -19,6 +20,8 @@
     },
   },
   "packages": {
+    "@cyberbaser/account-free-intake": ["@cyberbaser/account-free-intake@file:../../packages/account-free-intake", { "dependencies": { "@cyberbaser/proposal": "file:../proposal", "@cyberbaser/trust": "file:../trust" } }],
+
     "@cyberbaser/correction": ["@cyberbaser/correction@file:../../packages/correction", {}],
 
     "@cyberbaser/linkcheck": ["@cyberbaser/linkcheck@file:../../packages/linkcheck", { "bin": { "cb-linkcheck": "bin/cb-linkcheck.js" } }],
@@ -216,6 +219,10 @@
     "vfile-message": ["vfile-message@4.0.3", "", { "dependencies": { "@types/unist": "^3.0.0", "unist-util-stringify-position": "^4.0.0" } }, "sha512-QTHzsGd1EhbZs4AsQ20JX1rC3cOlt/IWJruk893DfLRr57lcnOeMaWG4K0JrRta4mIJZKth2Au3mM3u03/JWKw=="],
 
     "zwitch": ["zwitch@2.0.4", "", {}, "sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A=="],
+
+    "@cyberbaser/account-free-intake/@cyberbaser/proposal": ["@cyberbaser/proposal@file:../../packages/proposal", {}],
+
+    "@cyberbaser/account-free-intake/@cyberbaser/trust": ["@cyberbaser/trust@file:../../packages/trust", {}],
 
     "@cyberbaser/projection/@cyberbaser/publish": ["@cyberbaser/publish@file:../../packages/publish", { "dependencies": { "js-yaml": "^4.1.0" } }],
 

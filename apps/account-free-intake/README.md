@@ -14,7 +14,7 @@ This app is optional and refuses to start unless `enabled` is literal `true`. It
 - Abuse control is global rather than IP-derived: a 20-token process-wide bucket refills at one token per second, with at most four active submissions. This remains an origin control, not a substitute for edge DDoS protection.
 - Success returns only a bounded queue receipt. Untrusted rationale, evidence, source bytes, repository paths, and raw idempotency keys are never reflected.
 
-The process binds `0.0.0.0` for a later isolated-container deployment. Do not publish that listener directly. A separately configured reverse proxy must preserve the exact public Host and expose only `/v1/corrections`; it must not expose `/healthz`. TLS and edge abuse controls are outside this app.
+For a public HTTPS origin the process binds `0.0.0.0` for a later isolated-container deployment. Do not publish that listener directly. For the owner's own private site, `publicOrigin` may be one exact private numeric IPv4 HTTP origin with an explicit port, and `listen` then binds exactly that address; the owner app derives and writes that config and runs this process beside itself. A separately configured reverse proxy must preserve the exact public Host and expose only `/v1/corrections`; it must not expose `/healthz`. TLS and edge abuse controls are outside this app.
 
 ## Configuration
 

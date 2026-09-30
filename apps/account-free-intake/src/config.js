@@ -124,6 +124,64 @@ function canonicalHttpsOrigin(value, label) {
   return parsed.origin;
 }
 
+// The owner's private local site may host the form over plain HTTP on one
+// private numeric IPv4 address with an explicit port. These are the same ranges
+// owner-alpha binds to (loopback, RFC 1918, RFC 6598); exact range endpoints are
+// never usable hosts. Public deployments keep the HTTPS-only rule above.
+const PRIVATE_IPV4_RANGES = Object.freeze([
+  [0x7f000000, 0x7fffffff], // 127.0.0.0/8
+  [0x0a000000, 0x0affffff], // 10.0.0.0/8
+  [0xac100000, 0xac1fffff], // 172.16.0.0/12
+  [0xc0a80000, 0xc0a8ffff], // 192.168.0.0/16
+  [0x64400000, 0x647fffff], // 100.64.0.0/10
+]);
+
+export function isPrivateNetworkIpv4Host(value) {
+  if (typeof value !== 'string' || !/^(?:(?:0|[1-9][0-9]{0,2})\.){3}(?:0|[1-9][0-9]{0,2})$/u.test(value)) return false;
+  let numeric = 0;
+  for (const octet of value.split('.')) {
+    const parsed = Number(octet);
+    if (parsed > 255) return false;
+    numeric = numeric * 256 + parsed;
+  }
+  return PRIVATE_IPV4_RANGES.some(([low, high]) => numeric > low && numeric < high);
+}
+
+function privateNetworkHttpOrigin(value) {
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return null;
+  }
+  if (
+    parsed.protocol !== 'http:'
+    || !isPrivateNetworkIpv4Host(parsed.hostname)
+    || parsed.username !== ''
+    || parsed.password !== ''
+    || parsed.port === ''
+    || parsed.pathname !== '/'
+    || parsed.search !== ''
+    || parsed.hash !== ''
+    || parsed.origin !== value
+  ) {
+    return null;
+  }
+  return parsed;
+}
+
+/** One exact HTTPS origin, or one private-network IPv4 HTTP origin with an explicit port. */
+function canonicalFormOrigin(value, label) {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 2048) {
+    fail('invalid-config', `${label} must be a bounded HTTPS or private-network HTTP origin`);
+  }
+  if (privateNetworkHttpOrigin(value) !== null) return value;
+  if (value.startsWith('http:')) {
+    fail('invalid-config', `${label} may use HTTP only on one private numeric IPv4 address with an explicit port`);
+  }
+  return canonicalHttpsOrigin(value, label);
+}
+
 function canonicalRepository(value, label = 'repository') {
   if (typeof value !== 'string' || value.length === 0 || value.length > 2048) {
     fail('invalid-config', `${label} must be a bounded canonical HTTPS URL`);
@@ -249,18 +307,25 @@ export function validateConfig(input) {
   let listen = null;
   let allowedFormOrigins = [];
   if (formEnabled) {
-    publicOrigin = canonicalHttpsOrigin(input.publicOrigin, 'publicOrigin');
+    publicOrigin = canonicalFormOrigin(input.publicOrigin, 'publicOrigin');
     exactObject(input.listen, LISTEN_KEYS, 'listen');
-    if (input.listen.host !== '0.0.0.0') fail('invalid-config', 'listen.host must be 0.0.0.0');
     if (!Number.isSafeInteger(input.listen.port) || input.listen.port < 1 || input.listen.port > 65535) {
       fail('invalid-config', 'listen.port must be an integer from 1 through 65535');
     }
-    listen = { host: '0.0.0.0', port: input.listen.port };
+    const privateOrigin = privateNetworkHttpOrigin(publicOrigin);
+    if (privateOrigin === null) {
+      // Public HTTPS origins sit behind a terminating proxy; the service binds all interfaces.
+      if (input.listen.host !== '0.0.0.0') fail('invalid-config', 'listen.host must be 0.0.0.0');
+    } else if (input.listen.host !== privateOrigin.hostname || input.listen.port !== Number(privateOrigin.port)) {
+      // A private HTTP origin is served directly: bind exactly that address and port.
+      fail('invalid-config', 'listen must bind exactly the private-network publicOrigin address and port');
+    }
+    listen = { host: input.listen.host, port: input.listen.port };
     if (!Array.isArray(input.allowedFormOrigins) || input.allowedFormOrigins.length === 0) {
       fail('invalid-config', 'allowedFormOrigins must contain at least one origin');
     }
     allowedFormOrigins = input.allowedFormOrigins.map((origin, index) => (
-      canonicalHttpsOrigin(origin, `allowedFormOrigins[${index}]`)
+      canonicalFormOrigin(origin, `allowedFormOrigins[${index}]`)
     ));
     if (new Set(allowedFormOrigins).size !== allowedFormOrigins.length) {
       fail('invalid-config', 'allowedFormOrigins must not contain duplicates');

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { validateConfig, validateRuntimePaths } from '../src/config.js';
+import { isPrivateNetworkIpv4Host, validateConfig, validateRuntimePaths } from '../src/config.js';
 import { configInput } from './helpers.js';
 
 const ROOT = '/srv/cyberbaser/account-free';
@@ -33,13 +33,41 @@ describe('strict credential-free configuration', () => {
   test('rejects credentialed or non-HTTPS origins and repositories', () => {
     expect(() => validateConfig(configInput(ROOT, {
       publicOrigin: 'http://intake.example',
-    }))).toThrow(/HTTPS origin/);
+    }))).toThrow(/private numeric IPv4 address/);
     expect(() => validateConfig(configInput(ROOT, {
       allowedFormOrigins: ['https://user:pass@wiki.example'],
     }))).toThrow(/credential-free HTTPS origin/);
     expect(() => validateConfig(configInput(ROOT, {
       repository: 'https://user:pass@forge.example/owner/wiki.git',
     }))).toThrow(/credential-free HTTPS repository/);
+    expect(() => validateConfig(configInput(ROOT, {
+      listen: { host: '127.0.0.1', port: 8080 },
+    }))).toThrow(/listen.host must be 0.0.0.0/);
+  });
+
+  test('serves the owner-local form on one exact private-network HTTP origin', () => {
+    const config = validateConfig(configInput(ROOT, {
+      publicOrigin: 'http://127.0.0.1:4319',
+      listen: { host: '127.0.0.1', port: 4319 },
+      allowedFormOrigins: ['http://127.0.0.1:4318'],
+    }));
+    expect(config.publicOrigin).toBe('http://127.0.0.1:4319');
+    expect(config.publicHost).toBe('127.0.0.1:4319');
+    expect(config.listen).toEqual({ host: '127.0.0.1', port: 4319 });
+    expect(config.allowedFormOrigins).toEqual(['http://127.0.0.1:4318']);
+    expect(isPrivateNetworkIpv4Host('100.100.100.100')).toBe(true);
+    expect(isPrivateNetworkIpv4Host('127.0.0.0')).toBe(false);
+    expect(isPrivateNetworkIpv4Host('8.8.8.8')).toBe(false);
+
+    for (const [overrides, message] of [
+      [{ publicOrigin: 'http://8.8.8.8:4319', listen: { host: '8.8.8.8', port: 4319 } }, /private numeric IPv4 address/],
+      [{ publicOrigin: 'http://127.0.0.1', listen: { host: '127.0.0.1', port: 80 } }, /private numeric IPv4 address/],
+      [{ publicOrigin: 'http://127.0.0.1:4319', listen: { host: '0.0.0.0', port: 4319 } }, /bind exactly/],
+      [{ publicOrigin: 'http://127.0.0.1:4319', listen: { host: '127.0.0.1', port: 4320 } }, /bind exactly/],
+      [{ publicOrigin: 'http://127.0.0.1:4319', listen: { host: '127.0.0.1', port: 4319 }, allowedFormOrigins: ['http://wiki.internal:4318'] }, /private numeric IPv4 address/],
+    ]) {
+      expect(() => validateConfig(configInput(ROOT, overrides))).toThrow(message);
+    }
   });
 
   test('does not permit weakening the fixed public abuse bounds', () => {

@@ -170,8 +170,8 @@ function ready(checkout, head = HEAD) {
 }
 
 function fixtureRenderer(observe = () => {}) {
-  return async ({ contentDir, outputDir, workspaceDir, editLinkMode, ownerOrigin }) => {
-    observe({ contentDir, outputDir, workspaceDir, editLinkMode, ownerOrigin });
+  return async ({ contentDir, outputDir, workspaceDir, editLinkMode, ownerOrigin, suggestions = null }) => {
+    observe({ contentDir, outputDir, workspaceDir, editLinkMode, ownerOrigin, suggestions });
     const markdown = await readFile(path.join(contentDir, 'pub', 'Page.md'), 'utf8');
     await mkdir(path.join(outputDir, 'pub'), { recursive: true });
     await writeFile(
@@ -291,6 +291,103 @@ describe('local owner site rebuild', () => {
     expect(reused.publication).toEqual({ replacedExisting: false, reusedExisting: true });
     expect(reused.manifest.source.head).toBe(HEAD);
     expect(readinessChecks).toBe(2);
+  });
+
+  test('retains the publication binding and hands the form inputs to the renderer when the form is on', async () => {
+    const setup = await fixture('form');
+    const config = {
+      ...setup.config,
+      proposalReview: { enabled: true, socketPath: '/run/user/1000/cyberbaser/review.sock', requestTimeoutMs: 5000, maxListEntries: 100 },
+      suggestions: { form: { enabled: true }, forge: { enabled: false } },
+    };
+    const bindingDigest = `sha-256=:${Buffer.alloc(32, 7).toString('base64')}:`;
+    const retainCalls = [];
+    const renderCalls = [];
+    const verifyCalls = [];
+
+    const result = await rebuildOwnerSite({
+      config,
+      projectRoot: setup.projectRoot,
+      renderer: fixtureRenderer((call) => renderCalls.push(call)),
+    }, {
+      assertCheckoutReady: async () => ready(setup.checkout),
+      retainPublication: async (input) => {
+        retainCalls.push(input);
+        return { bindingDigest, pages: 1, trustPolicy: { status: 'missing', digest: null } };
+      },
+      createBuildId: () => 'build-form',
+      now: () => new Date('2026-09-30T12:00:00.000Z'),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(retainCalls).toHaveLength(1);
+    expect(retainCalls[0]).toMatchObject({
+      projectRoot: setup.projectRoot,
+      checkout: { root: setup.checkout, head: HEAD },
+      publishedPaths: ['pub/Page.md'],
+    });
+    expect(retainCalls[0].config.suggestions.form.enabled).toBe(true);
+    expect(retainCalls[0].selectedTreeDigest).toBe(result.manifest.projection.bytePreserving.sourceDigest);
+    expect(renderCalls[0].suggestions).toEqual({
+      intakeOrigin: 'http://127.0.0.1:4319',
+      bindingDigest,
+      sourceRepository: 'https://github.com/cybersader/cyberbase.git',
+      sourceRevision: HEAD,
+    });
+    expect(result.manifest.suggestions).toEqual({
+      form: true,
+      intakeOrigin: 'http://127.0.0.1:4319',
+      bindingDigest,
+      pages: 1,
+      trustPolicy: { status: 'missing', digest: null },
+    });
+
+    // Reuse requires the retained binding to still resolve; otherwise rebuild.
+    const reused = await ensureOwnerSite({
+      config,
+      projectRoot: setup.projectRoot,
+      renderer: async () => { throw new Error('must not render'); },
+    }, {
+      assertCheckoutReady: async () => ready(setup.checkout),
+      verifyRetainedPublication: async (input) => {
+        verifyCalls.push(input);
+        return true;
+      },
+    });
+    expect(reused.reused).toBe(true);
+    expect(verifyCalls[0]).toMatchObject({ projectRoot: setup.projectRoot, head: HEAD, bindingDigest });
+
+    const rebuilt = await ensureOwnerSite({
+      config,
+      projectRoot: setup.projectRoot,
+      renderer: fixtureRenderer((call) => renderCalls.push(call)),
+    }, {
+      assertCheckoutReady: async () => ready(setup.checkout),
+      verifyRetainedPublication: async () => false,
+      retainPublication: async () => ({ bindingDigest, pages: 1, trustPolicy: { status: 'missing', digest: null } }),
+      createBuildId: () => 'build-form-again',
+    });
+    expect(rebuilt.reused).toBeUndefined();
+    expect(renderCalls).toHaveLength(2);
+
+    // Turning the form off rebuilds without the form and records that.
+    const off = await ensureOwnerSite({
+      config: setup.config,
+      projectRoot: setup.projectRoot,
+      renderer: fixtureRenderer((call) => renderCalls.push(call)),
+    }, {
+      assertCheckoutReady: async () => ready(setup.checkout),
+      retainPublication: async () => { throw new Error('must not retain when the form is off'); },
+      createBuildId: () => 'build-form-off',
+    });
+    expect(off.manifest.suggestions).toEqual({ form: false });
+    expect(renderCalls[2].suggestions).toBeNull();
+    const plainReuse = await ensureOwnerSite({
+      config: setup.config,
+      projectRoot: setup.projectRoot,
+      renderer: async () => { throw new Error('must not render'); },
+    }, { assertCheckoutReady: async () => ready(setup.checkout) });
+    expect(plainReuse.reused).toBe(true);
   });
 
   test('rebuilds with the new exact owner origin when only the listen host changes', async () => {

@@ -1,0 +1,75 @@
+---
+title: Suggestions on the private site
+description: "How the owner turns on outside suggestions from one place: the suggestion form on the owner's private local site, the binding file written by each site build, and the intake started and stopped by the owner app itself. Built and mechanically proven 2026-09-30; not yet used on the real Cyberbase."
+sidebar:
+  order: 11.55
+status: research
+tags: [setup, governance, testing, contribution]
+---
+
+The owner decides, in one place, whether outside suggestions can reach the Proposals inbox. There is no second service to configure and no second command to run. This page says what the owner sees, what happens behind it, and what it does not do.
+
+:::note[Built, proven on a throwaway vault, not yet used on Cyberbase]
+Everything on this page is implemented and tested end to end: a real git checkout, the real owner site build, the real intake process started by the owner app, one real form submission from the private site's origin, one queue entry. No suggestion has yet been made about a real Cyberbase page this way; that is the [first real application run](/cyberbaser/development/first-real-application/), which the maintainer performs.
+:::
+
+## What the owner sees
+
+One section in the owner app's config, off by default:
+
+```json
+"suggestions": {
+  "form": { "enabled": true },
+  "forge": { "enabled": false }
+}
+```
+
+- **Form on** means the owner's private local site, the one the owner app serves and rebuilds after every save, shows **Suggest a correction** on every published page. Anyone who can reach that private site can suggest one exact text change. The public site is unchanged and keeps no form.
+- **Forge on** means the intake also watches the owner's own Forgejo copy of the vault for pull requests, as described in [Pull requests in the inbox](/cyberbaser/design/pull-requests-in-the-inbox/). It needs the forge repository URL (which must already be listed under `repository.aliases` or be the remote itself), an optional token file path, and a poll interval.
+- Either lane on requires `proposalReview.enabled`, because the review socket is how suggestions reach the inbox. Turning a lane on changes the durable policy revision; leaving both off leaves the pinned revision exactly as before.
+
+When the owner app starts, it prints what is on:
+
+```text
+Owner alpha reader: http://127.0.0.1:4318/cyberbase/
+Suggestions: form on for pages served from http://127.0.0.1:4318/cyberbase/
+Suggestions: no forge watched
+```
+
+Suggestions then appear in **Proposals** like any other, with the same review, **Approve**, and **Apply to page**.
+
+## What happens behind it
+
+Three things the owner never sees, all derived from that one section.
+
+1. **The site build retains the publication.** After the owner site build has selected, projected, and byte-verified the published pages, and before it renders, it fetches the branch tip into a private bare object store under the ignored workspace (`.workspace/owner-alpha/suggestions/objects.git`), reads every published Markdown page and the base trust policy from that store exactly as the intake will, and writes one content-addressed binding manifest into `.workspace/owner-alpha/suggestions/bindings/`. The rendered pages carry that binding digest and an opaque page ID; nothing else about the source reaches the browser. Old bindings stay retained and old commits stay reachable (garbage collection is off in the store), so a page left open on a previous build still resolves. A cached site is reused only if its binding is still retained.
+2. **The intake's settings are derived, never edited.** The form is served on the owner address at the owner port plus two (`http://127.0.0.1:4319` with the defaults), and the only origin allowed to post to it is the reader site at the owner port plus one. The repository is the owner's remote, the bindings root and object store are the ones the site build writes, the queue lives under the same workspace, the review socket is the owner's `proposalReview.socketPath`, and the queue and request limits are the fixed intake defaults. The derived file is written privately (`intake.json`, mode 0600) beside them. The forge block, when on, maps to the intake's `forgejo` block with the API base, owner, and name taken from the repository URL and the base branch from the owner's branch.
+3. **The owner app starts and stops the intake.** After the site build and before anything reads the review socket, the owner app launches the intake as its own child process from those settings and waits for its ready line; startup fails closed if the intake does not come up. Stopping the owner app stops the intake. The intake remains a separate process with its own exclusive queue lock, and the owner app still neither imports it nor reads queue files: the boundary from [Account-free intake Lane B](/cyberbaser/development/account-free-intake/) is unchanged, the intake simply has a supervisor now.
+
+The reader site's page policy allows scripts to talk to exactly that intake origin, and only when the form is on. The intake accepts one exact private numeric IPv4 HTTP origin for this local mode; every public deployment shape keeps the HTTPS-only rule.
+
+## What it does not do
+
+- It does not put a form on the public site. Public builds leave the form absent as before.
+- It does not expose anything. The form, the intake, and the review socket bind private addresses on the owner's machine; the same private-network ranges as the owner app itself.
+- It does not give suggestions any authority. A suggestion becomes a pending entry in the inbox. Only the owner's Approve and then Apply to page can change the vault, through the same owner pipeline as a direct edit.
+- It does not watch a live forge yet. Forge on is wired and validated in tests; the first real read waits on the maintainer's Forgejo ([live validation](/cyberbaser/development/forgejo-lane-a-live-validation/)).
+- It does not close Q09. Whether this account-free path is offered to anyone beyond the owner's private network is still the open question.
+
+## Where the pieces live
+
+- `apps/owner-alpha/src/config.js`: the `suggestions` block, its checks, and its place in the policy document.
+- `apps/owner-alpha/src/suggestions.js`: derived intake settings, the retained publication and object store, and the intake's start and stop.
+- `apps/owner-alpha/src/site.js` and `quartz-renderer.js`: retention before render, the form inputs to the renderer, the site manifest's `suggestions` record, and the reuse rule.
+- `apps/owner-alpha/src/server.js`: the intake started after the site build, stopped with the runtime, and the reader page policy.
+- `apps/account-free-intake/src/config.js` and `renderers/quartz-cyberbase/components/suggestCorrectionConfig.ts`: the private-network HTTP origin rule.
+- The owner container image and the WSL runtime mirror now carry the intake app beside the owner app.
+
+## Checks
+
+```text
+bun test apps/owner-alpha/test            # includes test/suggestions.test.js: real checkout, real intake process, one real submission
+bun test apps/account-free-intake/test    # private-network form origin rules
+bash renderers/quartz-cyberbase/tests/run.sh
+bun test deploy/owner-alpha/test/structure.test.js
+```
