@@ -1,0 +1,78 @@
+---
+title: Pull requests in the inbox
+description: "A written proposal for how a pull request on the maintainer's Forgejo becomes a suggestion in the owner's Proposals inbox, beside form suggestions, with one review, one Approve, and one Apply. Names the hard question: the queue has one writer. No code until accepted."
+sidebar:
+  order: 23.7
+status: research
+tags: [design, governance, architecture, contribution]
+---
+
+The maintainer decided on 2026-09-30 that a pull request opened on their own Forgejo should reach them the same way a form suggestion does: in **Proposals**, read in place, decided with Approve or Reject, put on the page with Apply. No second review surface, no commands. This page proposes how that works. It is written for the maintainer to accept, amend, or reject before any code is written.
+
+:::caution[Proposal, not a decision]
+Nothing on this page is implemented. The Lane A adapter exists and is being validated against a real forge separately. The decisions this page asks for are listed at the end.
+:::
+
+## The shape in one paragraph
+
+The service that already receives form suggestions, and already holds the queue's only writer lock, gains a second ear: it watches the forge for open pull requests on the vault copy. When it sees one it has not seen, it reads it through the existing adapter, exactly as the live check does, and puts the resulting exact suggestion into the same queue as a Lane A entry with the author's forge identity attached. From there nothing is new: the owner app validates it, lists it in Proposals with a line saying it came from a pull request, and the same Approve and Apply steps follow. The watcher never writes to the forge, never merges, never comments, and never touches source.
+
+## What the owner sees
+
+1. **Someone opens a pull request** on the vault copy in Forgejo, in Forgejo's own editor: change a sentence, commit as a new branch, open the request. Only accounts the owner created can do this; registration is off.
+2. **Within a minute it is in Proposals**, in Needs review, reading like any other suggestion. One extra line under it: *From a pull request by alice on your forge*, linking to the request.
+3. **Review, Approve or Reject, Apply.** Identical. The trust route comes from the trust policy naming that forge account, or full review for an account the policy does not name.
+4. **After Apply, the receipt says one more thing:** the pull request on the forge is still open, and the owner closes it there. This first version never writes to the forge.
+5. **If the author pushes again**, the newer version of the request appears as the current suggestion and the earlier one folds under it as *an earlier version of this request*. If the request is closed on the forge, the suggestion stays until it expires, and the owner can reject it; the first version does not learn about closures.
+
+## Where the watcher lives, and why
+
+The queue has one writer: the intake service takes an exclusive lifetime lock when it opens the queue, and the owner app only ever reads through the private socket. A separate forge watcher process could not write to the queue at all. So the watcher is a second input inside the intake service, beside the form endpoint. Two consequences:
+
+- The service must be able to run **with the public form endpoint off** and only the watcher on. Today it refuses to start unless its public listener is enabled. The maintainer's chosen shape, form only on the private local site and the service started by the owner app, already needs this.
+- The service's recovery check currently insists the queue holds only form entries. It has to accept forge entries too; the queue package already knows Lane A and derives replay identity from repository, request number, and head commit, so re-polling can never enqueue the same version twice.
+
+## What the watcher does, exactly
+
+Every poll, default once a minute:
+
+1. One read-only request to list open pull requests on the configured repository.
+2. For each open request whose repository, number, and head commit are not already in the queue: the adapter's four reads (version, repository, request, author), the exact base and head commits fetched into private temporary refs of the watcher's own clone, the one changed Markdown file, one splice proven to reproduce the head, and the trust policy at the base commit.
+3. One enqueue: the canonical proposal, the base bytes, the policy evidence, the verified subject `forgejo:<origin>#user=<id>`, and a Lane A carrier naming repository, request number, and head commit.
+4. Anything the adapter refuses (a draft, two files, a bot account, a request that no longer descends from its base) is skipped and noted in the service log, never enqueued, and retried on the next poll only if its head commit changes.
+
+The watcher keeps its own private clone of the forge repository under the service's data directory, fetched read-only. A token, if the repository is private, comes from a mode-0600 file and is read per request, as the live check does.
+
+## The repository identity problem
+
+The adapter binds each proposal to the repository it read from: the Forgejo copy's URL. The owner app compares that against its own remote, which is GitHub, at review and again at Apply, and refuses on mismatch. Left as is, every forge suggestion would be blocked at review.
+
+Two ways out. Cutting authority over to Forgejo would resolve it and is explicitly outside this arc. The other is to let the owner's policy say that the Forgejo copy **is the same vault**: a short list of repository identities the owner declares equivalent. Review and Apply then accept a proposal bound to any listed identity, and everything else stays exact: the base commit must still be reachable from the owner's branch, and the page's blob must still be the exact object reviewed. That holds because the copy was migrated from GitHub with identical commit history. It stops holding the day something is merged on the forge, so the rule for the copy is: never merge there; suggestions are consumed by the inbox and requests are closed by the owner.
+
+Recommendation: the alias list, declared in the owner's durable policy.
+
+## What stays out of the first version
+
+- No writes to the forge: no comments, labels, closes, or merges. Closing the request is the owner's act in Forgejo's screens.
+- No mirroring or syncing between GitHub and the forge; the copy drifts and is only for suggestions.
+- No accounts created by the watcher, no open registration.
+- No public exposure of the forge or the intake service.
+- No change to what a suggestion may be: one existing Markdown file, one splice.
+
+## Evidence plan, if accepted
+
+1. Hermetic: the intake service with the watcher on and the form off, against the package's fake Forgejo and real Git fixture: one request enqueues once and only once across polls; a new head enqueues a second entry; refusals enqueue nothing; the owner app lists the entry with its forge line and validates it; Approve and Apply succeed with the alias; the forge sees no request other than reads.
+2. Live, after the maintainer's forge is up: the maintainer opens one pull request in Forgejo and sees it in Proposals without doing anything else. That is the first time a suggestion arrives from a real forge account without a command.
+
+## Decisions requested
+
+| # | Decision | Recommendation |
+|---|---|---|
+| 1 | The forge watcher lives inside the intake service, the queue's one writer, and that service can run with the form off | Yes |
+| 2 | The owner's policy gains a short list of repository identities that count as the same vault, so forge suggestions pass review and Apply | Yes |
+| 3 | The first version never writes to the forge; the owner closes requests in Forgejo | Yes |
+| 4 | A newer head of the same request becomes the current suggestion; earlier heads fold under it | Yes |
+| 5 | Closed requests stay in the inbox until they expire in this first version | Accept as a known limit |
+| 6 | Poll once a minute by default, read-only, with a private clone under the service's data directory | Yes |
+
+Accepting these authorizes building the watcher, the alias list, and the inbox line, with the tests above. It does not expose the forge, install a lane for anyone but the owner's invited accounts, or move authority.
