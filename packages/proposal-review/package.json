@@ -1,0 +1,27 @@
+{
+  "name": "@cyberbaser/proposal-review",
+  "version": "0.1.0",
+  "description": "Canonical review evidence and decision-only owner artifacts for Cyberbaser proposals.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./schema/v1": "./schema/proposal-review-v1.schema.json"
+  },
+  "scripts": {
+    "test": "bun test test"
+  },
+  "dependencies": {
+    "@cyberbaser/correction": "file:../correction",
+    "@cyberbaser/ofm": "file:../ofm",
+    "@cyberbaser/proposal": "file:../proposal",
+    "@cyberbaser/proposal-queue": "file:../proposal-queue",
+    "@cyberbaser/trust": "file:../trust"
+  },
+  "devDependencies": {
+    "ajv": "8.17.1",
+    "ajv-formats": "3.0.1",
+    "js-yaml": "4.1.0"
+  }
+}

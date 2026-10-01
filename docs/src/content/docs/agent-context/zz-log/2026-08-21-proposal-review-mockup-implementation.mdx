@@ -1,0 +1,144 @@
+---
+title: "2026-08-21 · Proposal review mockup implementation"
+description: "Implemented and repaired the reusable proposal fixture corpus and separate static/no-effect review surface, preserving the real owner-review baseline and leaving the focused maintainer checkpoint pending."
+date: 2026-08-21
+status: implementation
+tags: [design, testing, governance, contribution]
+---
+
+## Why this wave happened
+
+Two mechanically successful owner-review interfaces failed the maintainer's product test. Current and Proposed were not unmistakable enough, the required action was not prominent enough, realistic proposal identity and scope were missing, and the interface did not teach where intake, queue, private review, immutable decision, later application authority, canonical source, Git, rendering, deployment observation, and publication witness live.
+
+The coordinated [proposal operating model](/cyberbaser/research/proposal-operating-model/) therefore required a coherent research checkpoint before any proposal-v2 contract lock, real owner-review refactor, or approved-proposal adapter.
+
+## What was implemented
+
+Two deliberately separate local layers now exist:
+
+- `packages/proposal-fixtures/` is the private `@cyberbaser/proposal-fixtures` development and research corpus;
+- `spikes/proposal-review-mockup/` is an unprivileged loopback-only static/no-effect application.
+
+The fixture package keeps five support levels separate: executable v1, target-v2 research, conceptual later, blocked synthetic, and authority-model-only. Six executable fixtures run through the real `@cyberbaser/proposal` prepare, canonical serialize, parse, digest, and apply APIs. Two target fixtures use a separate noncanonical single-file multi-operation validator and left-to-right candidate builder. Conceptual multi-file and new-file cases cannot acquire executable artifacts, queue evidence, decisions, or controls.
+
+The mockup runs on the distinct numeric loopback host `127.0.0.2` and imports no privileged owner session, queue socket, decision route, source checkout, Git, renderer, deployment, or publication capability. Keeping it off owner-alpha's `127.0.0.1` host prevents host-scoped owner-session cookies from crossing ports into the unprivileged server, which also rejects every inbound `Cookie` header. The client is memory-only. Approval and rejection create only in-memory receipt previews under the persistent statement **Static concept — controls do nothing. No decision is recorded.**
+
+Normal entry points are:
+
+```bash
+bun run --cwd docs review:proposal-mockup
+bun run --cwd docs test:proposal-mockup
+bun run --cwd docs screenshots:proposal-mockup
+```
+
+Portagenty also has a separate `proposal-mockup` development session. The authenticated same-host mechanical baseline remains `review:owner-alpha` and Portagenty `owner-review`.
+
+## Adversarial repair pass
+
+Two independent adversarial reviews found real comprehension and correctness defects. The confirmed problems were repaired without refactoring the protected owner-alpha implementation:
+
+- the editorial inbox now contains only ready, retained-blocked, and decided projections;
+- conceptual, pre-admission, and adversarial cases moved to a separate Evidence lab;
+- conceptual fixtures now say **Conceptual later · no decision available**;
+- target, conceptual, and authority fixtures cannot inflate current lane representability;
+- insertion, deletion, and replacement panes use operation-specific non-color semantics;
+- the retention scenario now exercises a genuine long paragraph;
+- bidi and invisible controls render as named code-point markers rather than active reading-order controls;
+- confirmation and receipt previews repeat every affected path and numbered operation;
+- authority-model screens lead with the illustrated historical decision and separate evidence axes instead of generic blocked copy;
+- the 1440×900 hierarchy keeps title, summary, Current, Proposed, scope, note, both actions, support/evidence labels, and the no-effect boundary in the viewport;
+- the mobile decision sheet keeps a pointer-accessible Close control in a sticky visible header;
+- operation navigation preserves the note, keyboard focus, and semantic selection state;
+- the System view is now an eight-boundary selectable walkthrough and explicitly says it is not an automatic successful pipeline;
+- target operations are validated in authored canonical order and are no longer silently sorted;
+- executable-v1 fixture validation parses and reapplies the canonical artifact, then cross-checks its digest, one-file/one-operation scope, path, operation bytes, declared base, and declared candidate;
+- the static server uses `127.0.0.2`, rejects inbound cookies, and has browser coverage proving a seeded HttpOnly owner-alpha cookie remains on `127.0.0.1`;
+- launcher ownership uses exclusive status-file creation plus PID-and-claim verification, stale-owner recovery, signal handlers installed before readiness publication, and ownership-bound cleanup; and
+- browser tests reuse one Chromium process, eliminating the repeated-launch navigation timeouts observed during review.
+
+The screenshot capture path also gained one bounded retry after one Chromium `Page.captureScreenshot` protocol failure. Each attempt still uses a new ignored UTC directory and never deletes or overwrites prior evidence.
+
+## Mechanical evidence
+
+The focused lightweight checks passed. The production build remains a separate deferred gate:
+
+```text
+bun run --cwd docs test:proposal-mockup
+  fixture package: 8 passed, 831 expectations
+  mockup package: 19 passed, 260 expectations
+
+OWNER_ALPHA_ACCEPTANCE=1 bun test \
+  apps/owner-alpha/test/proposal-review-browser.test.js \
+  apps/owner-alpha/test/proposal-review-acceptance.test.js
+  2 passed, 72 expectations
+
+bun run --cwd docs preflight
+  passed
+
+bun run --cwd docs build
+  not completed; three attempts were externally terminated during measured host memory pressure
+  partial docs/dist output is untrusted; the production-build gate is deferred
+
+git diff --check
+  passed
+```
+
+No valid post-mockup production-build result exists. Per the resource-aware verification rule, this session did not launch a fourth attempt. The remaining gate must run once from `docs/` as `build-contained -- bun run build` in a stable low-pressure window or after fresh owner authorization.
+
+The aggregate mockup command passed twice after the browser lifecycle repair. Launcher coverage includes simultaneous different-port startup, live foreign-owner refusal, stale-owner recovery, startup-failure cleanup, and matching PID-and-claim removal.
+
+The final static-design screenshot matrix is in:
+
+```text
+.workspace/proposal-review-mockup/screenshots/2026-08-21T194528-272Z/
+```
+
+It contains all eleven required names. The multi-operation image deliberately shows change 3 of 3 so the evidence covers later-operation navigation and scope recall rather than only the first change.
+
+These results are **synthetic-mechanical** and **static-design-only** evidence. They do not establish maintainer comprehension, independent-human usability, an offered lane, Lane A installation, public Lane B exposure, shared-socket OCI parity, a connected contributor-to-live path, or live effects.
+
+## Preserved boundaries
+
+The five protected owner-alpha files remain byte-identical to the repair baseline. Current proposal-v1 canonical bytes, parser, digests, one-existing-file/one-splice semantics, and decision-only authority were not changed. Existing modified and untracked working-tree paths were preserved; this wave added or narrowly edited only the planned fixture, mockup, launcher, test, and knowledge-ops surfaces.
+
+No commit, push, PR, merge, deployment, image publication, service installation, reset, stash, clean, rebase, or discard occurred.
+
+## Knowledge-ops closure and delivered state
+
+The final knowledge-ops pass aligned the current sequence across:
+
+- [Proposal operating model](/cyberbaser/research/proposal-operating-model/);
+- [Owner proposal UI review](/cyberbaser/development/owner-proposal-ui-review/);
+- [Architecture plan](/cyberbaser/design/v2-architecture-plan/);
+- [Roadmap](/cyberbaser/getting-started/roadmap/);
+- `.claude/FOCUS.md`; and
+- `.claude/20-ROADMAP.md`.
+
+The resulting current truth is: the operating model, typed fixtures, static mockup, adversarial repair, aggregate tests, launcher ownership checks, and screenshot evidence are locally delivered in the uncommitted working tree. The authenticated owner-alpha surface remains the unchanged mechanical baseline. The static launcher binds only `127.0.0.2`, separated from owner-alpha's host-scoped cookies, and the server rejects any inbound Cookie header. It claims one ignored status file exclusively with PID-and-token ownership, refuses a live foreign owner, recovers a stale owner, and removes only its own claim on shutdown. Portagenty remains a development launcher, not deployment or installation.
+
+## Maintainer checkpoint result
+
+The maintainer reviewed the coherent static surface on 2026-08-21. The checkpoint did **not** pass the product-direction gate. The mockup was a better starting point and made exact Current and Proposed evidence visible, but the always-on side-by-side proof plus decision rail compressed long prose into two narrow reading columns. The maintainer expected the range of views common in mature authoring and review tools, including ways to read the previous/current content, the proposed/new content, a merged or unified change view, and both sides together.
+
+The next design should therefore be a small evolvable review shell rather than further polish on this fixed three-column composition:
+
+- full-width **Proposed** and **Current** reading modes;
+- unified or inline **Changes** presentation;
+- optional side-by-side **Compare**;
+- operation navigation that works across every mode;
+- a collapsible, docked, or sheet-based decision surface; and
+- evaluation of mature reusable diff, merge-view, and authoring components instead of building a general-purpose editor from scratch.
+
+This is real maintainer comprehension and direction evidence. It is not usability acceptance, independent-human evidence, or a decision to select a particular editor library. The static mockup remains a no-effect research surface.
+
+## What remains open
+
+The next checkpoint must test the extensible review-mode shell before product direction is accepted. Until that evidence exists:
+
+- no proposal-v2 schema is selected;
+- no taxonomy or operation limit is locked;
+- no rendered-context contract or default review mode is selected;
+- no third-party editor or diff component is selected;
+- no source-application authority artifact is defined;
+- no real owner-review presentation refactor begins; and
+- the approved-proposal adapter does not resume.

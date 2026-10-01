@@ -1,6 +1,6 @@
 # Cyberbaser Knowledge Base — Index
 
-> **How this KB works (two layers):** the **canonical knowledge base is the docs site** (`docs/src/content/docs/`) — mature, vision-swept, test-covered. This `.claude/` layer is the **orientation + pointer layer** for agents: read `PROJECT_CONTEXT.md` then `FOCUS.md` to get the direction, then follow stub pointers into the docs for depth. The numbered files below are greppable stubs, each summarizing current truth and linking its canonical page. **Locked a decision? Update this layer in the same session** (see `41-QUESTIONS-RESOLVED.md` R07).
+> **How this KB works:** the **canonical knowledge base is the docs site** (`docs/src/content/docs/`) — mature, vision-swept, test-covered. Dated chronology lives in `docs/src/content/docs/agent-context/zz-log/`: one entry per meaningful research, architecture, real acceptance, or implementation wave. This `.claude/` layer is the **orientation + pointer layer** for agents: read `PROJECT_CONTEXT.md` then `FOCUS.md` to get the direction, then follow stub pointers into the docs for depth. The numbered files below are greppable stubs, each summarizing current truth and linking its canonical page. **Meaningful work? Update canonical docs, dated chronology, and this orientation layer in the same session.** Docs preflight fails when `FOCUS.md` is newer than the latest dated log.
 
 ## Meta (read first, in order)
 
@@ -31,9 +31,20 @@
 | [40-QUESTIONS-OPEN](./40-QUESTIONS-OPEN.md) | `reference/open-questions.mdx` |
 | [41-QUESTIONS-RESOLVED](./41-QUESTIONS-RESOLVED.md) | **Live here** — the agent-side decision log with rationale |
 
+## Current-arc pages without stubs (read from FOCUS, then here)
+
+| Topic | Canonical page |
+|---|---|
+| Apply is a second owner act | `design/owner-application-event.mdx`, `development/applying-approved-suggestion.mdx`, `development/approved-proposal-input.mdx` |
+| First real suggestion run (maintainer's sheet) | `development/first-real-application.mdx` |
+| Suggestions on from one config section, intake run by the owner app | `development/suggestions-on-the-private-site.mdx` |
+| Forge pull requests in the same inbox | `design/pull-requests-in-the-inbox.mdx` |
+| Forgejo on TrueNAS, then the Lane A live check | `development/forgejo-on-truenas.mdx`, `development/forgejo-lane-a-live-validation.mdx` |
+| Owner review checkpoint (prepared, unrun) | `development/owner-review-checkpoint.mdx`, `development/owner-proposal-ui-review.mdx` |
+
 ## Status Legend
 
 - ✅ Superseded stub (canonical content lives on the docs page; stub keeps key facts greppable)
 - 🌳 Live in this layer (PROJECT_CONTEXT, FOCUS, 20-ROADMAP, 40/41, RESEARCH_SOURCES)
 
-Current state (2026-06-21): orientation layer fully re-aligned to the locked vision; drift eliminated (was frozen at 2026-04-11).
+Current state (2026-10-01): canonical docs, dated `zz-log` chronology, and the orientation layer are realigned after the September apply, forge-inbox, and private-site-suggestion waves. The April-to-August log gap is explicitly recorded rather than hidden.

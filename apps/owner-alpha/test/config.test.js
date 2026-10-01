@@ -5,8 +5,11 @@ import path from 'node:path';
 import {
   OwnerAlphaError,
   computePolicyRevision,
+  forgeIdentity,
   loadOwnerAlphaConfig,
   policyDocument,
+  repositoryMatchesPolicy,
+  suggestionsEnabled,
   validateOwnerAlphaConfig,
 } from '../src/index.js';
 
@@ -74,6 +77,12 @@ describe('strict one-Save private owner config', () => {
 
     expect(raw).toEqual(before);
     expect(config.listen).toEqual({ host: '127.0.0.1', port: 4317, readerPort: 4318 });
+    expect(config.proposalReview).toEqual({
+      enabled: false,
+      socketPath: null,
+      requestTimeoutMs: 5000,
+      maxListEntries: 100,
+    });
     expect(config.repository.checkout).toBe('/absolute/path/to/cyberbase');
     expect(config.repository.remote.url).toBe('https://github.com/cybersader/cyberbase.git');
     expect(config.owner).toEqual({
@@ -107,6 +116,7 @@ describe('strict one-Save private owner config', () => {
       commitMessagePrefix: 'owner-alpha:',
     });
     expect(Object.isFrozen(config)).toBe(true);
+    expect(Object.isFrozen(config.proposalReview)).toBe(true);
     expect(Object.isFrozen(config.workflow.jobs)).toBe(true);
     expect(Object.isFrozen(config.checks.allowedOfmVerdicts)).toBe(true);
 
@@ -155,10 +165,56 @@ describe('strict one-Save private owner config', () => {
     expect(loopback).not.toBe(tailnet);
   });
 
+  test('binds proposal review to the exact private local IPC policy without changing Save authority', async () => {
+    const raw = await exampleConfig();
+    const originalRevision = computePolicyRevision(raw);
+    const enabled = validateOwnerAlphaConfig(variant(raw, (copy) => {
+      copy.proposalReview.enabled = true;
+      copy.proposalReview.socketPath = '/run/user/1000/cyberbaser/review.sock';
+    }));
+    expect(enabled.proposalReview).toEqual({
+      enabled: true,
+      socketPath: '/run/user/1000/cyberbaser/review.sock',
+      requestTimeoutMs: 5000,
+      maxListEntries: 100,
+    });
+    expect(computePolicyRevision(enabled)).toBe(originalRevision);
+    expect(policyDocument(enabled)).not.toHaveProperty('proposalReview');
+
+    for (const socketPath of [null, 'review.sock', '/review.sock', '/run/../review.sock', '/run/review.sock/']) {
+      expectCode(
+        () => validateOwnerAlphaConfig(variant(raw, (copy) => {
+          copy.proposalReview.enabled = true;
+          copy.proposalReview.socketPath = socketPath;
+        })),
+        socketPath === null ? 'invalid-config' : 'invalid-config-path',
+      );
+    }
+    expectCode(
+      () => validateOwnerAlphaConfig(variant(raw, (copy) => {
+        copy.proposalReview.socketPath = '/run/user/1000/cyberbaser/review.sock';
+      })),
+      'invalid-review-policy',
+    );
+    for (const [field, value] of [
+      ['enabled', 'true'],
+      ['requestTimeoutMs', 4999],
+      ['maxListEntries', 99],
+    ]) {
+      expectCode(
+        () => validateOwnerAlphaConfig(variant(raw, (copy) => {
+          copy.proposalReview[field] = value;
+        })),
+        field === 'enabled' ? 'invalid-config' : 'invalid-review-policy',
+      );
+    }
+  });
+
   test('rejects unknown and missing keys at every schema boundary', async () => {
     const raw = await exampleConfig();
     const unknownVariants = [
       variant(raw, (copy) => { copy.surprise = true; }),
+      variant(raw, (copy) => { copy.proposalReview.surprise = true; }),
       variant(raw, (copy) => { copy.repository.surprise = true; }),
       variant(raw, (copy) => { copy.repository.remote.surprise = true; }),
       variant(raw, (copy) => { copy.owner.surprise = true; }),
@@ -174,7 +230,9 @@ describe('strict one-Save private owner config', () => {
     }
 
     for (const [section, key] of [
+      [null, 'proposalReview'],
       [null, 'live'],
+      ['proposalReview', 'socketPath'],
       ['repository', 'checkout'],
       ['owner', 'identity'],
       ['workflow', 'name'],
@@ -218,6 +276,136 @@ describe('strict one-Save private owner config', () => {
         })),
         'invalid-config-ref',
       );
+    }
+  });
+
+  test('accepts a short list of repository aliases that count as the same vault, without moving the pinned revision', async () => {
+    const raw = await exampleConfig();
+    const plain = validateOwnerAlphaConfig(raw);
+    expect(plain.repository.aliases).toEqual([]);
+    expect(computePolicyRevision(raw)).toBe(GITHUB_POLICY_REVISION);
+    expect(policyDocument(raw).repository).toEqual({ remote: plain.repository.remote, branch: 'main' });
+
+    const aliased = variant(raw, (copy) => {
+      copy.repository.aliases = ['https://forge.home.arpa:8443/cybersader/cyberbase.git'];
+    });
+    const config = validateOwnerAlphaConfig(aliased);
+    expect(config.repository.aliases).toEqual(['https://forge.home.arpa:8443/cybersader/cyberbase.git']);
+    expect(repositoryMatchesPolicy(config, 'https://forge.home.arpa:8443/cybersader/cyberbase.git')).toBe(true);
+    expect(repositoryMatchesPolicy(config, 'https://github.com/cybersader/cyberbase.git')).toBe(true);
+    expect(repositoryMatchesPolicy(config, 'https://forge.home.arpa:8443/cybersader/other.git')).toBe(false);
+    expect(computePolicyRevision(aliased)).not.toBe(GITHUB_POLICY_REVISION);
+    expect(policyDocument(aliased).repository.aliases).toEqual(config.repository.aliases);
+
+    for (const [code, aliases] of [
+      ['invalid-config-url', ['http://forge.home.arpa/cybersader/cyberbase.git']],
+      ['invalid-config-url', ['https://forge.home.arpa/cybersader/cyberbase']],
+      ['invalid-config-url', ['https://forge.home.arpa/deep/cybersader/cyberbase.git']],
+      ['invalid-config', ['https://github.com/cybersader/cyberbase.git']],
+      ['invalid-config', ['https://forge.home.arpa/a/b.git', 'https://forge.home.arpa/a/b.git']],
+      ['invalid-config', Array.from({ length: 9 }, (_, index) => `https://forge.home.arpa/a/b${index}.git`)],
+      ['invalid-config', 'https://forge.home.arpa/a/b.git'],
+    ]) {
+      expectCode(
+        () => validateOwnerAlphaConfig(variant(raw, (copy) => { copy.repository.aliases = aliases; })),
+        code,
+      );
+    }
+  });
+
+  test('turns the suggestion lanes on from one place and derives the forge identity', async () => {
+    const raw = await exampleConfig();
+    const off = validateOwnerAlphaConfig(raw);
+    expect(off.suggestions).toEqual({ form: { enabled: false }, forge: { enabled: false } });
+    expect(suggestionsEnabled(off)).toBe(false);
+    expect(policyDocument(raw)).not.toHaveProperty('suggestions');
+    expect(computePolicyRevision(raw)).toBe(GITHUB_POLICY_REVISION);
+    const absent = variant(raw, (copy) => { delete copy.suggestions; });
+    expect(validateOwnerAlphaConfig(absent).suggestions).toEqual(off.suggestions);
+    expect(computePolicyRevision(absent)).toBe(GITHUB_POLICY_REVISION);
+
+    const reviewed = (change) => variant(raw, (copy) => {
+      copy.proposalReview.enabled = true;
+      copy.proposalReview.socketPath = '/run/user/1000/cyberbaser/review.sock';
+      change(copy);
+    });
+    const formOn = validateOwnerAlphaConfig(reviewed((copy) => { copy.suggestions.form.enabled = true; }));
+    expect(formOn.suggestions).toEqual({ form: { enabled: true }, forge: { enabled: false } });
+    expect(suggestionsEnabled(formOn)).toBe(true);
+    expect(policyDocument(formOn).suggestions).toEqual(formOn.suggestions);
+    expect(computePolicyRevision(formOn)).not.toBe(GITHUB_POLICY_REVISION);
+
+    const forgeOn = validateOwnerAlphaConfig(reviewed((copy) => {
+      copy.repository.aliases = ['https://forge.home.arpa:8443/cybersader/cyberbase.git'];
+      copy.suggestions.forge = {
+        enabled: true,
+        repository: 'https://forge.home.arpa:8443/cybersader/cyberbase.git',
+        tokenFile: '/run/user/1000/cyberbaser/forge-token',
+        pollIntervalMs: 60_000,
+      };
+    }));
+    expect(forgeOn.suggestions.forge).toEqual({
+      enabled: true,
+      repository: 'https://forge.home.arpa:8443/cybersader/cyberbase.git',
+      tokenFile: '/run/user/1000/cyberbaser/forge-token',
+      pollIntervalMs: 60_000,
+    });
+    expect(forgeIdentity(forgeOn.suggestions.forge.repository)).toEqual({
+      apiBaseUrl: 'https://forge.home.arpa:8443/api/v1',
+      owner: 'cybersader',
+      name: 'cyberbase',
+    });
+    // A normalized config re-validates to itself, as every module re-checks it.
+    expect(validateOwnerAlphaConfig(forgeOn)).toEqual(forgeOn);
+    expect(validateOwnerAlphaConfig(formOn)).toEqual(formOn);
+    const forgeNoToken = validateOwnerAlphaConfig(reviewed((copy) => {
+      copy.repository.aliases = ['https://forge.home.arpa:8443/cybersader/cyberbase.git'];
+      copy.suggestions.forge = {
+        enabled: true,
+        repository: 'https://forge.home.arpa:8443/cybersader/cyberbase.git',
+        tokenFile: null,
+        pollIntervalMs: 10_000,
+      };
+    }));
+    expect(forgeNoToken.suggestions.forge.tokenFile).toBeNull();
+
+    // A lane can only be on when proposal review is on: that socket is how suggestions reach the inbox.
+    expectCode(
+      () => validateOwnerAlphaConfig(variant(raw, (copy) => { copy.suggestions.form.enabled = true; })),
+      'suggestions-require-proposal-review',
+    );
+    expectCode(
+      () => validateOwnerAlphaConfig(reviewed((copy) => {
+        copy.listen.port = 65534;
+        copy.suggestions.form.enabled = true;
+      })),
+      'invalid-config',
+    );
+    for (const [code, change] of [
+      ['unknown-config-key', (copy) => { copy.suggestions.agents = { enabled: true }; }],
+      ['unknown-config-key', (copy) => { copy.suggestions.form.origin = 'https://wiki.example'; }],
+      ['unknown-config-key', (copy) => { copy.suggestions.forge.repository = 'https://forge.home.arpa/a/b.git'; }],
+      ['invalid-config', (copy) => { copy.suggestions.form.enabled = 'yes'; }],
+      ['missing-config-key', (copy) => {
+        copy.suggestions.forge = { enabled: true, repository: 'https://forge.home.arpa/cybersader/cyberbase.git' };
+      }],
+      ['invalid-config', (copy) => {
+        // Not the remote and not an alias: the forge copy must be declared the same vault first.
+        copy.suggestions.forge = { enabled: true, repository: 'https://forge.home.arpa/cybersader/cyberbase.git', tokenFile: null, pollIntervalMs: 60_000 };
+      }],
+      ['invalid-config-url', (copy) => {
+        copy.suggestions.forge = { enabled: true, repository: 'https://forge.home.arpa/cybersader/cyberbase', tokenFile: null, pollIntervalMs: 60_000 };
+      }],
+      ['invalid-config', (copy) => {
+        copy.repository.aliases = ['https://forge.home.arpa/cybersader/cyberbase.git'];
+        copy.suggestions.forge = { enabled: true, repository: 'https://forge.home.arpa/cybersader/cyberbase.git', tokenFile: null, pollIntervalMs: 5_000 };
+      }],
+      ['invalid-config-path', (copy) => {
+        copy.repository.aliases = ['https://forge.home.arpa/cybersader/cyberbase.git'];
+        copy.suggestions.forge = { enabled: true, repository: 'https://forge.home.arpa/cybersader/cyberbase.git', tokenFile: 'forge-token', pollIntervalMs: 60_000 };
+      }],
+    ]) {
+      expectCode(() => validateOwnerAlphaConfig(reviewed(change)), code);
     }
   });
 

@@ -14,7 +14,7 @@ This app is optional and refuses to start unless `enabled` is literal `true`. It
 - Abuse control is global rather than IP-derived: a 20-token process-wide bucket refills at one token per second, with at most four active submissions. This remains an origin control, not a substitute for edge DDoS protection.
 - Success returns only a bounded queue receipt. Untrusted rationale, evidence, source bytes, repository paths, and raw idempotency keys are never reflected.
 
-The process binds `0.0.0.0` for a later isolated-container deployment. Do not publish that listener directly. A separately configured reverse proxy must preserve the exact public Host and expose only `/v1/corrections`; it must not expose `/healthz`. TLS and edge abuse controls are outside this app.
+For a public HTTPS origin the process binds `0.0.0.0` for a later isolated-container deployment. Do not publish that listener directly. For the owner's own private site, `publicOrigin` may be one exact private numeric IPv4 HTTP origin with an explicit port, and `listen` then binds exactly that address; the owner app derives and writes that config and runs this process beside itself. A separately configured reverse proxy must preserve the exact public Host and expose only `/v1/corrections`; it must not expose `/healthz`. TLS and edge abuse controls are outside this app.
 
 ## Configuration
 
@@ -30,6 +30,10 @@ bun apps/account-free-intake/bin/server.js --config /absolute/account-free-intak
 ```
 
 Startup validates the input paths, performs proposal-queue recovery and retention, acquires the queue's kernel lock, and only then starts the Bun listener. `SIGINT` and `SIGTERM` stop the listener and release the queue lock.
+
+## Forge watcher
+
+An optional `forgejo` block makes the same process watch one Forgejo repository for open pull requests and enqueue each new head as a Lane A entry through the queue's one writer. It is read-only towards the forge. When the block is enabled, the public form may be off: set `listen` and `publicOrigin` to `null` and `allowedFormOrigins` to `[]`. The watcher keeps a private clone at `forgejo.cloneDir`, retains the base commit of every entry it enqueued, and proves Lane A entries from that clone on recovery. `forgejo.tokenFile` names a mode-0600 file for a private repository; the token is read per request and never logged. A disabled block is `{ "enabled": false }`.
 
 ## Read-only review commands
 

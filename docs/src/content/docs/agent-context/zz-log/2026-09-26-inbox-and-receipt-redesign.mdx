@@ -1,0 +1,35 @@
+---
+title: "2026-09-26 · Inbox and receipt redesign"
+description: "Gave the owner review inbox and decision receipt the same steps-first pass as the decision step: rows show what changes in place, dates replace timestamps, and the receipt answers the owner's three questions once, in plain words."
+date: 2026-09-26
+status: implementation
+tags: [design, testing, contribution]
+---
+
+## Reading the two pages as an owner
+
+**Inbox.** The owner's question is "what is waiting, and which should I open first?" The page opened with an uppercase kicker, an oversized title, and jump links to two sections already visible on a short page. Each row showed only the proposed sentence with the new word highlighted, so the owner could not see what it replaced without opening the proposal. The page path was styled as a second blue link inside the row link. Dates carried minutes and "UTC". Counts read "2 on this page" and "0 shown".
+
+**Receipt.** The owner's questions are "did it record, what did I decide, what happens now?" The page said "DECISION RECEIPT", then "Proposal rejected", then "Rejected" again in a bordered block, then the note, then a list of seven system verbs that had not happened. The change itself came after all of that under a third kicker.
+
+## What changed
+
+- **Rows show the change in place.** Removed words struck, added words marked, inside the surrounding sentence, using the same marks the Changes mode uses. Deletions and insertions read correctly without invented text. The contributor's reason follows; the path, dates, and any policy advisory sit last as quiet metadata.
+- **Dates, not timestamps.** "Aug 21, 2026" on screen; the exact instant stays on the `time` element for anyone who needs it.
+- **Less chrome.** One title at a working size, one sentence of lede, no kicker, no jump links. Section counts read "2 waiting" and are omitted when there is nothing to count. Empty states say "Nothing is waiting for you" and "No decisions yet".
+- **The receipt speaks to the owner.** "You approved this suggestion" with the date; the change as it reads and the page; the owner's note as a quiet quotation; then **Source unchanged** with one sentence: nothing on the page changed and nothing was published or scheduled, and, for an approval, applying it is a separate step the owner takes themselves. Evidence remains under **Details for the record**.
+- **Consistency on the review page.** The "1 exact change in 1 page" phrase left the header; the path is shown the same way everywhere.
+
+Nothing about authority changed. The receipt still leads with **Source unchanged**, the details still hold every digest and identifier, and the server still records exactly what it recorded before.
+
+## Checks
+
+```text
+bun test apps/owner-alpha/test
+  230 passed, 4 skipped, 0 failed
+OWNER_ALPHA_ACCEPTANCE=1 bun test apps/owner-alpha/test/proposal-review-browser.test.js
+  1 passed, 50 expectations: inbox rows carry both struck and added marks, receipts render
+  the new headings and boundary sentence, decided rows show the decision
+```
+
+Screenshots of the inbox, the rejection receipt, and the decided list on a phone were inspected directly. The maintainer has not reviewed either page; the checkpoint remains prepared and unrun.

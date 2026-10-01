@@ -349,5 +349,47 @@ export function createForgejoApi({
     }
   }
 
-  return Object.freeze({ readPullRequest });
+  // One read-only page of open pull requests: the numbers, heads, and draft
+  // flags a watcher needs to decide what to read in full. Bounded to one page
+  // of at most `limit` entries; anything beyond is left for the next poll.
+  async function listOpenPullRequests({ config: inputConfig, signal, limit = 50 } = {}) {
+    const config = validateForgejoIntakeConfig(inputConfig);
+    const pageSize = requirePositiveInteger(limit, 'limit');
+    if (pageSize > 50) fail('invalid-list-limit', 'limit may not exceed 50 pull requests per page');
+    const deadline = createDeadline(totalTimeout, signal, dependencies);
+    try {
+      const owner = encodeURIComponent(config.repository.owner);
+      const name = encodeURIComponent(config.repository.name);
+      const instanceVersion = normalizeVersion(await requestJson('/version', config, deadline));
+      const value = await requestJson(
+        `/repos/${owner}/${name}/pulls?state=open&sort=oldest&page=1&limit=${pageSize}`,
+        config,
+        deadline,
+      );
+      if (!Array.isArray(value)) fail('invalid-forgejo-pull-request-list', 'Forgejo pull request list must be an array');
+      if (value.length > pageSize) fail('invalid-forgejo-pull-request-list', 'Forgejo returned more pull requests than requested');
+      const pullRequests = value.map((item, index) => {
+        if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+          fail('invalid-forgejo-pull-request-list', `pull request list entry ${index} must be an object`);
+        }
+        if (!Number.isSafeInteger(item.number) || item.number < 1) {
+          fail('invalid-forgejo-pull-request-list', `pull request list entry ${index} has an invalid number`);
+        }
+        return {
+          number: item.number,
+          open: item.state === 'open',
+          draft: item.draft === true,
+          headSha: requireSha(item.head?.sha, `pull_requests[${index}].head.sha`),
+          baseSha: requireSha(item.base?.sha, `pull_requests[${index}].base.sha`),
+          baseRef: requireString(item.base?.ref, `pull_requests[${index}].base.ref`, { maxBytes: 255 }),
+        };
+      });
+      deadline.throwIfAborted();
+      return deepFreeze({ instanceVersion, pullRequests, truncated: value.length === pageSize });
+    } finally {
+      deadline.close();
+    }
+  }
+
+  return Object.freeze({ readPullRequest, listOpenPullRequests });
 }

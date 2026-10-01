@@ -1,0 +1,39 @@
+---
+title: "2026-09-27 · Apply follow-through: job page, Decided list, run sheet"
+description: "After the maintainer chose to aim at one real Cyberbase application, rewrote the job page in owner words, made the Decided list say Applied and Live, fixed a CI timing flake, and wrote the first-real-run sheet, which names three missing links before the run can happen without a terminal."
+date: 2026-09-27
+status: implementation
+tags: [design, governance, testing, contribution]
+---
+
+## Maintainer direction
+
+Asked as a funnel, high level first. The maintainer chose: aim the next stretch at applying one real suggestion on Cyberbase; rewrite the job page in owner words now; and make the Decided list show Applied and Live.
+
+## What was built
+
+- **Job page.** Titled by what is happening (**Putting the suggestion on the page** or **Saving your change**), the page in one line, six steps in order with the current one marked and stops named in plain words, the raw pipeline state kept in a small technical line, and a link back to the suggestion when the job came from one. The pipeline's job lookup now reports the job's origin from its session artifact; the public projection redacts everything else. One stage table on the server feeds both the page and its live refresh script.
+- **Decided list.** Rows read Rejected, Approved, Applied, or Live. Applied and Live come from a cheap progress lookup over application events and durable job state, never Git, so the inbox stays fast.
+- **CI.** The owner-alpha container workflow failed on the previous commit because `docker compose config` took 7.7 s on a loaded runner and the test's default timeout is 5 s. The test file is untouched by the branch and passed on the previous commit; the compose expansion tests now carry an explicit 30 s timeout.
+- **Run sheet.** [First real application run](/cyberbaser/development/first-real-application/): the steps, the record, the claim ceiling, and what must exist first.
+
+## Finding: three links are missing before a real run
+
+A suggestion about a real Cyberbase page has no way into the owner's queue without a terminal today. The **Suggest a correction** form is disabled in every build; the site build does not emit the retained publication binding the intake requires; and the intake service is not started beside the owner app. All three sit inside decided boundaries (form only on the owner's local site, intake local and unexposed, owner app the only writer) and together they are the connected contributor-to-live slice the roadmap names. Building them is the alignment question at the end of this session.
+
+## Checks
+
+```text
+bun test apps/owner-alpha/test deploy/owner-alpha/test/structure.test.js
+  241 passed, 4 skipped, 0 failed
+OWNER_ALPHA_ACCEPTANCE=1 bun test apps/owner-alpha/test/proposal-review-browser.test.js
+  1 passed, 67 expectations: approve, apply, job page in owner words, Decided reads Applied
+OWNER_ALPHA_ACCEPTANCE=1 bun test apps/owner-alpha/test/acceptance.test.js
+  1 passed: browser Save still reaches completed on the rewritten job page
+bun test deploy/owner-alpha/test/operator-surfaces.test.js
+  7 passed with the explicit compose timeout
+```
+
+## Boundaries
+
+No real Cyberbase application. Nothing merged, deployed, or exposed. The review checkpoint has not run. The public site carries no form.

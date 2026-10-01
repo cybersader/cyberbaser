@@ -20,6 +20,8 @@
   },
   "dependencies": {
     "@cyberbaser/account-free-intake": "file:../../packages/account-free-intake",
-    "@cyberbaser/proposal-queue": "file:../../packages/proposal-queue"
+    "@cyberbaser/forgejo-intake": "file:../../packages/forgejo-intake",
+    "@cyberbaser/proposal-queue": "file:../../packages/proposal-queue",
+    "@cyberbaser/proposal-review": "file:../../packages/proposal-review"
   }
 }

@@ -1,0 +1,16 @@
+{
+  "name": "@cyberbaser/proposal-review-mockup",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Unprivileged loopback-only static proposal-review research surface.",
+  "type": "module",
+  "scripts": {
+    "start": "bun bin/launch.js",
+    "test": "bun test test",
+    "screenshots": "bun bin/capture-screenshots.js"
+  },
+  "dependencies": {
+    "@cyberbaser/proposal-fixtures": "file:../../packages/proposal-fixtures",
+    "@cyberbaser/review-projection": "file:../../packages/review-projection"
+  }
+}

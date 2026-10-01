@@ -1,0 +1,60 @@
+---
+title: "2026-09-24 · Review projection audit"
+description: "Independently audited the shared review projection's UTF-8 byte offsets, unsupported-Markdown fallbacks, and large-document behavior; fixed nine verified defects in the package and its two consumers with focused tests."
+date: 2026-09-24
+status: implementation
+tags: [design, testing, contribution]
+---
+
+## Scope
+
+`packages/review-projection` is the pure replay that both the static mockup and the authenticated owner review render from. This pass read every line of it, probed it with scripts, had a bounded second reader audit the same three questions independently, and then fixed what both readings verified. Nothing here touches the proposal contract, the queue, the decision store, or any authority boundary: every change is in how a pinned page and its declared operations are turned into reading views.
+
+## Verified defects and fixes
+
+**One invisible character duplicated the page.** Segment text is rewritten to spell out zero-width and bidirectional controls, but segment offsets stay raw. Both consumers sliced context by offset and, when the exposed length no longer matched, fell back to pushing the whole context segment into every exact-source box it touched. A page with one U+200B in its first paragraph rendered its entire body inside the changed passage. The package now cuts context segments at the edges of every block that holds a change, so a consumer never has to slice exposed text. Both consumers work unchanged; the owner surface test asserts the middle paragraph appears once.
+
+**A change at the very end of the page was invisible.** A zero-width segment at the document length fell into no block, so appending text, replacing the last paragraph, or deleting it showed nothing changed in Changes or Current. The package now exports `segmentsWithinSpan`, whose rule gives a zero-width segment at the document end to the final block; the owner surface uses it and the mockup client mirrors it.
+
+**An empty pinned page showed nothing in Changes.** No blocks, no regions, an empty reading body while the mode reported itself available. The owner surface now renders the declared change as one exact-source region when a page has no blocks.
+
+**Pages over the 256 KiB reading bound were misreported.** The withheld text reached the projection as nulls, which reads as "this page does not exist in the pinned base". The owner surface now returns no projection when the document carries a reason, so the bound itself is what the reviewer reads.
+
+**Two regex families were quadratic on adversarial input.** Multiline patterns anchored with `^\s*` let `\s` cross newlines, so a fenced block of blank lines cost seconds at 32 KiB; the inline alternation backtracked at every unmatched `[`. A proposal's replacement text can carry either. Line anchors now use horizontal whitespace only, and the inline scanner is a single pass with cached closer lookups. A regression test runs five adversarial 64 KiB inputs under a generous bound; before the fix they took minutes.
+
+**Byte offsets were not checked.** An offset inside a multi-byte character or past the end decoded to a replacement character and quietly projected. The package now refuses the whole projection with a stated reason unless every offset is inside the base and on a UTF-8 boundary. Astral characters on valid boundaries were already correct and are now pinned by a test.
+
+**Constructs outside the rung read as prose instead of degrading.** Inline images rendered as a stray `!` plus a link mark; GFM tables without outer pipes, setext headings, indented blocks, HTML comments, and nested or list-valued frontmatter rendered wrongly; `* * *` became a list. Each now degrades the block to exact source with its own label, and spaced thematic breaks are recognised. A first setext detector was itself quadratic on one long line and was replaced with a last-line check before landing.
+
+**CRLF files lost all structure.** Line classification saw the trailing carriage return, so every heading, list, rule, and frontmatter fence became a paragraph. Classification now ignores a trailing `\r` while every offset still covers the raw bytes.
+
+**Small text losses.** A wikilink with two pipes dropped everything after the second; underscore emphasis was applied inside `snake_case_names`. Both fixed.
+
+**Whole-line replacements split into two passages.** The addition anchors at the start of the next block, and regions were keyed by segment index. Both consumers now key regions by operation number, so the removed and added halves of one operation share one exact-source box.
+
+## Recorded, not changed
+
+Escaped markers, intraword `*`, `==highlight==`, `~~strike~~`, hard line breaks, nested lists indented four or more spaces, lazy continuation lines, double-backtick code spans, and unclosed fences still render at R1 fidelity without losing text. They remain within the rung's stated limits. Above the reading bound the modes fall back to the declared change spans, as before.
+
+## Checks
+
+```text
+bun test packages/review-projection/test
+  11 passed, 0 failed
+bun test apps/owner-alpha/test/server.test.js apps/owner-alpha/test/review-checkpoint-corpus.test.js
+  42 passed, 0 failed (the five new consumer regressions fail without the fixes)
+OWNER_ALPHA_ACCEPTANCE=1 bun test apps/owner-alpha/test/proposal-review-browser.test.js
+  1 passed, 42 expectations
+bun test --cwd spikes/proposal-review-mockup test/view-model.test.js test/server.test.js test/launcher.test.js
+  17 passed, 0 failed
+bun test --cwd spikes/proposal-review-mockup test/browser.test.js
+  10 passed, 1 failed: a focus-outline width check that fails identically on the
+  unmodified client under this container's substituted Chromium build; CI installs
+  the pinned build
+bun test --cwd packages/proposal-fixtures
+  8 passed, 0 failed
+bun run --cwd docs preflight
+  passed
+```
+
+Timing on a 256 KiB page with roughly 6,900 blocks stays around half a second for all three views. Nothing merged, deployed, or exposed; approval still records intent only.

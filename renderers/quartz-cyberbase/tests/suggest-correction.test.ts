@@ -79,10 +79,28 @@ for (const origin of [
   "https://intake.example/",
   "https://INTAKE.example",
   "https://intake.example:443",
+  "http://8.8.8.8:4319",
+  "http://127.0.0.1",
+  "http://wiki.internal:4319",
+  "http://127.0.0.1:4319/",
 ]) {
   assert.throws(() => resolveIntakeOrigin(origin), /INTAKE_ORIGIN/)
 }
 assert.equal(resolveIntakeOrigin(intakeOrigin), intakeOrigin)
+// The owner's private local site posts to the intake the owner app runs beside it.
+assert.equal(resolveIntakeOrigin("http://127.0.0.1:4319"), "http://127.0.0.1:4319")
+assert.equal(resolveIntakeOrigin("http://100.100.100.100:4319"), "http://100.100.100.100:4319")
+assert.deepEqual(suggestionBindingForPage("docs/first.md", "docs/first", {
+  enabled: true,
+  intakeOrigin: "http://127.0.0.1:4319",
+  bindingDigest,
+  sourceRepository: repository,
+  sourceRevision: revision,
+}), {
+  action: `http://127.0.0.1:4319${ACCOUNT_FREE_INTAKE_PATH}`,
+  bindingDigest,
+  pageId: expectedPageId,
+})
 
 const entropy = Uint8Array.from({ length: 32 }, (_, index) => index)
 const idempotencyKey = idempotencyKeyFromBytes(entropy)

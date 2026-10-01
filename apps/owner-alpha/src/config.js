@@ -202,8 +202,38 @@ function validateListen(value) {
   return { host, port, readerPort };
 }
 
+// Other repository identities the owner declares to be the same vault, for
+// example a Forgejo copy that exists only to take pull requests. A proposal
+// bound to an alias passes the repository identity check at review and Apply;
+// every exact check (base reachable from the owner branch, exact blob) still
+// applies. The list is part of the durable policy.
+const MAX_REPOSITORY_ALIASES = 8;
+
+function validateRepositoryAliases(value, remoteUrl) {
+  if (value === undefined) return [];
+  const aliases = uniqueStrings(value, '$.repository.aliases', (entry, location) => {
+    const url = exactHttpsUrl(entry, location, { allowPort: true });
+    if (!url.pathname.endsWith('.git') || url.pathname.split('/').length !== 3 || url.pathname.includes('//')) {
+      fail('invalid-config-url', `${location} must be an exact https://HOST/OWNER/REPOSITORY.git URL`);
+    }
+    if (url.toString() === remoteUrl) fail('invalid-config', `${location} repeats $.repository.remote.url`);
+    return url.toString();
+  });
+  if (aliases.length > MAX_REPOSITORY_ALIASES) {
+    fail('invalid-config', `$.repository.aliases may name at most ${MAX_REPOSITORY_ALIASES} repositories`);
+  }
+  return aliases;
+}
+
+/** True when a proposal bound to `repositoryUrl` belongs to this owner's vault. */
+export function repositoryMatchesPolicy(config, repositoryUrl) {
+  return repositoryUrl === config.repository.remote.url || config.repository.aliases.includes(repositoryUrl);
+}
+
 function validateRepository(value, provider) {
-  const input = objectAt(value, '$.repository', ['checkout', 'remote', 'branch']);
+  const keys = ['checkout', 'remote', 'branch'];
+  if (isPlainObject(value) && Object.hasOwn(value, 'aliases')) keys.push('aliases');
+  const input = objectAt(value, '$.repository', keys);
   const remoteInput = objectAt(input.remote, '$.repository.remote', ['name', 'url']);
   const name = exactString(remoteInput.name, '$.repository.remote.name', { max: 255 });
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(name)) {
@@ -225,6 +255,7 @@ function validateRepository(value, provider) {
     checkout: absoluteCheckout(input.checkout, '$.repository.checkout'),
     remote: { name, url: remoteUrl.toString() },
     branch: branchName(input.branch, '$.repository.branch'),
+    aliases: validateRepositoryAliases(input.aliases, remoteUrl.toString()),
     identity,
   };
 }
@@ -384,6 +415,37 @@ function isStrictlyWithin(root, candidate) {
   return relative !== '' && relative !== '..' && !relative.startsWith('../') && !path.posix.isAbsolute(relative);
 }
 
+function validateProposalReview(value) {
+  const input = objectAt(value, '$.proposalReview', [
+    'enabled',
+    'socketPath',
+    'requestTimeoutMs',
+    'maxListEntries',
+  ]);
+  const enabled = requiredBoolean(input.enabled, '$.proposalReview.enabled');
+  if (input.requestTimeoutMs !== 5000) {
+    fail('invalid-review-policy', '$.proposalReview.requestTimeoutMs must be exactly 5000');
+  }
+  if (input.maxListEntries !== 100) {
+    fail('invalid-review-policy', '$.proposalReview.maxListEntries must be exactly 100');
+  }
+  let socketPath = null;
+  if (enabled) {
+    socketPath = exactString(input.socketPath, '$.proposalReview.socketPath');
+    const parent = path.dirname(socketPath);
+    if (!path.isAbsolute(socketPath)
+      || path.normalize(socketPath) !== socketPath
+      || socketPath.endsWith('/')
+      || socketPath === path.parse(socketPath).root
+      || parent === path.parse(parent).root) {
+      fail('invalid-config-path', '$.proposalReview.socketPath must be one normalized absolute path beneath a non-root parent');
+    }
+  } else if (input.socketPath !== null) {
+    fail('invalid-review-policy', '$.proposalReview.socketPath must be null while proposal review is disabled');
+  }
+  return { enabled, socketPath, requestTimeoutMs: 5000, maxListEntries: 100 };
+}
+
 function validateWorkspace(value) {
   const input = objectAt(value, '$.workspace', ['root', 'store', 'site', 'cache']);
   const root = repositoryRelativePath(input.root, '$.workspace.root');
@@ -501,11 +563,93 @@ function validateGit(value) {
   return { autoCommit, autoPush, useHooks, commitMessagePrefix };
 }
 
+// Suggestions: the owner's one place to turn the outside lanes on or off. The
+// form lane serves the account-free correction form on the owner's private
+// local site; the forge lane watches one forge copy of the vault for pull
+// requests. Both feed the same Proposals inbox through the intake service the
+// owner app starts beside itself, so the intake's own settings are derived from
+// here and never edited separately. Off is the default and leaves the pinned
+// policy revision unchanged.
+const SUGGESTION_FORGE_MIN_POLL_MS = 10_000;
+const SUGGESTION_FORGE_MAX_POLL_MS = 3_600_000;
+
+function validateSuggestions(value, { listen, proposalReview, repository }) {
+  if (value === undefined) return { form: { enabled: false }, forge: { enabled: false } };
+  const input = objectAt(value, '$.suggestions', ['form', 'forge']);
+  const form = objectAt(input.form, '$.suggestions.form', ['enabled']);
+  const formEnabled = requiredBoolean(form.enabled, '$.suggestions.form.enabled');
+  if (formEnabled && listen.readerPort + 1 > 65535) {
+    fail('invalid-config', '$.listen.port leaves no room for the suggestion form port (owner port + 2)');
+  }
+
+  if (!isPlainObject(input.forge)) fail('invalid-config', '$.suggestions.forge must be an object');
+  const forgeEnabled = requiredBoolean(input.forge.enabled, '$.suggestions.forge.enabled');
+  let forge = { enabled: false };
+  if (forgeEnabled) {
+    const forgeInput = objectAt(input.forge, '$.suggestions.forge', [
+      'enabled',
+      'repository',
+      'tokenFile',
+      'pollIntervalMs',
+    ]);
+    const url = exactHttpsUrl(forgeInput.repository, '$.suggestions.forge.repository', { allowPort: true });
+    const segments = url.pathname.split('/');
+    if (!url.pathname.endsWith('.git') || segments.length !== 3 || url.pathname.includes('//')) {
+      fail('invalid-config-url', '$.suggestions.forge.repository must be an exact https://HOST/OWNER/REPOSITORY.git URL');
+    }
+    const repositoryUrl = url.toString();
+    if (repositoryUrl !== repository.remote.url && !repository.aliases.includes(repositoryUrl)) {
+      fail('invalid-config', '$.suggestions.forge.repository must be $.repository.remote.url or one of $.repository.aliases');
+    }
+    let tokenFile = null;
+    if (forgeInput.tokenFile !== null) {
+      tokenFile = exactString(forgeInput.tokenFile, '$.suggestions.forge.tokenFile');
+      const parent = path.dirname(tokenFile);
+      if (!path.isAbsolute(tokenFile)
+        || path.normalize(tokenFile) !== tokenFile
+        || tokenFile.endsWith('/')
+        || parent === path.parse(parent).root) {
+        fail('invalid-config-path', '$.suggestions.forge.tokenFile must be one normalized absolute path beneath a non-root parent');
+      }
+    }
+    const pollIntervalMs = positiveInteger(forgeInput.pollIntervalMs, '$.suggestions.forge.pollIntervalMs', SUGGESTION_FORGE_MAX_POLL_MS);
+    if (pollIntervalMs < SUGGESTION_FORGE_MIN_POLL_MS) {
+      fail('invalid-config', `$.suggestions.forge.pollIntervalMs must be at least ${SUGGESTION_FORGE_MIN_POLL_MS}`);
+    }
+    // Declared values only, so a normalized config re-validates unchanged; the
+    // forge API base, owner, and name derive from the URL via forgeIdentity().
+    forge = { enabled: true, repository: repositoryUrl, tokenFile, pollIntervalMs };
+  } else {
+    objectAt(input.forge, '$.suggestions.forge', ['enabled']);
+  }
+
+  if ((formEnabled || forgeEnabled) && !proposalReview.enabled) {
+    fail('suggestions-require-proposal-review', 'suggestions reach the inbox through proposal review; enable $.proposalReview first');
+  }
+  return { form: { enabled: formEnabled }, forge };
+}
+
+/** The forge API base, owner, and repository name behind one forge clone URL. */
+export function forgeIdentity(repositoryUrl) {
+  const url = new URL(repositoryUrl);
+  const segments = url.pathname.split('/');
+  return {
+    apiBaseUrl: `${url.origin}/api/v1`,
+    owner: segments[1],
+    name: segments[2].slice(0, -'.git'.length),
+  };
+}
+
+export function suggestionsEnabled(config) {
+  return config.suggestions.form.enabled || config.suggestions.forge.enabled;
+}
+
 export function validateOwnerAlphaConfig(value) {
   assertNoCredentialMaterial(value);
   const input = objectAt(value, '$', [
     'schemaVersion',
     'listen',
+    'proposalReview',
     'repository',
     'owner',
     'live',
@@ -515,6 +659,7 @@ export function validateOwnerAlphaConfig(value) {
     'limits',
     'checks',
     'git',
+    ...(isPlainObject(value) && Object.hasOwn(value, 'suggestions') ? ['suggestions'] : []),
   ]);
   if (input.schemaVersion !== CONFIG_SCHEMA_VERSION) {
     fail('unsupported-config-version', `schemaVersion must be ${CONFIG_SCHEMA_VERSION}`);
@@ -525,10 +670,14 @@ export function validateOwnerAlphaConfig(value) {
     checkout: repositoryWithIdentity.checkout,
     remote: repositoryWithIdentity.remote,
     branch: repositoryWithIdentity.branch,
+    aliases: repositoryWithIdentity.aliases,
   };
+  const listen = validateListen(input.listen);
+  const proposalReview = validateProposalReview(input.proposalReview);
   const normalized = {
     schemaVersion: CONFIG_SCHEMA_VERSION,
-    listen: validateListen(input.listen),
+    listen,
+    proposalReview,
     repository,
     owner: validateOwner(input.owner, repositoryWithIdentity, provider),
     live: provider === 'github-actions'
@@ -542,6 +691,7 @@ export function validateOwnerAlphaConfig(value) {
     limits: validateLimits(input.limits),
     checks: validateChecks(input.checks),
     git: validateGit(input.git),
+    suggestions: validateSuggestions(input.suggestions, { listen, proposalReview, repository }),
   };
   return deepFreeze(normalized);
 }
@@ -554,6 +704,8 @@ export function policyDocument(configInput) {
     repository: {
       remote: config.repository.remote,
       branch: config.repository.branch,
+      // Only present when declared, so the pinned GitHub policy revision is unchanged.
+      ...(config.repository.aliases.length > 0 ? { aliases: config.repository.aliases } : {}),
     },
     owner: config.owner,
     live: config.live,
@@ -563,6 +715,8 @@ export function policyDocument(configInput) {
     limits: config.limits,
     checks: config.checks,
     git: config.git,
+    // Only present when a lane is on, so the pinned policy revision is unchanged.
+    ...(suggestionsEnabled(config) ? { suggestions: config.suggestions } : {}),
   });
 }
 

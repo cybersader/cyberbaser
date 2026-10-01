@@ -1,0 +1,49 @@
+---
+title: "2026-08-22 · Review surface density and wording"
+description: "Gave the static review surface real gutters and a spacing scale, cut duplicated chrome, and replaced internal navigation vocabulary with plain language."
+date: 2026-08-22
+status: research
+tags: [design, testing, contribution]
+---
+
+## What the maintainer reported
+
+Three things, in one sitting with the surface open at roughly a 960 pixel window:
+
+1. the type and spacing still read as dense, and the spacing felt off;
+2. the surface is a good enough start that the real implementation could begin; and
+3. **Receipts**, **System**, **Evidence legend**, and **Checkpoint** are internal vocabulary rather than words a content-focused person would reach for.
+
+The first and third were fixed in this pass. The second is a direction decision and is recorded as open below.
+
+## Density
+
+The dominant cause was not type size. The page used `calc(100% - 2rem)`, so at that window width the content hugged the viewport with a 16 pixel margin on each side and every column ran edge to edge.
+
+The pass introduced a `--gutter` scale of `clamp(1.15rem, 4.5vw, 3.25rem)` applied to the page, header, and decision dock, then spent the recovered rhythm deliberately: more air between identity rows, longer line height on muted text, a taller reading measure at a slightly narrower column, and more padding inside both the reading surface and the exact-source block.
+
+Duplicated chrome was removed rather than restyled. Two adjacent metadata rows became one. A single-change proposal no longer renders a change bar that restates its own title, which also removed a heading level from the page. Reading content now begins around 630 pixels instead of around 700 on that window, with four horizontal rules on screen instead of a dozen.
+
+## Wording
+
+Navigation now reads **Inbox · Decisions · How this works · What the labels mean · Questions for you**. Routes were deliberately left alone, so `#receipts`, `#system`, `#evidence`, and `#checkpoint` still resolve and every existing link, test, and screenshot keeps working.
+
+Page copy behind those routes changed with them. The receipts page now leads with what a decision is and what it does not start, rather than with the word receipt. The system page asks where a proposal goes and where it stops. The evidence page says that every label is a limit on what may be claimed.
+
+The internal terms remain correct and are still used in the documentation and in the fixture contract, where precision matters more than approachability. Naming stays open; these words are cheap to change.
+
+## Evidence
+
+```text
+bun run --cwd docs test:proposal-mockup
+  fixture package: 8 passed, 860 expectations
+  mockup package: 25 passed, 3 skipped, 401 expectations
+```
+
+The three skipped tests are the launcher ownership checks. They skip rather than fail or overwrite the claim when a maintainer is running the surface at the same time, which was the case during this pass.
+
+This remains **static-design-only** evidence. No proposal contract, authority boundary, or owner-alpha file changed.
+
+## Open
+
+The maintainer's second point stands unanswered on purpose: whether to begin the real owner-review implementation now, or keep iterating on the static surface first. That is a direction decision, and the project gate says the comprehension checkpoint settles it.

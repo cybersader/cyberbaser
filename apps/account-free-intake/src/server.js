@@ -11,6 +11,8 @@ import {
 import { openProposalQueue, ProposalQueueError } from '@cyberbaser/proposal-queue';
 import { createGlobalAbuseLimiter } from './abuse.js';
 import { validateRuntimePaths } from './config.js';
+import { startReviewIpcServer } from './review-ipc.js';
+import { createForgejoWatcher } from './forgejo-watcher.js';
 
 const SECURITY_HEADERS = Object.freeze({
   'Cache-Control': 'no-store',
@@ -297,6 +299,7 @@ export function createIntakeEvidenceContext({
   config,
   bindings: injectedBindings = null,
   gitFactory = null,
+  laneA = null,
 } = {}) {
   const bindings = injectedBindings ?? createRetainedSourceBindingResolver({
     manifestRoot: config.bindingsRoot,
@@ -307,8 +310,15 @@ export function createIntakeEvidenceContext({
     ...(deadline === null ? {} : { execute: executeGitWithDeadline(deadline) }),
   }));
   const resolveDurableEvidence = async (entry) => {
+    if (entry.carrier.lane === 'lane-a') {
+      // Forge entries are proven from the watcher's retained clone objects.
+      if (laneA === null || typeof laneA.resolveEvidence !== 'function') {
+        throw new ProposalQueueError('unsupported-queue-lane', 'this runtime holds Lane A entries but no forge watcher is configured to prove them');
+      }
+      return laneA.resolveEvidence(entry);
+    }
     if (entry.carrier.lane !== 'lane-b') {
-      throw new ProposalQueueError('unsupported-queue-lane', 'the account-free runtime queue may contain only Lane B entries');
+      throw new ProposalQueueError('unsupported-queue-lane', 'the account-free runtime queue may contain only Lane A and Lane B entries');
     }
     const metadata = entry.carrier.metadata;
     const binding = await bindings.resolve(metadata.bindingDigest, metadata.pageId);
@@ -334,21 +344,52 @@ export async function openIntakeService({
   queue: injectedQueue = null,
   gitFactory = null,
   validatePaths = true,
+  forgejo: forgejoDependencies = {},
 } = {}) {
   if (validatePaths) await validateRuntimePaths(config);
+  // The watcher is created before the queue opens because queue recovery may
+  // need it to prove retained Lane A entries. It holds no queue reference until
+  // the queue exists, and polls nothing until started.
+  let watcher = null;
+  const laneA = config.forgejo?.enabled
+    ? { resolveEvidence: (entry) => watcher.resolveEvidence(entry) }
+    : null;
   const evidenceContext = createIntakeEvidenceContext({
     config,
     bindings: injectedBindings,
     gitFactory,
+    laneA,
   });
   const { bindings, createGit, resolveDurableEvidence } = evidenceContext;
 
-  const queue = injectedQueue ?? await openProposalQueue({
-    config: config.queue,
-    clock: () => utcSecond(clock),
-    idFactory: queueIdFactory,
-    resolveEvidence: resolveDurableEvidence,
-  });
+  let queue = injectedQueue;
+  if (queue === null) {
+    const queueHandle = { current: null };
+    if (config.forgejo?.enabled) {
+      watcher = createForgejoWatcher({
+        config,
+        queue: {
+          enqueue: (input) => queueHandle.current.enqueue(input),
+          review: { list: (options) => queueHandle.current.review.list(options) },
+        },
+        ...forgejoDependencies,
+      });
+    }
+    queue = await openProposalQueue({
+      config: config.queue,
+      clock: () => utcSecond(clock),
+      idFactory: queueIdFactory,
+      resolveEvidence: async (entry) => {
+        if (entry.carrier.lane === 'lane-a' && watcher !== null && queueHandle.current === null) {
+          // During recovery the queue is not yet open to callers; the watcher
+          // only needs its clone here, never the queue.
+          return watcher.resolveEvidence(entry);
+        }
+        return resolveDurableEvidence(entry);
+      },
+    });
+    queueHandle.current = queue;
+  }
   let ready = true;
   const limiter = createGlobalAbuseLimiter({
     capacity: config.limits.tokenBucketCapacity,
@@ -431,8 +472,9 @@ export async function openIntakeService({
     const url = new URL(request.url);
     let corsOrigin = null;
     const corsPath = url.pathname === '/v1/corrections';
-    const healthHost = `127.0.0.1:${config.listen.port}`;
+    const healthHost = config.listen === null ? null : `127.0.0.1:${config.listen.port}`;
     try {
+      if (config.listen === null) requestFail('not-found', 404);
       if (url.search !== '') requestFail('not-found', 404);
       requireCredentialFreeRequest(request);
 
@@ -493,10 +535,13 @@ export async function openIntakeService({
   return Object.freeze({
     fetch,
     queue,
+    review: queue.review,
+    forgejo: watcher,
     stats: () => queue.stats(),
     setReadyForTest(value) { ready = value === true; },
     async close() {
       ready = false;
+      watcher?.stop();
       await queue.close();
     },
   });
@@ -510,4 +555,79 @@ export function startBunServer({ config, service }) {
       return service.fetch(request, server.requestIP(request));
     },
   });
+}
+
+async function attemptCleanup(steps) {
+  const errors = [];
+  for (const step of steps) {
+    try {
+      await step();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  return errors;
+}
+
+export async function startIntakeRuntime({
+  config,
+  serviceOptions = {},
+  openService = openIntakeService,
+  startReview = startReviewIpcServer,
+  startPublic = startBunServer,
+} = {}) {
+  const service = await openService({ config, ...serviceOptions });
+  let reviewIpc = null;
+  let server = null;
+  try {
+    reviewIpc = await startReview({ config, review: service.review });
+    server = config.listen === null ? null : await startPublic({ config, service });
+    service.forgejo?.start();
+  } catch (error) {
+    await attemptCleanup([
+      async () => server?.stop(false),
+      async () => reviewIpc?.close(),
+      async () => service.close(),
+    ]);
+    throw error;
+  }
+
+  const state = {
+    publicClosed: server === null,
+    reviewClosed: reviewIpc === null,
+    serviceClosed: false,
+  };
+  let closing = null;
+
+  async function close() {
+    if (state.publicClosed && state.reviewClosed && state.serviceClosed) return;
+    if (closing !== null) return closing;
+    closing = (async () => {
+      const errors = await attemptCleanup([
+        async () => {
+          if (state.publicClosed) return;
+          await server.stop(false);
+          state.publicClosed = true;
+        },
+        async () => {
+          if (state.reviewClosed) return;
+          await reviewIpc.close();
+          state.reviewClosed = true;
+        },
+        async () => {
+          if (state.serviceClosed) return;
+          await service.close();
+          state.serviceClosed = true;
+        },
+      ]);
+      if (errors.length > 0) throw new AggregateError(errors, 'intake runtime cleanup failed');
+    })();
+    try {
+      await closing;
+    } finally {
+      closing = null;
+    }
+  }
+
+  return Object.freeze({ service, reviewIpc, server, close });
 }

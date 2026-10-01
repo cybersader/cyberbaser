@@ -1,0 +1,80 @@
+---
+title: Reusable components for proposal review
+description: "What Cyberbaser should reuse, and what it should not build, for presenting Current, Proposed, unified Changes, and side-by-side Compare views of an exact proposal."
+sidebar:
+  order: 12
+status: research
+tags: [research, prior-art, design, tradeoffs]
+---
+
+The first maintainer checkpoint rejected a fixed side-by-side review composition and asked for the range of views that mature authoring tools offer. The obvious next question is what to reuse. Editors and diff viewers are large, well-tested, and expensive to reproduce, so the default assumption was that Cyberbaser should adopt one.
+
+That assumption turned out to be half right.
+
+## The finding that changes the shopping list
+
+A diff viewer exists to answer a question Cyberbaser has already answered.
+
+General diff tools receive two documents and **infer** a plausible set of changes between them. Every such inference is a heuristic: line-based, word-based, or character-based, with tuning thresholds and scan limits. `@codemirror/merge` even marks a chunk `precise: false` when its diff falls back to imprecise matching under a scan-depth limit.
+
+A Cyberbaser proposal does not need that inference. It carries a pinned base, exact base-relative byte ranges, the expected old bytes, and the replacement bytes. Current, Proposed, and unified Changes are therefore **replays of declared operations**, not guesses about what changed:
+
+- `Current` is the base with each declared range marked;
+- `Proposed` is the candidate with each replacement span marked;
+- `Changes` is one left-to-right pass over the base emitting unchanged slices, removed spans, and added spans.
+
+This is roughly 150 lines of pure functions with no dependency, and it fails closed. If the declared operations are not canonically ordered and non-overlapping, if the declared old bytes do not match the pinned base, or if replaying the operations does not reproduce the declared candidate, the projection reports that the view is not derivable instead of rendering an approximation. A heuristic differ would happily draw a confident diff in all three cases.
+
+The static mockup and privileged owner review share this implementation in `packages/review-projection/src/document-projection.js`.
+
+## Where a differ is genuinely needed
+
+The differ belongs on the authoring side, not the review side.
+
+When a contributor edits a page in a rich surface, that surface holds a modified document and must derive exact base-relative operations from it before submitting. That derivation is a real diff problem, and it is where a mature library earns its place. It is also where correctness matters most, because the derived operations become the proposal.
+
+Cyberbaser has not selected that authoring surface, so this evaluation records candidates rather than a decision.
+
+## Candidates
+
+| Option | License and weight | Fit for review presentation | Fit for operation derivation |
+|---|---|---|---|
+| No library (declared-operation replay) | None | Exact, fail-closed, dependency-free, already implemented | Not applicable |
+| [`@codemirror/merge`](https://github.com/codemirror/merge) | MIT, modest, plus CodeMirror core | Unified and side-by-side views, `collapseUnchanged`, chunk accept and reject; source-editor framing rather than prose reading | Strong candidate; exposes chunk ranges |
+| [`jsdiff`](https://github.com/kpdecker/jsdiff) | BSD, small, no UI | Not a renderer; would need custom markup anyway | Strong candidate; `diffWords` suits prose, and it can emit patches |
+| [`diff2html`](https://github.com/rtfpessoa/diff2html) | MIT, tiered bundles | Renders unified patches in a code-review frame; wrong register for editorial prose, and the default bundle carries highlight.js for many languages | Not applicable; it is a renderer |
+| [`monaco-editor`](https://github.com/microsoft/monaco-editor) diff editor | MIT, multi-megabyte, mandatory web worker | Rejected for this surface: diff computation requires `editor.worker`, which conflicts with the mockup's `worker-src 'none'` and `script-src 'self'` policy, and the weight is unjustified for Markdown prose | Possible but heavy |
+| [Tiptap Pro tracked changes](https://tiptap.dev/docs/editor/extensions/functionality/tracked-changes) | Paid extension on an MIT core; pre-1.0 and API-unstable; ships its own ProseMirror copy | Suggestion-mode review of rich content, not exact source bytes | Only if a rich contributor editor is separately selected and justified |
+
+## Constraints any candidate must satisfy
+
+The static research surface is deliberately hostile to heavy dependencies, and the constraints are the same ones the real owner surface will face:
+
+- exact bytes survive presentation, and no view may be synthesized when it cannot be derived;
+- `default-src 'none'` with `script-src 'self'`, `connect-src 'none'`, and `worker-src 'none'`;
+- no network, storage, cookie, clipboard, or download capability in the review client;
+- long Markdown prose read at normal width, not code framed in a gutter;
+- keyboard-operable mode switching, visible focus, and color-independent semantics;
+- mobile stacking without page-level horizontal overflow; and
+- framework independence, because the privileged owner surface is server-rendered HTML with a small client.
+
+## Current recommendation
+
+1. Keep review presentation dependency-free. The declared-operation replay is smaller, exact, and honest about what it cannot derive.
+2. Treat the four review modes as a UX question to be settled by maintainer evidence, not by whichever library was adopted first.
+3. Revisit `@codemirror/merge` and `jsdiff` when, and only when, an authoring surface needs to derive operations from an edited document.
+4. Leave Monaco and Tiptap Pro out of scope for the owner review surface.
+
+No component is selected by this page.
+
+## Semi-rendered reading, and why it did not need a Markdown library either
+
+The maintainer asked whether Obsidian-style live preview is possible here. It is, and the architecture makes it easier rather than harder.
+
+The usual difficulty with marking changes inside rendered output is mapping source byte offsets onto rendered DOM positions. Cyberbaser sidesteps it with the same asymmetry as before: a block that contains a declared change **reveals its exact source**, exactly as live preview reveals source at the cursor, while untouched blocks render normally. Nothing has to be mapped into rendered inline nodes, and the bytes under decision are never paraphrased by a renderer.
+
+A full CommonMark parser was not adopted for this either. The surface needs a conservative, deterministic block and inline subset with contiguous offset coverage, a plain-text fallback for anything unrecognized, and no HTML passthrough at all. A general parser optimizes for feature coverage and typically emits HTML strings, which is the wrong shape for a surface that builds DOM nodes only and must never inject content-derived markup. The projection is a single pure module with unit tests.
+
+The published-rendering contract remains open. This projection is an approximate reading aid and says so on screen, and Obsidian-flavored callouts, embeds, and plugin syntax are deliberately out of its subset. If the owner surface later needs to match the published site, that is a separate decision about reusing the pinned renderer, not about adopting a Markdown library here.
+
+**Sources:** [@codemirror/merge](https://github.com/codemirror/merge/blob/main/CHANGELOG.md) · [jsdiff](https://github.com/kpdecker/jsdiff) · [diff2html](https://github.com/rtfpessoa/diff2html) · [monaco-editor bundle and worker requirements](https://github.com/microsoft/monaco-editor/issues/5154) · [Monaco ESM integration](https://github.com/microsoft/monaco-editor/blob/main/docs/integrate-esm.md) · [Tiptap tracked changes](https://tiptap.dev/docs/editor/extensions/functionality/tracked-changes)

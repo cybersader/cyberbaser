@@ -1,0 +1,36 @@
+---
+title: "2026-09-27 · Review page redesign"
+description: "Completed the steps-first pass over the owner review surface: the review page's header, reading note, and details now match the decision step, inbox, and receipt. Approve and Reject stay as the visible verbs by maintainer choice."
+date: 2026-09-27
+status: implementation
+tags: [design, testing, contribution]
+---
+
+## What the owner does on this page
+
+Open a suggestion, understand what changes and why, read it in the page, decide. The header and chrome around the reading were the last part of the surface still speaking in the system's voice.
+
+- The page path appeared three times: in the header, again above the reading, and in the decision bar.
+- Two lines of hedging copy sat under the tabs on every visit, one a legend and one a disclaimer, both in architecture vocabulary ("every other byte", "approximate structural reading").
+- The contributor's note was truncated under the title, then repeated in full inside a disclosure the owner had to open.
+- The evidence disclosure was titled "Technical evidence" here and "Receipt and verification details" on the receipt.
+
+## What changed
+
+- **Why before what.** The contributor's note is shown in full under a small kicker, **Why the contributor suggests it**, with references as a short inline list of hostnames. Only a note longer than about three hundred characters folds behind "Read the whole note".
+- **One path.** The header carries it as quiet metadata; the decision bar carries it beside the actions; the line above the reading is gone.
+- **One honest line.** "Removed text is struck through, added text is underlined, and everything else is the page's exact source. This is a structural reading, not the published page." The rung is still declared on screen, once, in plain words.
+- **One name for the details.** "Details for the record" on both the review page and the receipt. The unavailable-view panel says "This view cannot be shown" and "The page is never invented from partial evidence" instead of "Not derivable".
+
+The maintainer chose to keep **Approve** and **Reject** as the visible verbs: precise for a suggestion, the decision model's own words, and not worth a rename that would ripple through the contract, docs, and tests.
+
+## Checks
+
+```text
+bun test apps/owner-alpha/test
+  230 passed, 4 skipped, 0 failed
+OWNER_ALPHA_ACCEPTANCE=1 bun test apps/owner-alpha/test/proposal-review-browser.test.js
+  1 passed, 50 expectations
+```
+
+Desktop and phone screenshots were inspected directly. This closes the steps-first pass over the whole owner surface: decision step, inbox, receipt, and review page. None of it has been reviewed by the maintainer; the checkpoint remains prepared and unrun. The next agreed step is a written proposal for the owner application-authority event, with no code until it is accepted.

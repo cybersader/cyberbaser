@@ -15,3 +15,11 @@ export {
   deriveForgejoPullRequestProposal,
   readForgejoPullRequestProposal,
 } from './adapter.js';
+export {
+  LIVE_CHECK_SCHEMA_VERSION,
+  createTokenFileReader,
+  formatLiveCheckReport,
+  liveCheckReport,
+  loadForgejoIntakeConfig,
+  runForgejoLiveCheck,
+} from './live-check.js';

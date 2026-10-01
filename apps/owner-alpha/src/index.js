@@ -13,6 +13,9 @@ export {
   loadOwnerAlphaConfig,
   policyDocument,
   computePolicyRevision,
+  repositoryMatchesPolicy,
+  forgeIdentity,
+  suggestionsEnabled,
 } from './config.js';
 export {
   defineStoreContext,
@@ -30,6 +33,44 @@ export {
   readJsonArtifact,
 } from './artifacts.js';
 export { acquireFileLock, withFileLock } from './flock.js';
+export {
+  PROPOSAL_REVIEW_IPC_SCHEMA_VERSION,
+  PROPOSAL_REVIEW_IPC_REQUEST_MAX_BYTES,
+  PROPOSAL_REVIEW_IPC_RESPONSE_MAX_BYTES,
+  createProposalReviewClient,
+} from './proposal-review-client.js';
+export {
+  defaultProposalReviewGit,
+  validateOwnerReviewEvidence,
+  createOwnerProposalReviewSource,
+} from './proposal-review.js';
+export {
+  PROPOSAL_DECISION_INDEX_SCHEMA_VERSION,
+  PROPOSAL_DECISION_INDEX_ARTIFACT_TYPE,
+  PROPOSAL_DECISION_ROOT,
+  PROPOSAL_DECISION_LOCK,
+  PROPOSAL_DECISION_INDEX,
+  PROPOSAL_DECISION_MAX_INDEX_BYTES,
+  recoverProposalDecisions,
+  recordProposalDecision,
+  createProposalDecisionOverlay,
+} from './proposal-decisions.js';
+export {
+  APPROVED_INPUT_SCHEMA_VERSION,
+  APPROVED_INPUT_ARTIFACT_TYPE,
+  APPROVED_INPUT_ROOT,
+  APPROVED_INPUT_LOCK,
+  APPROVED_INPUT_MAX_BYTES,
+  APPROVED_INPUT_AUTHORIZATION_STATE,
+  APPROVED_INPUT_STALE_REASONS,
+  validateApprovedProposalInput,
+  assessApprovedProposal,
+  prepareApprovedProposalInput,
+  readApprovedProposalInput,
+  decisionDigest,
+  listApprovedProposalInputs,
+  approvedProposalInputPath,
+} from './approved-proposal.js';
 export {
   JOB_SCHEMA_VERSION,
   JOB_ARTIFACT_TYPE,
@@ -73,6 +114,24 @@ export {
   runPreApplyChecks,
 } from './checks.js';
 export { applyAcceptedOperation, applyExactAcceptedOperation } from './apply.js';
+export {
+  PROPOSAL_APPLICATION_SCHEMA_VERSION,
+  PROPOSAL_APPLICATION_ARTIFACT_TYPE,
+  PROPOSAL_APPLICATION_ROOT,
+  PROPOSAL_APPLICATION_LOCK,
+  PROPOSAL_APPLICATION_MAX_BYTES,
+  PROPOSAL_APPLICATION_MAX_ATTEMPTS,
+  PROPOSAL_APPLICATION_UNAPPLICABLE_REASONS,
+  PROPOSAL_APPLICATION_STATES,
+  validateProposalApplicationEvent,
+  listProposalApplicationEvents,
+  listProposalApplicationProgress,
+  proposalApplicationEventPath,
+  resolveRenderedPageSlug,
+  deriveProposalApplication,
+  assessProposalApplication,
+  applyApprovedProposal,
+} from './proposal-application.js';
 export {
   verifyExactCommit,
   commitAppliedCandidate,
@@ -135,6 +194,7 @@ export {
 export {
   MAX_OWNER_SESSIONS,
   createMemoryEditSessionStore,
+  createOwnerProposalReviewService,
   createOwnerAlphaHandler,
   createReaderHandler,
   startOwnerAlphaServer,
@@ -147,3 +207,15 @@ export {
   formatBootstrapUrl,
   startBootstrapConsole,
 } from './bootstrap-console.js';
+export {
+  SUGGESTIONS_DIRECTORY,
+  SUGGESTION_INTAKE_CONFIG_FILENAME,
+  SUGGESTION_PUBLICATION_REF_PREFIX,
+  suggestionPaths,
+  suggestionFormOrigin,
+  deriveIntakeConfig,
+  ensureSuggestionWorkspace,
+  retainPublication,
+  verifyRetainedPublication,
+  startSuggestionIntake,
+} from './suggestions.js';

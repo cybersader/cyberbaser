@@ -1,0 +1,78 @@
+---
+title: "2026-08-22 · Owner review port"
+description: "Moved the four reading modes, semi-rendered projection, and collapsible decision dock from the static research surface into the privileged owner-alpha review, behind a shared pure projection package."
+date: 2026-08-22
+status: implementation
+tags: [design, architecture, testing, governance, contribution]
+---
+
+## Why now
+
+The maintainer reviewed the static surface, called it a good enough start, and said the real implementation could begin. This wave does that: the research surface stops being the destination and becomes the design reference.
+
+## One implementation, not two
+
+The projection was extracted into `packages/review-projection`, a pure package with no I/O and no authority. It holds the invisible-character exposure, the Markdown block and inline projection, and the declared-operation replay that produces Current, Proposed, and unified Changes.
+
+The static mockup now consumes that package instead of its own copies, so the research surface and the privileged surface cannot drift apart. The package carries its own tests covering replay, the three fail-closed refusals, contiguous block coverage, named degradation for constructs outside the rung, and the guarantee that no raw HTML passes through.
+
+## The base bytes were already there
+
+`validateOwnerReviewEvidence` already reads the pinned Markdown blob, decodes it, applies the proposal, and independently recomputes classification. It kept only lengths and digests and discarded the text.
+
+It now also returns a bounded `document`. Under a 256 KiB reading bound it carries the verified base and candidate text; above it, it carries nulls and a stated reason instead of truncating. Nothing new is read, and no new trust is placed anywhere: the same bytes that were already verified are simply kept.
+
+The `/api/review` list explicitly selects summary and source-verification fields; its detail route omits `document`. A regression test verifies that neither JSON route includes the bounded reading text. The authenticated HTML review does display it.
+
+## Modes are URLs, not client state
+
+The static surface used client-side tabs because it is a single-page research artifact. The privileged surface renders each mode server-side and links between them:
+
+`/owner/review/<queueId>?mode=changes|proposed|current|compare`
+
+Every mode is a real address that can be bookmarked, reloaded, linked in a note, and rendered with scripting disabled. The route previously rejected every query string; it now admits exactly one `mode` parameter through the existing `queryObject` allowlist, only on the HTML route, and only with a known value. Anything else is still `unexpected-query`.
+
+The decision surface is a `<details>` dock fixed to the bottom of the page. Collapsed by default, it still shows the attention state, the exact scope, the trust tier and route, and one primary action. It expands without JavaScript.
+
+The client script lost its tab machinery entirely. What remains is note validation, the byte counter, the confirmation dialog, retry recovery, and arrow-key movement between the mode links.
+
+## What did not change
+
+The security and authority contracts were treated as fixed:
+
+- exact Host, session, Origin, CSRF, CSP, no-store, body-size, and escaping behaviour;
+- decision POST fields limited to `queueId`, `reviewEvidenceDigest`, `action`, `reason`, and `csrf`;
+- server-side evidence reload and independent revalidation before recording;
+- create-once immutable decisions and the all-false effect boundary; and
+- the receipt page, which still leads with the decision, the note, **Source unchanged**, and the explicit statement that nothing was started.
+
+Every string the projection produces goes through the same `escapeHtml` used by the rest of the surface, and the projection builds no markup of its own.
+
+## Evidence
+
+```text
+bun test apps/owner-alpha/test
+  217 passed, 4 skipped
+
+OWNER_ALPHA_ACCEPTANCE=1 bun test \
+  apps/owner-alpha/test/proposal-review-browser.test.js \
+  apps/owner-alpha/test/proposal-review-acceptance.test.js
+  2 passed, 83 expectations
+
+bun test packages/review-projection/test
+  5 passed, 36 expectations
+
+bun run --cwd docs test:proposal-mockup
+  fixture package: 8 passed
+  mockup package: 28 passed, 414 expectations
+```
+
+The browser acceptance fixture now carries a real pinned page, so it exercises the rendered projection end to end: heading and list rendering, the exact-source region at the changed passage, mode navigation by pointer and keyboard, the dock opening, note validation, deliberate confirmation, retry recovery, and the receipt.
+
+This is mechanical evidence for the same-host surface. It establishes no independent-human usability and no live effect.
+
+## Open
+
+The maintainer has not yet reviewed the ported surface. The four checkpoint questions still stand: which mode should default, whether the semi-rendered projection reads well enough, whether the collapsed dock is prominent enough, and whether Compare earns its place. Answers change defaults, not architecture.
+
+Also still open: the inbox, decision receipt, and decided history have not had the same visual pass as the review screen, and R2 and R3 of the fidelity ladder remain unbuilt.

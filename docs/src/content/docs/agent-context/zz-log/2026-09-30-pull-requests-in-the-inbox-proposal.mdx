@@ -1,0 +1,24 @@
+---
+title: "2026-09-30 · Pull requests in the inbox, proposed"
+description: "The maintainer chose one inbox for forge pull requests and form suggestions, with only owner-created forge accounts, and asked for the design on paper while Forgejo comes up. Wrote the proposal: a watcher inside the queue's one writer, a repository alias list in owner policy, no writes to the forge."
+date: 2026-09-30
+status: research
+tags: [design, governance, contribution]
+---
+
+## Maintainer direction
+
+Asked as a funnel: pull requests on the maintainer's Forgejo should reach them in the same Proposals inbox as form suggestions; only accounts the maintainer creates may open one; while the forge comes up, design the connection on paper.
+
+## What was written
+
+[Pull requests in the inbox](/cyberbaser/design/pull-requests-in-the-inbox/). Two findings shaped it:
+
+- **The queue has one writer.** The intake service holds the queue's exclusive lifetime lock; the owner app only reads through the socket. A forge watcher therefore lives inside the intake service, which must be able to run with the public form endpoint off and must accept Lane A entries on recovery, which it refuses today. The queue package already derives Lane A replay identity from repository, request number, and head commit, so polling is idempotent by construction.
+- **Repository identity.** The adapter binds each proposal to the Forgejo copy's URL; the owner app compares that with its GitHub remote at review and at Apply and refuses on mismatch. The proposal recommends a short alias list in the owner's durable policy declaring the copy the same vault, with base reachability and exact blob identity still enforced, and a rule never to merge on the copy.
+
+Six decisions are requested, none taken. No code.
+
+## Boundaries
+
+Nothing installed, exposed, merged, or written to any forge. GitHub remains authority. The connected-slice shape decisions of 2026-09-27 (form on the owner's local site, intake started by the owner app) are consistent with this design: the same service carries both inputs.
