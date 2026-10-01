@@ -31,9 +31,20 @@
 | [40-QUESTIONS-OPEN](./40-QUESTIONS-OPEN.md) | `reference/open-questions.mdx` |
 | [41-QUESTIONS-RESOLVED](./41-QUESTIONS-RESOLVED.md) | **Live here** — the agent-side decision log with rationale |
 
+## Current-arc pages without stubs (read from FOCUS, then here)
+
+| Topic | Canonical page |
+|---|---|
+| Apply is a second owner act | `design/owner-application-event.mdx`, `development/applying-approved-suggestion.mdx`, `development/approved-proposal-input.mdx` |
+| First real suggestion run (maintainer's sheet) | `development/first-real-application.mdx` |
+| Suggestions on from one config section, intake run by the owner app | `development/suggestions-on-the-private-site.mdx` |
+| Forge pull requests in the same inbox | `design/pull-requests-in-the-inbox.mdx` |
+| Forgejo on TrueNAS, then the Lane A live check | `development/forgejo-on-truenas.mdx`, `development/forgejo-lane-a-live-validation.mdx` |
+| Owner review checkpoint (prepared, unrun) | `development/owner-review-checkpoint.mdx`, `development/owner-proposal-ui-review.mdx` |
+
 ## Status Legend
 
 - ✅ Superseded stub (canonical content lives on the docs page; stub keeps key facts greppable)
 - 🌳 Live in this layer (PROJECT_CONTEXT, FOCUS, 20-ROADMAP, 40/41, RESEARCH_SOURCES)
 
-Current state (2026-08-21): canonical docs, dated `zz-log` chronology, and the orientation layer are realigned. The April-to-August log gap is explicitly recorded rather than hidden.
+Current state (2026-10-01): canonical docs, dated `zz-log` chronology, and the orientation layer are realigned after the September apply, forge-inbox, and private-site-suggestion waves. The April-to-August log gap is explicitly recorded rather than hidden.
