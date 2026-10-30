@@ -97,6 +97,13 @@ export {
   createEditSession,
 } from './source.js';
 export {
+  OWNER_PUBLICATION_SCHEMA_VERSION,
+  OWNER_PUBLICATION_ARTIFACT_TYPE,
+  readAuthoringSource,
+  prepareOwnerPublication,
+  revalidateOwnerPublicationSource,
+} from './owner-publication.js';
+export {
   SOURCE_OPERATION_SCHEMA_VERSION,
   SOURCE_OPERATION_ARTIFACT_TYPE,
   deriveEditorOperation,

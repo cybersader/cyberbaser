@@ -491,6 +491,24 @@ async function executeLocked(input, config, context, dependencies) {
               { expected: bindings.session.baseCommit, actual: checkout.head },
             );
           }
+          // A publication source is an injected candidate, not a second source
+          // authority. Recheck it at the final pre-effect gate, also on recovery.
+          if (bindings.session.origin?.type === 'owner-publication') {
+            const origin = bindings.session.origin;
+            if (!isPlainObject(origin)
+              || Object.keys(origin).sort().join(',') !== 'authorizationDigest,draftId,reference,type'
+              || !/^[0-9a-f]{64}$/u.test(origin.draftId)
+              || !/^[0-9a-f]{64}$/u.test(origin.authorizationDigest)
+              || !isPlainObject(origin.reference)) {
+              fail('invalid-publication-origin', 'publication job provenance is invalid');
+            }
+            if (typeof dependencies.revalidateSource !== 'function') {
+              fail('publication-guard-unavailable', 'publication requires a pre-application source guard');
+            }
+          }
+          if (typeof dependencies.revalidateSource === 'function') {
+            await dependencies.revalidateSource({ jobId, session: bindings.session, operation: bindings.operation });
+          }
           state = await transition(context, state, 'applying', 'apply-exact-accepted-save', dependencies);
           application = null;
           enteredApplying = true;
@@ -778,7 +796,7 @@ export async function getOwnerAlphaJob({ config: configInput, projectRoot, conte
   if (session && typeof session.relativePath === 'string') {
     origin = session.origin?.type === 'approved-proposal' && typeof session.origin.queueId === 'string'
       ? { type: 'approved-proposal', queueId: session.origin.queueId, relativePath: session.relativePath }
-      : { type: 'owner-edit', relativePath: session.relativePath };
+      : { type: session.origin?.type === 'owner-publication' ? 'owner-publication' : 'owner-edit', relativePath: session.relativePath };
   }
   return deepFreeze({ ...pipelineSummary(state, paths), origin });
 }

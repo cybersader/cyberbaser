@@ -446,6 +446,57 @@ function validateProposalReview(value) {
   return { enabled, socketPath, requestTimeoutMs: 5000, maxListEntries: 100 };
 }
 
+// A configured input is not a reader or publication grant. The approved coherent
+// reader is injected separately; this policy only selects one existing page.
+function publicationPath(value, location) {
+  const candidate = repositoryRelativePath(value, location);
+  if (candidate.length > 1024 || !candidate.isWellFormed() || /[:%?#]/u.test(candidate)) {
+    fail('invalid-config-path', `${location} must be one bounded exact relative path without URL syntax`);
+  }
+  return candidate;
+}
+
+function publicationId(value, location) {
+  const candidate = exactString(value, location, { max: 128 });
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(candidate) || candidate.includes('..')) {
+    fail('invalid-config', `${location} must be one opaque safe identifier`);
+  }
+  return candidate;
+}
+
+function validateOwnerPublication(value) {
+  if (value === undefined) return { enabled: false };
+  if (!isPlainObject(value)) fail('invalid-config', '$.ownerPublication must be an object');
+  const enabled = requiredBoolean(value.enabled, '$.ownerPublication.enabled');
+  if (!enabled) {
+    objectAt(value, '$.ownerPublication', ['enabled']);
+    return { enabled: false };
+  }
+  const input = objectAt(value, '$.ownerPublication', ['enabled', 'mappings']);
+  if (!Array.isArray(input.mappings) || input.mappings.length !== 1) {
+    fail('invalid-config', '$.ownerPublication.mappings must contain exactly one existing-page mapping');
+  }
+  const location = '$.ownerPublication.mappings[0]';
+  const mapping = objectAt(input.mappings[0], location, ['id', 'source', 'relativePath', 'slug']);
+  const source = objectAt(mapping.source, `${location}.source`, ['identity', 'path']);
+  const relativePath = publicationPath(mapping.relativePath, `${location}.relativePath`);
+  if (path.posix.extname(relativePath) !== '.md') {
+    fail('invalid-config-path', `${location}.relativePath must identify one lowercase .md page`);
+  }
+  return {
+    enabled: true,
+    mappings: [{
+      id: publicationId(mapping.id, `${location}.id`),
+      source: {
+        identity: publicationId(source.identity, `${location}.source.identity`),
+        path: publicationPath(source.path, `${location}.source.path`),
+      },
+      relativePath,
+      slug: publicationPath(mapping.slug, `${location}.slug`),
+    }],
+  };
+}
+
 function validateWorkspace(value) {
   const input = objectAt(value, '$.workspace', ['root', 'store', 'site', 'cache']);
   const root = repositoryRelativePath(input.root, '$.workspace.root');
@@ -660,6 +711,7 @@ export function validateOwnerAlphaConfig(value) {
     'checks',
     'git',
     ...(isPlainObject(value) && Object.hasOwn(value, 'suggestions') ? ['suggestions'] : []),
+    ...(isPlainObject(value) && Object.hasOwn(value, 'ownerPublication') ? ['ownerPublication'] : []),
   ]);
   if (input.schemaVersion !== CONFIG_SCHEMA_VERSION) {
     fail('unsupported-config-version', `schemaVersion must be ${CONFIG_SCHEMA_VERSION}`);
@@ -692,6 +744,7 @@ export function validateOwnerAlphaConfig(value) {
     checks: validateChecks(input.checks),
     git: validateGit(input.git),
     suggestions: validateSuggestions(input.suggestions, { listen, proposalReview, repository }),
+    ownerPublication: validateOwnerPublication(input.ownerPublication),
   };
   return deepFreeze(normalized);
 }
@@ -717,6 +770,7 @@ export function policyDocument(configInput) {
     git: config.git,
     // Only present when a lane is on, so the pinned policy revision is unchanged.
     ...(suggestionsEnabled(config) ? { suggestions: config.suggestions } : {}),
+    ...(config.ownerPublication.enabled ? { ownerPublication: config.ownerPublication } : {}),
   });
 }
 

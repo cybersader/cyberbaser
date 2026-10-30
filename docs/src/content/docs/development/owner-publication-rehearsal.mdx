@@ -1,0 +1,51 @@
+---
+title: Owner publication rehearsal
+description: "Launch a disposable, authenticated exact-review-to-publication loop with real local Git effects and explicitly simulated downstream stages."
+sidebar:
+  order: 10
+status: research
+tags: [setup, governance, testing]
+---
+
+This rehearsal lets a maintainer inspect one coherent loop: capture a synthetic authoring page, review its exact changes privately, explicitly **Publish**, and follow the existing owner job to completion. It runs the real authenticated publication routes, immutable draft and authorization store, source revalidation, and owner-controlled application pipeline.
+
+**It is a synthetic rehearsal, not a connected authoring-workspace integration.** Publishing changes only a newly created disposable local repository and its local bare remote. Rendering, deployment, live confirmation, and local rebuild are simulated and labelled on screen. No real page has been accepted through this lane.
+
+## Launch
+
+From the repository root:
+
+```bash
+bun run --cwd docs review:owner-publication
+```
+
+Use an interactive terminal and a graphical display. Bun, Git, Linux `flock`, the local app dependencies, and the docs workspace's Playwright package and Chromium browser must already be installed. The launcher does not install dependencies or download a browser.
+
+The launcher creates fresh temporary repositories and an empty private ignored store, starts loopback-only services, and opens its own ephemeral Chromium browser with a nonpersistent context. It uses the normal one-time owner authentication flow without printing or saving the sign-in capability. It does not attach to your main browser profile. Browser requests are restricted to the fixture's own origins; its safe panel address alone does not authenticate another browser.
+
+Keep the launcher terminal open:
+
+- **`b` then Enter** opens a fresh isolated browser sign-in.
+- **`q` then Enter** or **Ctrl-C** closes the owned browser and services and removes the temporary repositories after active owned jobs settle. Cleanup waits for active jobs for up to 30 seconds; if it cannot finish, it reports the retained temporary directory rather than claiming cleanup succeeded.
+
+## Walk through the loop
+
+1. On the publication panel, choose **Prepare exact review**. This captures the synthetic page and prepares an immutable exact change against the pinned canonical base. **Preparation does not publish.** There is no authoring editor in this fixture.
+2. Read **Changes**, **Proposed**, **Current**, and **Compare**. These are structural exact-review modes, not a Quartz preview of the published page. Changed blocks expose exact source; unsupported constructs remain source rather than pretending to reproduce the renderer. See [Review projection model](/cyberbaser/design/review-projection-model/).
+3. Choose **Publish this captured version** and confirm deliberately. The reviewed version does not include later authoring edits. Source and canonical-base checks must still pass before application; the capture is not permission to publish whatever the authoring page contains later.
+4. Follow the ordinary owner job page to **completed**. Exact source application, commit, and push are real, but confined to the disposable repository and local bare remote. The remaining publication stages are synthetic.
+5. Repeated Publish requests for the same draft return the same job, not another publication. An unchanged draft with a terminal job is not a retry mechanism; preparing identical inputs does not create a fresh attempt.
+
+## What the evidence establishes
+
+The fresh headless browser rehearsal completed normal authentication, all four review modes, explicit Publish, durable completion, and a deliberate same-job replay. It measured one publication application, one commit, one local-bare push, and one job, then closed its browser and removed its owned temporary root. These publication effects are separate from the fixture's initial setup commit and push.
+
+Four separately bounded browser runs informed that result. Earlier runs stopped during Prepare-response observation; the completed run uses the actual navigated review address and immutable draft to verify the exact candidate binding without depending on a response body surviving navigation. This is test-harness evidence, not evidence of a product serialization repair.
+
+The human-invoked headed launcher has not itself been accepted. Headless fixture success and screenshots do not establish human usability or acceptance of the interface.
+
+## What remains separate
+
+The standalone owner-panel entry is implemented. Navigation from an actual authoring workspace is not connected. A real host's coherent reader, connector, enrollment, and explicit activation remain open gates; this fixture supplies only a synthetic coherent reader.
+
+This rehearsal does not access or change a real authoring host, source page, remote, enrollment, domain, or deployment. It does not establish real-host compatibility, real renderer behavior, live publication, or production authority. The docs provide the launch point and evidence boundary; the privileged controls remain on their separate authenticated origin.

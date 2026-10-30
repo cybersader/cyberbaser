@@ -118,6 +118,16 @@ bun run --cwd docs review:owner-alpha
 
 The launcher creates three disposable proposals, starts the real queue writer and private review socket, performs independent owner validation, starts the privileged review routes on loopback, verifies the list, and requests an authenticated browser launch without printing the one-time capability. Enter `b` in its terminal to open a fresh sign-in; `Ctrl-C` stops the services and removes the temporary fixture. The fixture cannot edit or apply source. See [Owner proposal UI review](../../docs/src/content/docs/development/owner-proposal-ui-review.mdx).
 
+### Owner publication rehearsal
+
+From the repository root, launch the disposable exact-review-to-Publish loop:
+
+```bash
+bun run --cwd docs review:owner-publication
+```
+
+This uses normal owner authentication in its own ephemeral browser, never your main profile. Publish applies, commits, and pushes only to fresh temporary repositories and a local bare remote; rendering, deployment, live confirmation, and local rebuild are simulated. Dependencies and the docs Playwright browser must already be installed, and the headed launcher requires a graphical display. Enter `b` then Enter for a fresh isolated sign-in; `q` then Enter or `Ctrl-C` cleans owned resources after active jobs settle. The headless fixture passed; the headed launcher and real authoring-workspace integration are not accepted. See [Owner publication rehearsal](../../docs/src/content/docs/development/owner-publication-rehearsal.mdx) for the walkthrough and remaining gates.
+
 ## Child-held `flock`
 
 `withFileLock()` starts `flock --exclusive --nonblock ... cat`. The child confirms lock ownership through its pipe and remains alive for the callback. Closing the pipe releases the kernel lock, including when the callback throws. Contention fails with `OwnerAlphaError` code `lock-busy` instead of waiting.

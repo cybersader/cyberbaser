@@ -21,6 +21,7 @@ import { ensureOwnerSite } from './site.js';
 import { createEditSession as createSourceEditSession } from './source.js';
 import { prepareStore, storeContextFromConfig } from './store.js';
 import { startSuggestionIntake, suggestionFormOrigin } from './suggestions.js';
+import { createOwnerPublicationRuntime, createPublicationSourceGuard } from './owner-publication-runtime.js';
 
 const COOKIE_NAME = 'owner_alpha_session';
 export const MAX_OWNER_SESSIONS = 64;
@@ -200,7 +201,7 @@ ${body}
 `;
 }
 
-function editPage({ editSessionId, csrfToken, session, reviewEnabled }) {
+function editPage({ editSessionId, csrfToken, session, reviewEnabled, publicationEnabled }) {
   return pageShell({
     title: 'Owner edit',
     script: '/owner/assets/editor.js',
@@ -210,6 +211,7 @@ function editPage({ editSessionId, csrfToken, session, reviewEnabled }) {
 <h1>Edit Markdown</h1>
 <p class="lede">One bounded Save publishes through the configured owner-controlled pipeline.</p></div>
 ${reviewEnabled ? '<a href="/owner/review">Review proposals</a>' : ''}
+${publicationEnabled ? '<a href="/owner/publication">Publish workspace page</a>' : ''}
 </header>
 <form id="edit-form">
 <label for="edited-text">Markdown</label>
@@ -291,6 +293,7 @@ function jobStageCopy(state) {
 function jobPage(job, readerOrigin) {
   const safe = publicJob(job);
   const fromSuggestion = safe.origin?.type === 'approved-proposal';
+  const fromPublication = safe.origin?.type === 'owner-publication';
   const current = jobStepIndex(safe.state);
   const done = safe.state === 'completed';
   const stopped = Object.hasOwn(JOB_STOPS, safe.state) && !done;
@@ -300,17 +303,18 @@ function jobPage(job, readerOrigin) {
   }).join('\n');
   const back = fromSuggestion
     ? `<a href="/owner/decisions/${encodeURIComponent(safe.origin.queueId)}">Back to the suggestion</a>`
-    : `<a href="${escapeHtml(readerOrigin)}/cyberbase/">Return to Cyberbase</a>`;
+    : fromPublication ? '<a href="/owner/publication">Back to publication</a>'
+      : `<a href="${escapeHtml(readerOrigin)}/cyberbase/">Return to Cyberbase</a>`;
   const stageJson = escapeHtml(JSON.stringify({
     steps: JOB_STEPS.map((step) => ({ key: step.key, label: step.label, states: step.states })),
     stops: JOB_STOPS,
   }));
   return pageShell({
-    title: fromSuggestion ? 'Putting the suggestion on the page' : 'Saving your change',
+    title: fromSuggestion ? 'Putting the suggestion on the page' : fromPublication ? 'Publishing your page' : 'Saving your change',
     script: '/owner/assets/job.js',
     body: `<main class="owner-shell" id="owner-job" data-job-id="${escapeHtml(safe.jobId)}" data-stages="${stageJson}">
 <header class="owner-header">
-<h1>${fromSuggestion ? 'Putting the suggestion on the page' : 'Saving your change'}</h1>
+<h1>${fromSuggestion ? 'Putting the suggestion on the page' : fromPublication ? 'Publishing your page' : 'Saving your change'}</h1>
 <p class="lede">${safe.origin?.relativePath ? `<span class="identity-path">${escapeHtml(safe.origin.relativePath)}</span>. ` : ''}This runs on the server in the background. You can close this page and come back; nothing here needs a click.</p>
 </header>
 <section class="job-card" aria-live="polite">
@@ -785,6 +789,44 @@ ${reviewModeNav(entry.summary.queueId, mode.key, projection)}
 <p class="reading-note"><span>Removed text is <del>struck through</del>, added text is <ins>underlined</ins>, and everything else is the page's exact source.</span> <span>${escapeHtml(readingNote)}</span></p>
 <div class="mode-panel mode-panel-${mode.key}">${panel}</div>
 </section>`;
+}
+
+function publicationLanding(config, csrfToken, readerOrigin) {
+  const mapping = config.ownerPublication.mappings[0];
+  return pageShell({ title: 'Publish workspace page', script: '/owner/assets/publication.js',
+    body: `<main class="owner-shell"><header class="owner-header"><h1>Publish workspace page</h1>
+<p class="lede">Capture the configured authoring page and review its exact change against the version-controlled page. Preparation does not change or publish the page.</p></header>
+<p>Publication target: <span class="identity-path">${escapeHtml(mapping.relativePath)}</span></p>
+<form id="publication-form" data-action="prepare" data-mapping-id="${escapeHtml(mapping.id)}" data-csrf="${escapeHtml(csrfToken)}">
+<button type="submit">Prepare exact review</button><p id="publication-status" class="status" role="status"></p></form>
+<p><a href="${escapeHtml(readerOrigin)}/cyberbase/">Browse the local site</a></p></main>` });
+}
+
+function publicationReviewPage(draft, job, modeKey, csrfToken) {
+  const { session, operation, candidate } = draft.prepared;
+  const projection = documentProjection({ files: [{ path: session.relativePath, exists: true,
+    baseText: session.source.text, candidateText: candidate.text }], operations: [{ path: session.relativePath,
+    start: operation.start, end: operation.end,
+    oldText: Buffer.from(operation.expectedOldBytesBase64, 'base64').toString('utf8'),
+    replacementText: Buffer.from(operation.replacementBytesBase64, 'base64').toString('utf8') }] });
+  const mode = REVIEW_MODES.find((item) => item.key === modeKey);
+  const nav = REVIEW_MODES.map((item) => `<a class="mode-tab${item.key === modeKey ? ' active' : ''}" href="/owner/publication/${draft.draftId}?mode=${item.key}"${item.key === modeKey ? ' aria-current="page"' : ''}>${escapeHtml(item.label)}</a>`).join('');
+  const exactFallback = `<p>This structural view is not derivable. Exact current and proposed source follow.</p><pre>${escapeHtml(session.source.text)}</pre><pre>${escapeHtml(candidate.text)}</pre>`;
+  const panel = mode.view === null
+    ? projection.modes.current.available && projection.modes.proposed.available
+      ? `<div class="proof-grid"><section class="proof proof-current"><h2>Current source</h2>${readingHtml(projection.files[0].current, 'compare-body')}</section><section class="proof proof-proposed"><h2>Proposed publication</h2>${readingHtml(projection.files[0].proposed, 'compare-body')}</section></div>` : exactFallback
+    : projection.modes[mode.key].available ? readingHtml(projection.files[0][mode.view], `document-${mode.key}`) : exactFallback;
+  const action = job.status === 'present'
+    ? `<p>This draft already has one job (${escapeHtml(job.state)}). It will not start again. Preparing unchanged evidence returns this same draft and job.</p><a href="/owner/jobs/${draft.jobId}">View publication job</a>`
+    : job.status === 'missing'
+      ? `<form id="publication-form" data-action="publish" data-draft-id="${draft.draftId}" data-csrf="${escapeHtml(csrfToken)}"><button type="submit">Publish this captured version</button><p id="publication-status" class="status" role="status"></p></form>`
+      : '<p>Job state cannot be established safely. Publication is unavailable; do not assume the job is absent.</p>';
+  return pageShell({ title: 'Review publication', script: '/owner/assets/publication.js',
+    body: `<main class="owner-shell review-detail"><header class="owner-header"><h1>Review publication</h1><a href="/owner/publication">Prepare another review</a></header>
+<p>Target: <span class="identity-path">${escapeHtml(session.relativePath)}</span>. Captured authoring version ${draft.prepared.reference.source.version}.</p>
+<p>This is an exact structural review, not a completed Quartz preview. Publish runs checks, applies this exact change, commits, pushes, and confirms the deployment. Later authoring edits are not part of this captured version.</p>
+<nav class="review-modes" aria-label="Review mode">${nav}</nav><p class="reading-note">Removed text is struck through; added text is underlined. This is a structural reading, not the published page.</p>${panel}
+<section class="job-card">${action}</section></main>` });
 }
 
 function technicalEvidence(entry, { decision = null, queueRetained = null, title = 'Technical evidence' } = {}) {
@@ -1540,6 +1582,7 @@ export function createOwnerAlphaHandler({
   saveEdit,
   lookupJob,
   proposalReview = null,
+  ownerPublication = null,
   createToken = token,
   createJobId = () => `OA-${randomUUID()}`,
 } = {}) {
@@ -1560,6 +1603,10 @@ export function createOwnerAlphaHandler({
       || typeof proposalReview.loadDecision !== 'function'
       || typeof proposalReview.record !== 'function')) {
     throw new TypeError('enabled proposal review requires list, load, loadDecision, and record dependencies');
+  }
+  if (config.ownerPublication.enabled
+    && ['prepare', 'load', 'publish', 'readJob'].some((key) => typeof ownerPublication?.[key] !== 'function')) {
+    throw new TypeError('enabled owner publication requires its private runtime service');
   }
   // Each consumed bootstrap capability becomes one device session with its own
   // cookie and CSRF token, so one captured device secret is not every device's
@@ -1641,7 +1688,7 @@ export function createOwnerAlphaHandler({
       outstanding = null;
       sessions.set(consumed.sessionToken, { csrfToken: consumed.csrfToken });
       return response(null, 303, {
-        Location: `${readerOrigin}/cyberbase/`,
+        Location: config.ownerPublication.enabled ? '/owner/publication' : `${readerOrigin}/cyberbase/`,
         'Set-Cookie': cookieHeader(consumed.sessionToken),
       });
     }
@@ -1657,7 +1704,7 @@ export function createOwnerAlphaHandler({
 
     if (url.pathname === '/') {
       if (request.method !== 'GET' && request.method !== 'HEAD') return response(null, 405, { Allow: 'GET, HEAD' });
-      return response(null, 302, { Location: `${readerOrigin}/cyberbase/` });
+      return response(null, 302, { Location: config.ownerPublication.enabled ? '/owner/publication' : `${readerOrigin}/cyberbase/` });
     }
 
     const asset = {
@@ -1665,12 +1712,65 @@ export function createOwnerAlphaHandler({
       '/owner/assets/job.js': 'job.js',
       '/owner/assets/review.js': 'review.js',
       '/owner/assets/apply.js': 'apply.js',
+      '/owner/assets/publication.js': 'publication.js',
       '/owner/assets/owner.css': 'owner.css',
     }[url.pathname];
     if (asset) {
       if (request.method !== 'GET' && request.method !== 'HEAD') return response(null, 405, { Allow: 'GET, HEAD' });
       if (url.search !== '') return errorResponse(400, 'unexpected-query');
       return staticResponse(publicRoot, asset, request, { directoryIndex: false });
+    }
+
+    if (url.pathname === '/owner/publication' || url.pathname.startsWith('/owner/publication/')
+      || url.pathname.startsWith('/api/publication/')) {
+      if (!config.ownerPublication.enabled) return errorResponse(404, 'publication-disabled');
+      if (url.pathname === '/owner/publication') {
+        if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
+        if (url.search) return errorResponse(400, 'invalid-publication-query');
+        return html(request.method === 'HEAD' ? null : publicationLanding(config, csrfToken, readerOrigin));
+      }
+      const review = /^\/owner\/publication\/([0-9a-f]{64})$/u.exec(url.pathname);
+      if (review) {
+        if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
+        const query = optionalQueryObject(url, ['mode']);
+        if (!query || (query.mode !== undefined && !REVIEW_MODE_KEYS.includes(query.mode))) return errorResponse(400, 'invalid-publication-query');
+        try {
+          const draft = await ownerPublication.load({ draftId: review[1] });
+          const job = await ownerPublication.readJob(draft.jobId);
+          return html(request.method === 'HEAD' ? null : publicationReviewPage(draft, job, query.mode ?? 'changes', csrfToken));
+        } catch { return errorResponse(409, 'publication-review-unavailable'); }
+      }
+      const action = url.pathname === '/api/publication/prepare' ? 'prepare'
+        : url.pathname === '/api/publication/publish' ? 'publish' : null;
+      if (action === null) return errorResponse(404, 'not-found');
+      if (request.method !== 'POST') return response(null, 405, { Allow: 'POST' });
+      if (url.search) return errorResponse(400, 'invalid-publication-query');
+      let body;
+      try { body = await readBoundedJson(request, Math.min(maximumBodyBytes, 4096)); }
+      catch (error) { return errorResponse(error.status ?? 400, error.code ?? 'invalid-json'); }
+      const key = action === 'prepare' ? 'mappingId' : 'draftId';
+      if (!body || typeof body !== 'object' || Array.isArray(body)
+        || Object.keys(body).sort().join(',') !== `${key},csrf`.split(',').sort().join(',')
+        || typeof body[key] !== 'string'
+        || (key === 'draftId' ? !/^[0-9a-f]{64}$/u.test(body[key]) : !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(body[key]))) {
+        return errorResponse(400, 'invalid-publication-body');
+      }
+      if (!sameSecret(body.csrf, csrfToken)) return errorResponse(403, 'invalid-csrf');
+      try {
+        if (action === 'prepare') {
+          const result = await ownerPublication.prepare({ mappingId: body.mappingId });
+          return json({ draftId: result.summary.draftId, jobId: result.summary.jobId,
+            capturedVersion: result.summary.capturedVersion, candidateDigest: result.summary.candidateDigest,
+            reviewUrl: `/owner/publication/${result.summary.draftId}` }, 201);
+        }
+        const result = await ownerPublication.publish({ draftId: body.draftId });
+        return json({ draftId: result.draftId, jobId: result.jobId, state: result.state,
+          capturedVersion: result.capturedVersion, replayed: result.replayed,
+          statusUrl: `/owner/jobs/${result.jobId}` }, 202);
+      } catch {
+        // Do not project arbitrary dependency codes/messages or private references.
+        return errorResponse(409, action === 'prepare' ? 'publication-prepare-failed' : 'publication-publish-refused');
+      }
     }
 
     if (url.pathname === '/owner/review' || url.pathname === '/api/review') {
@@ -1874,6 +1974,7 @@ export function createOwnerAlphaHandler({
           csrfToken,
           session,
           reviewEnabled: config.proposalReview.enabled,
+          publicationEnabled: config.ownerPublication.enabled,
         });
         if (request.method === 'HEAD') return html(null, 200);
         return html(body);
@@ -2023,6 +2124,7 @@ async function loadPipelineAdapter(options) {
   if (typeof created === 'function') {
     return {
       saveEdit: created,
+      startEdit: typeof created.startEdit === 'function' ? created.startEdit : null,
       resumeJob: typeof created.resumeJob === 'function' ? created.resumeJob : null,
       getJob: typeof created.getJob === 'function' ? created.getJob : null,
     };
@@ -2032,6 +2134,7 @@ async function loadPipelineAdapter(options) {
   }
   return {
     saveEdit: created.saveEdit,
+    startEdit: typeof created.startEdit === 'function' ? created.startEdit : null,
     resumeJob: typeof created.resumeJob === 'function' ? created.resumeJob : null,
     getJob: typeof created.getJob === 'function' ? created.getJob : null,
   };
@@ -2076,6 +2179,7 @@ export async function runOwnerAlphaServer({
   recoverDecisions = recoverProposalDecisions,
   recordDecision = recordProposalDecision,
   startSuggestions = startSuggestionIntake,
+  readAuthoringNote,
 } = {}) {
   if (typeof rebuildSite !== 'function'
     || typeof loadPipeline !== 'function'
@@ -2101,7 +2205,11 @@ export async function runOwnerAlphaServer({
   const suggestions = await startSuggestions({ config, projectRoot });
   let pipeline;
   try {
-    pipeline = await loadPipeline({ config, projectRoot, context: storeContext });
+    // Install even when currently disabled: recovered publication jobs must not
+    // silently become ordinary edits if a reader or config is no longer present.
+    const publicationGuard = createPublicationSourceGuard({ config, context: storeContext, readNote: readAuthoringNote });
+    pipeline = await loadPipeline({ config, projectRoot, context: storeContext,
+      dependencies: { revalidateSource: publicationGuard } });
   } catch (error) {
     await suggestions?.close().catch(() => {});
     throw error;
@@ -2136,6 +2244,8 @@ export async function runOwnerAlphaServer({
     saveEdit: pipeline.saveEdit,
     lookupJob,
     proposalReview,
+    ownerPublication: config.ownerPublication.enabled
+      ? createOwnerPublicationRuntime({ config, context: storeContext, readNote: readAuthoringNote, pipeline }) : null,
   });
   const readerFetch = createReader({ config, projectRoot });
   let runtime;
