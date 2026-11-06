@@ -1,0 +1,42 @@
+---
+title: "Snapshot permission-integration authorization"
+description: "Local owner approval and agreed synthetic scope, with host execution awaiting its own direct confirmation."
+tags: [design, planning, testing]
+---
+
+## Authorization and execution status
+
+On 2026-10-07 the owner authorized coordination of snapshot permission-check implementation and tests with synthetic workspaces. This is **local owner authorization**, not implementation progress or production activation.
+
+The bounded instruction was relayed to the host. Its initial status had no acknowledgement or start evidence. The latest coordination update says the host **acknowledges the agreed scope** but requires direct bounded confirmation in its own session before execution. Peer-relayed instruction is insufficient for that host gate; the coordinator accepted the boundary without bypass or retry. **Host implementation is NOT STARTED.** Model/tool approval remains separate.
+
+The earlier producer handoff's superseded manual-confirmation status is historical evidence, not proof that this new confirmation requirement is cleared. This approval is also distinct from the preceding daemon cleanup review: that review closed its bounded findings but did not authorize another worker or implementation cycle.
+
+## Agreed planned slice-three scope
+
+- Trusted-context supplier mapping.
+- Export-policy and current-permission checks on create and every page/chunk retrieval.
+- Host-owned bound hash-only handles.
+- Audit and budgets.
+- Transport and restart tests against synthetic workspaces.
+
+Concrete transport remains to freeze. Frozen r3 descriptor/pages/chunks semantics remain unchanged. The pure Cyberbaser consumer verifier is unchanged; no consumer rerun is assumed or reported.
+
+## Production and later-slice boundaries
+
+The **production index remains wholly UNCONFIGURED through slice three**. Fixture-only adapters cannot enable it; production remains non-serving.
+
+Real subject/store ownership, durable cross-subject/stopped-daemon erasure and host reservations remain later slice-four/six obligations. This authorization does not cover live Cyberbase access, preview/render/UI work, publishing, source migration, new commits/pushes or deployment. Broader integration, full acceptance and human gates remain open.
+
+## Evidence retained and documentation checks
+
+Prior consumer completion, frozen r1/r2 interoperability and bounded daemon cleanup evidence remain unchanged. A host local reviewed-source/documentation checkpoint and no-push/no-deployment status were peer-reported; no host commit or source-tree hash checks were repeated here. Private provenance stays in the private coordination journal.
+
+This documentation wave records approval, acknowledged scope and the execution gate. It does not dispatch a review or implementation task and supplies no new implementation/test evidence. Checks are limited to local documentation tags, privacy, whitespace, chronology and preservation; no preflight, build, suite rerun, host source inspection/edit, live action, external publication or Git mutation is part of this wave.
+
+## Related records
+
+- [Current snapshot design](/cyberbaser/design/snapshot-preview-integration/).
+- [Producer authorization and historical handoff](/cyberbaser/agent-context/zz-log/2026-10-07-snapshot-producer-authorization/).
+- [Frozen producer/consumer interoperability](/cyberbaser/agent-context/zz-log/2026-10-07-snapshot-producer-consumer-interop/).
+- [Daemon repairs and bounded cleanup closure](/cyberbaser/agent-context/zz-log/2026-10-07-snapshot-daemon-repairs/).

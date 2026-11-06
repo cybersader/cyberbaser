@@ -1,0 +1,40 @@
+---
+title: "Byte-preservation regression checks"
+description: "Synthetic two-client evidence separates exact-byte transport checks from deployed behavior and interactive editor acceptance."
+tags: [architecture, testing]
+---
+
+## Exact-byte checks must cover transport
+
+The [source-preservation boundary](/cyberbaser/design/translation-layer/) applies to bytes delivered by an authoring spoke, not just its local write. A successful write on one client does not establish that another client received the same bytes.
+
+A synthetic two-client check on 2026-10-26 reproduced a leading UTF-8 byte-order mark being removed in a browser-connected synchronization path. The writing client retained all 31 bytes; the receiving client had 28 bytes whose hash matched the content without the marker. This occurred in both directions, through both a text-string create API and a raw-byte create API. The notes were created after startup, so this observation was distinct from normalization while seeding the test fixture.
+
+The same check against a corrected local runtime preserved all four notes, including their byte-order marks, on both clients. A separate eight-file fixture also matched its expected lengths and SHA-256 hashes on both clients. It included Markdown syntax, trailing spaces, no final newline, CRLF and mixed line endings, Unicode normalization variants, and a small binary attachment.
+
+## Do not confuse a report with a passing assertion
+
+The initial consumer assertions returned diagnostic objects even on a mismatch. The harness treated those objects as passing return values, so process exit zero alone did not establish byte preservation. The original reports remain historical evidence: their nested comparison results, not their top-level assertion status, distinguish the failing and passing runs.
+
+A regression gate must make missing, unreadable, truncated, or byte-different content fail explicitly while preserving useful diagnostics. In particular, a same-length change must fail the hash comparison. A deliberate negative control is needed to prove that the gate actually rejects a mismatch.
+
+## Failure signaling verified
+
+On 2026-10-29 both consumer verifiers were corrected to throw bounded diagnostic errors on mismatches while retaining explicit successful comparison results.
+
+- Fourteen deterministic tests passed with zero failures or skips. They covered correct, BOM-stripped, missing, same-length wrong-byte, unreadable and empty inputs, plus zero/excess file counts. Unreadability was simulated through adapter errors.
+- One positive two-client local run exited zero. All six assertions passed, and both byte verifiers explicitly returned successful comparison results on both clients.
+- One isolated negative-control run intentionally compared a disposable note against a wrong expected hash of the same byte length. Both client assertions failed and the harness exited two, as required. The original fixture and product code were unchanged.
+- Both real runs recorded completed teardown. The coordinator inspected their reports and independently reran the fourteen deterministic tests successfully; it did not rerun the two real cases.
+
+The checks use a minimal no-op plugin to isolate transport behavior. They neither test general plugin compatibility nor resolve earlier unrelated probe-plugin diagnostics. A private rerun command preserves unique evidence, verifies detailed results and cleanup, and propagates failure. Historical reports are unchanged.
+
+## Evidence boundaries remain explicit
+
+- These are synthetic local connected-runtime checks, not acceptance of a deployed service or a full authoring integration.
+- Calls to text and raw-byte create APIs do not exercise interactive editor typing, editing an existing note, or every save path.
+- The harness's built-in reload precedes the assertion writes. These results do not prove that those writes survive a subsequent reload or restart.
+- A local relay check does not verify production authentication, authorization, or delivery. Deployment inclusion and a live round-trip are separate evidence.
+- The finite fixture establishes only the tested byte patterns and operations, not universal Markdown fidelity or whole-vault scale.
+
+Detailed host-specific provenance and test artifacts remain private. No source authority, product dependency, public contribution lane, or deployment was selected by this work. Snapshot expansion and the proposed bounded export experiment remain held.

@@ -6,13 +6,17 @@ import { createJobState } from '../src/job-state.js';
 import { computePolicyRevision } from '../src/config.js';
 import { createHash } from 'node:crypto';
 import { defaultProposalReviewGit, readTrustPolicy } from '../src/proposal-review.js';
-import { createPublicationJobReader, createPublicationSourceGuard } from '../src/owner-publication-runtime.js';
+import { createOwnerPublicationRuntime, createPublicationJobReader, createPublicationSourceGuard,
+  PUBLICATION_VIEW_LIMIT, PUBLICATION_VIEW_BYTE_LIMIT, PUBLICATION_VIEW_TTL_MS } from '../src/owner-publication-runtime.js';
 import { artifactJson } from '../src/json.js';
-import { assertCheckoutReady } from '../src/source.js';
+import { assertCheckoutReady, createEditSession, detectYamlFrontmatterRange } from '../src/source.js';
+import { prepareOwnerPublication } from '../src/owner-publication.js';
 import { OwnerAlphaError } from '../src/errors.js';
 import { BASE, MAPPING, PRIVATE_ID, PRIVATE_PATH, cleanup, publicationFixture } from './publication-fixture.js';
+import { cleanupPublicationReviewFixture, publicationReviewCase } from './publication-readonly-checkpoints.js';
 
-afterEach(async () => { await Promise.all(cleanup.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { await Promise.all(cleanup.splice(0).map((root) =>
+  cleanupPublicationReviewFixture(root, () => rm(root, { recursive: true, force: true })))); });
 
 test('real Git-bound preparation and immediate checks create only a private draft, not a job or source edit', async () => {
   const data = await publicationFixture();
@@ -24,6 +28,99 @@ test('real Git-bound preparation and immediate checks create only a private draf
   expect(JSON.stringify(result.summary)).not.toContain(PRIVATE_ID);
   expect(JSON.stringify(result.summary)).not.toContain(PRIVATE_PATH);
 });
+
+test('Prepare reads and creates a base once on both branches; changed artifacts are byte-identical to ordinary preparation', () =>
+  publicationReviewCase('runtime-prepare', (onRoot) => publicationFixture({ onRoot }), async (data) => {
+  let sessions = 0;
+  const runtime = createOwnerPublicationRuntime({ config: data.config, context: data.context, readNote: data.readNote,
+    sourceSession: async (input) => { sessions += 1; return createEditSession({ ...input, git: data.git }); } });
+  const before = data.reads;
+  const result = await runtime.prepare({ mappingId: MAPPING.id });
+  expect(data.reads).toBe(before + 1); expect(sessions).toBe(1);
+  const expected = await prepareOwnerPublication({ config: data.config, mappingId: MAPPING.id, readNote: data.readNote,
+    createEditSession: (input) => createEditSession({ ...input, git: data.git }) });
+  expect(artifactJson(result.draft.prepared)).toBe(artifactJson(expected));
+  data.setSource(BASE, 9); const reads = data.reads;
+  const unchanged = await runtime.prepare({ mappingId: MAPPING.id });
+  expect(data.reads).toBe(reads + 1); expect(sessions).toBe(2);
+  expect(Object.keys(unchanged).sort()).toEqual(['outcome', 'reviewUrl']);
+  expect(unchanged.outcome).toBe('unchanged');
+  const viewId = unchanged.reviewUrl.split('/').at(-1);
+  expect(viewId).toMatch(/^[0-9a-f]{64}$/u);
+  const view = runtime.loadCurrent({ viewId });
+  expect(view.text).toBe(BASE); expect(Object.isFrozen(view)).toBe(true);
+  expect(artifactJson(view)).not.toContain(PRIVATE_ID); expect(artifactJson(view)).not.toContain(PRIVATE_PATH);
+  expect(data.reads).toBe(reads + 1);
+}));
+
+test('writer absence denies direct Publish before any context, source, checkout, authorization or job access', () =>
+  publicationReviewCase('runtime-deny', (onRoot) => publicationFixture({ onRoot }), async (data) => {
+  const { draft } = await data.prepare();
+  let accesses = 0;
+  const forbidden = () => { accesses += 1; throw new Error('must not run'); };
+  for (const pipeline of [undefined, {}, { startEdit: null }]) {
+    const runtime = createOwnerPublicationRuntime({ config: data.config, context: data.context, pipeline,
+      readNote: forbidden, sourceSession: forbidden, checkoutReady: forbidden, onCompletion: forbidden });
+    expect(runtime.publishAvailable).toBe(false);
+    await expect(runtime.publish({ draftId: draft.draftId })).rejects.toMatchObject({ code: 'publication-start-unavailable' });
+    const poison = createOwnerPublicationRuntime({ config: data.config, context: new Proxy({}, { get: forbidden }) });
+    await expect(poison.publish({ draftId: 'invalid' })).rejects.toMatchObject({ code: 'publication-start-unavailable' });
+  }
+  expect(accesses).toBe(0); expect(data.reads).toBe(1);
+  await expect(readFile(path.join(data.context.storeRoot, 'owner-publication/authorizations', `${draft.draftId}.json`))).rejects.toMatchObject({ code: 'ENOENT' });
+  expect(await data.runtime.readJob(draft.jobId)).toEqual({ status: 'missing' });
+  expect(data.runtime.publishAvailable).toBe(true);
+}));
+
+async function memoryReviewRuntime(onRoot) {
+  const data = await publicationFixture({ onRoot });
+  const template = await createEditSession({ config: data.config, renderer: { relativePath: MAPPING.relativePath, slug: MAPPING.slug }, git: data.git });
+  let now = 1000; let text = BASE; let reads = 0; let sessions = 0;
+  const session = () => {
+    const bytes = Buffer.from(text);
+    return { ...template, source: { ...template.source, text, bytesBase64: bytes.toString('base64'),
+      byteLength: bytes.length, digest: `sha-256=:${createHash('sha256').update(bytes).digest('base64')}:`,
+      frontmatter: detectYamlFrontmatterRange(bytes) } };
+  };
+  const runtime = createOwnerPublicationRuntime({ config: data.config, context: new Proxy({}, { get() { throw new Error('unchanged must not touch store'); } }),
+    clock: () => now,
+    readNote: async () => { reads += 1; const value = session(); return { ...MAPPING.source, version: 7, ...Object.fromEntries(['text', 'bytesBase64', 'byteLength', 'digest'].map((key) => [key, value.source[key]])) }; },
+    sourceSession: async () => { sessions += 1; return session(); } });
+  return { runtime, setText: (value) => { text = value; }, setTime: (value) => { now = value; },
+    prepare: async () => (await runtime.prepare({ mappingId: MAPPING.id })).reviewUrl.split('/').at(-1),
+    get reads() { return reads; }, get sessions() { return sessions; } };
+}
+
+test('unchanged views evict oldest entries at eight, refuse missing/invalid IDs and expire at thirty minutes without reads', () =>
+  publicationReviewCase('runtime-entry-expiry', memoryReviewRuntime, async (data) => {
+  const ids = [];
+  expect(PUBLICATION_VIEW_LIMIT).toBe(8); expect(PUBLICATION_VIEW_TTL_MS).toBe(30 * 60 * 1000);
+  for (let i = 0; i < 9; i += 1) { data.setText(`# Page ${i}\n\nFull unchanged page.\n`); ids.push(await data.prepare()); }
+  expect(new Set(ids).size).toBe(9);
+  for (const viewId of [ids[0], '0'.repeat(64), '../other', ids[1].toUpperCase(), null]) {
+    expect(() => data.runtime.loadCurrent({ viewId })).toThrow();
+  }
+  for (const viewId of ids.slice(1)) expect(data.runtime.loadCurrent({ viewId }).text).toContain('Full unchanged page.');
+  data.setTime(1000 + PUBLICATION_VIEW_TTL_MS - 1);
+  expect(data.runtime.loadCurrent({ viewId: ids[1] }).text).toContain('Page 1');
+  data.setTime(1000 + PUBLICATION_VIEW_TTL_MS);
+  for (const viewId of ids) expect(() => data.runtime.loadCurrent({ viewId })).toThrow();
+  expect(data.reads).toBe(9); expect(data.sessions).toBe(9);
+  const fresh = await data.prepare(); expect(data.runtime.loadCurrent({ viewId: fresh }).text).toContain('Page 8');
+}));
+
+test('unchanged views enforce the total byte ceiling independently of entry count and refuse a single oversized view', () =>
+  publicationReviewCase('runtime-byte-capacity', memoryReviewRuntime, async (data) => {
+  expect(PUBLICATION_VIEW_BYTE_LIMIT).toBe(2 * 1024 * 1024);
+  data.setText('a'.repeat(400_000)); const first = await data.prepare();
+  data.setText('b'.repeat(400_000)); const second = await data.prepare();
+  expect(() => data.runtime.loadCurrent({ viewId: first })).toThrow();
+  expect(data.runtime.loadCurrent({ viewId: second }).byteLength).toBe(400_000);
+  data.setText('c'.repeat(710_000));
+  await expect(data.prepare()).rejects.toMatchObject({ code: 'publication-view-too-large' });
+  expect(data.runtime.loadCurrent({ viewId: second }).byteLength).toBe(400_000);
+  expect(data.reads).toBe(3); expect(data.sessions).toBe(3);
+}));
 
 test('pinned Git trust reader preserves significant trailing UTF-8 bytes instead of the text-trimming runner contract', async () => {
   const trust = 'trusted: [example]\n# Exact policy bytes: café  \n \n';

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { computePolicyRevision, validateOwnerAlphaConfig } from './config.js';
 import { fail } from './errors.js';
 import { canonicalJson, deepFreeze, isPlainObject } from './json.js';
-import { applyEditorOperation, deriveEditorOperation } from './operation.js';
+import { applyEditorOperation, deriveEditorOperation, validateEditSession } from './operation.js';
 import {
   createEditSession as defaultCreateEditSession, EDIT_SESSION_ARTIFACT_TYPE,
   EDIT_SESSION_SCHEMA_VERSION, liveUrlForSlug, pathMatchesPolicy,
@@ -144,11 +144,9 @@ function snapshotEditSession(value) {
   }
 }
 
-/** Effect-free preparation only: no Save job, store, render or source application.
- * createEditSession defaults to the existing read-only Git-bound implementation.
- * A supplied session is reused only after mapping/policy and exact-byte validation.
- */
-export async function prepareOwnerPublication({
+// Shared capture checks retain the writer's validation order. Capturing alone is
+// not an unchanged verdict: the full operation session validator must run first.
+async function capturePublicationInputs({
   config: configInput, mappingId, readNote, session: suppliedSession,
   createEditSession = defaultCreateEditSession,
 }) {
@@ -176,6 +174,31 @@ export async function prepareOwnerPublication({
   if (note.text.startsWith('﻿') || session.source.text.startsWith('﻿')) {
     fail('publication-bom-unsupported', 'owner publication does not support BOM-prefixed Markdown');
   }
+  return deepFreeze({ config, mapping, policyRevision, note, session });
+}
+
+/** One detached capture for review. The unchanged view has no upstream binding,
+ * operation or authority; changed captures still go through ordinary preparation.
+ */
+export async function captureOwnerPublicationReview(input) {
+  const { config, note, session } = await capturePublicationInputs(input);
+  const { base } = validateEditSession(session);
+  if (base.length > config.limits.maxSourceBytes) {
+    fail('publication-session-too-large', 'edit session exceeds the source byte limit');
+  }
+  const unchanged = base.toString('base64') === note.bytesBase64;
+  return deepFreeze({ note, session, view: unchanged ? {
+    relativePath: session.relativePath, text: note.text, baseCommit: session.baseCommit,
+    byteLength: note.byteLength, digest: note.digest,
+  } : null });
+}
+
+/** Effect-free preparation only: no Save job, store, render or source application.
+ * createEditSession defaults to the existing read-only Git-bound implementation.
+ * A supplied session is reused only after mapping/policy and exact-byte validation.
+ */
+export async function prepareOwnerPublication(input) {
+  const { config, mapping, policyRevision, note, session } = await capturePublicationInputs(input);
   const operation = deriveEditorOperation({ session, editedText: note.text, config });
   const bytes = applyEditorOperation(session, operation);
   if (bytes.toString('base64') !== note.bytesBase64 || digest(bytes) !== note.digest) {

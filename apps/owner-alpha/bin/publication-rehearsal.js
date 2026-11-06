@@ -44,7 +44,7 @@ export async function runPublicationRehearsalLauncher() {
         // a persistent userDataDir, a main browser profile, or a live origin.
         browser = await chromium.launch({ headless: false });
       }
-      const context = await browser.newContext();
+      const context = await browser.newContext({ viewport: null });
       await context.route('**/*', (route) => [fixture.ownerOrigin, fixture.readerOrigin].includes(new URL(route.request().url()).origin)
         ? route.continue() : route.abort());
       const page = await context.newPage();

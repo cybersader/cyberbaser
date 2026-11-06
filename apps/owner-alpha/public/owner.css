@@ -847,3 +847,267 @@ body.proposal-review-page {
 .earlier-versions { margin: 0.35rem 0 0 0.25rem; color: var(--review-muted); font-size: 0.85rem; }
 .earlier-versions a { color: var(--review-muted); text-decoration: underline; }
 .forge-followup { margin: 0.6rem 0 0; color: var(--review-ink); line-height: 1.55; }
+
+/* Publication workspace. Deliberately separate from proposal and editor styles. */
+body.publication-page {
+  --review-ground: #f3f5f8;
+  --review-sheet: #fff;
+  --review-ink: #202832;
+  --review-muted: #5d6878;
+  --review-line: #d7dde5;
+  --review-line-strong: #aab4c1;
+  --review-accent: #2f5ea8;
+  --review-accent-soft: #e8eef8;
+  --review-approve: #2d6a4f;
+  --review-approve-soft: #e5f1eb;
+  --review-reject: #963f45;
+  --review-reject-soft: #f8e9ea;
+  --review-attention: #8a5a12;
+  --review-attention-soft: #fbf1dc;
+  background: var(--review-ground);
+  color: var(--review-ink);
+  font: 1rem/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.publication-page :is(h1, h2, h3, p, a, dd) { overflow-wrap: anywhere; }
+.publication-page :is(h1, h2, h3) { text-wrap: balance; }
+.publication-page p { text-wrap: pretty; }
+.publication-page h1 { margin: 0; font-size: 1.5rem; font-weight: 650; letter-spacing: -0.02em; line-height: 1.25; }
+.publication-page h2 { margin: 0 0 0.75rem; font-size: 1.25rem; font-weight: 650; line-height: 1.35; }
+.publication-page a { color: var(--review-accent); text-underline-offset: 0.2em; }
+.publication-page a:hover { text-decoration-thickness: 2px; }
+.publication-page :is(a, button, summary):focus-visible { outline: 3px solid var(--review-accent); outline-offset: 4px; }
+.publication-page .publication-shell,
+.publication-page .publication-appbar { width: min(54rem, calc(100% - 2rem)); margin-inline: auto; }
+.publication-page.publication-compare :is(.publication-shell, .publication-appbar) { width: min(76rem, calc(100% - 2rem)); }
+.publication-page .publication-appbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-block: 1rem; border-bottom: 1px solid var(--review-line); font-size: 0.875rem; }
+.publication-page .publication-appbar a { display: inline-flex; align-items: center; min-height: 44px; text-decoration: none; }
+.publication-page .publication-brand { gap: 0.75rem; color: var(--review-ink); font-weight: 700; }
+.publication-page .publication-brand span { color: var(--review-muted); font-weight: 400; }
+.publication-page .publication-private { color: var(--review-muted); }
+.publication-page .publication-shell { padding-block: 2.5rem 2rem; }
+.publication-page .publication-heading { margin-bottom: 2rem; }
+.publication-page .publication-meta { margin: 0.5rem 0 0; color: var(--review-muted); font-size: 0.8125rem; font-variant-numeric: tabular-nums; }
+.publication-page .publication-intro { max-width: 65ch; margin-block: 3rem 2.5rem; }
+.publication-page .publication-intro p { margin: 0; }
+.publication-page .publication-destination { margin: 2rem 0 0; }
+.publication-page .publication-destination dt { color: var(--review-muted); font-size: 0.8125rem; font-weight: 500; }
+.publication-page .publication-destination dd { margin-top: 0.25rem; font: inherit; }
+.publication-page .publication-destination a { display: inline-block; padding-block: 0.4rem; }
+.publication-page form { margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.publication-page .publication-action { display: flex; align-items: center; justify-content: space-between; gap: 1rem 2rem; padding-block: 1.25rem; border-top: 1px solid var(--review-line); }
+.publication-page .publication-action p { flex: 1; min-width: 0; margin: 0; color: var(--review-muted); font-size: 0.875rem; }
+.publication-page .publication-action p span { display: block; color: var(--review-ink); }
+.publication-page button,
+.publication-page .publication-button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; min-height: 44px; border: 1px solid transparent; border-radius: 0.45rem; padding: 0.65rem 1.15rem; background: var(--review-accent); color: var(--review-sheet); font: 600 0.9375rem/1.4 ui-sans-serif, system-ui, sans-serif; text-decoration: none; }
+.publication-page :is(button, .publication-button):hover:not(:disabled) { filter: brightness(0.93); text-decoration: none; }
+.publication-page :is(button, .publication-button):active:not(:disabled) { transform: translateY(1px); }
+.publication-page button:disabled { cursor: not-allowed; opacity: 0.65; }
+.publication-page form[aria-busy="true"] button { cursor: wait; }
+.publication-page .status { color: var(--review-muted); margin: 0 0 0.75rem; font-size: 0.875rem; }
+.publication-page :is(.status, .error):empty { display: none; }
+.publication-page .publication-local-link { margin-top: 1.5rem; font-size: 0.875rem; }
+.publication-page .publication-local-link a { display: inline-block; padding-block: 0.5rem; }
+.publication-page .review-modes { gap: 0.5rem; }
+.publication-page .mode-tab { display: flex; align-items: center; justify-content: center; min-width: 0; min-height: 48px; border-bottom: 3px solid transparent; padding: 0.65rem 0.4rem; color: var(--review-muted); text-decoration: none; font-size: 0.9375rem; font-weight: 600; }
+.publication-page .mode-tab:hover { color: var(--review-ink); background: var(--review-accent-soft); }
+.publication-page .mode-tab.active { border-color: var(--review-accent); color: var(--review-ink); }
+.publication-page .reading-note { margin-block: 1rem 1.5rem; color: var(--review-muted); font-size: 0.8125rem; }
+.publication-page .mode-panel { padding: 0; }
+.publication-page .reading-body { width: 100%; max-width: 75ch; margin: 0; padding: 2rem; border-radius: 0.65rem; background: var(--review-sheet); box-shadow: none; font-size: 1.0625rem; line-height: 1.75; }
+.publication-page .md-h1 { font-size: 1.35em; }
+.publication-page .md-h2 { font-size: 1.2em; }
+.publication-page .md-h3 { font-size: 1.1em; }
+.publication-page .md-source-label { font-size: 0.75rem; font-weight: 500; letter-spacing: normal; text-transform: none; }
+.publication-page .md-source { font: 0.875rem/1.8 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.publication-page .md-source-wrap { border-left-width: 2px; }
+.publication-page .section-kicker { color: var(--review-muted); font-size: 0.8125rem; letter-spacing: normal; text-transform: none; }
+.publication-page .proof-grid { gap: 1.5rem; }
+.publication-page .proof { padding: 1.5rem; border: 0; border-radius: 0.65rem; background: var(--review-sheet); }
+.publication-page .proof > h2 { margin-bottom: 1.25rem; font: 600 0.9375rem/1.4 ui-sans-serif, system-ui, sans-serif; }
+.publication-page .proof .reading-body { max-width: none; padding: 0; background: transparent; font-size: 1.0625rem; }
+.publication-page .technical-evidence { margin-top: 2rem; border-color: var(--review-line); }
+.publication-page .technical-evidence summary { padding: 1rem 0; color: var(--review-muted); font-size: 0.875rem; font-weight: 500; }
+.publication-page .publication-record { padding-bottom: 1.5rem; overflow-wrap: anywhere; font-size: 0.8125rem; }
+.publication-page .publication-record p { margin-block: 0.75rem; }
+.publication-page .publication-record h2 { margin-top: 1.5rem; font-size: 1rem; }
+.publication-page pre { max-width: 100%; overflow: auto; border: 1px solid var(--review-line); padding: 1rem; background: var(--review-sheet); color: var(--review-ink); font: 0.8125rem/1.7 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.publication-page .publication-publish-region { position: sticky; z-index: 5; bottom: 0; margin-top: 2rem; background: var(--review-ground); }
+.publication-page #publication-dialog { width: min(32rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); margin: auto; overflow: auto; padding: 2rem; border: 0; border-radius: 0.75rem; background: var(--review-sheet); color: var(--review-ink); }
+.publication-page #publication-dialog::backdrop { background: rgb(18 27 39 / 55%); }
+.publication-page #publication-dialog h2 { font-size: 1.5rem; }
+.publication-page .publication-dialog-title { margin: 1.5rem 0 0; font-weight: 650; }
+.publication-page #publication-confirm-consequence { margin-top: 1.5rem; }
+.publication-page .dialog-actions { margin-top: 2rem; }
+.publication-page button.publication-cancel { border-color: var(--review-line-strong); background: transparent; color: var(--review-ink); }
+.publication-page .publication-explanation { color: var(--review-muted); margin: 0 0 2rem; }
+.publication-page .job-steps { margin: 0; gap: 0; }
+.publication-page .job-step { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; min-height: 52px; padding: 0.85rem 0 0.85rem 2rem; border-bottom: 1px solid var(--review-line); color: var(--review-muted); font-size: 0.9375rem; }
+.publication-page .job-step::before { top: 1.1rem; width: 0.9rem; height: 0.9rem; border-color: var(--review-line-strong); }
+.publication-page .job-step-done { color: var(--review-ink); }
+.publication-page .job-step-done::before { content: '✓'; display: grid; place-items: center; width: 1.1rem; height: 1.1rem; top: 0.95rem; border: 0; background: transparent; color: var(--review-approve); font-weight: 750; }
+.publication-page .job-step-current { color: var(--review-ink); }
+.publication-page .job-step-current::before { border-color: var(--review-accent); background: var(--review-sheet); }
+.publication-page .job-step-stopped { color: var(--review-reject); }
+.publication-page .job-step-stopped::before { border-color: var(--review-reject); background: transparent; }
+.publication-page .job-step-unknown::before { content: '?'; display: grid; place-items: center; border: 0; border-radius: 0; background: transparent; color: var(--review-muted); font-weight: 600; line-height: 1; }
+.publication-page .publication-step-status { flex-shrink: 0; font-size: 0.8125rem; font-weight: 500; }
+.publication-page .error { color: var(--review-reject); font-size: 0.875rem; }
+@media (max-width: 900px) {
+  .publication-page .proof-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 720px) {
+  .publication-page .publication-appbar { align-items: flex-start; font-size: 0.8125rem; }
+  .publication-page .publication-appbar .publication-brand { display: grid; gap: 0; }
+  .publication-page .publication-publish-region { position: static; }
+  .publication-page .publication-shell { padding-top: 1.75rem; }
+  .publication-page .publication-action { flex-direction: column; align-items: stretch; gap: 0.75rem; }
+  .publication-page .publication-action p { flex: auto; }
+  .publication-page .publication-action :is(button, .publication-button) { width: 100%; }
+  .publication-page .reading-body { padding: 1.25rem; }
+  .publication-page .proof { padding: 1.25rem; }
+  .publication-page #publication-dialog { padding: 1.5rem; }
+  .publication-page .job-step { flex-wrap: wrap; gap: 0.15rem 1rem; }
+  .publication-page .publication-step-status { margin-left: auto; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .publication-page :is(button, .publication-button, .mode-tab) { transition: background-color 150ms ease, color 150ms ease; }
+}
+@media (prefers-color-scheme: dark) {
+  body.publication-page {
+    --review-ground: #11161d;
+    --review-sheet: #19212b;
+    --review-ink: #edf1f5;
+    --review-muted: #aeb8c5;
+    --review-line: #35404d;
+    --review-line-strong: #526172;
+    --review-accent: #8eb4f5;
+    --review-accent-soft: #23364f;
+    --review-approve: #76b89e;
+    --review-approve-soft: #1d3a31;
+    --review-reject: #f09aa0;
+    --review-reject-soft: #43272d;
+    --review-attention: #f0c36e;
+    --review-attention-soft: #3b311d;
+  }
+}
+
+/* Document-first publication review. Reserved chrome and a separate scroller:
+ * no sticky/fixed element can cover the document or its focused change anchors. */
+body.publication-document-review { height: 100dvh; min-height: 0; margin: 0; padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+.publication-document-review > :is(.publication-appbar, .rehearsal-notice) { flex: none; }
+.publication-document-review .publication-appbar { padding-block: 0.15rem; }
+.publication-document-review .publication-review-app { display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; margin: 0; padding: 0; }
+.publication-document-review .publication-toolbar { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 0.5rem 1rem; padding: 0.65rem max(1rem, calc((100% - 72rem) / 2)); border-bottom: 1px solid var(--review-line); background: var(--review-sheet); }
+.publication-document-review .publication-toolbar > * { min-width: 0; margin: 0; }
+.publication-document-review .publication-toolbar-title { display: flex; flex-direction: column; font-size: 0.9rem; line-height: 1.4; }
+.publication-document-review .publication-toolbar-title h1 { font-size: 0.9rem; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.publication-document-review .publication-review-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+.publication-document-review .publication-review-controls button { padding: 0.45rem 0.65rem; background: transparent; color: var(--review-ink); border-color: var(--review-line); font-size: 0.8125rem; }
+.publication-document-review .publication-review-controls button[aria-pressed="true"] { background: var(--review-accent-soft); border-color: var(--review-accent); }
+.publication-document-review .publication-change-controls { display: flex; align-items: center; gap: 0.1rem; }
+.publication-document-review .publication-review-controls button { min-width: 44px; gap: 0.45rem; }
+.publication-document-review #publication-change-count { padding-inline: 0.3rem; color: var(--review-muted); font: 0.75rem/1.4 system-ui, sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.publication-document-review .publication-icon { width: 20px; height: 20px; flex: none; vertical-align: middle; }
+.publication-document-review .publication-eye-slash { display: none; }
+.publication-document-review [aria-pressed="false"] .publication-eye-slash { display: block; }
+.publication-document-review .publication-tool { position: relative; display: inline-flex; }
+.publication-document-review .publication-tooltip { position: absolute; z-index: 10; top: 100%; left: 50%; transform: translateX(-50%); width: max-content; max-width: 12rem; padding: 0.4rem 0.6rem; border: 1px solid var(--review-line-strong); border-radius: 0.35rem; background: var(--review-sheet); color: var(--review-ink); box-shadow: 0 0.3rem 1rem rgb(0 0 0 / 15%); font: 0.75rem/1.5 system-ui, sans-serif; visibility: hidden; }
+.publication-document-review .publication-tool[data-tooltip-visible="true"] .publication-tooltip { visibility: visible; }
+.publication-document-review .publication-change-controls .publication-tool:first-child .publication-tooltip { left: 0; transform: none; }
+.publication-document-review .publication-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.publication-document-review :is(#publication-toggle-details, #publication-review-fallback)[hidden] { display: none; }
+.publication-document-review .publication-toolbar-publish .status { max-width: 23ch; margin: 0.5rem 0 0; }
+.publication-document-review .publication-document-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scroll-padding-block: 1.5rem; }
+.publication-document-review .publication-document-content { width: min(52rem, 100%); margin: auto; padding: 1.5rem 2.5rem 4rem; box-sizing: border-box; background: var(--review-sheet); }
+.publication-document-review .publication-review-note { color: var(--review-muted); font: 0.8125rem/1.5 system-ui, sans-serif; margin: 0 0 0.6rem; }
+.publication-document-review .publication-reviewed-document { margin-top: 2.25rem; font: 1.1rem/1.8 Georgia, 'Times New Roman', serif; color: var(--review-ink); }
+.publication-document-review .publication-block { position: relative; margin-block: 1.35rem; min-width: 0; }
+.publication-document-review .publication-block :is(.md-paragraph, .md-heading, .md-list, .md-quote) { margin-block: 0; }
+.publication-document-review .publication-block .md-heading { font-family: system-ui, sans-serif; line-height: 1.4; margin-top: 2rem; font-weight: 650; }
+.publication-document-review .publication-block .md-h1 { font-size: 1.9rem; letter-spacing: -0.025em; }
+.publication-document-review .publication-block .md-h2 { font-size: 1.35rem; }
+.publication-document-review .publication-block .md-h3 { font-size: 1.1rem; }
+.publication-document-review .publication-block .md-frontmatter { font: 0.8125rem/1.5 system-ui, sans-serif; color: var(--review-muted); border: 0; padding: 0; }
+.publication-document-review .publication-block .md-frontmatter dl { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; }
+.publication-document-review .publication-block .md-frontmatter dl > div { display: flex; gap: 0.5rem; }
+.publication-document-review .publication-block .md-frontmatter dd { margin: 0; }
+.publication-document-review .publication-change { border-left: 3px solid var(--review-accent); padding-left: 1rem; margin-left: -1.2rem; }
+.publication-document-review .publication-margin-mark { position: absolute; left: -2.1rem; top: 0.2rem; width: 1.5rem; height: 1.5rem; display: grid; place-items: center; border-radius: 50%; color: var(--review-accent); background: var(--review-accent-soft); font: 600 0.75rem/1.4 system-ui, sans-serif; }
+.publication-document-review .publication-change:focus { outline: 2px solid var(--review-accent); outline-offset: 6px; }
+.publication-document-review .publication-previous-fragment { margin-top: 0.6rem; font: 0.8125rem/1.5 system-ui, sans-serif; color: var(--review-muted); }
+.publication-document-review summary { min-height: 44px; padding-block: 0.6rem; cursor: pointer; box-sizing: border-box; }
+.publication-document-review .publication-previous-fragment pre { margin-top: 0.35rem; }
+.publication-document-review .publication-removal { font: 0.875rem/1.5 system-ui, sans-serif; color: var(--review-muted); }
+.publication-document-review [data-marks-visible="false"] .publication-change { border-color: transparent; }
+.publication-document-review [data-marks-visible="false"] :is(.publication-margin-mark, .publication-previous-fragment) { display: none; }
+.publication-document-review .publication-source-label { color: var(--review-muted); font: 0.75rem/1.5 system-ui, sans-serif; margin-bottom: 0.4rem; }
+.publication-document-review .publication-source-block { border-block: 1px solid var(--review-line); padding-block: 0.75rem; }
+.publication-document-review .publication-source-block pre { margin: 0; border: 0; padding: 0; }
+.publication-document-review .publication-coarse { display: inline-block; margin-block: 0.5rem; padding: 0.25rem 0.6rem; border: 1px solid var(--review-line-strong); border-radius: 0.3rem; color: var(--review-muted); font: 0.75rem/1.5 system-ui, sans-serif; }
+.publication-document-review #publication-review-fallback { border-top: 1px solid var(--review-line); margin-top: 3rem; }
+.publication-document-review #publication-review-details > details { border-bottom: 1px solid var(--review-line); }
+.publication-document-review #publication-details-dialog { box-sizing: border-box; width: min(42rem, 100%); max-width: 100%; height: 100dvh; max-height: 100dvh; inset: 0; margin: 0 0 0 auto; padding: 0; overflow: hidden; border: 0; border-left: 1px solid var(--review-line); background: var(--review-sheet); color: var(--review-ink); box-shadow: -1rem 0 3rem rgb(0 0 0 / 15%); }
+.publication-document-review #publication-details-dialog:not([open]) { display: none; }
+.publication-document-review #publication-details-dialog[open] { display: flex; flex-direction: column; }
+.publication-document-review #publication-details-dialog::backdrop { background: rgb(18 27 39 / 40%); }
+.publication-document-review .publication-details-header { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.75rem 1.5rem; border-bottom: 1px solid var(--review-line); }
+.publication-document-review .publication-details-header h2 { margin: 0; font-size: 1rem; }
+.publication-document-review #publication-close-details { gap: 0.4rem; padding-inline: 0.75rem; background: transparent; color: var(--review-ink); border-color: var(--review-line); }
+.publication-document-review #publication-details-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 0.75rem 1.5rem 2rem; }
+.publication-document-review #publication-details-body .proof-grid { grid-template-columns: minmax(0, 1fr); }
+.publication-document-review #publication-details-body .proof-grid > * { min-width: 0; }
+.publication-document-review #publication-details-body .publication-reviewed-document { font-size: 1rem; }
+.publication-document-review .publication-review-limit { color: var(--review-muted); font: 0.875rem/1.5 system-ui, sans-serif; }
+@media (max-width: 640px) {
+  .publication-document-review #publication-details-dialog { width: 100%; border-left: 0; }
+  .publication-document-review :is(.publication-details-header, #publication-details-body) { padding-inline: 1rem; }
+}
+.publication-document-review .publication-unavailable { max-width: 32ch; font-size: 0.8125rem; }
+@media (max-width: 1050px) {
+  .publication-document-review .publication-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
+  .publication-document-review .publication-toolbar-title { grid-column: 1; }
+  .publication-document-review .publication-review-controls { grid-column: 1; grid-row: 2; }
+  .publication-document-review .publication-toolbar-publish { grid-column: 2; grid-row: 1 / span 2; }
+}
+@media (max-width: 540px) {
+  .publication-document-review .publication-appbar { font-size: 0.75rem; align-items: center; }
+  .publication-document-review .publication-appbar .publication-brand { display: inline-flex; gap: 0.4rem; }
+  .publication-document-review .publication-toolbar { gap: 0.25rem 0.5rem; padding: 0.5rem 1rem; }
+  .publication-document-review .publication-toolbar-title { grid-column: 1; }
+  .publication-document-review .publication-review-controls { grid-column: 1 / -1; }
+  .publication-document-review .publication-toolbar-publish { grid-row: 1; }
+  .publication-document-review .publication-toolbar-publish button { padding-inline: 0.85rem; }
+  .publication-document-review .publication-review-controls { gap: 0.3rem; }
+  .publication-document-review .publication-review-controls button { padding-inline: 0.45rem; }
+  .publication-document-review #publication-change-count { max-width: 5.8rem; font-size: 0.7rem; }
+  .publication-document-review .publication-document-content { padding: 1.25rem 1.5rem 3rem 2.25rem; }
+  .publication-document-review .publication-reviewed-document { font-size: 1.0625rem; line-height: 1.75; }
+  .publication-document-review .publication-margin-mark { left: -1.9rem; }
+  .publication-document-review .publication-change { margin-left: -0.7rem; padding-left: 0.5rem; }
+}
+
+/* Publication-only endpoint tracked changes. Noncolour cues are primary. */
+.publication-document-review .publication-ins {
+  color: var(--review-ink); background: var(--review-approve-soft);
+  text-decoration: underline solid currentColor 2px; text-underline-offset: .18em;
+  box-decoration-break: clone; -webkit-box-decoration-break: clone;
+}
+.publication-document-review .publication-del {
+  color: var(--review-ink); background: var(--review-reject-soft);
+  text-decoration: line-through solid currentColor 2px;
+  box-decoration-break: clone; -webkit-box-decoration-break: clone;
+}
+.publication-document-review .publication-change-label {
+  font: .8125rem/1.55 ui-sans-serif, system-ui, sans-serif;
+  color: var(--review-muted); overflow-wrap: anywhere;
+}
+.publication-document-review .publication-change-label { border-left: 2px solid var(--review-line-strong); padding-left: .65rem; }
+.publication-document-review .publication-added-block { border-right: 3px double var(--review-approve); }
+.publication-document-review .publication-deleted-block { border-right: 2px dashed var(--review-reject); }
+.publication-document-review .publication-deleted-block :is(.md-paragraph, .md-heading, li, blockquote) { text-decoration: line-through solid currentColor 2px; }
+.publication-document-review [data-marks-visible="false"] .publication-del,
+.publication-document-review [data-marks-visible="false"] .publication-deleted-block { display: none; }
+.publication-document-review [data-marks-visible="false"] .publication-ins { background: none; text-decoration: none; }
+.publication-document-review [data-marks-visible="false"] .publication-added-block { border-right-color: transparent; }
+.publication-document-review [data-marks-visible="false"] .publication-change-label { display: none; }
+.publication-document-review [data-marks-visible="false"] .publication-block:has(> .publication-removal) { display: none; }

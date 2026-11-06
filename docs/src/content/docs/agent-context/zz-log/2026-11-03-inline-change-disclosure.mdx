@@ -1,0 +1,51 @@
+---
+title: Inline changes without duplicate disclosure
+description: "Record the owner's rejection of duplicate Previous text, the narrow rendering correction and one no-Publish browser smoke."
+tags: [design, implementation, testing]
+---
+
+## Outcome
+
+**Verified inline changes now show old and new text once, without a duplicate local Previous dropdown.** Necessary fallback disclosures and full pinned/exact source in global Details remain available. One focused rendering selection and one small no-Publish browser smoke passed. The coordinator reopened the corrected rehearsal, and the owner gave positive feedback on this refinement. This is not acceptance of the full publishing workflow or live integration.
+
+## Owner correction
+
+The owner said, **“better but showing the criticmarkup AND this dropdown doesnt make sense”**. Their screenshot showed struck **sixty**, underlined **forty**, and an expanded **Previous** repeating the whole old paragraph below it. The request is to remove redundant local evidence, not remove access to the previous version.
+
+The word “criticmarkup” here describes the visible review marks. The implementation still uses the existing verified rendered-endpoint reconstruction; this feedback does not select CriticMarkup syntax, canonical storage or a parser. Progressive disclosure should supply missing information, not repeat old/new text already visible.
+
+## Narrow implementation
+
+The publication renderer now excludes local Previous when **`row.tracked.kind === 'inline'`**. Other row kinds retain their existing disclosure behavior, including block, source-only and unsupported fallbacks. Global Details still contains the pinned version, comparison, full pinned/proposed exact source and authoritative operation. The change is one rendering condition, not a differ or fidelity-policy change.
+
+Directly affected assertions now require inline old/new marks with no local Previous, literal notation unchanged, fallback Previous retained, and global evidence reachable. The existing real-preparation variation test covers the inline and source/table cases. Its gated browser body required no adaptation and remains unchanged. Client, CSS, toolbar, modal logic, Publish/confirmation/payloads, authentication, backend authority, source bytes and diff/projection core are unchanged.
+
+## Verification
+
+Exactly one contained focused server/render selection passed **two tests, zero failures, 17 filtered cases and 148 assertions in 19.17 seconds**. It selected the inline-render regression and existing full-page variation test across two files, not every test in those files or the whole suite. The variation test prepares all its existing cases, including finite refusal and honest fallback. Its assertions preserve exact evidence rather than replacing it with display guesses.
+
+Only after that pass, exactly one small existing-fixture browser smoke ran with an explicit **120-second test timeout** and **180-second outer ceiling**, under the existing resource wrapper and unchanged limits. It passed **one test, zero failures and 86 assertions in 6.92 seconds**, with **one Chromium launch** and **22 successful closed checkpoints**. It used one desktop **1440×900 light** viewport and three sequential fixture cases, not a new matrix or full publication campaign:
+
+- Both dispersed inline changes retain the expected struck/added words and have **zero duplicate local Previous disclosures**.
+- Source-only and unsupported table changes retain **one necessary Previous disclosure**, which opens to the old exact source.
+- Details still opens as the existing independent modal. The full pinned version and both exact-source endpoints remain reachable and match the fixture evidence in every case.
+- Display controls and Publish send **zero requests**. A test-only route guard would block any accidental Publish, but none was attempted or blocked.
+- Application, publication commit/push and owner-job counts are **zero**; delivery bytes and local/bare heads remain unchanged. Each disposable fixture's initialization commit and local-bare push are separate setup effects, not publication.
+
+The builder inspected all **four viewport captures**: the second inline change without duplication, the open Details evidence, and both retained fallback disclosures. Full-source equality/reachability is a DOM assertion, not a claim that all source fits inside one screenshot. No mobile/theme matrix, full Publish/replay campaign, broad review, native-window probe or independent browser rerun occurred.
+
+## Cleanup and handoff
+
+The smoke exclusively checked its fresh listener pair before fixture creation and would stop rather than reuse an occupied listener. Existing create-exclusive private ownership records were written before browser/context launch. All three contexts and the browser closed, all three exact recorded roots were removed, and the fresh listeners were clear. No recovery sweep, unrelated process action, manual deletion or cgroup stop was used.
+
+The worker left the existing human-facing rehearsal untouched. The coordinator subsequently stopped the known owned instance, confirmed its normal cleanup, and reopened the corrected version through the [normal documented launch experience](/cyberbaser/development/owner-publication-rehearsal/).
+
+After reopening, the owner said **“that's better”**. This records positive feedback on removing the duplicate disclosure, not approval of real publication, acceptance of the entire workflow, or a general usability claim.
+
+## Preserved boundaries
+
+The earlier tracked-change round-six and quiet-review round-two passes, independent evidence inspections and failed-gate history remain time-qualified evidence for their own source versions. This correction does not rerun or replace them. Historical tracked-change round-five cleanup remains **UNCONFIRMED**, its resources unlocated and untouched, and its actual durable effects must not be inferred zero.
+
+Precise source-span mapping remains **unproven**. The historical 21-fixture CriticMarkup gate remains **UNRUN**. No notation/storage/import/export/fork selection, per-change acceptance, invented author history, real-source/live integration or publication authority follows. Earlier nonblockers about count semantics, exact-only candidate labelling, Details spacing and inert no-JavaScript controls remain unfixed.
+
+The rehearsal guide and current FOCUS status describe the correction, and the existing UI-review memory records the nonduplication principle without a duplicate memory file. This new dated log is written last. Scope, whitespace and public-added-prose privacy checks close the wave; no installation, docs build, product commit/push or live-host work occurs.

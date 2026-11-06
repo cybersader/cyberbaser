@@ -37,10 +37,14 @@
 |---|---|
 | Apply is a second owner act | `design/owner-application-event.mdx`, `development/applying-approved-suggestion.mdx`, `development/approved-proposal-input.mdx` |
 | First real suggestion run (maintainer's sheet) | `development/first-real-application.mdx` |
+| Cyberbase Publish replacement: Quartz selected, content/URLs preserved, activation gated | `development/quartz-publishing-migration.mdx` |
 | Suggestions on from one config section, intake run by the owner app | `development/suggestions-on-the-private-site.mdx` |
 | Forge pull requests in the same inbox | `design/pull-requests-in-the-inbox.mdx` |
 | Forgejo on TrueNAS, then the Lane A live check | `development/forgejo-on-truenas.mdx`, `development/forgejo-lane-a-live-validation.mdx` |
 | Owner review checkpoint (prepared, unrun) | `development/owner-review-checkpoint.mdx`, `development/owner-proposal-ui-review.mdx` |
+| Exact-byte transport regression evidence (synthetic local checks, not live acceptance) | `agent-context/zz-log/2026-10-29-byte-preservation-regression.mdx` |
+| Usable owner workspace milestone and current integration limits | `agent-context/zz-log/2026-10-30-usable-owner-workspace.mdx` |
+| Owner publication rehearsal: authenticated exact review, local-only Git effects, simulated deployment | `development/owner-publication-rehearsal.mdx` |
 
 ## Status Legend
 

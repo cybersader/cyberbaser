@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { validateOwnerAlphaConfig } from '../src/config.js';
@@ -21,9 +21,16 @@ export async function command(root, args) {
   if (status) throw new Error(`synthetic Git command failed: ${stderr}`);
   return stdout.trim();
 }
-export async function publicationFixture({ trust = 'trusted: [example]\n', overrides = {} } = {}) {
+export async function publicationFixture({ trust = 'trusted: [example]\n', overrides = {}, onRoot } = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'publication-runtime-'));
   cleanup.push(root);
+  try { await onRoot?.(root); }
+  catch (error) {
+    // This root was just allocated here. Callback refusal must not orphan it;
+    // existing afterEach still confirms/removes its registered cleanup entry.
+    await rm(root, { recursive: true, force: true });
+    throw error;
+  }
   await command(root, ['init', '-q', '-b', 'main']);
   await command(root, ['config', 'user.name', 'Synthetic Owner']);
   await command(root, ['config', 'user.email', 'synthetic@example.invalid']);

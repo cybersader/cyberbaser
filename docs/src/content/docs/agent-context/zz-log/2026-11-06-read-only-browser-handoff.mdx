@@ -1,0 +1,33 @@
+---
+title: Read-only browser handoff evidence
+description: "Record scoped sign-in and handoff evidence through the unchanged non-browser actual-core composition gate, with browser and live-read boundaries retained."
+tags: [implementation, testing, governance]
+---
+
+## Outcome
+
+The approved sign-in and read-only browser handoff wave now has scoped source-review and synthetic actual-core composition evidence. **G2 is closed for unchanged, non-browser composition only.** This does not establish browser acceptance or an owner-usable experience. Stage B browser acceptance and Stage C fresh live-capture authority remain separate and unexecuted.
+
+## Implementation and source-review evidence
+
+The focused core sign-in selection passed **49 tests with 589 assertions**. The private handoff selection passed **18 tests**; no separate assertion count was reported. Two scoped source reviews found **zero blockers** and did not rerun those implementation selections. The handoff review required the actual-core G2 composition case before that gate could close. It did not reopen or rerun historical G1, which remains closed.
+
+## G2 actual-core composition
+
+One bounded actual-core synthetic test passed for an unchanged captured page. A distinct second session authenticated through the real body-only bootstrap POST and then fetched the captured review through the real authenticated GET; the original session continued to work. The run recorded exactly **one source read, one Prepare and one handoff issuer**. Seven writer routes were denied before body access or dispatch. There were no authorization artifacts, executable jobs or source mutations. The captured source and fixture remained unchanged.
+
+The test receipt reports **189 harness-instrumented checks**, plus additional snapshot assertions excluded from that count. This is not a runner assertion total. The independent G2 evidence review closed the gate for unchanged non-browser composition only: all **15 source pins** and the harness hash matched, and absence of the owned fixture was verified. The reviewer did not rerun the test.
+
+This closes Stage A's scoped source-review and synthetic actual-core composition evidence. The bridge was not exercised in a real browser: actual cookie interception/delivery, capability nonpersistence and owned browser-profile cleanup remain untested. The test's synthetic bridge submission and fixture cleanup do not establish those properties.
+
+## Stage B synthetic-runner preparation
+
+The first fake-only runner selection passed **12 of 14 tests** and failed two; that failure remains historical. Independent source review identified three bounded defects: unnecessary emergency cleanup after verified normal cleanup, a live scan that could pass without the required profile, and cleanup verification that did not reliably enforce its deadline. Repairs preserved the original failed evidence. The focused repaired selection passed **20 tests with 295 instrumented checks** (not a runner assertion total); all **21 owned synthetic fixture roots** were checked absent in-process. Independent repaired-delta review closed the findings without rerunning tests.
+
+This establishes local synthetic runner readiness, not actual browser acceptance. One exact browser request is pending, but it has not been approved and no browser execution has occurred. Actual live-profile and surviving-artifact scans and actual browser cleanup remain unexecuted. No quiescent shutdown-before-deletion scan exists, so even a future bounded pass cannot exclude encrypted, transformed or shutdown-flushed persistence. Stage C remains held. The runner remains local synthetic; separately checked workspace availability does not mean it is used by the runner. The owner reiterated the eventual real-dogfood goal, without granting new source-read or publication authority.
+
+## Limits and retained history
+
+There was no human acceptance, fresh live read, publication, or browser authority in this wave. The approved scope covers only disposable isolated login-session cookies, not persistence of the bootstrap capability or workspace credentials. The private driver is import-only and is not a runnable owner experience; this record adds no operator command. The existing command in the [owner publication rehearsal guide](/cyberbaser/development/owner-publication-rehearsal/) remains unchanged and continues to launch only the synthetic rehearsal.
+
+Stage B still requires separate exact-scope browser approval and browser acceptance. Stage C requires separate fresh bounded authority for any real source read; neither stage follows from G2. The November 4 log's failed first attempt, successful later backend capture, unattributed timeout and cleanup uncertainty remain historical as recorded; this closeout neither reruns nor revises them. No build, installation, test, browser, listener, source, helper, network, Git mutation, commit, push, deployment or artifact publication was performed for this documentation update.

@@ -1,0 +1,37 @@
+---
+title: "Independent snapshot host and client foundations"
+description: "Owner constraint, intended optional-adapter boundary and unproven acceptance targets, with direct host task approval reported."
+tags: [architecture, principles, planning]
+---
+
+## Owner constraint
+
+Later on 2026-10-07, after the permission-integration authorization record, the owner clarified that neither architecture should overscope its vision. Cyberbaser must not be tied to one particular host, and the host must contain no Cyberbaser/Cyberbase-specific internal product logic. Independent foundations should interface well.
+
+This reinforces the existing independent-spokes vision. Future-facing means independent evolution through bounded versioned contracts and minimal changes, not a new universal framework, speculative providers, framework extraction or automatic package renaming/refactoring.
+
+## Intended boundary and acceptance targets
+
+The host confirmed its planned tools, policy, bound hash-only handles, audit, transport and context enforce a generic host snapshot capability. Host capability records describe host identity/grant/room/expiry/capture only, without publication, Quartz, proposal or content-layout semantics. This is a reported plan, not inspected implementation.
+
+The host-prefixed r3 protocol and verifier belong in an **optional host-specific integration adapter**, not generic Cyberbaser publication/proposal domain. No reverse host runtime dependency on Cyberbaser is intended; test-only interoperability harnesses are distinct. Frozen r3 semantics and the existing verifier package/API remain unchanged. No code move, rename or refactor follows from this documentation clarification.
+
+Acceptance targets are:
+
+- The host is useful without Cyberbaser.
+- Another client uses unchanged host APIs without a host special case.
+- Replacing the host does not reshape Cyberbaser's publication/proposal domain.
+
+**These targets are not proven code properties.** Another-client acceptance has not been demonstrated. Verifier purity is not proof of architectural independence, and no code-level architectural audit is claimed or performed here.
+
+## Later same-day coordination status
+
+The host now peer-confirms receipt of **direct owner task approval** before slice-three coding. This supersedes the previous direct-confirmation hold recorded in the [permission-integration authorization log](/cyberbaser/agent-context/zz-log/2026-10-07-snapshot-permission-integration-authorization/), which remains unchanged as chronology.
+
+**Coding is NOT STARTED; no implementation edits are reported.** Worker/model approval remains separate. Concrete transport remains to freeze. There is no new test result, consumer rerun or extension of historical interoperability evidence.
+
+Production stays non-serving: its index remains wholly **UNCONFIGURED through slice three**, and fixture-only adapters cannot enable it. Real subject/store ownership, durable cross-subject/stopped-daemon erasure and host reservations remain later slice-four/six obligations. Existing live Cyberbase, preview/render/UI, publishing, source-migration, new commit/push and deployment holds remain intact.
+
+## Documentation scope
+
+The [canonical snapshot design](/cyberbaser/design/snapshot-preview-integration/) and agent orientation record the owner constraint, intended boundary, acceptance targets and latest reported coordination status separately. This wave inspects no host source, changes no code and dispatches no implementation or review. Checks are limited to local documentation tags, privacy, whitespace, chronology and preservation; no preflight, build, suite rerun, Git mutation or publication is authorized here.

@@ -1,0 +1,50 @@
+---
+title: "Snapshot transport reconciliation"
+description: "Proposed 3A sender/receiver scope and consumer qualifications, without implementation, security approval or interoperability acceptance."
+tags: [architecture, planning, testing]
+---
+
+## Finding and proposed first slice
+
+On 2026-10-08 the coordinating session reported directly reading and pin-checking the proposed host integration contract, then inspecting existing consumer descriptor/page/chunk validation. It identified **no consumer-semantic blocker** for proposed 3A paired sender/receiver transport. This is **not security approval, implemented behavior or interoperability acceptance**. No tests or workers were used for this reconciliation; this documentation worker did not repeat the contract, source or pin inspection.
+
+First 3A is bounded to **two new host modules and two focused tests**, with no MCP, handle store or production imports/index changes. Later 3B covers authority/custody, 3C optional MCP and 3D persistence/exclusion. Task approval is in place, but **coding is NOT STARTED per the last peer report; no first-edit event is recorded**. Worker/model approval remains separate.
+
+## Three consumer qualifications
+
+1. Public descriptor/pages/chunks remain **exact closed r3 schemas**. New host access-state fields stay outside them.
+2. Host chunk capacity defaults to 1 MiB with a 2 MiB maximum; the verifier defaults to 256 KiB with a hard 1 MiB ceiling. A future optional host adapter must explicitly request chunks within existing consumer budgets. No automatic limit increases follow.
+3. `expected.grantId` is local-only context, not descriptor/hash grant authentication. Independently supplied source expectations remain mandatory.
+
+RPC envelopes and host headers are outside the generic consumer domain. No automatic consumer code change or test run follows; existing verifier and historical interoperability evidence remain unchanged.
+
+## Boundaries retained
+
+Host-specific protocol integration remains optional, not generic Cyberbaser publication/proposal logic or a reverse host runtime dependency. Architectural independence and another-client acceptance remain targets, not newly demonstrated properties.
+
+Production remains non-serving: the index stays wholly **UNCONFIGURED through slice three**, and fixture-only adapters cannot enable it. Later ownership, durable erasure and host reservations remain gated, as do live source access, preview/render/UI, publication, source migration and new Git/deployment actions.
+
+The [canonical design](/cyberbaser/design/snapshot-preview-integration/) and FOCUS receive minimal status updates. Prior logs remain unchanged; no new product decision or decision-log entry is required. Private provenance stays in the coordination journal. Checks are limited to touched-file tags, privacy, whitespace and chronology; no tests, preflight, build, Git or external publication are part of this wave.
+
+## Later 2026-10-08: isolated 3A implementation and independent r2 closeout
+
+**Isolated 3A is implemented and independently reviewed. GO applies only to the exact four-file r2 source, not production or the next cut.** This supersedes the earlier approved-but-not-started checkpoint above without rewriting it.
+
+The original independent isolated 3A review retained low-severity diagnostic-classification finding F1. A post-review builder correction added the known storage-failure classification and fixed bounded diagnostic; its receipt still described independent delta review as pending. The same independent reviewer subsequently rechecked only that narrow r2 delta, explicitly **closed F1** and extended the original isolated GO to this exact generation. The broader review was not repeated. Final report, independent receipt and builder receipt were read and their three fingerprints verified here; no inconsistency was found.
+
+### Exact test scope and limits
+
+- Independent recheck: exactly the two authorized focused test files, **107 passed, zero failed, 1,438 assertions, exit zero**. No skip count was reported.
+- No independent handler-regression, broad-suite/security rereview, build, typecheck or additional-probe rerun. Builder evidence separately records the same focused selection and an affected-component typecheck exiting zero; neither is an additional independent rerun or a second set of unique tests.
+- Temporary ignored dependency source links were removed. These results are **not clean-install, packaging, full-suite, consumer-interoperability or live proof**.
+- Current/frozen source matching and historical evidence preservation remain reviewer/coordinator-recorded evidence. This documentation worker did not inspect product source, recompute its aggregate or run tests. The four implementation/test files remain reported uncommitted.
+
+### Behavior and retained gates
+
+The known storage failure retains typed corruption/durability refusal and a fixed bounded diagnostic with exception isolation. This classifies and refuses a failure; it does not repair storage or add ownership/durability authority.
+
+POST validation still operates on the existing parsed object. Duplicate-member handling follows the existing parser, not raw-wire duplicate rejection or fatal raw-wire UTF-8 validation. The earlier characterization was not rerun in this delta recheck; the reviewer relies on unchanged decoder/test bytes and retained evidence. Strict raw-header/query checks remain unchanged.
+
+Production remains wholly **UNCONFIGURED**, with no MCP, handle custody or live-authority implementation and no production composition changes. Public r3 output schemas remain unchanged; no consumer edits or reruns occurred. Optional-adapter independence, the three consumer qualifications above, later 3B/3C/3D, real ownership, durable erasure, host reservations and full/live acceptance remain separately gated. Isolated GO grants no next-cut, new-worker, shipping, deployment, migration or publication authority.
+
+Current design and FOCUS reflect this bounded closeout. Earlier log content/results remain intact; no new decision-log entry is required. Checks in this documentation continuation are limited to tags, privacy, whitespace, chronology and local prefix preservation. No tests, builds/preflight, installs, source changes, Git or external publication occurred here.

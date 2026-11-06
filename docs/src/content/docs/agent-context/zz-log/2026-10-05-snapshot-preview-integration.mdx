@@ -1,0 +1,31 @@
+---
+title: "2026-10-05 · Snapshot and private preview candidate"
+description: "Bounded source inspection informs an integration candidate, not selected contracts or implemented host execution."
+date: 2026-10-05
+status: research
+tags: [architecture, planning, meta]
+---
+
+## Evidence basis
+
+Two completed bounded read-only inspections and peer coordination were synthesized privately. Cyberbaser was inspected at `2e0bafb`: `packages/publish/src/select.js:243–255,404–462`, `packages/projection/src/project.js:478–654`, `renderers/quartz-cyberbase/build.sh:19–86`, and `packages/linkcheck/src/url-continuity.js:249–342`. Host inspection covered scoped dispatch, edit/version behavior, extension primitives, and archive construction. Its cited implementation was unchanged across the two inspected revisions; identifying references remain private. Peer coordination does not grant implementation or final acceptance.
+
+## Candidate, not selection
+
+The [canonical candidate](/cyberbaser/design/snapshot-preview-integration/) recommends host-owned consistent source capture and Cyberbaser-owned trusted disposable preview consumption; future request/result ownership is uncommitted. Current archive hashing does not establish consistent completeness. A snapshot alone supplies neither trusted execution nor a workspace result UI; browser tabs cannot bypass the deliberately excluded agent-MCP origin.
+
+The first useful milestone is an owner-requested, host-inspected private preview with no source/publication effects. External execution is possible only through a newly designed narrow authenticated handoff. Endpoint names, schemas, runtime, and dispatch remain unselected.
+
+## Scope and open gates
+
+Documentation only: added the candidate and concise FOCUS/migration pointers, without a decision-log amendment. No capture, builds, plugin installation, live calls, or browser acceptance ran. Source reconciliation, exact Apply/governance, production publication, independent consequential security review, first-real-run/review gates, Q09, and Q10 remain open. Prior direction amendments and October 2 history remain intact. Local date is `2026-10-05`.
+
+## 2026-10-05 · Independent review reconciliation
+
+**Observed documentation:** a completed independent design read and amended producer candidate were inspected. **Peer-review recommendation:** S1 snapshot production only with amendments; S2 integrated preview is not ready. This is conditional design evidence, not security certification, owner build approval, or runtime/test/UI acceptance. Private identifying references remain outside public docs.
+
+The candidate now distinguishes advisory peer-writable per-note revisions from real content SHA-256 write preconditions and mandatory captured-state/byte/manifest identity. Source/import reconciliation remains separate from unverified actor hints. Producer requirements include coherent in-memory capture, existing/pinned blobs, non-tar retrieval bound to grant/tenant-qualified room/scope, per-request authorization, scope filtering before totals/hashes, and visible quotas/expiry/revocation/purge. They are not implemented.
+
+Request/result ownership is uncommitted; S1 supplies no job/UI flow. Trusted owner selection of the exact publication-policy artifact is absent and a first-preview gate. S2 requires a separate registrable domain outside host agent-MCP origins; access, sandboxing, credentials/network, navigation/messaging, and lifetime remain unresolved.
+
+No live changes, capture, builds, installation, domain configuration, or browser actions occurred. Source/Apply/governance/publication, implementation authorization, independent runtime security review, and actual acceptance/cutover gates remain open.

@@ -71,6 +71,10 @@ The one small thing is a test, not a feature: the conformance suite (Option 5) g
 
 ## Option 4: change the unit of contribution from file-and-PR to a suggestion
 
+:::caution[Historical status checked 2026-10-31]
+The original proposal below is preserved, not adopted. No execution or result for its 21-fixture CriticMarkup gate was found in the bounded tracked documentation, orientation, application and package scope searched; private execution is not ruled out. Reject-all byte identity would prove tested reversibility, not absence of semantic conflicts, harmful acceptance or attribution abuse. The claims below about eliminating conflicts and proving nothing destroyed are not established results. See [review change notation](/cyberbaser/research/review-change-notation/) for the evidence limits, separate presentation/notation/authority layers and unrun evaluation gate. No primitive or per-change acceptance is selected; owner Publish remains whole-version.
+:::
+
 This is the strongest single idea in this pass.
 
 **The frame everything else argues inside:** a contribution is a new version of a file, delivered on a branch, reviewed as a diff, merged. Every hard problem in the critique is a consequence of that choice: merge-conflict UX for non-git contributors, per-PR previews that GitHub Pages structurally cannot provide, the fork-and-PR dance the CMS exists to hide, and the moderation load of reading whole-file diffs.

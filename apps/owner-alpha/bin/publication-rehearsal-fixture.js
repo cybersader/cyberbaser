@@ -12,11 +12,12 @@ import { createSaveHandler } from '../src/pipeline.js';
 import { createOwnerAlphaHandler, startOwnerAlphaServers } from '../src/server.js';
 import { assertCheckoutReady, createEditSession } from '../src/source.js';
 import { defineStoreContext, prepareStore } from '../src/store.js';
+import { publicationRehearsalCorpus, PUBLICATION_REHEARSAL_BASE, PUBLICATION_REHEARSAL_CANDIDATES } from './publication-rehearsal-corpus.js';
 
 const execFileAsync = promisify(execFile);
 export const REHEARSAL_SOURCE_PATH = 'rehearsal/synthetic-only.md';
-export const REHEARSAL_BASE = '# Synthetic publication rehearsal\n\nThis page exists only in a disposable local delivery repository.\n\nThe rehearsal value is old.\n\nRenderer, deployment, live confirmation, and local rebuild are simulated.\n';
-export const REHEARSAL_CANDIDATE = REHEARSAL_BASE.replace('value is old', 'value is new');
+export const REHEARSAL_BASE = PUBLICATION_REHEARSAL_BASE;
+export const REHEARSAL_CANDIDATE = PUBLICATION_REHEARSAL_CANDIDATES.dispersed;
 export const REHEARSAL_LABEL = 'Synthetic rehearsal only. Exact application, commit, and push affect a disposable local repository and local bare remote. Rendering, deployment, live confirmation, and local rebuild are simulated.';
 const MAPPING = Object.freeze({ id: 'synthetic-page', source: Object.freeze({ identity: 'synthetic-authoring-memory', path: 'drafts/rehearsal.md' }),
   relativePath: REHEARSAL_SOURCE_PATH, slug: 'rehearsal/synthetic-only' });
@@ -32,8 +33,8 @@ function configFor(checkout, port) {
       path: '.github/workflows/synthetic.yml', event: 'push', branch: 'main', jobs: ['build', 'deploy'], environment: 'github-pages' },
     workspace: { root: '.workspace/owner-alpha', store: '.workspace/owner-alpha/store', site: '.workspace/owner-alpha/site', cache: '.workspace/owner-alpha/cache' },
     paths: { include: ['rehearsal/*.md'], exclude: ['.git/**', '.workspace/**'] },
-    limits: { maxSourceBytes: 8192, maxReplacementBytes: 1024, maxChangedBytes: 1024, maxChangedLines: 6,
-      maxArtifactBytes: 65536, requestTimeoutMs: 5000, networkTimeoutMs: 30000 },
+    limits: { maxSourceBytes: 65536, maxReplacementBytes: 65536, maxChangedBytes: 65536, maxChangedLines: 3200,
+      maxArtifactBytes: 1048576, requestTimeoutMs: 5000, networkTimeoutMs: 30000 },
     checks: { allowedOfmVerdicts: ['clean'], requirePublishedSource: true, requireProjectionVerification: true,
       requireNoNewBrokenLinks: true, requireRenderedWitness: true },
     git: { autoCommit: true, autoPush: true, useHooks: true, commitMessagePrefix: 'synthetic-rehearsal:' },
@@ -49,7 +50,8 @@ function isolatedEnvironment() {
 
 /** Import-safe fixture construction. It never reads a local owner configuration,
  * real checkout, authoring workspace, browser profile, credential, or live API. */
-export async function createPublicationRehearsal({ port = 46327, serve = Bun.serve } = {}) {
+export async function createPublicationRehearsal({ port = 46327, serve = Bun.serve, variation = 'dispersed' } = {}) {
+  const corpus = publicationRehearsalCorpus(variation);
   if (!Number.isSafeInteger(port) || port < 1024 || port > 65534) throw new TypeError('rehearsal port must be 1024 through 65534');
   if (typeof serve !== 'function') throw new TypeError('rehearsal requires a server factory');
   const root = await mkdtemp(path.join(os.tmpdir(), 'owner-publication-rehearsal-'));
@@ -98,7 +100,7 @@ export async function createPublicationRehearsal({ port = 46327, serve = Bun.ser
     await git(checkout, ['config', 'user.name', 'Synthetic Rehearsal']);
     await git(checkout, ['config', 'user.email', 'synthetic@example.invalid']);
     await mkdir(path.join(checkout, 'rehearsal')); await mkdir(path.join(checkout, '.cyberbaser'));
-    await writeFile(path.join(checkout, REHEARSAL_SOURCE_PATH), REHEARSAL_BASE);
+    await writeFile(path.join(checkout, REHEARSAL_SOURCE_PATH), corpus.base);
     await writeFile(path.join(checkout, '.cyberbaser/trust.yml'), 'trusted: [rehearsal]\n');
     await git(checkout, ['add', '--', REHEARSAL_SOURCE_PATH, '.cyberbaser/trust.yml']);
     await git(checkout, ['commit', '-q', '-m', 'Synthetic rehearsal base']);
@@ -109,7 +111,7 @@ export async function createPublicationRehearsal({ port = 46327, serve = Bun.ser
     const config = configFor(checkout, port);
     const context = defineStoreContext({ projectRoot, workspaceRoot: path.join(projectRoot, config.workspace.root), storeRoot: path.join(projectRoot, config.workspace.store) });
     await prepareStore(context);
-    const text = REHEARSAL_CANDIDATE; let version = 1;
+    const text = corpus.candidate; let version = 1;
     const readNote = async () => {
       if (closed) throw new Error('synthetic source closed');
       const bytes = Buffer.from(text);
@@ -165,10 +167,27 @@ export async function createPublicationRehearsal({ port = 46327, serve = Bun.ser
       saveEdit: async () => { throw new Error('use synthetic publication panel'); }, lookupJob: pipeline.getJob });
     const labelled = async (request) => {
       const result = await authenticated(request);
-      if (request.method === 'HEAD' || !result.headers.get('content-type')?.startsWith('text/html')) return result;
+      if (request.method === 'HEAD') return result;
+      const type = result.headers.get('content-type') ?? '';
+      if (!type.startsWith('text/html') && !type.startsWith('text/css')) return result;
       const headers = new Headers(result.headers); headers.delete('content-length');
-      return new Response((await result.text()).replace(/(<body[^>]*>)/u, `$1<aside class="owner-shell" aria-label="Synthetic fixture">${REHEARSAL_LABEL}</aside>`),
-        { status: result.status, headers });
+      if (type.startsWith('text/css')) return new Response(`${await result.text()}\n.rehearsal-notice { background: var(--review-attention-soft, #fbf1dc); color: var(--review-attention, #8a5a12); border-top: 3px solid currentColor; font: 0.8125rem/1.5 system-ui, sans-serif; }\n.rehearsal-notice details { width: min(76rem, calc(100% - 2rem)); margin: auto; }\n.rehearsal-notice summary { padding: 0.65rem 0; min-height: 44px; cursor: pointer; }\n.rehearsal-notice p { max-width: 85ch; padding-bottom: 1rem; margin: 0; }\n.rehearsal-notice summary:focus-visible { outline: 3px solid currentColor; outline-offset: 2px; }`, { status: result.status, headers });
+      let content = await result.text();
+      // Fixture-only presentation: production has no simulation flag or bypass.
+      // Replacements also cover the escaped data-stages read by the job client.
+      for (const [before, after] of [
+        ['Published and confirmed.', 'Rehearsal complete'],
+        ['Publishing this version', 'Running the local rehearsal'],
+        ['The reviewed version completed its publication checks.', 'Exact application, commit and push completed locally. No public site changed.'],
+        ['Waiting for the site to build', 'Simulating the site build'],
+        ['Checking the live page', 'Simulating live confirmation'],
+        ['Refreshing your local copy', 'Simulating local rebuild'],
+        ['Checking the page', 'Checking the page (render simulated)'],
+        ['Pushing to your repository', 'Pushing to the disposable local remote'],
+        ['This runs checks, applies the exact reviewed change, commits and pushes it, then checks the deployment. Later authoring edits are not included.', 'This applies the exact change, commits and pushes only to the disposable local repository. Rendering, deployment and live confirmation are simulated. No public site changes.'],
+      ]) content = content.replaceAll(before, after);
+      const notice = `<aside class="rehearsal-notice" aria-label="Synthetic fixture"><details><summary><strong>Synthetic rehearsal</strong> · Disposable local Git only. No public-site effects.</summary><p>${REHEARSAL_LABEL}</p></details></aside>`;
+      return new Response(content.replace(/(<body[^>]*>)/u, `$1${notice}`), { status: result.status, headers });
     };
     Object.defineProperties(labelled, { bootstrapToken: { value: authenticated.bootstrapToken }, issueBootstrap: { value: authenticated.issueBootstrap } });
     const readerFetch = (request) => {

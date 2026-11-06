@@ -1,0 +1,36 @@
+---
+title: "Isolated snapshot handle-store closeout"
+description: "Corrected local handle-store step accepted within exact source scope, with instance-local failure limits and production integration still incomplete."
+tags: [architecture, planning, testing]
+---
+
+## Accepted isolated step
+
+On 2026-10-08 the corrected isolated 3B1 local handle-store step received **scoped GO; R1 is CLOSED only on the exact two-file r2 generation**. The original r1 source and BLOCKED review remain historical and immutable. This is not acceptance of complete host permission integration.
+
+Plain effect: the local store refuses tested file-identity changes while saving **its own catalog**. This is not knowledge-base publication or a host-auth change. The failure latch is **instance-local**: catalog bytes saved before refusal may remain and reopen as issued. No rollback, persistent cross-restart quarantine or crash/power-loss guarantee is claimed.
+
+## Review chronology and exact evidence
+
+Earlier invocation/output-format blockers remain preserved as tooling history, not review evidence. A registered direct-instruction leaf reviewer completed the original bounded review, which found R1 and blocked r1. The builder then corrected that finding; the same independent reviewer assessed the exact correction and explicitly closed R1 for r2. Original failed runs, fault evidence and receipts were not erased or retroactively accepted.
+
+The final independent receipt and coordinator closeout were read for this documentation update. The requested independent receipt fingerprint matched. Verdict, source-identity metadata, exact commands, flags and counts reconcile without inconsistency. Source/frozen-copy and other evidence checks remain reviewer/coordinator-recorded evidence, not repeated here.
+
+| Execution | Selection | Passed / failed | Assertions | Exit |
+| --- | --- | --- | --- | --- |
+| Independent focused run | One handle-store test file | 121 / 0 | 834 | 0 |
+| Independent probes | One private file containing two probes | 2 / 0 | 30 | 0 |
+| Builder before correction, reported | Original source with new negative tests | 119 / 2 | 807 | 1 |
+| Builder after correction, reported | Same focused selection on corrected source | 121 / 0 | 834 | 0 |
+
+Both independent commands used the shared verification gate and contained runner with isolation enabled, a 30,000 ms test timeout and **no test-name filter**. No skipped or filtered tests were declared or reported; explicit zero counts were not emitted. Builder results are separately reported execution, not independent reruns against old source or additional unique tests.
+
+No broad suite, typecheck, clean-install, consumer-interoperability or live proof follows from this independent review. It did not re-review 3A or the foundation. Cleanup is reported at its stated scope; no stronger inventory or crash-safety claim is added here.
+
+## Remaining boundaries
+
+The host reports no snapshot worker queued. Service/current authority and export policy, audit/MCP, real store ownership/erasure/replay and persistence composition remain incomplete. A stable store binding is not independently proven ownership. Production remains wholly **UNCONFIGURED**, and fixture-only adapters cannot enable it.
+
+This remains a generic host snapshot capability with optional Cyberbaser integration. r3 output schemas, consumer code/tests and [earlier 3A/interoperability evidence](/cyberbaser/agent-context/zz-log/2026-10-08-snapshot-transport-reconciliation/) are unchanged; no consumer work is required. GO grants no next-slice, new-worker, live, commit/push, deployment or publication authority.
+
+The [canonical snapshot design](/cyberbaser/design/snapshot-preview-integration/) and FOCUS receive minimal current-status updates. Private pins and fault details remain in the private journal; no new decision-log entry is required. Checks are limited to documentation tags, privacy, whitespace, chronology and preservation. No product source inspection/change, tests, builds/preflight, installs, Git or external publication occurred here.

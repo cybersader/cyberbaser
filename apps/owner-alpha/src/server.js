@@ -18,10 +18,11 @@ import { documentProjection, segmentsWithinSpan } from '@cyberbaser/review-proje
 import { fail, OwnerAlphaError } from './errors.js';
 import { listDurableJobs, loadDurableJob, validateJobId } from './job-state.js';
 import { ensureOwnerSite } from './site.js';
-import { createEditSession as createSourceEditSession } from './source.js';
+import { createEditSession as createSourceEditSession, liveUrlForSlug } from './source.js';
 import { prepareStore, storeContextFromConfig } from './store.js';
 import { startSuggestionIntake, suggestionFormOrigin } from './suggestions.js';
 import { createOwnerPublicationRuntime, createPublicationSourceGuard } from './owner-publication-runtime.js';
+import { publicationDisplay } from './publication-display.js';
 
 const COOKIE_NAME = 'owner_alpha_session';
 export const MAX_OWNER_SESSIONS = 64;
@@ -201,6 +202,21 @@ ${body}
 `;
 }
 
+function signInPage() {
+  return pageShell({
+    title: 'Sign in',
+    script: '/owner/assets/bootstrap.js',
+    body: `<main class="owner-shell">
+<header class="owner-header"><h1 id="owner-bootstrap-heading">Sign in</h1></header>
+<label for="owner-bootstrap-token">One-time sign-in code</label>
+<input id="owner-bootstrap-token" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="43">
+<div class="actions"><button id="owner-bootstrap-submit" type="button">Sign in</button></div>
+<p id="owner-bootstrap-status" class="status" role="status" aria-live="polite"></p>
+<noscript><p>Signing in needs scripting enabled in this browser.</p></noscript>
+</main>`,
+  });
+}
+
 function editPage({ editSessionId, csrfToken, session, reviewEnabled, publicationEnabled }) {
   return pageShell({
     title: 'Owner edit',
@@ -294,6 +310,7 @@ function jobPage(job, readerOrigin) {
   const safe = publicJob(job);
   const fromSuggestion = safe.origin?.type === 'approved-proposal';
   const fromPublication = safe.origin?.type === 'owner-publication';
+  if (fromPublication) return publicationJobPage(safe);
   const current = jobStepIndex(safe.state);
   const done = safe.state === 'completed';
   const stopped = Object.hasOwn(JOB_STOPS, safe.state) && !done;
@@ -791,42 +808,157 @@ ${reviewModeNav(entry.summary.queueId, mode.key, projection)}
 </section>`;
 }
 
-function publicationLanding(config, csrfToken, readerOrigin) {
-  const mapping = config.ownerPublication.mappings[0];
-  return pageShell({ title: 'Publish workspace page', script: '/owner/assets/publication.js',
-    body: `<main class="owner-shell"><header class="owner-header"><h1>Publish workspace page</h1>
-<p class="lede">Capture the configured authoring page and review its exact change against the version-controlled page. Preparation does not change or publish the page.</p></header>
-<p>Publication target: <span class="identity-path">${escapeHtml(mapping.relativePath)}</span></p>
-<form id="publication-form" data-action="prepare" data-mapping-id="${escapeHtml(mapping.id)}" data-csrf="${escapeHtml(csrfToken)}">
-<button type="submit">Prepare exact review</button><p id="publication-status" class="status" role="status"></p></form>
-<p><a href="${escapeHtml(readerOrigin)}/cyberbase/">Browse the local site</a></p></main>` });
+// Publication presentation uses only config or evidence already bound by the route.
+// These helpers never read the authoring host or broaden the public job projection.
+function publicationTitle(relativePath, text = '') {
+  return /^#\s+([^\r\n]+)$/mu.exec(text)?.[1]?.replace(/\s+#+\s*$/u, '').trim()
+    || (relativePath ? path.posix.basename(relativePath, '.md') : '') || 'Your page';
 }
 
-function publicationReviewPage(draft, job, modeKey, csrfToken) {
+function publicationHeader(back = false) {
+  return `<header class="publication-appbar"><a class="publication-brand" href="/owner/publication">Cyberbaser <span>Publication</span></a>${back ? '<a href="/owner/publication">Back to your page</a>' : '<span class="publication-private">Private workspace</span>'}</header>`;
+}
+
+const PUBLICATION_STOPS = Object.freeze({
+  ...JOB_STOPS,
+  completed: { step: 6, copy: 'Published and confirmed.' },
+  'live-verification-failed': { step: 4, copy: 'The change was pushed. The live page is not confirmed yet. Checking again.' },
+  'manual-intervention': { step: 1, copy: 'Publication stopped. Check the record before taking another action.' },
+  failed: { step: 0, copy: 'Publication stopped. Changes may already have been made; check the record.' },
+  cancelled: { step: 0, copy: 'Publication cancelled. Check the record before starting another review.' },
+});
+
+function publicationJobPage(safe) {
+  const title = publicationTitle(safe.origin?.relativePath);
+  const current = jobStepIndex(safe.state);
+  const done = safe.state === 'completed';
+  const stopped = Object.hasOwn(PUBLICATION_STOPS, safe.state) && !done;
+  const stages = { steps: JOB_STEPS, stops: PUBLICATION_STOPS, activeCopy: 'Publishing this version' };
+  const uncertain = ['failed', 'manual-intervention', 'cancelled'].includes(safe.state);
+  const steps = JOB_STEPS.map((step, index) => {
+    const status = uncertain ? 'unknown' : done || index < current ? 'done' : index === current ? (stopped ? 'stopped' : 'current') : 'pending';
+    const label = { done: 'Done', current: 'In progress', stopped: 'Stopped', pending: 'Waiting', unknown: 'See record' }[status];
+    return `<li class="job-step job-step-${status}" data-step="${step.key}" data-status="${status}"><span>${escapeHtml(step.label)}</span><span class="publication-step-status">${label}</span></li>`;
+  }).join('');
+  return pageShell({ title: `${title} · Publication`, bodyClass: 'publication-page', script: '/owner/assets/publication.js',
+    body: `${publicationHeader(true)}<main class="publication-shell publication-job" id="owner-job" data-job-id="${escapeHtml(safe.jobId)}" data-stages="${escapeHtml(JSON.stringify(stages))}">
+<header class="publication-heading"><h1>${escapeHtml(title)}</h1></header>
+<section aria-label="Publication progress" aria-live="polite"><h2 id="job-stage">${escapeHtml(PUBLICATION_STOPS[safe.state]?.copy ?? stages.activeCopy)}</h2>
+<p class="publication-explanation" id="publication-job-note" data-complete-copy="The reviewed version completed its publication checks.">${done ? 'The reviewed version completed its publication checks.' : 'This runs in the background. You can close this page and return to follow its progress.'}</p>
+<ol class="job-steps" id="job-steps">${steps}</ol><p id="job-error" class="error" role="alert">${safe.failure ? `Stopped (${escapeHtml(safe.failure.code)}).` : ''}</p></section>
+<details class="technical-evidence"><summary>Details for the record</summary><div class="publication-record">
+<p>Source page ${escapeHtml(safe.origin?.relativePath ?? '—')}</p><p>Job <span id="job-id">${escapeHtml(safe.jobId)}</span></p><p>State <span id="job-state">${escapeHtml(safe.state)}</span></p><p>Updated <span id="job-updated">${escapeHtml(safe.updatedAt ?? '—')}</span></p>
+<p id="job-recovery">${escapeHtml(safe.recovery?.instruction ?? '')}</p></div></details></main>` });
+}
+
+function publicationLanding(config, csrfToken, readerOrigin) {
+  const mapping = config.ownerPublication.mappings[0];
+  const title = publicationTitle(mapping.relativePath);
+  const publicUrl = liveUrlForSlug(config.live.baseUrl, mapping.slug);
+  return pageShell({ title: `${title} · Publication`, bodyClass: 'publication-page', script: '/owner/assets/publication.js',
+    body: `${publicationHeader()}<main class="publication-shell publication-landing"><header class="publication-heading"><h1>${escapeHtml(title)}</h1></header>
+<section class="publication-intro"><h2>Review your page before publishing</h2><p>Capture the current authoring version and see exactly what would change. Reviewing does not change or publish the page.</p>
+<dl class="publication-destination"><dt>Public address</dt><dd><a href="${escapeHtml(publicUrl)}" rel="noreferrer">${escapeHtml(publicUrl)}</a></dd></dl></section>
+<form id="publication-form" data-action="prepare" data-mapping-id="${escapeHtml(mapping.id)}" data-csrf="${escapeHtml(csrfToken)}">
+<div class="publication-action"><p>Your next step is a private review.</p><button type="submit">Review changes</button></div><p id="publication-status" class="status" role="status"></p></form>
+<p class="publication-local-link"><a href="${escapeHtml(readerOrigin)}/cyberbase/">Browse the local site</a></p></main>` });
+}
+
+function publicationBlock(block, text, tracked = null) {
+  if (tracked?.kind === 'inline') {
+    const groups = tracked.groups.map((group) => group.runs.map((run) => {
+      const html = tokenHtml(run.token);
+      return run.kind === 'context' ? html : run.kind === 'added'
+        ? `<ins class="publication-ins" aria-label="Added">${html}</ins>`
+        : `<del class="publication-del" aria-label="Removed">${html}</del>`;
+    }).join(''));
+    if (block.kind === 'paragraph') return `<p class="md-paragraph">${groups[0]}</p>`;
+    if (block.kind === 'heading') return `<p class="md-heading md-h${block.level}">${groups[0]}</p>`;
+    if (block.kind === 'quote') return `<blockquote class="md-quote">${groups[0]}</blockquote>`;
+    if (block.kind === 'code') return `<pre class="md-codeblock">${groups[0]}</pre>`;
+    if (block.items) { const tag = block.kind === 'ordered-list' ? 'ol' : 'ul'; return `<${tag}>${block.items.map((item, index) => `<li${item.depth ? ' class="md-nested"' : ''}>${groups[index]}</li>`).join('')}</${tag}>`; }
+  }
+  return block.uninterpreted?.length || !blockHtml(block)
+    ? `<div class="publication-source-block"><p class="publication-source-label">Exact source · ${escapeHtml(block.uninterpreted?.join(', ') || block.kind)} is not rendered in this structural review</p><pre>${escapeHtml(text.slice(block.start, block.end))}</pre></div>`
+    : blockHtml(block);
+}
+
+// Publication-only decorative icons. Labels and state belong to their controls.
+function publicationIcon(name) {
+  const paths = {
+    previous: '<path d="m14 6-6 6 6 6"/>',
+    next: '<path d="m10 6 6 6-6 6"/>',
+    eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path class="publication-eye-slash" d="m3 3 18 18"/>',
+    panel: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/>',
+    previousSource: '<path d="M9 5H5v4m0-4 5 5m-5 3a7 7 0 1 0 3-6"/>',
+    close: '<path d="m6 6 12 12M6 18 18 6"/>',
+  };
+  return `<svg class="publication-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths[name]}</svg>`;
+}
+
+function publicationDocument(display, text, { previous = false } = {}) {
+  if (display.exactOnly) return `<div class="publication-exact-document"><p class="publication-source-label">Exact source</p><pre>${escapeHtml(text)}</pre></div>`;
+  const rows = previous ? display.file.current.blocks.filter((block) => block.kind !== 'gap').map((block) => ({ block })) : display.tracked.rows;
+  return rows.map((row) => {
+    const content = row.block ? publicationBlock(row.deleted ? { ...row.block, start: 0, end: row.previous[0].length } : row.block,
+      row.deleted ? row.previous[0] : text, row.tracked) : `<p class="publication-removal">${row.removed ? 'Text removed at this position.' : 'Whitespace changed at this position.'}</p>`;
+    const label = row.tracked && row.tracked.kind !== 'inline' ? `<p class="publication-change-label">${escapeHtml(row.tracked.reason)}</p>` : row.tracked?.note ? `<p class="publication-change-label">${escapeHtml(row.tracked.note)}</p>` : '';
+    return `<section class="publication-block${row.mark ? ' publication-change' : ''}${row.deleted ? ' publication-deleted-block' : ''}${row.tracked?.kind === 'added' ? ' publication-added-block' : ''}"${row.mark ? ` id="publication-change-${row.mark}" tabindex="-1" data-change="${row.mark}"` : ''}>${row.mark ? `<span class="publication-margin-mark" aria-label="Change ${row.mark}">${row.mark}</span>` : ''}${label}${content}${row.changed && row.tracked?.kind !== 'inline' && row.previous?.some((part) => part.length) ? `<details class="publication-previous-fragment"><summary aria-label="Previous exact source${row.mark ? ` for change ${row.mark}` : ''}">${publicationIcon('previousSource')} Previous</summary><pre>${escapeHtml(row.previous.join('\n'))}</pre></details>` : ''}</section>`;
+  }).join('');
+}
+
+function publicationCurrentPage(view) {
+  const title = publicationTitle(view.relativePath, view.text);
+  let primary = `<div class="publication-exact-document"><p class="publication-source-label">Exact source</p><pre>${escapeHtml(view.text)}</pre></div>`;
+  try {
+    const projection = documentProjection({ files: [{ path: view.relativePath, exists: true,
+      baseText: view.text, candidateText: view.text }], operations: [] }).files[0].proposed;
+    if (projection.available) {
+      const rendered = projection.blocks.filter((block) => block.kind !== 'gap').map((block) =>
+        `<section class="publication-block">${publicationBlock(block, view.text)}</section>`).join('');
+      if (rendered) primary = rendered;
+    }
+  } catch { /* Unsupported projection keeps the escaped exact document, never a fake operation. */ }
+  const detailsContent = `<section id="publication-review-details"><p>The captured page matches the pinned repository version. Current deployment has not been verified.</p><details class="technical-evidence"><summary>Exact source and review details</summary><div class="publication-record"><p>Pinned repository version ${escapeHtml(view.baseCommit)}.</p><p>${escapeHtml(view.relativePath)}</p><h3>Captured page · exact source</h3><pre>${escapeHtml(view.text)}</pre></div></details></section>`;
+  return pageShell({ title: `${title} · Review document`, bodyClass: 'publication-page publication-document-review', script: '/owner/assets/publication.js',
+    body: `${publicationHeader(true)}<main class="publication-review-app" data-marks-visible="false"><header class="publication-toolbar" aria-label="Document review controls"><div class="publication-toolbar-title"><h1>${escapeHtml(title)}</h1></div><div class="publication-review-controls"><span role="status">No changes</span><button type="button" id="publication-toggle-details" aria-expanded="false" aria-controls="publication-details-dialog" aria-haspopup="dialog" hidden>${publicationIcon('panel')}<span>Details</span></button></div><div class="publication-toolbar-publish"><span>Read only</span></div></header><div class="publication-document-scroll" id="publication-document-scroll" tabindex="0" aria-label="Reviewed document"><div class="publication-document-content"><article class="publication-reviewed-document" aria-label="Captured document">${primary}</article><details id="publication-review-fallback"><summary>Details</summary>${detailsContent}</details></div></div></main>${publicationDetailsDialog()}` });
+}
+
+function publicationDetailsDialog() {
+  return `<dialog id="publication-details-dialog" aria-labelledby="publication-details-heading"><header class="publication-details-header"><h2 id="publication-details-heading">Details</h2><button type="button" id="publication-close-details" aria-label="Close details" autofocus>${publicationIcon('close')}<span>Close</span></button></header><div id="publication-details-body"></div></dialog>`;
+}
+
+function publicationReviewPage(draft, job, modeKey, csrfToken, publishAvailable) {
   const { session, operation, candidate } = draft.prepared;
-  const projection = documentProjection({ files: [{ path: session.relativePath, exists: true,
-    baseText: session.source.text, candidateText: candidate.text }], operations: [{ path: session.relativePath,
-    start: operation.start, end: operation.end,
+  const title = publicationTitle(session.relativePath, candidate.text);
+  const exactOperation = { path: session.relativePath, start: operation.start, end: operation.end,
     oldText: Buffer.from(operation.expectedOldBytesBase64, 'base64').toString('utf8'),
-    replacementText: Buffer.from(operation.replacementBytesBase64, 'base64').toString('utf8') }] });
-  const mode = REVIEW_MODES.find((item) => item.key === modeKey);
-  const nav = REVIEW_MODES.map((item) => `<a class="mode-tab${item.key === modeKey ? ' active' : ''}" href="/owner/publication/${draft.draftId}?mode=${item.key}"${item.key === modeKey ? ' aria-current="page"' : ''}>${escapeHtml(item.label)}</a>`).join('');
-  const exactFallback = `<p>This structural view is not derivable. Exact current and proposed source follow.</p><pre>${escapeHtml(session.source.text)}</pre><pre>${escapeHtml(candidate.text)}</pre>`;
-  const panel = mode.view === null
-    ? projection.modes.current.available && projection.modes.proposed.available
-      ? `<div class="proof-grid"><section class="proof proof-current"><h2>Current source</h2>${readingHtml(projection.files[0].current, 'compare-body')}</section><section class="proof proof-proposed"><h2>Proposed publication</h2>${readingHtml(projection.files[0].proposed, 'compare-body')}</section></div>` : exactFallback
-    : projection.modes[mode.key].available ? readingHtml(projection.files[0][mode.view], `document-${mode.key}`) : exactFallback;
-  const action = job.status === 'present'
-    ? `<p>This draft already has one job (${escapeHtml(job.state)}). It will not start again. Preparing unchanged evidence returns this same draft and job.</p><a href="/owner/jobs/${draft.jobId}">View publication job</a>`
-    : job.status === 'missing'
-      ? `<form id="publication-form" data-action="publish" data-draft-id="${draft.draftId}" data-csrf="${escapeHtml(csrfToken)}"><button type="submit">Publish this captured version</button><p id="publication-status" class="status" role="status"></p></form>`
-      : '<p>Job state cannot be established safely. Publication is unavailable; do not assume the job is absent.</p>';
-  return pageShell({ title: 'Review publication', script: '/owner/assets/publication.js',
-    body: `<main class="owner-shell review-detail"><header class="owner-header"><h1>Review publication</h1><a href="/owner/publication">Prepare another review</a></header>
-<p>Target: <span class="identity-path">${escapeHtml(session.relativePath)}</span>. Captured authoring version ${draft.prepared.reference.source.version}.</p>
-<p>This is an exact structural review, not a completed Quartz preview. Publish runs checks, applies this exact change, commits, pushes, and confirms the deployment. Later authoring edits are not part of this captured version.</p>
-<nav class="review-modes" aria-label="Review mode">${nav}</nav><p class="reading-note">Removed text is struck through; added text is underlined. This is a structural reading, not the published page.</p>${panel}
-<section class="job-card">${action}</section></main>` });
+    replacementText: Buffer.from(operation.replacementBytesBase64, 'base64').toString('utf8') };
+  const display = publicationDisplay({ path: session.relativePath, baseText: session.source.text,
+    candidateText: candidate.text, operation: exactOperation });
+  const diagnostic = job.status === 'present'
+    ? `<p>This draft already has one job (${escapeHtml(job.state)}). It will not start again. Preparing unchanged evidence returns this same draft and job.</p>`
+    : job.status === 'missing' ? '' : '<p>Job state cannot be established safely. Publication is unavailable; do not assume the job is absent.</p>';
+  const publishable = publishAvailable && display.available && job.status === 'missing';
+  const action = !publishAvailable ? '<span>Read only</span>' : !display.available
+    ? '<p class="publication-unavailable" role="alert">The pinned source, exact operation and candidate are inconsistent or unavailable. Publish is disabled. Inspect the exact evidence.</p><button type="button" disabled>Publish unavailable</button>'
+    : job.status === 'present'
+      ? `<a class="publication-button" href="/owner/jobs/${draft.jobId}">View progress</a>`
+      : publishable
+        ? `<form id="publication-form" data-action="publish" data-draft-id="${draft.draftId}" data-csrf="${escapeHtml(csrfToken)}"><button type="submit">Publish</button><p id="publication-status" class="status" role="status"></p><noscript><p>JavaScript is required for deliberate publication confirmation.</p></noscript></form>`
+        : '<p>Publication status is unavailable. A job may already exist; reload this review before taking another action.</p><button type="button" disabled>Publish unavailable</button>';
+  const dialog = publishable ? `<dialog id="publication-dialog" aria-labelledby="publication-confirm-heading" aria-describedby="publication-confirm-consequence"><h2 id="publication-confirm-heading">Publish this version?</h2><p class="publication-dialog-title">${escapeHtml(title)}</p><p class="publication-meta">${escapeHtml(session.liveUrl)}</p><p id="publication-confirm-consequence">This runs checks, applies the exact reviewed change, commits and pushes it, then checks the deployment. Later authoring edits are not included.</p><div class="dialog-actions"><button type="button" class="publication-cancel" id="publication-cancel" autofocus>Cancel</button><button type="button" id="publication-confirm">Publish</button></div></dialog>` : '';
+  const secondary = modeKey === 'current' || modeKey === 'compare';
+  const comparison = display.available ? `<details id="publication-comparison"${modeKey === 'compare' ? ' open' : ''}><summary>Comparison with pinned repository version</summary><p>Exact comparison evidence, not a second publishing choice.</p><div class="proof-grid"><section><h3>Pinned repository version</h3><pre>${escapeHtml(session.source.text)}</pre></section><section><h3>Proposed version</h3><pre>${escapeHtml(candidate.text)}</pre></section></div></details>` : '';
+  const primary = display.available ? publicationDocument(display, candidate.text) : `<p role="alert">${escapeHtml(display.reason)}</p><pre>${escapeHtml(candidate.text)}</pre>`;
+  const marksVisible = modeKey !== 'proposed' && !display.tracked?.defaultClean;
+  const trackedCount = display.tracked?.rows.filter((row) => row.mark).length ?? 0;
+  const iconControl = (id, label, icon, extra = '', tooltip = label) => `<span class="publication-tool"><button type="button" id="publication-${id}" aria-label="${label}" aria-describedby="publication-${id}-tip" ${extra}>${publicationIcon(icon)}</button><span class="publication-tooltip" role="tooltip" id="publication-${id}-tip">${tooltip}</span></span>`;
+  const reviewLimit = display.coarse ? `<aside class="publication-review-limit"><h3>Whole-document review</h3><p>${escapeHtml(display.coarseReason)}</p>${display.tracked?.reason && display.tracked.reason !== display.coarseReason ? `<p>${escapeHtml(display.tracked.reason)}</p>` : ''}</aside>` : '';
+  const detailsContent = `<section id="publication-review-details">${reviewLimit}<details id="publication-previous-version"${modeKey === 'current' ? ' open' : ''}><summary>Pinned repository version</summary>${display.available && !display.exactOnly ? `<article class="publication-reviewed-document">${publicationDocument(display, session.source.text, { previous: true })}</article>` : `<pre>${escapeHtml(session.source.text)}</pre>`}</details>${comparison}<details class="technical-evidence"><summary>Exact source and review details</summary><div class="publication-record"><p>Captured authoring version ${draft.prepared.reference.source.version}. Draft ${draft.draftId}.</p><p>${escapeHtml(session.relativePath)} · ${escapeHtml(session.liveUrl)}</p>${diagnostic}${!display.available ? `<p>${escapeHtml(display.reason)}</p>` : ''}<h3>Pinned repository version · exact source</h3><pre>${escapeHtml(session.source.text)}</pre><h3>Entire proposed version · exact source</h3><pre>${escapeHtml(candidate.text)}</pre><h3>Authoritative exact operation</h3><p>Byte range ${operation.start}–${operation.end}. Derived display differences are never saved or applied.</p><h4>Expected old text</h4><pre>${escapeHtml(exactOperation.oldText)}</pre><h4>Replacement text</h4><pre>${escapeHtml(exactOperation.replacementText)}</pre></div></details></section>`;
+  const detailsDialog = publicationDetailsDialog();
+  return pageShell({ title: `${title} · Review document`, bodyClass: 'publication-page publication-document-review', script: '/owner/assets/publication.js',
+    body: `${publicationHeader(true)}<main class="publication-review-app" data-marks-visible="${marksVisible}"><header class="publication-toolbar" aria-label="Document review controls"><div class="publication-toolbar-title"><h1>${escapeHtml(title)}</h1></div><div class="publication-review-controls">${display.available && trackedCount > 0 ? `<div class="publication-change-controls" aria-label="Change navigation">${iconControl('previous-change', 'Previous change', 'previous')}<output id="publication-change-count" aria-hidden="true">${trackedCount} ${trackedCount === 1 ? 'change' : 'changes'}</output>${iconControl('next-change', 'Next change', 'next')}</div>` : ''}${display.available ? iconControl('toggle-marks', 'Show changes', 'eye', `aria-pressed="${marksVisible}"`, marksVisible ? 'Changes shown' : 'Changes hidden') : ''}<button type="button" id="publication-toggle-details" aria-expanded="false" aria-controls="publication-details-dialog" aria-haspopup="dialog" hidden>${publicationIcon('panel')}<span>Details</span></button></div><div class="publication-toolbar-publish">${action}</div><span id="publication-review-announcement" class="publication-sr-only" role="status" aria-live="polite" aria-atomic="true">${trackedCount} ${trackedCount === 1 ? 'change' : 'changes'}. ${marksVisible ? 'Changes shown.' : 'Changes hidden.'}</span></header><div class="publication-document-scroll" id="publication-document-scroll" tabindex="0" aria-label="Reviewed document"><div class="publication-document-content">${display.coarse ? '<aside class="publication-coarse" role="note">Whole-document review</aside>' : ''}<article class="publication-reviewed-document" aria-label="Proposed document">${primary}</article><details id="publication-review-fallback"${secondary ? ' open' : ''}><summary>Details</summary>${detailsContent}</details></div></div></main>${detailsDialog}${dialog}` });
 }
 
 function technicalEvidence(entry, { decision = null, queueRetained = null, title = 'Technical evidence' } = {}) {
@@ -1103,7 +1235,20 @@ function queryObject(url, required) {
   return Object.fromEntries(found);
 }
 
-async function readBoundedJson(request, maximum) {
+function parseBootstrapBody(text) {
+  const value = JSON.parse(text);
+  // A single string-valued member cannot hide duplicate (including escaped)
+  // keys. JSON.parse first validates string escapes and JSON whitespace.
+  if (!/^[\t\n\r ]*\{[\t\n\r ]*"(?:[^"\\]|\\[\s\S])*"[\t\n\r ]*:[\t\n\r ]*"(?:[^"\\]|\\[\s\S])*"[\t\n\r ]*\}[\t\n\r ]*$/u.test(text)
+    || Object.keys(value).length !== 1 || !Object.hasOwn(value, 'token')
+    || !exactToken(value.token)
+    || Buffer.from(value.token, 'base64url').toString('base64url') !== value.token) {
+    throw new Error('bootstrap-body');
+  }
+  return value;
+}
+
+async function readBoundedJson(request, maximum, parse = JSON.parse) {
   const contentType = request.headers.get('content-type');
   if (contentType !== 'application/json') throw Object.assign(new Error('content-type'), { status: 415 });
   const declared = request.headers.get('content-length');
@@ -1133,7 +1278,7 @@ async function readBoundedJson(request, maximum) {
   try {
     const bytes = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), total);
     const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    return JSON.parse(text);
+    return parse(text);
   } catch (error) {
     if (error?.status) throw error;
     throw Object.assign(new Error('json'), { status: 400 });
@@ -1605,8 +1750,8 @@ export function createOwnerAlphaHandler({
     throw new TypeError('enabled proposal review requires list, load, loadDecision, and record dependencies');
   }
   if (config.ownerPublication.enabled
-    && ['prepare', 'load', 'publish', 'readJob'].some((key) => typeof ownerPublication?.[key] !== 'function')) {
-    throw new TypeError('enabled owner publication requires its private runtime service');
+    && ['prepare', 'load', 'loadCurrent', 'publish', 'readJob'].some((key) => typeof ownerPublication?.[key] !== 'function')) {
+    throw new TypeError('enabled owner publication requires prepare, load, loadCurrent, publish, and readJob dependencies');
   }
   // Each consumed bootstrap capability becomes one device session with its own
   // cookie and CSRF token, so one captured device secret is not every device's
@@ -1640,6 +1785,14 @@ export function createOwnerAlphaHandler({
   function issueBootstrap() {
     outstanding = createBootstrapCapability();
     return outstanding.bootstrapToken;
+  }
+
+  function consumeBootstrap(value) {
+    if (outstanding === null || !sameSecret(value, outstanding.bootstrapToken)) return null;
+    const consumed = outstanding;
+    outstanding = null;
+    sessions.set(consumed.sessionToken, { csrfToken: consumed.csrfToken });
+    return consumed.sessionToken;
   }
 
   function resolveSession(cookieValue) {
@@ -1678,18 +1831,43 @@ export function createOwnerAlphaHandler({
     }
     if (url.origin !== expectedOrigin) return errorResponse(421, 'invalid-host');
 
+    if (url.pathname === '/owner/sign-in') {
+      if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
+      if (url.search !== '') return errorResponse(400, 'unexpected-query');
+      return html(request.method === 'HEAD' ? null : signInPage());
+    }
+    const signInAsset = {
+      '/owner/assets/bootstrap.js': 'bootstrap.js',
+      '/owner/assets/owner.css': 'owner.css',
+    }[url.pathname];
+    if (signInAsset) {
+      if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
+      if (url.search !== '') return errorResponse(400, 'unexpected-query');
+      const assetResponse = await staticResponse(publicRoot, signInAsset, request, { directoryIndex: false });
+      assetResponse.headers.set('Cache-Control', 'no-store');
+      assetResponse.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive');
+      return assetResponse;
+    }
+
     if (url.pathname === '/owner/bootstrap') {
-      if (request.method !== 'GET') return response(null, 405, { Allow: 'GET' });
-      const query = queryObject(url, ['token']);
-      if (!query || outstanding === null || !sameSecret(query.token, outstanding.bootstrapToken)) {
-        return errorResponse(403, 'invalid-bootstrap');
+      if (request.method === 'POST') {
+        if (request.headers.get('origin') !== expectedOrigin) return errorResponse(403, 'invalid-origin');
+        if (url.search !== '') return errorResponse(400, 'unexpected-query');
+        let body;
+        try { body = await readBoundedJson(request, 256, parseBootstrapBody); }
+        catch (error) { return errorResponse(error?.status ?? 400, 'invalid-bootstrap-body'); }
+        const sessionToken = consumeBootstrap(body.token);
+        body.token = null;
+        if (sessionToken === null) return errorResponse(403, 'invalid-bootstrap');
+        return json({ ok: true }, 200, { 'Set-Cookie': cookieHeader(sessionToken) });
       }
-      const consumed = outstanding;
-      outstanding = null;
-      sessions.set(consumed.sessionToken, { csrfToken: consumed.csrfToken });
+      if (request.method !== 'GET') return response(null, 405, { Allow: 'GET, POST' });
+      const query = queryObject(url, ['token']);
+      const sessionToken = query ? consumeBootstrap(query.token) : null;
+      if (sessionToken === null) return errorResponse(403, 'invalid-bootstrap');
       return response(null, 303, {
         Location: config.ownerPublication.enabled ? '/owner/publication' : `${readerOrigin}/cyberbase/`,
-        'Set-Cookie': cookieHeader(consumed.sessionToken),
+        'Set-Cookie': cookieHeader(sessionToken),
       });
     }
 
@@ -1729,6 +1907,15 @@ export function createOwnerAlphaHandler({
         if (url.search) return errorResponse(400, 'invalid-publication-query');
         return html(request.method === 'HEAD' ? null : publicationLanding(config, csrfToken, readerOrigin));
       }
+      const current = /^\/owner\/publication\/current\/([0-9a-f]{64})$/u.exec(url.pathname);
+      if (current) {
+        if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
+        if (url.search) return errorResponse(400, 'invalid-publication-query');
+        try {
+          const view = await ownerPublication.loadCurrent({ viewId: current[1] });
+          return html(request.method === 'HEAD' ? null : publicationCurrentPage(view));
+        } catch { return errorResponse(409, 'publication-review-unavailable'); }
+      }
       const review = /^\/owner\/publication\/([0-9a-f]{64})$/u.exec(url.pathname);
       if (review) {
         if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
@@ -1737,13 +1924,14 @@ export function createOwnerAlphaHandler({
         try {
           const draft = await ownerPublication.load({ draftId: review[1] });
           const job = await ownerPublication.readJob(draft.jobId);
-          return html(request.method === 'HEAD' ? null : publicationReviewPage(draft, job, query.mode ?? 'changes', csrfToken));
+          return html(request.method === 'HEAD' ? null : publicationReviewPage(draft, job, query.mode ?? 'changes', csrfToken, ownerPublication.publishAvailable === true));
         } catch { return errorResponse(409, 'publication-review-unavailable'); }
       }
       const action = url.pathname === '/api/publication/prepare' ? 'prepare'
         : url.pathname === '/api/publication/publish' ? 'publish' : null;
       if (action === null) return errorResponse(404, 'not-found');
       if (request.method !== 'POST') return response(null, 405, { Allow: 'POST' });
+      if (action === 'publish' && ownerPublication.publishAvailable !== true) return errorResponse(403, 'publication-read-only');
       if (url.search) return errorResponse(400, 'invalid-publication-query');
       let body;
       try { body = await readBoundedJson(request, Math.min(maximumBodyBytes, 4096)); }
@@ -1759,6 +1947,12 @@ export function createOwnerAlphaHandler({
       try {
         if (action === 'prepare') {
           const result = await ownerPublication.prepare({ mappingId: body.mappingId });
+          if (result.outcome === 'unchanged') {
+            if (typeof result.reviewUrl !== 'string' || !/^\/owner\/publication\/current\/[0-9a-f]{64}$/u.test(result.reviewUrl)) {
+              return errorResponse(409, 'publication-prepare-failed');
+            }
+            return json({ outcome: 'unchanged', reviewUrl: result.reviewUrl }, 201);
+          }
           return json({ draftId: result.summary.draftId, jobId: result.summary.jobId,
             capturedVersion: result.summary.capturedVersion, candidateDigest: result.summary.candidateDigest,
             reviewUrl: `/owner/publication/${result.summary.draftId}` }, 201);

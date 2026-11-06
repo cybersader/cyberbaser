@@ -7,6 +7,7 @@ import { applyEditorOperation } from '../src/operation.js';
 import { detectYamlFrontmatterRange, liveUrlForSlug } from '../src/source.js';
 import {
   OWNER_PUBLICATION_ARTIFACT_TYPE,
+  captureOwnerPublicationReview,
   prepareOwnerPublication,
   readAuthoringSource,
   revalidateOwnerPublicationSource,
@@ -423,6 +424,65 @@ describe('effect-free publication candidate preparation', () => {
     const config = configWith((raw) => { raw.limits.maxArtifactBytes = 4096; });
     const base = 'a'.repeat(1800);
     await expectCode(() => prepare({ config, base, edited: `${base}b` }), 'publication-artifact-too-large');
+  });
+});
+
+describe('unchanged review capture without a writer artifact', () => {
+  const review = ({ config = configWith(), base = BASE, session = sessionFor(config, base), readNote = async () => note(base) } = {}) =>
+    captureOwnerPublicationReview({ config, mappingId: MAPPING.id, session, readNote });
+
+  test('full verified equality produces only a detached frozen view, while the writer still refuses no-op', async () => {
+    const result = await review();
+    expect(Object.keys(result.view).sort()).toEqual(['baseCommit', 'byteLength', 'digest', 'relativePath', 'text']);
+    expect(result.view.text).toBe(BASE);
+    expect(result.view.digest).toBe(note(BASE).digest);
+    deeplyFrozen(result);
+    expect(JSON.stringify(result.view)).not.toContain(MAPPING.source.identity);
+    expect(JSON.stringify(result.view)).not.toContain(MAPPING.source.path);
+    for (const key of ['operation', 'jobId', 'draftId', 'reference', 'session']) expect(result.view).not.toHaveProperty(key);
+    await expectCode(() => prepare({ edited: BASE }), 'no-op-edit');
+  });
+
+  test('changed captures reproduce exactly the existing prepared artifact from the same immutable values', async () => {
+    const config = configWith(); let reads = 0; let sessions = 0;
+    const captured = await captureOwnerPublicationReview({ config, mappingId: MAPPING.id,
+      readNote: async () => { reads += 1; return note(); }, createEditSession: async () => { sessions += 1; return sessionFor(config); } });
+    expect(captured.view).toBeNull();
+    const expected = await prepare();
+    const actual = await prepareOwnerPublication({ config, mappingId: MAPPING.id,
+      readNote: async () => captured.note, session: captured.session });
+    expect(actual).toEqual(expected);
+    expect(JSON.stringify(actual)).toBe(JSON.stringify(expected));
+    expect(reads).toBe(1); expect(sessions).toBe(1);
+  });
+
+  test('apparent equality cannot bypass full session integrity, binding, frontmatter or LF/BOM checks', async () => {
+    const config = configWith();
+    for (const [change, code] of [
+      [(session) => { session.source.digest = digest(Buffer.from('wrong')); }, 'edit-session-source-mismatch'],
+      [(session) => { session.source.byteLength += 1; }, 'edit-session-source-mismatch'],
+      [(session) => { session.source.text = session.source.text.replace('old', 'OLD'); }, 'edit-session-source-mismatch'],
+      [(session) => { session.source.bytesBase64 = 'YR=='; }, 'invalid-operation-bytes'],
+      [(session) => { session.source.frontmatter.end -= 1; }, 'edit-session-frontmatter-mismatch'],
+      [(session) => { session.baseCommit = 'wrong'; }, 'invalid-edit-session'],
+      [(session) => { session.policyRevision = `sha256:${'0'.repeat(64)}`; }, 'publication-session-binding-mismatch'],
+      [(session) => { session.relativePath = 'Notes/Other.md'; }, 'publication-session-binding-mismatch'],
+      [(session) => { session.slug = 'Notes/other'; }, 'publication-session-binding-mismatch'],
+      [(session) => { session.liveUrl += 'other'; }, 'publication-session-binding-mismatch'],
+      [(session) => { session.source.extra = true; }, 'invalid-edit-session'],
+      [(session) => { Object.defineProperty(session.source, 'text', { get() { throw new Error('must not read'); } }); }, 'invalid-edit-session'],
+    ]) {
+      const session = structuredClone(sessionFor(config)); change(session);
+      await expectCode(() => review({ config, session }), code);
+    }
+    await expectCode(() => review({ base: BASE.replaceAll('\n', '\r\n') }), 'source-not-lf-only');
+    await expectCode(() => review({ base: `${BASE}\r` }), 'source-not-lf-only');
+    await expectCode(() => review({ base: `﻿${BASE}` }), 'publication-bom-unsupported');
+    await expectCode(() => review({ config: configWith((raw) => { raw.limits.maxSourceBytes = 128; }), base: 'x'.repeat(129) }), 'authoring-source-too-large');
+    await expectCode(() => review({ session: sessionFor(config, 'x'.repeat(4097)) }), 'publication-session-too-large');
+    await expectCode(() => review({ session: sessionFor(config, 'é'.repeat(2049)) }), 'publication-session-too-large');
+    await expectCode(() => review({ readNote: async () => ({ ...note(BASE), byteLength: 1 }) }), 'authoring-source-integrity-mismatch');
+    await expectCode(() => review({ readNote: async () => ({ ...note(BASE), path: 'Other.md' }) }), 'authoring-source-binding-mismatch');
   });
 });
 

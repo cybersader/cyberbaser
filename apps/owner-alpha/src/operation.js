@@ -34,7 +34,7 @@ function exactSessionString(value, label) {
   return value;
 }
 
-function validateEditSession(session) {
+export function validateEditSession(session) {
   if (!isPlainObject(session)
     || session.schemaVersion !== EDIT_SESSION_SCHEMA_VERSION
     || session.artifactType !== EDIT_SESSION_ARTIFACT_TYPE

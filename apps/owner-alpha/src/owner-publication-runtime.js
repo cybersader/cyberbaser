@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { runImmediateChecks } from './checks.js';
@@ -8,6 +9,7 @@ import { artifactJson, deepFreeze } from './json.js';
 import { assertPrivateDirectory, readPrivateFile } from './proposal-decisions.js';
 import { defaultProposalReviewGit, readTrustPolicy } from './proposal-review.js';
 import { assertCheckoutReady, createEditSession } from './source.js';
+import { captureOwnerPublicationReview } from './owner-publication.js';
 import { assertSafeStoreTarget, resolveStorePath } from './store.js';
 import {
   guardOwnerPublicationSource, loadOwnerPublicationDraft,
@@ -15,6 +17,10 @@ import {
 } from './owner-publication-store.js';
 
 const MAXIMUM = 8 * 1024 * 1024;
+export const PUBLICATION_VIEW_LIMIT = 8;
+// Account for serialized UTF-8 evidence plus the retained UTF-16 document text.
+export const PUBLICATION_VIEW_BYTE_LIMIT = 2 * 1024 * 1024;
+export const PUBLICATION_VIEW_TTL_MS = 30 * 60 * 1000;
 
 /** Private on-disk authority, never the HTTP job projection. An existing empty or
  * partial job directory is ambiguous, not an invitation to start another job. */
@@ -107,22 +113,47 @@ export function createOwnerPublicationRuntime({
   config: configInput, context, readNote, pipeline,
   sourceSession = createEditSession, checkoutReady = assertCheckoutReady,
   git = defaultProposalReviewGit, immediateChecks = runImmediateChecks,
-  onCompletion = () => {},
+  onCompletion = () => {}, clock = () => Date.now(),
 }) {
   const config = validateOwnerAlphaConfig(configInput);
   const reader = typeof readNote === 'function' ? readNote : async () => {
     fail('publication-reader-unavailable', 'publication source reader is unavailable');
   };
   const readJob = createPublicationJobReader({ config, context });
+  const writer = pipeline?.startEdit;
+  const startEdit = typeof writer === 'function' ? writer.bind(pipeline) : null;
+  const publishAvailable = startEdit !== null;
+  const views = new Map();
+  let viewBytes = 0;
+  const removeView = (id) => {
+    viewBytes -= views.get(id).bytes;
+    views.delete(id);
+  };
+  const expireViews = (now) => {
+    for (const [id, entry] of views) if (entry.expiresAt <= now) removeView(id);
+  };
+  const retainView = (view) => {
+    const now = clock();
+    expireViews(now);
+    const bytes = Buffer.byteLength(artifactJson(view), 'utf8') + 2 * view.text.length;
+    if (bytes > PUBLICATION_VIEW_BYTE_LIMIT) fail('publication-view-too-large', 'unchanged review exceeds the memory byte limit');
+    while (views.size >= PUBLICATION_VIEW_LIMIT || viewBytes + bytes > PUBLICATION_VIEW_BYTE_LIMIT) {
+      removeView(views.keys().next().value);
+    }
+    const viewId = randomBytes(32).toString('hex');
+    views.set(viewId, { view, bytes, expiresAt: now + PUBLICATION_VIEW_TTL_MS });
+    viewBytes += bytes;
+    return deepFreeze({ outcome: 'unchanged', reviewUrl: `/owner/publication/current/${viewId}` });
+  };
   return Object.freeze({
+    publishAvailable,
     async prepare({ mappingId }) {
-      let baseCommit;
-      return prepareOwnerPublicationDraft({ config, context, mappingId, readNote: reader,
-        createEditSession: async (input) => {
-          const session = await sourceSession(input);
-          baseCommit = session.baseCommit;
-          return session;
-        },
+      const capture = await captureOwnerPublicationReview({ config, mappingId, readNote: reader,
+        createEditSession: sourceSession });
+      if (capture.view) return retainView(capture.view);
+      const baseCommit = capture.session.baseCommit;
+      return prepareOwnerPublicationDraft({ config, context, mappingId, readNote: async () => capture.note,
+        createEditSession: async () => capture.session,
         immediateChecks: async (input) => {
           // Same policy source and owner subject as normal preapply, pinned to the
           // reviewed Git base. Missing/malformed policies remain null, fail closed.
@@ -132,13 +163,19 @@ export function createOwnerPublicationRuntime({
       });
     },
     load({ draftId }) { return loadOwnerPublicationDraft({ config, context, draftId }); },
-    publish({ draftId }) {
+    loadCurrent({ viewId }) {
+      expireViews(clock());
+      if (typeof viewId !== 'string' || !/^[0-9a-f]{64}$/u.test(viewId) || !views.has(viewId)) {
+        fail('publication-view-not-found', 'unchanged review is unavailable or expired');
+      }
+      return views.get(viewId).view;
+    },
+    async publish({ draftId }) {
+      // Deny before the store can inspect layout, revalidate or authorize anything.
+      if (!publishAvailable) fail('publication-start-unavailable', 'publication pipeline is unavailable');
       return publishOwnerPublicationDraft({ config, context, draftId, readNote: reader,
         checkoutReady, readJob, onCompletion,
-        startEdit: (input) => {
-          if (typeof pipeline?.startEdit !== 'function') fail('publication-start-unavailable', 'publication pipeline is unavailable');
-          return pipeline.startEdit(input);
-        },
+        startEdit,
       });
     },
     readJob,

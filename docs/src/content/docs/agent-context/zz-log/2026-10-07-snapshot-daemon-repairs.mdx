@@ -1,0 +1,84 @@
+---
+title: "2026-10-07 · Daemon repair evidence"
+description: "Inspected receipt and reported daemon fixes/tests reconcile; production remains non-serving and security review, slice three and deployment stay on hold."
+date: 2026-10-07
+status: research
+tags: [architecture, testing, meta]
+---
+
+## Completed fixes/tests evidence, not security acceptance
+
+The host reports completion of a bounded repair → separate deterministic tests → evidence-reconciliation workflow for daemon slice two. **Evidence completeness PASS only. Production remains NON-SERVING; final intended-model security review, slice three and deployment remain ON HOLD.** The earlier failed intended-review attempt remains historical and unattested. This milestone is not its retry, a replacement security review or permission to advance.
+
+This documentation worker read the full workflow report and JSON receipt, independently verified the receipt bytes against the supplied SHA-256 identity, and reconciled counts, scope and recorded frozen-source provenance. Execution results remain host-recorded evidence, not tests/builds rerun here. Private workflow identifiers, paths, hashes and source fingerprints are retained only in private coordination notes.
+
+The [canonical design](/cyberbaser/design/snapshot-preview-integration/) and minimal FOCUS current status now reflect this hold. Prior [r1/r2 compatibility evidence](/cyberbaser/agent-context/zz-log/2026-10-07-snapshot-producer-consumer-interop/), authorization, decision history and artifacts remain unchanged. No new consumer compatibility extension or rerun occurred.
+
+## Three defect classes, four scenarios
+
+- **Context mutation across awaits:** erasure uses the same validated frozen target for verification, deletion and evidence; creation retains its validated frozen identity/expiry context while resolving the mount. These are two separate scenarios within one defect class.
+- **Expiry during final publication:** recheck effective expiry after the final temporary-catalog fsync, refuse late expiry, preserve earlier captures and roll back only newly promoted objects.
+- **Non-destructive recovery:** reject missing/invalid mandatory descriptor fields and inconsistent derived values before deleting catalog, staging, temporary-catalog or orphan evidence.
+
+These are documented repairs and concrete regressions, not exhaustive corruption or concurrency certification. No producer code review was performed by this documentation worker.
+
+## Reconciled recorded results
+
+| Recorded selection | Passed | Failed | Skipped | Assertions | Exit |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Exactly six capture files, no filters | 359 | 0 | 0 | 1,047 | 0 |
+| Exactly two manager/lock files, no filters | 56 | 0 | 0 | 278 | 0 |
+| Four pre-fix reproductions | 0 | 4 expected failures | Not specified | 7 | 1 expected |
+
+Both contained component builds recorded exit 0. The capture selection increased from a recorded prior 308 to 359, exactly **51 new regressions**. The separate independent focused selection recorded 54 passed, zero failed, 112 filtered and 322 assertions; it overlaps the six-file run and is **not additional unique coverage**. The earlier builder's 45-test focused selection preceded six additional stored-identity cases; those plus three existing startup-barrier tests account for the later 54. No count inconsistency was found.
+
+These are selected subsets, not full component suites. Expected synthetic malformed-frame, unsafe-path, capacity-failure and loopback-refusal diagnostics are not new provider failures. The final evidence-reconciliation role did not supply security acceptance.
+
+## Frozen provenance and preservation
+
+The inspected receipt contains 18 frozen source/test fingerprints and five changed-file fingerprints that agree with its source map. The report identifies the same receipt and frozen snapshot and reports all 18 current/frozen hashes matching, exactly five changed files and 13 unchanged files. **Those actual source-hash checks were reported by the host, not independently repeated here.** This worker checked receipt identity and internal/report consistency without opening producer implementation.
+
+Previous receipts/snapshots and historical r1/r2 artifacts are reported preserved, including each artifact's 33 generated-file and 13 source fingerprints. Neither historical artifact was regenerated or reaccepted against these daemon repairs. Earlier consumer unit-test counts remain prior evidence.
+
+## Unchanged holds and next gates
+
+Production still lacks the authenticated context/mount adapter, durable pending-erasure integration and subject/store authority needed to serve. Full suites, intended-model security review, live grant/export/handle/audit/budget integration, hostwide reservations, read-only-bind witnesses, capacity/performance and all 27 acceptance obligations remain open.
+
+S2/private preview, source authority/reconciliation, Q09/Q10, the first real suggestion, owner review and human usability are unchanged. No host edits, new review, installs, builds, services, live reads/writes, deployment, publication, credentials/configuration changes, commit or push occurred in this documentation/evidence-reconciliation wave.
+
+## Independent review follow-up · 2026-10-07
+
+**Current verdict: FIX-FIRST**, from a new, separately owner-approved independent host review. This is distinct from the earlier fixes/tests evidence-reconciliation workflow; its historical PASS results above remain unchanged and are not security acceptance.
+
+Public findings are limited to these coarse categories:
+
+| Category | Severity |
+| --- | --- |
+| Physical-erasure retry reliability | High |
+| Healthy lock-contention availability | Medium |
+| Final-publication expiry | Medium |
+
+The review reports three independently reproduced adverse outcomes: **three new synthetic probes passed, zero failed, 21 assertions**. Passing here means the findings were reproduced, **not acceptance**. Old suites/builds were not rerun. Prior immutable-context/schema defects are closed for the documented seams; the expiry repair is partial. No public-read bypass was demonstrated, and the production non-serving boundary remains intact.
+
+The coordinating session read the full private report but has not independently rerun tests or hash checks. The underlying repair receipt is reported unchanged, with 18 current and 18 frozen source hashes matching according to the coordinator. Report provenance, reproduction details and source anchors stay private; this documentation worker launched no review and performed no producer code inspection.
+
+**Production remains NON-SERVING; slice three and deployment remain ON HOLD.** The host awaits the owner's bounded repair/recheck decision. No new decision was locked and no repairs are authorized by this follow-up. Earlier failed-review history, r1/r2 compatibility evidence and all broader authority, acceptance, S2/source and human gates remain unchanged.
+
+## Final bounded cleanup closure · 2026-10-07
+
+**Both remaining cleanup findings are CLOSED within the reviewed seams; no repair-induced regression was verified in that bounded scope.** This supersedes the unresolved-finding status above, not its historical evidence. It is not whole-product/release readiness, security certification or completion of all 27 acceptance obligations.
+
+The preceding repair re-review closed erasure-retry and healthy-contention findings and corrected the observed expired-success behavior. It still retained publication-cleanup and shutdown cleanup-drain concerns. The final independent review closes both after further repairs. Reproduction details, source anchors and exact private provenance remain outside public docs.
+
+| Final independent selection | Passed | Failed | Filtered | Assertions | Exit |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Focused repair regressions | 25 | 0 | 122 | 201 | 0 |
+| Seven new desired-behavior probes | 7 | 0 | 0 | 70 | 0 |
+
+These new probes check desired behavior; they are distinct from the earlier adverse-outcome probes, which were preserved and not rerun. The wider 384-test capture selection, 56 manager/lock tests and two builds are **prior builder-only evidence**, not new independent suite execution. No full suites, builds or tests were rerun by this documentation worker.
+
+This worker read the final report, review receipt and intermediate recheck for chronology, independently verified the final receipt's SHA-256 against the supplied identity, and reconciled closure statuses, counts and referenced provenance. No inconsistency was found. The reviewer reports verification of 18 source files and 211 historical files; **those actual source/history hash checks were not repeated here**. No producer code was inspected.
+
+**Conservative retention qualification:** refused-but-published captures may retain valid referenced bytes until trusted release, purge or TTL cleanup. Refusal is not successful issuance and does not promise immediate physical removal on every refusal. Closure is confined to observable reviewed seams, not arbitrary later delivery timing or overall cleanup/performance guarantees.
+
+Production routes remain disabled/NON-SERVING. Later authenticated integration, authority/erasure/budget/capacity proofs, live operation, slice three, deployment, source reconciliation and human gates remain unchanged. No consumer rerun or extension of historical r1/r2 interoperability occurred. The host reports jobs and owned fixture cleanup complete; this verdict authorizes no further worker or repair cycle. Earlier logs, receipts, artifacts and failed-review history are preserved. No new direction/roadmap decision, live access, publication, commit or push occurred in this documentation addendum.
