@@ -5,24 +5,21 @@ import type { SuggestCorrectionOptions } from "./suggestCorrectionConfig"
 // @ts-ignore Quartz's inline-script loader compiles this browser entry separately.
 import script from "./scripts/suggest-correction.inline"
 
-/**
- * Disabled-by-default account-free correction form for real source-backed pages.
- *
- * Only the retained publication binding digest, opaque page ID, and public intake
- * action reach the browser. Repository, revision, source path, owner origin, and
- * private-network details remain build-time inputs and are never form fields or
- * request members.
- */
+/** Only the public intake action and opaque publication identity reach readers. */
 export default ((opts: SuggestCorrectionOptions) => {
-  const label = opts.enabled ? (opts.text ?? "Suggest a correction") : "Suggest a correction"
+  const label = opts.enabled ? (opts.text ?? "Suggest an edit") : "Suggest an edit"
 
   function SuggestCorrection({ fileData, displayClass }: QuartzComponentProps) {
     const binding = suggestionBindingForPage(fileData.relativePath, fileData.slug, opts)
     if (!binding) return null
 
     return (
-      <details class={classNames(displayClass, "suggest-correction")}>
-        <summary>{label}</summary>
+      <section class={classNames(displayClass, "suggest-correction")} aria-label="Suggest an edit">
+        <button type="button" class="suggest-correction-entry">{label}</button>
+        <p class="suggest-correction-hint" role="status" aria-live="polite" hidden>
+          Select words in the page and choose Suggest edit, or click a pencil beside a paragraph.
+          Your edit goes to the owner for review; the page stays unchanged. No account needed.
+        </p>
         <form
           class="suggest-correction-form"
           action={binding.action}
@@ -31,39 +28,19 @@ export default ((opts: SuggestCorrectionOptions) => {
           data-action={binding.action}
           data-binding-digest={binding.bindingDigest}
           data-page-id={binding.pageId}
+          hidden
         >
-          <p class="suggest-correction-intro">
-            Send one exact text correction for owner review. No account or contact information is requested.
-          </p>
           <label>
-            Text to replace
-            <textarea name="quote" required rows={3} maxlength={16 * 1024}></textarea>
-          </label>
-          <div class="suggest-correction-selection">
-            <button type="button" class="suggest-correction-use-selection">Use selected text</button>
-            <span class="suggest-correction-selection-hint" role="status" aria-live="polite"></span>
-          </div>
-          <div class="suggest-correction-context">
-            <label>
-              Context immediately before (optional)
-              <textarea name="prefix" rows={2} maxlength={4 * 1024}></textarea>
-            </label>
-            <label>
-              Context immediately after (optional)
-              <textarea name="suffix" rows={2} maxlength={4 * 1024}></textarea>
-            </label>
-          </div>
-          <label>
-            Replacement text
-            <textarea name="replacement" rows={3} maxlength={16 * 1024}></textarea>
+            Suggest an edit
+            <textarea name="edited" rows={4} spellcheck={true}></textarea>
           </label>
           <label>
-            Why should this change?
-            <textarea name="rationale" required rows={3} maxlength={16 * 1024}></textarea>
+            Why? (optional)
+            <input name="rationale" type="text" maxlength={16 * 1024} />
           </label>
           <label>
-            Evidence links (optional, one HTTPS URL per line)
-            <textarea name="evidence" rows={2} maxlength={16 * 1024}></textarea>
+            Source link (optional)
+            <input name="evidence" type="url" inputmode="url" placeholder="https://…" maxlength={2 * 1024} />
           </label>
           {opts.enabled && opts.challengeSiteKey !== undefined && (
             <div
@@ -74,100 +51,93 @@ export default ((opts: SuggestCorrectionOptions) => {
             ></div>
           )}
           <div class="suggest-correction-actions">
-            <button type="submit" disabled>Send for review</button>
-            <span class="suggest-correction-status" role="status" aria-live="polite"></span>
+            <button type="submit" disabled>Send</button>
+            <button type="button" class="suggest-correction-cancel">Cancel</button>
           </div>
+          <p class="suggest-correction-status" role="status" aria-live="polite"></p>
         </form>
-      </details>
+      </section>
     )
   }
 
   SuggestCorrection.afterDOMLoaded = script
   SuggestCorrection.css = `
-.suggest-correction {
-  margin: 0.6rem 0 1rem;
-  border: 1px solid var(--lightgray);
-  border-radius: 6px;
-  font-size: 0.9rem;
-}
-.suggest-correction > summary {
-  cursor: pointer;
-  padding: 0.45rem 0.65rem;
-  color: var(--secondary);
-  font-family: var(--headerFont);
-  font-weight: 600;
-}
+.suggest-correction { margin: 0.6rem 0 1rem; font-size: 0.9rem; }
+.suggest-correction-hint { color: var(--gray); }
 .suggest-correction-form {
   display: grid;
-  gap: 0.75rem;
-  padding: 0 0.75rem 0.85rem;
-}
-.suggest-correction-intro {
-  margin: 0;
-  color: var(--gray);
-}
-.suggest-correction-form label {
-  display: grid;
-  gap: 0.25rem;
+  box-sizing: border-box;
+  width: 100%;
   min-width: 0;
-  color: var(--darkgray);
-  font-family: var(--headerFont);
-  font-weight: 600;
+  gap: 0.6rem;
+  padding: 0.8rem;
+  border: 1px solid var(--secondary);
+  border-radius: 6px;
+  background: var(--light);
 }
-.suggest-correction-form textarea {
+.suggest-correction-form[hidden], .suggest-edit-floating[hidden], .suggest-edit-block[hidden] { display: none; }
+.suggest-correction-form > * { margin: 0; min-width: 0; }
+.suggest-correction-form label { display: grid; gap: 0.25rem; font: 600 0.9rem var(--headerFont); }
+.suggest-correction-form :is(textarea, input) {
   box-sizing: border-box;
   width: 100%;
   max-width: 100%;
-  resize: vertical;
+  min-height: 40px;
   padding: 0.5rem;
   border: 1px solid var(--lightgray);
   border-radius: 5px;
   background: var(--light);
   color: var(--darkgray);
-  font: 400 0.9rem/1.4 var(--bodyFont);
+  font: 400 1rem/1.5 var(--bodyFont);
 }
-.suggest-correction-form textarea:focus {
-  outline: 2px solid var(--secondary);
-  outline-offset: 1px;
-}
-.suggest-correction-context {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
-}
-.suggest-correction-selection,
-.suggest-correction-actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.65rem;
-}
-.suggest-correction-selection button,
-.suggest-correction-actions button {
-  padding: 0.45rem 0.75rem;
+.suggest-correction-form textarea { resize: vertical; }
+.suggest-correction-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.suggest-correction :is(button), .suggest-correction-form button, .suggest-edit-floating {
+  min-height: 40px;
+  padding: 0.4rem 0.75rem;
   border: 1px solid var(--secondary);
   border-radius: 5px;
-  background: var(--secondary);
-  color: var(--light);
-  font-family: var(--headerFont);
-  font-weight: 600;
-  cursor: pointer;
-}
-.suggest-correction-selection button {
-  padding: 0.25rem 0.5rem;
   background: var(--light);
   color: var(--secondary);
+  font: 600 0.9rem var(--headerFont);
+  cursor: pointer;
 }
-.suggest-correction-selection-hint { color: var(--gray); }
-.suggest-correction-actions button:disabled {
-  cursor: wait;
-  opacity: 0.55;
+.suggest-correction-form button[type="submit"], .suggest-edit-floating { background: var(--secondary); color: var(--light); }
+.suggest-correction-form button:disabled { opacity: 0.5; cursor: not-allowed; }
+/* Keep the pencil inside the content column: Quartz's left sidebar sits over
+   the outer margin and would swallow clicks there. */
+.suggest-edit-block { position: relative; padding-inline-end: 40px; }
+.suggest-edit-pencil {
+  position: absolute;
+  inset-inline-end: 0;
+  top: 0;
+  z-index: 1;
+  min-width: 32px;
+  min-height: 32px;
+  border: 1px solid var(--lightgray);
+  border-radius: 5px;
+  padding: 0;
+  background: var(--light);
+  color: var(--secondary);
+  font: 1.2rem var(--bodyFont);
+  cursor: pointer;
+  opacity: 0;
 }
-.suggest-correction-status[data-state="success"] { color: var(--secondary); }
+.suggest-edit-block:hover > .suggest-edit-pencil,
+.suggest-edit-block:focus-within > .suggest-edit-pencil { opacity: 1; }
+.suggest-edit-floating { position: fixed; z-index: 1000; }
+.suggest-edit-host, li.suggest-edit-receipt { list-style: none; }
+.suggest-edit-receipt { font-size: 0.9rem; color: var(--secondary); }
 .suggest-correction-status[data-state="error"] { color: #a83a32; }
 :root[saved-theme="dark"] .suggest-correction-status[data-state="error"] { color: #ef9089; }
-@media (max-width: 640px) {
-  .suggest-correction-context { grid-template-columns: minmax(0, 1fr); }
+:is(.suggest-correction-form, .suggest-correction) :is(button, input, textarea):focus-visible,
+.suggest-edit-pencil:focus-visible, .suggest-edit-floating:focus-visible {
+  outline: 2px solid var(--secondary); outline-offset: 2px;
+}
+@media (max-width: 800px), (hover: none) {
+  .suggest-edit-block { padding-inline-end: 0; }
+  .suggest-edit-mobile-visible { opacity: 1; position: static; float: right; margin-inline-start: 0.4rem; min-width: 40px; min-height: 40px; }
+  .suggest-correction-form { width: 100%; }
 }
 `
 

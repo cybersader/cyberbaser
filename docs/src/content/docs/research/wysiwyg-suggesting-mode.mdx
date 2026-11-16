@@ -1,0 +1,65 @@
+---
+title: WYSIWYG suggesting mode
+description: "Measurement, prototype and prior-art research for Google-Docs-style tracked suggestions on rendered Markdown: 98.8% of real page text maps to exact source bytes, a clickable prototype on a real Cyberbase page, ranked editor architectures and a multi-change proposal recommendation."
+status: research
+tags: [research, contribution, translation-layer, design]
+---
+
+## Why this exists
+
+After trying the inline block editor on real Cyberbase pages, the maintainer asked for something better: a WYSIWYG, Google-Docs-style **suggesting mode** with CriticMarkup-like granular tracked changes, instead of selecting and replacing whole blocks. The constraint is unchanged: every change must be an exact byte splice on the pinned source, never a regenerated file (whole-file re-serialization kept only 4.6% of the real vault byte-identical).
+
+Four GPT-6.1 Sol workers ran in parallel on 2026-11-16: a measurement, a clickable prototype, prior-art research and a batching design. This page is the coordinator's synthesis. It is research, not a selected editor, contract or implementation.
+
+## Finding 1: rendered text maps to source almost completely
+
+Measured on all 57 pages of `📁 03 - Curations, Stacks` at the vault's `origin/main`, using the pinned Quartz v4.5.2 configuration and transformer chain instrumented to carry source byte positions:
+
+| Measure | Result |
+|---|---:|
+| Substantive body characters mapped to exact source bytes | **125,462 / 126,944 (98.83%)** |
+| Word-like segments with continuous source ranges | 18,402 / 18,617 (98.85%) |
+| Fully mapped text nodes | 3,051 / 3,212 (94.99%) |
+
+Ordinary paragraphs, list items, headings, link text, bold, inline code, table cells, callout bodies and blockquotes mapped at 100% of their characters. The 1.2% that did not map: wikilink labels derived from the link target (962 characters; editing them would change the destination), callout titles (389; Quartz rebuilds them without position data), KaTeX output and generated whitespace. The folder index page maps 0% because every label comes from an unaliased wikilink.
+
+Verification: 58/58 instrumented-versus-baseline output trees identical, 14/14 byte-splice rerender tests exact, all four CRLF pages handled, offsets in UTF-8 bytes. Annotating the real Quartz build is feasible but needs care at specific points: before Quartz's text trimming, through Obsidian-flavored regex replacements, smart typography, raw-HTML reparsing and link-label shortening. The measurement scripts are private workspace evidence; the counts above are the durable result.
+
+**Implication:** editing directly on the rendered page is viable for nearly all prose. A source fallback is needed for target-derived wikilink labels, callout titles, math, tables-as-structure and formatting changes.
+
+## Finding 2: the prototype feels like a document, and stays byte-exact
+
+[Open the suggesting-mode prototype](/cyberbaser/prototypes/suggesting-mode.html) (real "Awesome Peripherals" page, self-contained, no network). Turn on **Suggesting**, click into text and type, select and type to replace, or press Backspace to delete. Insertions show green, deletions red strikethrough, each with a margin card for a comment, preview or discard. **What gets sent** lists the exact byte splices, a CriticMarkup view of the source and a full resulting-Markdown diff with a byte-exact check. Text that cannot be mapped offers **Edit source of this block** with the same tracked marks.
+
+Scripted checks (19 passing, desktop and mobile) produced exact splices such as replacing `Mouses` with `Mice`, inserting ` for enthusiasts`, and deleting `CUSTOM ` inside a link's text without touching its URL. Send only displays the payload; suggestions are not persisted; real touch handles and operating-system input methods are untested.
+
+## Finding 3: ranked architectures
+
+| Rank | Approach | How bytes stay exact | Trade-off |
+|---|---|---|---|
+| 1 | **Source-first CodeMirror 6 live preview with a suggestion ledger** (Obsidian/Typora-like) | The editor works on source; every change is recorded as an operation on the original bytes, with a separate UTF-8 and line-ending map | Lowest effort; syntax reappears near the cursor; looks like an editor, not the published page |
+| 2 | **Rendered page with proven editable spans, CM6 fallback** (the prototype) | Provenance map from pinned source; edits only in uniquely mapped spans; re-render from proposed source | Feels most like editing the site; needs the renderer annotation above |
+| 3 | Rich-text editor islands (ProseMirror/Tiptap) with a transaction compiler | Whitelisted transactions lowered to splices | Highest effort; polished suggestion UIs solve the rich-text half, not the Markdown mapping |
+
+Visual CMS tools such as Tina, Decap, Keystatic and Milkdown save by serializing an editor model back to Markdown, which is the pattern Cyberbaser avoids. The local [obsidian-criticmarkup](https://github.com/Fevol/obsidian-criticmarkup) plugin (MIT, CM6) offers reusable patterns but is beta and not an integrity boundary. Writemark (MIT) is a relevant source-canonical CM6 candidate to evaluate. CriticMarkup works best as a display and import/export format, not as the integrity envelope.
+
+**Coordinator recommendation:** one shared source-coordinate suggestion ledger with two surfaces. Readers suggest on the rendered page (approach 2, as prototyped) because that is the experience the maintainer asked for and the measurement supports it. Contributors and the fallback use the CM6 source editor (approach 1) for formatting, structure and unmappable text. Both emit the same exact operations.
+
+## Finding 4: several edits travel as one proposal
+
+Today's proposal is one file, one splice. A batch of N separate proposals fails on application: after the first splice, the rest no longer match the pinned base. One big block replacement hides the real changes and spends limits on unchanged text. The recommendation is the already-researched **single-file multi-operation successor**: one proposal with ordered, non-overlapping exact operations against one pinned base, reviewed per change but decided **Approve all / Reject all** first. Choosing a subset later produces a new exact candidate with a fresh approval, never a reinterpretation of the original. Abuse limits count submissions plus operation and byte budgets. v1 proposals and decision records stay readable unchanged.
+
+## Decisions for the owner
+
+1. Adopt the two-surface direction (rendered-page suggesting for readers, CM6 source editor for contributors and fallback), or choose one.
+2. Select the multi-operation proposal successor with Approve all / Reject all first.
+3. Then build in order: renderer position annotation in the Quartz build; the rendered-page suggesting mode from the prototype; the multi-operation contract through intake, review and apply; the CM6 fallback.
+
+None of this is implemented in the product yet. The current inline block editor in the rehearsal remains a stopgap.
+
+## Related
+
+- [Review change notation](/cyberbaser/research/review-change-notation/): earlier CriticMarkup research and its open source-mapping gate, which Finding 1 now answers for one real folder.
+- [Proposal contract](/cyberbaser/design/proposal-contract/) and [proposal operating model](/cyberbaser/research/proposal-operating-model/).
+- [Translation layer](/cyberbaser/design/translation-layer/).
+- Chronology: [2026-11-16 suggesting-mode research](/cyberbaser/agent-context/zz-log/2026-11-16-suggesting-mode-research/).

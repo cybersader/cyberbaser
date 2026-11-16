@@ -171,11 +171,10 @@ Quartz exit code. Useful env vars:
 - `CYBERBASER_SUGGESTION_CHALLENGE_SITE_KEY=…` — optional public challenge site
   key, meaningful only when the correction form is enabled. The default provider
   is Turnstile, whose keys use 1–256 ASCII letters, digits, underscores or hyphens.
-  Empty or provider-rejected values fail the enabled build. Without a key, the
-  existing form and request are unchanged and no widget or provider script loads.
-  With a key, source-backed forms load the selected provider's script on browser
-  initialization and render a `suggest-correction` widget before the submit
-  button. The single-use token goes only in `Cyberbaser-Challenge-Token`, never
+  Empty or provider-rejected values fail the enabled build. Without a key, no
+  widget or provider script loads and the JSON request stays unchanged. With a
+  key, opening an inline editor loads the selected provider's script and renders
+  a `suggest-correction` widget before the Send button. The single-use token goes only in `Cyberbaser-Challenge-Token`, never
   the JSON intent or URL, and the widget resets after every attempt. Server-side
   verification and a matching CORS header allowlist are required separately;
   this renderer neither verifies tokens nor holds a secret.
@@ -194,37 +193,68 @@ will not enable the widget through that app. These offline tests do not validate
 live Turnstile or authorize enabling a public form. Other providers require their
 own reviewed script/frame CSP permissions; no provider adds host policy itself.
 
-## Selecting a correction quote
+## Suggesting an edit on the page
 
-On enabled forms, select a passage in the page's article, then open **Suggest a
-correction**. An empty **Text to replace** field fills from that selection.
-Selections in navigation, sidebars, or forms are excluded; article code blocks
-are allowed. The browser keeps the last article selection in memory across focus
-changes, capturing `selectionchange`, `pointerup`, `keyup`, and `pointerdown`.
-A new non-content selection discards it; Quartz SPA cleanup clears it between
-pages. Nothing is sent until the reader submits the form.
+Readers edit the page text, not a quote-and-context form. On an enabled,
+source-backed page:
 
-**Use selected text**, beside the field, captures the current article selection
-again (or uses the last captured selection if focus collapsed it). It is a native
-keyboard-accessible button. Only this explicit action can replace a non-empty
-quote, so reopening the form never overwrites reader-entered text. A selection
-longer than the field's existing 16,384 UTF-16-code-unit maximum is not inserted;
-a nearby live hint asks for a shorter passage. It is never silently truncated.
+1. Select words within a paragraph, heading or leaf list item and click the
+   floating **Suggest edit** button. Or hover a block and click its margin pencil;
+   the same pencil is keyboard-focusable and always visible on narrow/touch
+   screens. The page-level **Suggest an edit** button explains these two paths.
+2. That block becomes a full-width plain-text editor, already filled with the
+   block's text. A selection stays selected so typing replaces just those words.
+   Edit naturally, optionally add **Why?** or one HTTPS **Source link**, complete
+   the bot check if configured, and choose **Send**. Unchanged edits cannot send.
+3. The receipt appears beside the original block: **Thanks — sent for review.
+   Receipt …** The original rendered text returns unchanged. The owner must
+   review and apply the proposal before the published page changes.
 
-Selection text is normalized **only** by trimming leading/trailing whitespace and
-collapsing internal whitespace/newline runs to one space. Markdown punctuation,
-Unicode characters, and all other non-whitespace characters are left unchanged.
-This is a convenience, not a rendered-to-source mapping: formatting hidden by the
-renderer or changed source whitespace can still fail the server's exact-source
-quote resolution. The server's source-bound checks and owner review remain
-unchanged. No challenge widget is required, no new request is made, and disabled
-forms still emit nothing and are omitted from the layout and browser resources.
+**Cancel** or **Escape** restores the exact original DOM nodes, including links
+and formatting, without submitting. Focus returns to the original block after
+cancel or receipt. Only one block can be edited at once. Navigation, sidebars,
+forms, standalone code blocks, and selections crossing blocks are excluded.
+Nested list containers are not flattened; their leaf paragraphs/items have their
+own pencils. Nothing is submitted merely by selecting, opening or cancelling.
+
+### The machine contract stays exact
+
+`components/suggestCorrectionDiff.ts` compares original and edited text using
+Unicode code points, takes their common prefix/suffix, and widens the changed
+span to word boundaries. Separate edits in one block become one covering span.
+An insertion includes an adjacent unchanged word so the quote is never empty.
+The client always supplies adjacent before/after context (up to 40 code points
+per side, cut at word boundaries; `null` at block edges). It does not normalize
+whitespace, Unicode or Markdown. Quote and replacement retain their existing
+16 KiB UTF-8 limits; oversized spans get a short message instead of truncation.
+
+The strict correction-intent JSON is unchanged: pinned binding digest, opaque
+page ID, derived quote/context/replacement, rationale, evidence URLs and retry
+key. Because the existing server requires a nonempty rationale, leaving **Why?**
+blank supplies the neutral machine value `Suggested an edit to this page.`
+No new authority, identity or source-path fields are sent. Retry keys remain
+stable for identical retries, and challenge tokens remain header-only.
+
+This is not a rendered-to-Markdown source mapper. Text in links, bold, inline
+code, multiline source or other formatting can fail exact-source matching,
+especially when formatting falls within the automatic context. The editor stays
+open with a plain suggestion to choose a smaller plain-text phrase for both
+`correction-quote-not-found` and `correction-quote-ambiguous` (and their bare
+variants). Owner review and source-bound validation remain authoritative.
+Disabled forms still emit no markup or browser resources; enabling the editor
+adds no new external service or request beyond the configured intake/challenge.
 
 Run `build-contained -- bash renderers/quartz-cyberbase/tests/run.sh` from the
-repository root. Its fake-DOM lifecycle tests bundle the real browser entry and
-cover selection scope, normalization, length bounds, preserving typed text,
-explicit recapture, and SPA cleanup, with and without a challenge. Real browser
-selection/focus timing and touch selection handles still need browser verification.
+repository root. The tests bundle the real browser entry and cover both entry
+paths, in-place edits, exact DOM restoration, disabled output, receipts,
+source-mismatch copy, retry/challenge lifecycle and mobile visibility classes.
+Pure diff tests include replacement, insertion, deletion, disjoint changes,
+Unicode/emoji and 1,000 deterministic exact-reconstruction cases, checked against
+the actual strict server intent validator. Strict browser TypeScript checking is
+`build-contained -- docs/node_modules/.bin/tsc -p renderers/quartz-cyberbase/tests/tsconfig.browser.json`.
+These are hermetic checks, not a live/browser usability acceptance. Real browser
+selection/focus timing, mobile selection handles and rendered CSS still need
+browser verification.
 
 ## Adding a challenge provider
 

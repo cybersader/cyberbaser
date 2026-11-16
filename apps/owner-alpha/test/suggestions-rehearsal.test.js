@@ -4,7 +4,8 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { assertPrerequisites, createSuggestionsFixture, optionsFromArgs, PAGES, PREPARE_COMMAND, PROJECT_ROOT, QUOTE, REPLACEMENT } from '../bin/suggestions-rehearsal-fixture.js';
-import { instructions } from '../bin/suggestions-rehearsal.js';
+import { EventEmitter } from 'node:events';
+import { instructions, installSignInSignal } from '../bin/suggestions-rehearsal.js';
 import { copyCommittedFolder, MAX_COPY_BYTES } from '../bin/suggestions-rehearsal-source.js';
 import { validateOwnerAlphaConfig } from '../src/config.js';
 import { deriveIntakeConfig } from '../src/suggestions.js';
@@ -116,6 +117,35 @@ catch (error) {
 const challengeConfigTest = challengeConfigSupported ? test : test.skip;
 
 describe('suggestions rehearsal fixture (hermetic)', () => {
+  test('a launcher-local signal requests fresh sign-in output without stdin or an HTTP endpoint', () => {
+    const target = new EventEmitter();
+    let issued = 0;
+    const dispose = installSignInSignal({ target, issueSignIn: () => { issued += 1; } });
+    expect(issued).toBe(0);
+    target.emit('SIGUSR1');
+    target.emit('SIGUSR1');
+    expect(issued).toBe(2);
+    dispose();
+    expect(target.listenerCount('SIGUSR1')).toBe(0);
+    target.emit('SIGUSR1');
+    expect(issued).toBe(2);
+  });
+
+  test('printed copied-page examples stay canonical and short, with home as the first link', () => {
+    const fixture = {
+      root: '/owned/throwaway', readerOrigin: 'http://127.0.0.1:49001', ownerOrigin: 'http://127.0.0.1:49000', challenge: null, keep: false,
+      copied: { ref: 'origin/main', commit: 'a'.repeat(40), pages: 8, publishedPages: Array(8), attachments: 0,
+        pageLinks: Array.from({ length: 8 }, (_, index) => `${encodeURIComponent('📁-Curations,-Stacks')}/page-${index}`) },
+    };
+    const output = instructions(fixture);
+    const links = output.match(/http:\/\/127\.0\.0\.1:49001\/cyberbase\/[^\s]*/gu);
+    expect(links).toHaveLength(6);
+    expect(links[0]).toBe(`${fixture.readerOrigin}/cyberbase/`);
+    expect(links[1]).toContain('%F0%9F%93%81-Curations%2C-Stacks/page-0');
+    expect(output).not.toContain('%252C');
+    expect(output).not.toContain('/cyberbase/📁');
+  });
+
   test('arguments allow only bounded loopback port selection and published test modes', () => {
     expect(optionsFromArgs([])).toEqual({ keep: false, challenge: null, prepare: false, port: 46437 });
     expect(optionsFromArgs(['--keep', '--challenge', 'spent', '--port', '49000'])).toEqual({ keep: true, challenge: 'spent', prepare: false, port: 49000 });
@@ -146,7 +176,11 @@ describe('suggestions rehearsal fixture (hermetic)', () => {
     expect(text).toContain(f.readerOrigin);
     expect(text).toContain(`${f.ownerOrigin}/owner/review`);
     expect(text).toContain('simulated');
-    expect(text).toContain('paste into Text to replace');
+    expect(text).toContain('2. Select a sentence on the page and choose Suggest edit (or click the pencil next to a paragraph), edit the text in place, and send.');
+    expect(text).not.toContain('Text to replace');
+    expect(text.indexOf(`${f.readerOrigin}/cyberbase/`)).toBeLessThan(text.indexOf(`${f.readerOrigin}/cyberbase/mfa-methods`));
+    expect(text).toContain('start from the site home');
+    expect(text).toContain(`kill -USR1 ${process.pid}`);
     await f.cleanup();
     await f.cleanup();
     expect(await exists(f.root)).toBe(false);
@@ -224,7 +258,8 @@ describe('suggestions rehearsal fixture (hermetic)', () => {
     expect(index).not.toContain('Other private');
     expect(instructions(f)).toContain('All edits go only to the throwaway copy, never the real vault.');
     expect(instructions(f)).toContain(`/cyberbase/${encodeURIComponent('📁-03---Curations,-Stacks')}/MFA-methods`);
-    expect(instructions(f)).toContain('Choose a short ordinary sentence');
+    expect(instructions(f)).toContain('Select a sentence on the page and choose Suggest edit');
+    expect(instructions(f)).not.toContain('/cyberbase/📁');
     expect(instructions(f)).toContain('needs internet access');
     expect(instructions(f)).not.toContain('open MFA methods');
     await f.cleanup();

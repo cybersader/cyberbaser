@@ -47,6 +47,7 @@ export function setupSuggestionChallenge(
   form: HTMLFormElement,
   submit: HTMLButtonElement,
   status: (message: string, state: "idle" | "error") => void,
+  canSubmit: () => boolean = () => true,
 ): SuggestionChallenge | undefined {
   const container = form.querySelector<HTMLElement>(".suggest-correction-challenge")
   if (!container) return undefined
@@ -75,7 +76,7 @@ export function setupSuggestionChallenge(
         if (destroyed) return
         token = typeof value === "string" && value.length <= 2048 && /^\S+$/u.test(value) && !/[\x00-\x1f\x7f]/u.test(value)
           ? value : ""
-        submit.disabled = busy || token === ""
+        submit.disabled = busy || token === "" || !canSubmit()
         if (!busy && token !== "" && verificationStatus) status("", "idle")
       },
       onExpire: () => {

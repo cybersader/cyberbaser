@@ -208,7 +208,8 @@ for (const missing of ["intakeOrigin", "bindingDigest", "sourceRepository", "sou
 const componentSource = readFileSync(join(import.meta.dir, "../components/SuggestCorrection.tsx"), "utf8")
 assert.doesNotMatch(componentSource, /data-(?:source|repository|revision|path|owner|identity|contact|account)/iu)
 const formNames = [...componentSource.matchAll(/name="([^"]+)"/gu)].map((match) => match[1])
-assert.deepEqual(formNames, ["quote", "prefix", "suffix", "replacement", "rationale", "evidence"])
+assert.deepEqual(formNames, ["edited", "rationale", "evidence"])
+assert.doesNotMatch(componentSource, /Text to replace|Context immediately (?:before|after)/u)
 
 const acceptedCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = []
 const acceptedFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -222,7 +223,7 @@ const accepted = await submitCorrectionIntent(`${intakeOrigin}${ACCOUNT_FREE_INT
 assert.deepEqual(accepted, {
   accepted: true,
   replayed: false,
-  message: "Correction received. Status: pending-review. Queue ID: Q-test.",
+  message: "Thanks — sent for review. Receipt Q-test. The page stays unchanged until the owner applies the edit.",
 })
 assert.equal(acceptedCalls.length, 1)
 assert.equal(String(acceptedCalls[0].input), `${intakeOrigin}/v1/corrections`)
@@ -243,7 +244,7 @@ const replayed = await submitCorrectionIntent(`${intakeOrigin}${ACCOUNT_FREE_INT
   })) as typeof fetch)
 assert.equal(replayed.accepted, true)
 assert.equal(replayed.replayed, true)
-assert.match(replayed.message, /^Correction already received\./u)
+assert.match(replayed.message, /^Thanks — already sent for review\./u)
 
 const rejected = await submitCorrectionIntent(`${intakeOrigin}${ACCOUNT_FREE_INTAKE_PATH}`, intent, (async () =>
   new Response(JSON.stringify({ error: { code: "queue-full", message: "must not be displayed" } }), {

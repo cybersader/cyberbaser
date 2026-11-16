@@ -280,18 +280,17 @@ export async function submitCorrectionIntent(
   }
   if (response.status === 200 || response.status === 202) {
     const fields = receiptFields(payload)
-    const details = [
-      fields.status === null ? null : `Status: ${fields.status}.`,
-      fields.queueId === null ? null : `Queue ID: ${fields.queueId}.`,
-    ].filter((value): value is string => value !== null)
     return {
       accepted: true,
       replayed: response.status === 200,
-      message: [response.status === 200 ? "Correction already received." : "Correction received.", ...details].join(" "),
+      message: `${response.status === 200 ? "Thanks — already sent for review." : "Thanks — sent for review."}${fields.queueId === null ? "" : ` Receipt ${fields.queueId}.`} The page stays unchanged until the owner applies the edit.`,
     }
   }
   const code = errorCodeFromResponse(payload)
-  const friendlyMessage = response.status === 403 && code === "challenge-failed"
+  const unmatchedQuote = code !== null && ["quote-not-found", "quote-ambiguous", "correction-quote-not-found", "correction-quote-ambiguous"].includes(code)
+  const friendlyMessage = unmatchedQuote
+    ? "This part of the page is formatted in a way we couldn't match. Try selecting a smaller plain-text phrase."
+    : response.status === 403 && code === "challenge-failed"
     ? "Couldn't confirm you're human. Please try again."
     : response.status === 503 && code === "challenge-unavailable"
       ? "Verification is temporarily unavailable. Please try again later."

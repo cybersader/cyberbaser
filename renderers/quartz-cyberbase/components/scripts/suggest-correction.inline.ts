@@ -5,17 +5,13 @@ import {
   retryIdempotencyKey,
   submitCorrectionIntent,
 } from "../suggestCorrectionClient"
-
 import { setupSuggestionSelection } from "../suggestCorrectionSelection"
 import { setupSuggestionChallenge } from "../suggestCorrectionChallenge"
 import type { SuggestionChallenge } from "../suggestCorrectionChallenge"
 
-const FORM_SELECTOR = "form.suggest-correction-form"
-const challenges = new WeakMap<HTMLFormElement, SuggestionChallenge>()
-
-function field(form: HTMLFormElement, name: string): HTMLTextAreaElement {
+function field(form: HTMLFormElement, name: string): HTMLInputElement | HTMLTextAreaElement {
   const element = form.elements.namedItem(name)
-  if (!(element instanceof HTMLTextAreaElement)) throw new Error(`missing ${name} field`)
+  if (!(element instanceof HTMLTextAreaElement) && !(element instanceof HTMLInputElement)) throw new Error(`missing ${name} field`)
   return element
 }
 
@@ -26,111 +22,127 @@ function setStatus(form: HTMLFormElement, message: string, state: "idle" | "work
   status.dataset.state = state
 }
 
-function retryStorageKey(bindingDigest: string, pageId: string): string {
-  return `cyberbaser:suggest-correction:v1:${bindingDigest}:${pageId}`
-}
-
 function readRetryState(key: string) {
-  try {
-    return parseRetryState(sessionStorage.getItem(key))
-  } catch {
-    return null
-  }
+  try { return parseRetryState(sessionStorage.getItem(key)) } catch { return null }
 }
-
 function writeRetryState(key: string, fingerprint: string, idempotencyKey: string) {
-  try {
-    sessionStorage.setItem(key, JSON.stringify({ fingerprint, idempotencyKey }))
-  } catch {
-    // A blocked or full session store must not prevent a single submission.
+  try { sessionStorage.setItem(key, JSON.stringify({ fingerprint, idempotencyKey })) } catch {
+    // A blocked session store must not prevent a single submission.
   }
 }
-
 function clearRetryState(key: string) {
-  try {
-    sessionStorage.removeItem(key)
-  } catch {
-    // The successful request is authoritative even if browser storage is blocked.
-  }
-}
-
-async function submitCorrection(event: SubmitEvent) {
-  event.preventDefault()
-  const form = event.currentTarget
-  if (!(form instanceof HTMLFormElement)) return
-  const submit = form.querySelector<HTMLButtonElement>("button[type='submit']")
-  if (!submit || submit.disabled) return
-  const challenge = challenges.get(form)
-  const challengeToken = challenge?.response()
-  if (challenge && !challengeToken) {
-    setStatus(form, "Please complete the human verification before sending.", "error")
-    challenge.reset()
-    return
-  }
-
-  const bindingDigest = form.dataset.bindingDigest ?? ""
-  const pageId = form.dataset.pageId ?? ""
-  const action = form.dataset.action ?? ""
-  const input = {
-    bindingDigest,
-    pageId,
-    quote: field(form, "quote").value,
-    prefix: field(form, "prefix").value,
-    suffix: field(form, "suffix").value,
-    replacement: field(form, "replacement").value,
-    rationale: field(form, "rationale").value,
-    evidenceText: field(form, "evidence").value,
-  }
-  const fingerprint = intentFingerprint(input)
-  const storageKey = retryStorageKey(bindingDigest, pageId)
-  const entropy = crypto.getRandomValues(new Uint8Array(32))
-  const idempotencyKey = retryIdempotencyKey(fingerprint, readRetryState(storageKey), entropy)
-
-  let intent
-  try {
-    intent = buildCorrectionIntent({ ...input, idempotencyKey })
-  } catch (error) {
-    setStatus(form, error instanceof Error ? error.message : "The correction form is invalid.", "error")
-    challenge?.reset()
-    return
-  }
-
-  writeRetryState(storageKey, fingerprint, idempotencyKey)
-  submit.disabled = true
-  challenge?.submitting()
-  setStatus(form, "Sending correction for owner review…", "working")
-  try {
-    const result = await submitCorrectionIntent(action, intent, fetch, challengeToken)
-    if (result.accepted) {
-      clearRetryState(storageKey)
-      form.reset()
-      setStatus(form, result.message, "success")
-    } else {
-      setStatus(form, result.message, "error")
-    }
-  } catch {
-    setStatus(form, "The correction could not be submitted. Retry to send the same request safely.", "error")
-  } finally {
-    if (challenge) challenge.reset()
-    else submit.disabled = false
+  try { sessionStorage.removeItem(key) } catch {
+    // The successful request remains authoritative.
   }
 }
 
 document.addEventListener("nav", () => {
-  for (const form of document.querySelectorAll<HTMLFormElement>(FORM_SELECTOR)) {
-    form.addEventListener("submit", submitCorrection)
-    const cleanupSelection = setupSuggestionSelection(form)
+  for (const form of document.querySelectorAll<HTMLFormElement>("form.suggest-correction-form")) {
     const submit = form.querySelector<HTMLButtonElement>("button[type='submit']")
-    if (submit) {
-      const challenge = setupSuggestionChallenge(form, submit, (message, state) => setStatus(form, message, state))
-      if (challenge) challenges.set(form, challenge)
-      else submit.disabled = false
+    if (!submit) continue
+    let challenge: SuggestionChallenge | undefined
+    let busy = false
+    let destroyed = false
+    let validChange = false
+    const refresh = () => {
+      try {
+        validChange = editor.change() !== null
+        const status = form.querySelector<HTMLElement>(".suggest-correction-status")
+        if (status?.dataset.validation === "true") {
+          setStatus(form, "", "idle")
+          delete status.dataset.validation
+        }
+      } catch (error) {
+        validChange = false
+        setStatus(form, error instanceof Error ? error.message : "Try a smaller edit.", "error")
+        const status = form.querySelector<HTMLElement>(".suggest-correction-status")
+        if (status) status.dataset.validation = "true"
+      }
+      submit.disabled = !validChange || busy || (challenge !== undefined && !challenge.response())
     }
+    const editor = setupSuggestionSelection(form, {
+      opened() {
+        setStatus(form, "", "idle")
+        challenge = setupSuggestionChallenge(form, submit,
+          (message, state) => setStatus(form, message, state), () => validChange && !busy && editor.active)
+      },
+      changed: refresh,
+      closed() {
+        challenge?.destroy()
+        challenge = undefined
+        validChange = false
+        submit.disabled = true
+      },
+    })
+    const onSubmit = async (event: SubmitEvent) => {
+      event.preventDefault()
+      if (destroyed || !editor.active || busy) return
+      refresh()
+      if (!validChange) return
+      const challengeToken = challenge?.response()
+      if (challenge && !challengeToken) {
+        setStatus(form, "Please complete the human verification before sending.", "error")
+        challenge.reset()
+        return
+      }
+      const change = editor.change()!
+      const bindingDigest = form.dataset.bindingDigest ?? ""
+      const pageId = form.dataset.pageId ?? ""
+      const input = {
+        bindingDigest, pageId, ...change,
+        // The strict machine contract requires rationale. Do not force a reader
+        // to invent one or change the wire schema when the optional line is blank.
+        rationale: field(form, "rationale").value.trim() || "Suggested an edit to this page.",
+        evidenceText: field(form, "evidence").value.trim(),
+      }
+      // Let a reader paste an ordinary URL (for example a bare HTTPS origin),
+      // then let the unchanged strict builder enforce HTTPS and credential rules.
+      try {
+        if (input.evidenceText) input.evidenceText = new URL(input.evidenceText).href
+      } catch {
+        setStatus(form, "Use an HTTPS source link, or leave it blank.", "error")
+        challenge?.reset()
+        return
+      }
+      const fingerprint = intentFingerprint(input)
+      const storageKey = `cyberbaser:suggest-correction:v1:${bindingDigest}:${pageId}`
+      const idempotencyKey = retryIdempotencyKey(fingerprint, readRetryState(storageKey), crypto.getRandomValues(new Uint8Array(32)))
+      let intent
+      try { intent = buildCorrectionIntent({ ...input, idempotencyKey }) } catch (error) {
+        setStatus(form, error instanceof Error ? error.message : "Please check this edit.", "error")
+        challenge?.reset()
+        return
+      }
+      writeRetryState(storageKey, fingerprint, idempotencyKey)
+      busy = true
+      editor.busy(true)
+      submit.disabled = true
+      challenge?.submitting()
+      setStatus(form, "Sending for owner review…", "working")
+      try {
+        const result = await submitCorrectionIntent(form.dataset.action ?? "", intent, fetch, challengeToken)
+        if (destroyed) return
+        if (result.accepted) {
+          clearRetryState(storageKey)
+          challenge?.reset()
+          editor.finish(result.message)
+        } else setStatus(form, result.message, "error")
+      } catch {
+        if (!destroyed) setStatus(form, "The edit could not be submitted. Retry to send the same request safely.", "error")
+      } finally {
+        busy = false
+        if (!destroyed) {
+          editor.busy(false)
+          challenge?.reset()
+          refresh()
+        }
+      }
+    }
+    form.addEventListener("submit", onSubmit)
     window.addCleanup(() => {
-      form.removeEventListener("submit", submitCorrection)
-      cleanupSelection()
-      challenges.get(form)?.destroy()
-      challenges.delete(form)
+      destroyed = true
+      form.removeEventListener("submit", onSubmit)
+      editor.destroy()
     })
   }
 })

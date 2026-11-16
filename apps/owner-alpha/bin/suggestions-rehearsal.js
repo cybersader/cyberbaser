@@ -1,17 +1,24 @@
 #!/usr/bin/env bun
 import path from 'node:path';
-import { assertPrerequisites, createSuggestionsFixture, optionsFromArgs, PROJECT_ROOT, QUOTE, REPLACEMENT, startSuggestionsRehearsal } from './suggestions-rehearsal-fixture.js';
+import { assertPrerequisites, createSuggestionsFixture, optionsFromArgs, PROJECT_ROOT, startSuggestionsRehearsal } from './suggestions-rehearsal-fixture.js';
+
+// Like console 'b', this requires local process authority, not an HTTP request.
+// The capability is still printed only to this launcher's existing output.
+export function installSignInSignal({ target = process, issueSignIn }) {
+  target.on('SIGUSR1', issueSignIn);
+  return () => target.off('SIGUSR1', issueSignIn);
+}
 
 export function instructions(fixture) {
   return [
     'Disposable suggestions rehearsal. No real vault or public site is changed.',
+    `Site home (start here): ${fixture.readerOrigin}/cyberbase/`,
     `Owned throwaway state: ${fixture.root}`,
-    `Private site: ${fixture.readerOrigin}/cyberbase/`,
     ...(fixture.copied ? [
       `Read-only source snapshot: ${fixture.copied.ref} (${fixture.copied.commit})`,
       `Copied ${fixture.copied.pages} Markdown pages (${fixture.copied.publishedPages.length} published) and ${fixture.copied.attachments} referenced attachments.`,
-      'Try a published page:',
-      ...fixture.copied.pageLinks.map((link) => `  ${fixture.readerOrigin}/cyberbase/${link}`),
+      'Published pages (or follow the links from the site home):',
+      ...fixture.copied.pageLinks.slice(0, 5).map((link) => `  ${fixture.readerOrigin}/cyberbase/${link}`),
       'All edits go only to the throwaway copy, never the real vault.',
     ] : [`MFA methods page: ${fixture.readerOrigin}/cyberbase/mfa-methods`]),
     `Proposals: ${fixture.ownerOrigin}/owner/review`,
@@ -19,8 +26,8 @@ export function instructions(fixture) {
     'The bootstrap link is a temporary local capability. Do not share the terminal output.',
     '',
     'Try this:',
-    fixture.copied ? '1. Open the bootstrap link, then one of the published page URLs above.' : '1. Open the bootstrap link, then open MFA methods on the private site.',
-    fixture.copied ? '2. Choose a short ordinary sentence, select and copy it exactly, open Suggest a correction, and paste into Text to replace. Enter a small plain-text correction, explain why, and send. Expect a receipt.' : `2. Select and copy exactly “${QUOTE}”, open Suggest a correction, and paste into Text to replace. Enter “${REPLACEMENT}” as the replacement, explain why, and send. Expect a receipt.`,
+    fixture.copied ? '1. Open the bootstrap link to sign in, then start from the site home and choose a published page.' : '1. Open the bootstrap link to sign in, then start from the site home and choose MFA methods.',
+    '2. Select a sentence on the page and choose Suggest edit (or click the pencil next to a paragraph), edit the text in place, and send.',
     '3. Before approving, send two more distinct suggestions about that same page. The second attempt gets a receipt; the third is rate-limited. Two attempts per page are allowed. Do this now, before the page rebuild changes its ID.',
     '4. Open Proposals, open the first suggestion, and read the before/after change. Choose Approve. The page has not changed yet.',
     '5. On the approved receipt choose Apply to page. Follow the job to Local rehearsal complete. Rendering, exact application, commit, local push and private-site rebuild are real; deployment and live confirmation are simulated.',
@@ -36,6 +43,7 @@ export function instructions(fixture) {
     'Ctrl-C or q then Enter stops all owned services.',
     fixture.keep ? `--keep: stopped state will remain at ${fixture.root}` : 'Cleanup removes this run’s throwaway state. Add --keep on a new run to retain it.',
     'Enter b then Enter for another one-time sign-in URL. No browser is launched automatically.',
+    `Fresh sign-in without terminal input: kill -USR1 ${process.pid} (prints a new link here; never shares it over HTTP).`,
   ].join('\n');
 }
 
@@ -50,12 +58,13 @@ export async function runSuggestionsLauncher(args = process.argv.slice(2)) {
   await assertPrerequisites();
   const fixture = await createSuggestionsFixture(options);
   process.stdout.write(`Creating a throwaway private site. Owned state: ${fixture.root}\nThe first real Quartz build may take a minute.\n`);
-  let runtime; let stopping = false; let disposeInput = () => {};
+  let runtime; let stopping = false; let disposeInput = () => {}; let disposeSignInSignal = () => {};
   const startup = startSuggestionsRehearsal(fixture);
   const stop = async (code = 0) => {
     if (stopping) return;
     stopping = true;
     disposeInput();
+    disposeSignInSignal();
     process.stdout.write('Stopping the owned services; waiting for any active local job to settle.\n');
     try {
       await startup.catch(() => {});
@@ -72,7 +81,10 @@ export async function runSuggestionsLauncher(args = process.argv.slice(2)) {
   try {
     runtime = await startup;
     if (stopping) return;
-    const issueSignIn = () => process.stdout.write(`Owner alpha bootstrap: ${fixture.ownerOrigin}/owner/bootstrap?token=${runtime.issueBootstrap()}\n`);
+    const issueSignIn = () => {
+      if (!stopping) process.stdout.write(`Owner alpha bootstrap: ${fixture.ownerOrigin}/owner/bootstrap?token=${runtime.issueBootstrap()}\n`);
+    };
+    disposeSignInSignal = installSignInSignal({ issueSignIn });
     process.stdout.write(`${instructions(fixture)}\n`);
     issueSignIn();
     if (process.stdin.isTTY) {

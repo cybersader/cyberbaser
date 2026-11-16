@@ -6,6 +6,7 @@ WRAPPER_DIR="$(cd "$HERE/.." && pwd)"
 
 bun "$HERE/edit-links.test.ts"
 bun "$HERE/suggest-correction.test.ts"
+bun "$HERE/suggest-diff.test.ts"
 bun "$HERE/suggest-challenge.test.ts"
 for provider_test in "$HERE"/*-provider.test.ts; do
   bun "$provider_test"

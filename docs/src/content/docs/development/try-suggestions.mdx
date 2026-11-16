@@ -19,7 +19,9 @@ From the repository root:
 bun run --cwd docs try:suggestions
 ```
 
-Keep that terminal open. The launcher prints the owned temporary directory, private site URL, **MFA methods** page URL, **Proposals** URL, a one-time sign-in URL, and the six steps below. It does not launch or attach to a browser. Open the printed one-time bootstrap URL in your own browser to sign in, then use the page and Proposals links in that same browser. Enter **b** then Enter in the terminal for a fresh sign-in link if the first expires or you switch browsers. Do not share the sign-in link or terminal output.
+Keep that terminal open. The launcher prints the **site home first**, a short list of canonically encoded page links, the owned temporary directory, **Proposals**, a one-time sign-in URL, and the six steps below. It does not launch or attach to a browser. Open the printed one-time bootstrap URL in your own browser to sign in; it lands on the site home. **Start from the site home** and follow its page links, then use Proposals in that same browser. You do not need to type a page URL. The reader repairs a missing home slash and can redirect one extra percent-encoding layer added by a chat app, but only for an existing safe site path. Missing pages show a home link in the browser.
+
+Enter **b** then Enter in the terminal for a fresh sign-in link if the first expires or you switch browsers. Without terminal input, run the exact short **`kill -USR1 <launcher-pid>`** command printed by this run, from another local shell or your coding session. This signals only that launcher and prints a fresh link to its original output; it does not return a link over HTTP or launch a browser. It replaces any unused link, keeps existing signed-in sessions, and preserves the one-time, loopback, separate-owner-origin sign-in boundary. Only signal the PID printed by your current run. Do not share the sign-in link or terminal output.
 
 ### Prepare once if asked
 
@@ -36,7 +38,7 @@ Preparation runs inside `build-contained`. It installs the two apps' frozen depe
 To rehearse with a folder from your vault instead of the three sample notes:
 
 ```bash
-bun run --cwd docs try:suggestions --from "/home/cybersader/04 Vaults/cyberbase" --folder "📁 03 - Curations, Stacks"
+bun run --cwd docs try:suggestions --from "/path/to/your/vault" --folder "📁 03 - Curations, Stacks"
 ```
 
 The source vault is **read-only**. The launcher reads committed objects from **`origin/main` by default**, not the desktop working tree or an extra unpushed commit. It does not fetch, checkout, change the index, or update refs. Use `--ref <commit-ish>` to select another already-local commit. A missing ref or folder is refused. The launcher refuses the project's own docs and previous rehearsal directories as sources.
@@ -45,14 +47,14 @@ Only that folder's Markdown is copied, preserving exact paths and bytes, plus re
 
 The throwaway publication allowlist selects the chosen folder and generated front page. The real owner publication selector and projection still enforce **`publish: false` and `cb-publish: false`**; denied notes are copied into the disposable vault but are absent from the site and front-page listing. The normal projection independently determines which copied attachments reach the site. Markdown and referenced attachments each have a **50 MiB total cap**. The folder may contain at most **400 Markdown pages**, including denied notes; raise only that page-count cap with `--max-pages 800`, or choose a smaller folder. Symlinks and unsafe paths are refused.
 
-Open one of the published page URLs printed by the launcher. Follow the six steps below, but choose a short ordinary sentence and your own small correction instead of the synthetic MFA sentence. **Every edit, commit and push goes only to the throwaway copy and its local bare remote, never your source vault.** Loopback-only listeners, Ctrl-C cleanup, `--keep`, `--port` and optional `--challenge` modes work as before.
+Start from the printed **site home** and choose a published page from its list. Follow the six steps below, but choose a short ordinary sentence and your own small correction instead of the synthetic MFA sentence. **Every edit, commit and push goes only to the throwaway copy and its local bare remote, never your source vault.** Loopback-only listeners, Ctrl-C cleanup, `--keep`, `--port` and optional `--challenge` modes work as before.
 
 This is a partial copy: links and embeds into other folders will not resolve, and source pages are never rewritten to repair them. Existing content errors can still block projection or application. The current application route requires LF-only source and the normal 64 KiB source-edit limit; CRLF or larger notes retain their exact bytes in the copy but cannot be applied through this rehearsal. No Excalidraw exports, Canvas rendering or Dataview execution is added.
 
 ## Try the six steps
 
-1. **Sign in and open MFA methods.** Open the bootstrap URL, then the printed MFA methods URL on the private site. You should see a short page containing the deliberately wrong sentence **SMS codes are phishing-resistant.**
-2. **Suggest the correction.** Select that exact sentence on the page, then open **Suggest a correction**. **Text to replace** fills in from your selection; if your browser cleared it, select the sentence again and press **Use selected text**, or paste it. Enter **SMS codes are not phishing-resistant.** as the replacement, add a short explanation, and send. You should get a receipt. This creates a proposal, not a source edit.
+1. **Sign in and start from the site home.** Open the bootstrap URL, which lands on the private site home, then choose **MFA methods**. You should see a short page containing the deliberately wrong sentence **SMS codes are phishing-resistant.**
+2. **Suggest the correction.** Select a sentence on the page and choose **Suggest edit** (or click the pencil next to a paragraph), edit the text in place, and send. For the sample MFA page, change **SMS codes are phishing-resistant.** to **SMS codes are not phishing-resistant.** Add a short explanation when asked. You should get a receipt. This creates a proposal, not a source edit.
 3. **Deliberately hit the page limit before applying.** Send two more distinct suggestions about that same page, with different explanations or replacements. The second attempt should get a receipt; the third should show the rate-limit message and create no additional proposal. The page budget is two attempts, including replays or later source-validation failures, not two successful edits. Do this before applying: the rebuild creates a new publication-bound page ID. The sender also has a three-attempt budget, so do not spend attempts on other pages first.
 4. **Review and Approve.** Open the printed **Proposals** URL. Open your first correction, inspect the before/after change, and choose **Approve**. The page is still unchanged; approval records the owner's decision only.
 5. **Apply to page.** On the approved receipt choose **Apply to page**, confirm, and follow the job. You should reach **Local rehearsal complete**. The exact splice, commit, push to the local bare remote, and private-site rebuild are real. Deployment and live confirmation are explicitly simulated.
@@ -98,7 +100,8 @@ The printed directory contains the disposable vault, local remote, owner config 
 
 - **Missing dependencies or Quartz seed:** run the printed `--prepare` command. Preparation uses the existing pinned renderer setup and may need npm/Git network access. The launcher does not silently install anything.
 - **A port is occupied:** stop the other rehearsal, or choose another three consecutive ports, for example `bun run --cwd docs try:suggestions --port 46537`. Only loopback addresses are accepted; there is no host option.
-- **Proposals asks you to sign in:** use the bootstrap link in the same browser. The private reader page being accessible does not authenticate the separate owner origin. Enter **b** for a fresh one-time link.
+- **Proposals asks you to sign in:** use the bootstrap link in the same browser. The private reader page being accessible does not authenticate the separate owner origin. Enter **b** for a fresh one-time link, or run this launcher's printed `kill -USR1 <launcher-pid>` command and read its original output.
+- **A copied page link does not open from chat:** open the printed site home and use its page list. The reader repairs one extra encoding layer only, not repeated encoding or links outside this partial copy.
 - **The third suggestion is not accepted:** that is the intended page-limit check. Restart for a clean queue and limit state. Replays and malformed source-bound requests can use the budget too.
 - **No widget or challenge refusal:** check access to `challenges.cloudflare.com`, browser blocking extensions and the selected test mode. A disconnected widget fails closed. If this checkout does not yet accept the optional challenge block, use ordinary mode until the matching owner configuration change is present.
 - **The page has not updated:** approval alone never applies. Use **Apply to page**, wait for the local job to finish, then reload the private site, not a public site. The terminal remains open throughout.

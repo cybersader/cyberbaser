@@ -1683,6 +1683,119 @@ describe('server-side edit sessions and one Save', () => {
 });
 
 describe('configured Quartz static site', () => {
+  test('redirects the slashless site home for GET and HEAD', async () => {
+    const { fetch } = await readerFixture();
+    for (const method of ['GET', 'HEAD']) {
+      const redirected = await fetch(readerRequest('/cyberbase', { method }));
+      expect(redirected.status).toBe(308);
+      expect(redirected.headers.get('location')).toBe('/cyberbase/');
+      expect(redirected.headers.get('content-security-policy')).toContain("form-action 'none'");
+      expect(await redirected.text()).toBe('');
+    }
+  });
+
+  test('recovers one extra encoding layer on existing safe clean URLs and directories only', async () => {
+    const siteRoot = await mkdtemp(path.join(os.tmpdir(), 'owner-alpha-encoded-site-'));
+    cleanup.push(siteRoot);
+    const folder = '📁-03---Curations,-Stacks';
+    await mkdir(path.join(siteRoot, folder));
+    await writeFile(path.join(siteRoot, folder, 'index.html'), '<h1>Folder</h1>');
+    await writeFile(path.join(siteRoot, folder, 'MFA-methods.html'), '<h1>MFA methods</h1>');
+    const { fetch } = await readerFixture({ siteRoot });
+    const canonical = `/cyberbase/${encodeURIComponent(folder)}/MFA-methods`;
+    const doubledComma = canonical.replace('%2C', '%252C');
+    for (const method of ['GET', 'HEAD']) {
+      const redirected = await fetch(readerRequest(doubledComma, { method }));
+      expect(redirected.status).toBe(308);
+      expect(redirected.headers.get('location')).toBe(canonical);
+      const resolved = await fetch(readerRequest(redirected.headers.get('location'), { method }));
+      expect(resolved.status).toBe(200);
+      expect(resolved.headers.get('location')).toBeNull();
+    }
+    const directory = `/cyberbase/${encodeURIComponent(folder)}/`;
+    const redirectedDirectory = await fetch(readerRequest(directory.replace('%2C', '%252C')));
+    expect(redirectedDirectory.status).toBe(308);
+    expect(redirectedDirectory.headers.get('location')).toBe(directory);
+    expect((await fetch(readerRequest(directory))).status).toBe(200);
+    for (const original of [canonical, canonical.replace('%2C', ','), `/cyberbase/${folder}/MFA-methods`]) {
+      expect((await fetch(readerRequest(original))).status).toBe(200);
+    }
+  });
+
+  test('does not decode twice when the originally requested percent-bearing filename exists', async () => {
+    const siteRoot = await mkdtemp(path.join(os.tmpdir(), 'owner-alpha-percent-site-'));
+    cleanup.push(siteRoot);
+    await writeFile(path.join(siteRoot, 'literal%2C.html'), '<h1>Literal percent</h1>');
+    await writeFile(path.join(siteRoot, 'literal,.html'), '<h1>Comma</h1>');
+    const { fetch } = await readerFixture({ siteRoot });
+    const original = await fetch(readerRequest('/cyberbase/literal%252C'));
+    expect(original.status).toBe(200);
+    expect(await original.text()).toBe('<h1>Literal percent</h1>');
+    expect(original.headers.get('location')).toBeNull();
+  });
+
+  test('rejects unsafe extra encodings and symlinks without redirecting or exposing outside bytes', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'owner-alpha-extra-encoding-'));
+    cleanup.push(root);
+    const siteRoot = path.join(root, 'site');
+    await mkdir(siteRoot);
+    await writeFile(path.join(root, 'secret.html'), 'outside-private');
+    await symlink(path.join(root, 'secret.html'), path.join(siteRoot, 'linked,.html'));
+    const { fetch } = await readerFixture({ siteRoot });
+    for (const encoded of [
+      '%252e%252e/secret.html', '%252E%252E/secret.html', '%252e%252e%252fsecret.html',
+      '%252fsecret.html', '%255csecret.html', '%2500secret.html', '%250asecret.html',
+      'linked%252C.html', '%25ZZ',
+    ]) {
+      const rejected = await fetch(readerRequest(`/cyberbase/${encoded}`));
+      expect(rejected.status).toBe(404);
+      expect(rejected.headers.get('location')).toBeNull();
+      expect(await rejected.text()).not.toContain('outside-private');
+    }
+  });
+
+  test('keeps missing and triple-encoded paths at 404 without repeated recovery', async () => {
+    const siteRoot = await mkdtemp(path.join(os.tmpdir(), 'owner-alpha-missing-encoding-'));
+    cleanup.push(siteRoot);
+    await writeFile(path.join(siteRoot, 'exists,.html'), '<h1>Exists</h1>');
+    const { fetch } = await readerFixture({ siteRoot });
+    for (const encoded of ['missing%252C', 'exists%25252C']) {
+      const missing = await fetch(readerRequest(`/cyberbase/${encoded}`));
+      expect(missing.status).toBe(404);
+      expect(missing.headers.get('location')).toBeNull();
+    }
+  });
+
+  test('offers a safe HTML 404 with site-home navigation only to HTML clients', async () => {
+    const siteRoot = await mkdtemp(path.join(os.tmpdir(), 'owner-alpha-html-404-'));
+    cleanup.push(siteRoot);
+    await writeFile(path.join(siteRoot, 'index.html'), '<h1>Home</h1>');
+    const { fetch } = await readerFixture({ siteRoot });
+    const home = await fetch(readerRequest('/cyberbase/'));
+    for (const pathname of ['/cyberbase/missing%252C', '/not-a-reader-route']) {
+      const missing = await fetch(readerRequest(pathname, { headers: { Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8' } }));
+      expect(missing.status).toBe(404);
+      expect(missing.headers.get('content-type')).toBe('text/html; charset=utf-8');
+      const html = await missing.text();
+      expect(html).toContain('<h1>Page not found</h1>');
+      expect(html).toContain('href="/cyberbase/"');
+      expect(html).not.toContain(pathname);
+      for (const header of ['content-security-policy', 'x-content-type-options', 'referrer-policy', 'cross-origin-resource-policy']) {
+        expect(missing.headers.get(header)).toBe(home.headers.get(header));
+      }
+    }
+    const head = await fetch(readerRequest('/cyberbase/missing', { method: 'HEAD', headers: { Accept: 'text/html' } }));
+    expect(head.status).toBe(404);
+    expect(head.headers.get('content-type')).toBe('text/html; charset=utf-8');
+    expect(await head.text()).toBe('');
+    for (const accept of ['', 'application/json', '*/*', 'text/html;q=0,application/json']) {
+      const missing = await fetch(readerRequest('/cyberbase/missing', { headers: { Accept: accept } }));
+      expect(missing.status).toBe(404);
+      expect(missing.headers.get('content-type')).toBe('application/json; charset=utf-8');
+      expect(await missing.json()).toEqual({ error: { code: 'not-found' } });
+    }
+  });
+
   test('serves the configured cached site with clean URLs and HEAD support', async () => {
     const siteRoot = await mkdtemp(path.join(os.tmpdir(), 'owner-alpha-site-'));
     cleanup.push(siteRoot);

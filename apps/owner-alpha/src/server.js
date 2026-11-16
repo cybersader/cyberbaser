@@ -1672,14 +1672,49 @@ export function createReaderHandler({
       return errorResponse(400, 'invalid-url');
     }
     if (url.origin !== expectedOrigin) return errorResponse(421, 'invalid-host');
+    const redirect = (location) => {
+      const headers = securityHeaders({ csp });
+      headers.set('Location', location);
+      return new Response(null, { status: 308, headers });
+    };
+    const notFound = () => {
+      const acceptsHtml = request.headers.get('accept')?.split(',').some((range) => {
+        const [type, ...parameters] = range.trim().toLowerCase().split(';');
+        return type.trim() === 'text/html' && !parameters.some((parameter) => /^q\s*=\s*0(?:\.0*)?\s*$/u.test(parameter.trim()));
+      });
+      if (!acceptsHtml) return errorResponse(404, 'not-found');
+      const headers = securityHeaders({ csp });
+      headers.set('Content-Type', 'text/html; charset=utf-8');
+      return new Response(request.method === 'HEAD' ? null : '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Page not found</title><main><h1>Page not found</h1><p>This page is not available. <a href="/cyberbase/">Go to the site home</a>.</p></main></html>', { status: 404, headers });
+    };
     if (url.pathname === '/') return response(null, 302, { Location: '/cyberbase/' });
-    if (!url.pathname.startsWith('/cyberbase/')) return errorResponse(404, 'not-found');
+    if (url.pathname === '/cyberbase') {
+      if (url.search !== '') return errorResponse(400, 'unexpected-query');
+      return redirect('/cyberbase/');
+    }
+    if (!url.pathname.startsWith('/cyberbase/')) return notFound();
     if (url.search !== '') return errorResponse(400, 'unexpected-query');
-    return staticResponse(resolvedSiteRoot, url.pathname.slice('/cyberbase/'.length), request, {
-      cleanHtml: true,
-      reader: true,
-      csp,
-    });
+    const encodedPath = url.pathname.slice('/cyberbase/'.length);
+    const options = { cleanHtml: true, reader: true, csp };
+    const original = await staticResponse(resolvedSiteRoot, encodedPath, request, options);
+    if (original.status !== 404) return original;
+    // Some chat clients escape existing percent signs. Try exactly one extra
+    // layer, only after a miss, with the same segment and filesystem checks.
+    if (/%25/iu.test(encodedPath)) {
+      try {
+        const decodedPath = decodeURIComponent(encodedPath);
+        const directory = decodedPath.endsWith('/');
+        const segments = safePathSegments(directory ? decodedPath.slice(0, -1) : decodedPath, { directoryIndex: false });
+        const canonicalPath = segments.map((segment) => encodeURIComponent(segment)).join('/') + (directory ? '/' : '');
+        if (canonicalPath !== encodedPath) {
+          const recovered = await staticResponse(resolvedSiteRoot, canonicalPath, request, options);
+          if (recovered.status === 200) return redirect(`/cyberbase/${canonicalPath}`);
+        }
+      } catch {
+        // Unsafe or malformed extra encodings remain a miss, never a redirect.
+      }
+    }
+    return notFound();
   };
 }
 
