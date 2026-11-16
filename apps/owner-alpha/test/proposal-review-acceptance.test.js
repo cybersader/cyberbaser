@@ -261,6 +261,14 @@ acceptanceTest('live same-host intake, owner decisions, restart recovery, and pu
   await chmod(reviewRuntime, 0o700);
   const socketPath = path.join(reviewRuntime, 'review.sock');
   const intakeConfig = validateIntakeConfig(configInput(fixture.root, {
+    // This acceptance batch submits several proposals from one test client;
+    // admit it without weakening product defaults (limits are tested in the intake app).
+    limits: {
+      ...configInput(fixture.root).limits,
+      perSenderCapacity: 20,
+      perNetworkCapacity: 20,
+      perPageCapacity: 20,
+    },
     reviewIpc: {
       enabled: true,
       socketPath,

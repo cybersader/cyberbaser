@@ -194,6 +194,38 @@ will not enable the widget through that app. These offline tests do not validate
 live Turnstile or authorize enabling a public form. Other providers require their
 own reviewed script/frame CSP permissions; no provider adds host policy itself.
 
+## Selecting a correction quote
+
+On enabled forms, select a passage in the page's article, then open **Suggest a
+correction**. An empty **Text to replace** field fills from that selection.
+Selections in navigation, sidebars, or forms are excluded; article code blocks
+are allowed. The browser keeps the last article selection in memory across focus
+changes, capturing `selectionchange`, `pointerup`, `keyup`, and `pointerdown`.
+A new non-content selection discards it; Quartz SPA cleanup clears it between
+pages. Nothing is sent until the reader submits the form.
+
+**Use selected text**, beside the field, captures the current article selection
+again (or uses the last captured selection if focus collapsed it). It is a native
+keyboard-accessible button. Only this explicit action can replace a non-empty
+quote, so reopening the form never overwrites reader-entered text. A selection
+longer than the field's existing 16,384 UTF-16-code-unit maximum is not inserted;
+a nearby live hint asks for a shorter passage. It is never silently truncated.
+
+Selection text is normalized **only** by trimming leading/trailing whitespace and
+collapsing internal whitespace/newline runs to one space. Markdown punctuation,
+Unicode characters, and all other non-whitespace characters are left unchanged.
+This is a convenience, not a rendered-to-source mapping: formatting hidden by the
+renderer or changed source whitespace can still fail the server's exact-source
+quote resolution. The server's source-bound checks and owner review remain
+unchanged. No challenge widget is required, no new request is made, and disabled
+forms still emit nothing and are omitted from the layout and browser resources.
+
+Run `build-contained -- bash renderers/quartz-cyberbase/tests/run.sh` from the
+repository root. Its fake-DOM lifecycle tests bundle the real browser entry and
+cover selection scope, normalization, length bounds, preserving typed text,
+explicit recapture, and SPA cleanup, with and without a challenge. Real browser
+selection/focus timing and touch selection handles still need browser verification.
+
 ## Adding a challenge provider
 
 The browser contract is `ChallengeProvider` in `components/challenge/registry.ts`:

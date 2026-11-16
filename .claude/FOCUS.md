@@ -2,6 +2,8 @@
 
 > Update when direction changes, milestones complete, or priorities shift.
 
+**Real-content rehearsal, 2026-11-16:** session work pushed to draft PR #7. `try:suggestions --from "<vault>" --folder "<folder>"` copies a real folder read-only from `origin/main`; selecting text fills the suggestion form. 14 vault notes have CRLF and cannot be applied until normalized. Chronology: `agent-context/zz-log/2026-11-16-real-content-rehearsal.mdx`.
+
 **ofm-check false positives fixed, 2026-11-16:** from vault PR #11: wikilink retargets and deliberate link-label escapes now check clean; the reported dropped line was inserted spacing; bullet markers preserved; real round-trip loss now errors. `packages/ofm` 40/40. Reaches vault CI only after merge to Cyberbaser `main` (vault clones it unpinned; pin before enforcement). Chronology: `agent-context/zz-log/2026-11-16-ofm-check-false-positives.mdx`.
 
 **Vault cleanup constraints, 2026-11-16:** the owner wants Cyberbase off Publish with the real vault as first content. Desktop vault is 19 commits behind the Cyberbaser-enabled remote; cleanup must start from `origin/main`. Do-not-change and degradation lists are in `development/quartz-publishing-migration.mdx#vault-cleanup-constraints-2026-11-16`. Chronology: `agent-context/zz-log/2026-11-16-vault-cleanup-constraints.mdx`.

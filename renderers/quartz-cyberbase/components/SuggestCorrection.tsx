@@ -39,6 +39,10 @@ export default ((opts: SuggestCorrectionOptions) => {
             Text to replace
             <textarea name="quote" required rows={3} maxlength={16 * 1024}></textarea>
           </label>
+          <div class="suggest-correction-selection">
+            <button type="button" class="suggest-correction-use-selection">Use selected text</button>
+            <span class="suggest-correction-selection-hint" role="status" aria-live="polite"></span>
+          </div>
           <div class="suggest-correction-context">
             <label>
               Context immediately before (optional)
@@ -131,12 +135,14 @@ export default ((opts: SuggestCorrectionOptions) => {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
 }
+.suggest-correction-selection,
 .suggest-correction-actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 0.65rem;
 }
+.suggest-correction-selection button,
 .suggest-correction-actions button {
   padding: 0.45rem 0.75rem;
   border: 1px solid var(--secondary);
@@ -147,6 +153,12 @@ export default ((opts: SuggestCorrectionOptions) => {
   font-weight: 600;
   cursor: pointer;
 }
+.suggest-correction-selection button {
+  padding: 0.25rem 0.5rem;
+  background: var(--light);
+  color: var(--secondary);
+}
+.suggest-correction-selection-hint { color: var(--gray); }
 .suggest-correction-actions button:disabled {
   cursor: wait;
   opacity: 0.55;

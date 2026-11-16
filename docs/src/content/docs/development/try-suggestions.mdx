@@ -7,7 +7,7 @@ status: research
 tags: [setup, testing, contribution, governance]
 ---
 
-Try the complete suggestion loop in your own browser without opening your real vault or owner configuration. The launcher creates three short security notes, a fresh Git vault, a local bare remote, and a private owner workspace. All three HTTP listeners bind **127.0.0.1 only**. Nothing is deployed.
+Try the complete suggestion loop in your own browser without changing your real vault or opening your owner configuration. By default, the launcher creates three short security notes, a fresh Git vault, a local bare remote, and a private owner workspace. You can instead rehearse on a read-only committed folder copy, described below. All three HTTP listeners bind **127.0.0.1 only**. Nothing is deployed.
 
 This is a hands-on companion to [Suggestions on the private site](/cyberbaser/development/suggestions-on-the-private-site/), not the [first real application run](/cyberbaser/development/first-real-application/).
 
@@ -31,10 +31,28 @@ bun run --cwd docs try:suggestions --prepare
 
 Preparation runs inside `build-contained`. It installs the two apps' frozen dependency closures without install scripts, then downloads the pinned Quartz checkout and installs its pinned npm dependencies. It does not update project lockfiles. Internet access is needed for preparation. Its reusable renderer seed lives at `.workspace/suggestions-rehearsal-renderer`; it is not part of the disposable vault. The normal launcher never downloads dependencies or a browser. The first real site build can take a minute.
 
+## Use a copy of real content
+
+To rehearse with a folder from your vault instead of the three sample notes:
+
+```bash
+bun run --cwd docs try:suggestions --from "/home/cybersader/04 Vaults/cyberbase" --folder "📁 03 - Curations, Stacks"
+```
+
+The source vault is **read-only**. The launcher reads committed objects from **`origin/main` by default**, not the desktop working tree or an extra unpushed commit. It does not fetch, checkout, change the index, or update refs. Use `--ref <commit-ish>` to select another already-local commit. A missing ref or folder is refused. The launcher refuses the project's own docs and previous rehearsal directories as sources.
+
+Only that folder's Markdown is copied, preserving exact paths and bytes, plus referenced files under the vault-root `_attachments/` directory. Attachment references use the existing Markdown reference extractor, with exact-path/relative-path lookup and filename fallback for embeds, wikilinks and Markdown links. Ambiguous attachment filenames are refused. Only references from publishable pages bring attachments into the copy. Unreferenced attachments, other folders, vault configuration, Git history, and working-tree changes are not copied. A generated `index.md` lists the publishable copied pages.
+
+The throwaway publication allowlist selects the chosen folder and generated front page. The real owner publication selector and projection still enforce **`publish: false` and `cb-publish: false`**; denied notes are copied into the disposable vault but are absent from the site and front-page listing. The normal projection independently determines which copied attachments reach the site. Markdown and referenced attachments each have a **50 MiB total cap**. The folder may contain at most **400 Markdown pages**, including denied notes; raise only that page-count cap with `--max-pages 800`, or choose a smaller folder. Symlinks and unsafe paths are refused.
+
+Open one of the published page URLs printed by the launcher. Follow the six steps below, but choose a short ordinary sentence and your own small correction instead of the synthetic MFA sentence. **Every edit, commit and push goes only to the throwaway copy and its local bare remote, never your source vault.** Loopback-only listeners, Ctrl-C cleanup, `--keep`, `--port` and optional `--challenge` modes work as before.
+
+This is a partial copy: links and embeds into other folders will not resolve, and source pages are never rewritten to repair them. Existing content errors can still block projection or application. The current application route requires LF-only source and the normal 64 KiB source-edit limit; CRLF or larger notes retain their exact bytes in the copy but cannot be applied through this rehearsal. No Excalidraw exports, Canvas rendering or Dataview execution is added.
+
 ## Try the six steps
 
 1. **Sign in and open MFA methods.** Open the bootstrap URL, then the printed MFA methods URL on the private site. You should see a short page containing the deliberately wrong sentence **SMS codes are phishing-resistant.**
-2. **Suggest the correction.** Select and copy that exact sentence, open **Suggest a correction**, and paste it into **Text to replace**. The current form does not capture selections automatically. Enter **SMS codes are not phishing-resistant.** as the replacement, add a short explanation, and send. You should get a receipt. This creates a proposal, not a source edit.
+2. **Suggest the correction.** Select that exact sentence on the page, then open **Suggest a correction**. **Text to replace** fills in from your selection; if your browser cleared it, select the sentence again and press **Use selected text**, or paste it. Enter **SMS codes are not phishing-resistant.** as the replacement, add a short explanation, and send. You should get a receipt. This creates a proposal, not a source edit.
 3. **Deliberately hit the page limit before applying.** Send two more distinct suggestions about that same page, with different explanations or replacements. The second attempt should get a receipt; the third should show the rate-limit message and create no additional proposal. The page budget is two attempts, including replays or later source-validation failures, not two successful edits. Do this before applying: the rebuild creates a new publication-bound page ID. The sender also has a three-attempt budget, so do not spend attempts on other pages first.
 4. **Review and Approve.** Open the printed **Proposals** URL. Open your first correction, inspect the before/after change, and choose **Approve**. The page is still unchanged; approval records the owner's decision only.
 5. **Apply to page.** On the approved receipt choose **Apply to page**, confirm, and follow the job. You should reach **Local rehearsal complete**. The exact splice, commit, push to the local bare remote, and private-site rebuild are real. Deployment and live confirmation are explicitly simulated.
@@ -89,4 +107,4 @@ The printed directory contains the disposable vault, local remote, owner config 
 
 The rehearsal uses the real private-site Quartz form, retained source binding, separate intake process, queue, authenticated Proposals review, immutable owner decision and separate application act. Rendering, exact source checks, source application, commit, local push and private-site rebuild run against disposable data. A fixture-local Git seam verifies the local bare remote before presenting the policy's synthetic HTTPS repository identity. That identity is not a network destination.
 
-It does **not** deploy, contact GitHub Actions, verify a public page, open your real vault, offer public contribution access, establish usability acceptance, or settle Q09. Deployment discovery, deployment success and live confirmation are explicitly simulated and labelled on the owner screens. The optional bot-check modes contact Cloudflare but do not validate production keys or real abuse handling. Actual browser selection, the visual widget and the owner's experience still require the human walkthrough above; an HTTP test is not a browser acceptance result.
+It does **not** deploy, contact GitHub Actions, verify a public page, write to your real vault, offer public contribution access, establish usability acceptance, or settle Q09. Only `--from` reads a real vault, using committed objects without opening its working-tree content. Deployment discovery, deployment success and live confirmation are explicitly simulated and labelled on the owner screens. The optional bot-check modes contact Cloudflare but do not validate production keys or real abuse handling. Actual browser selection, the visual widget and the owner's experience still require the human walkthrough above; an HTTP test is not a browser acceptance result.

@@ -3,6 +3,7 @@ import { cp, lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'no
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { copyCommittedFolder, DEFAULT_MAX_PAGES, validateCopyOptions } from './suggestions-rehearsal-source.js';
 
 const exec = promisify(execFile);
 export const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -24,22 +25,27 @@ const TEST_KEYS = Object.freeze({
 
 export function optionsFromArgs(args) {
   const result = { keep: false, challenge: null, prepare: false, port: 46437 };
+  const copy = { from: null, folder: null, ref: 'origin/main', maxPages: DEFAULT_MAX_PAGES };
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
     if (arg === '--keep') result.keep = true;
     else if (arg === '--prepare') result.prepare = true;
     else if (arg === '--challenge' && Object.hasOwn(TEST_KEYS, args[i + 1])) result.challenge = args[++i];
     else if (arg === '--port' && /^\d+$/u.test(args[i + 1] ?? '')) result.port = Number(args[++i]);
-    else throw new Error('Use --keep, --port NUMBER, --prepare, or --challenge pass|fail|spent.');
+    else if (['--from', '--folder', '--ref'].includes(arg) && args[i + 1] && !args[i + 1].startsWith('--')) copy[{ '--from': 'from', '--folder': 'folder', '--ref': 'ref' }[arg]] = args[++i];
+    else if (arg === '--max-pages' && /^\d+$/u.test(args[i + 1] ?? '')) copy.maxPages = Number(args[++i]);
+    else throw new Error('Use --keep, --port NUMBER, --prepare, --challenge pass|fail|spent, or --from VAULT --folder FOLDER [--ref origin/main] [--max-pages 400].');
   }
   if (!Number.isSafeInteger(result.port) || result.port < 1024 || result.port > 65533) throw new Error('Choose an owner port from 1024 through 65533; this rehearsal uses three consecutive ports.');
-  if (result.prepare && (result.keep || result.challenge)) throw new Error('--prepare runs preparation only; do not combine it with --keep or --challenge.');
-  return result;
+  if (copy.from === null && args.some((arg) => ['--folder', '--ref', '--max-pages'].includes(arg))) throw new Error('--folder, --ref and --max-pages require --from.');
+  validateCopyOptions(copy);
+  if (result.prepare && (result.keep || result.challenge || copy.from !== null)) throw new Error('--prepare runs preparation only; do not combine it with --keep, --challenge or --from.');
+  return copy.from === null ? result : { ...result, ...copy };
 }
 
 function environment() {
   const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_') && !name.startsWith('CYBERBASER_')));
-  return { ...env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0', GIT_NO_LAZY_FETCH: '1' };
+  return { ...env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0', GIT_NO_LAZY_FETCH: '1', GIT_OPTIONAL_LOCKS: '0' };
 }
 
 async function command(program, args, options = {}) {
@@ -71,8 +77,9 @@ export async function assertPrerequisites({ seed = RENDERER_SEED } = {}) {
 }
 
 /** Only fresh fixture-owned files are written. The real owner config is never read. */
-export async function createSuggestionsFixture({ port = 46437, keep = false, challenge = null } = {}) {
+export async function createSuggestionsFixture({ port = 46437, keep = false, challenge = null, from = null, folder = null, ref = 'origin/main', maxPages = DEFAULT_MAX_PAGES } = {}) {
   optionsFromArgs(['--port', String(port), ...(challenge === null ? [] : ['--challenge', challenge])]);
+  validateCopyOptions({ from, folder, ref, maxPages });
   await mkdir(path.join(PROJECT_ROOT, '.workspace'), { recursive: true, mode: 0o700 });
   const root = await mkdtemp(path.join(PROJECT_ROOT, '.workspace/try-suggestions-'));
   const checkout = path.join(root, 'vault');
@@ -111,8 +118,10 @@ export async function createSuggestionsFixture({ port = 46437, keep = false, cha
     await writeFile(path.join(projectRoot, '.gitignore'), '.workspace/\n', { mode: 0o600 });
     await mkdir(checkout, { mode: 0o700 });
     await mkdir(path.join(checkout, '.cyberbaser'), { mode: 0o700 });
-    for (const [name, text] of Object.entries(PAGES)) await writeFile(path.join(checkout, name), text, { mode: 0o600 });
-    await writeFile(path.join(checkout, 'publish.yml'), 'allow:\n  - "*.md"\n', { mode: 0o600 });
+    const copied = from === null ? null : await copyCommittedFolder({ from, folder, ref, maxPages, checkout, root, projectRoot: PROJECT_ROOT, command });
+    if (copied === null) for (const [name, text] of Object.entries(PAGES)) await writeFile(path.join(checkout, name), text, { mode: 0o600 });
+    const allow = copied === null ? ['*.md'] : ['index.md', folder];
+    await writeFile(path.join(checkout, 'publish.yml'), copied === null ? 'allow:\n  - "*.md"\n' : `${JSON.stringify({ allow })}\n`, { mode: 0o600 });
     await writeFile(path.join(checkout, '.cyberbaser/trust.yml'), 'trusted: [rehearsal]\nagents: []\n', { mode: 0o600 });
     await git(checkout, ['init', '-q', '--initial-branch=main']);
     await git(checkout, ['config', 'user.name', 'Suggestions Rehearsal']);
@@ -131,7 +140,7 @@ export async function createSuggestionsFixture({ port = 46437, keep = false, cha
         path: '.github/workflows/local-only.yml', event: 'push', branch: 'main', jobs: ['build', 'deploy'], environment: 'github-pages' },
       proposalReview: { enabled: true, socketPath: path.join(root, 'review.sock'), requestTimeoutMs: 5000, maxListEntries: 100 },
       workspace: { root: '.workspace/owner-alpha', store: '.workspace/owner-alpha/store', site: '.workspace/owner-alpha/site', cache: '.workspace/owner-alpha/cache' },
-      paths: { include: ['*.md'], exclude: ['.git/**', '.workspace/**', '.cyberbaser/**'] },
+      paths: { include: copied === null ? ['*.md'] : ['**/*.md'], exclude: ['.git/**', '.workspace/**', '.cyberbaser/**'] },
       limits: { maxSourceBytes: 65536, maxReplacementBytes: 65536, maxChangedBytes: 65536, maxChangedLines: 60,
         maxArtifactBytes: 8388608, requestTimeoutMs: 30000, networkTimeoutMs: 900000 },
       checks: { allowedOfmVerdicts: ['clean'], requirePublishedSource: true, requireProjectionVerification: true,
@@ -145,7 +154,7 @@ export async function createSuggestionsFixture({ port = 46437, keep = false, cha
       config.suggestions.form.challenge = { provider: 'turnstile', siteKey: TEST_KEYS[challenge][0], secretFile, expectedHostnames: ['example.com'] };
     }
     await writeFile(configFile, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
-    return { root, checkout, remote, config, configFile, projectRoot, challenge, keep, git, cleanup,
+    return { root, checkout, remote, config, configFile, projectRoot, challenge, keep, copied, git, cleanup,
       ownerOrigin: `http://127.0.0.1:${port}`, readerOrigin: `http://127.0.0.1:${port + 1}`, intakeOrigin: `http://127.0.0.1:${port + 2}`,
       track(promise) { active.add(promise); promise.then(() => active.delete(promise), () => active.delete(promise)); return promise; },
       attachRuntime(value) { runtime = value; },

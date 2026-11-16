@@ -6,6 +6,7 @@ import {
   submitCorrectionIntent,
 } from "../suggestCorrectionClient"
 
+import { setupSuggestionSelection } from "../suggestCorrectionSelection"
 import { setupSuggestionChallenge } from "../suggestCorrectionChallenge"
 import type { SuggestionChallenge } from "../suggestCorrectionChallenge"
 
@@ -118,6 +119,7 @@ async function submitCorrection(event: SubmitEvent) {
 document.addEventListener("nav", () => {
   for (const form of document.querySelectorAll<HTMLFormElement>(FORM_SELECTOR)) {
     form.addEventListener("submit", submitCorrection)
+    const cleanupSelection = setupSuggestionSelection(form)
     const submit = form.querySelector<HTMLButtonElement>("button[type='submit']")
     if (submit) {
       const challenge = setupSuggestionChallenge(form, submit, (message, state) => setStatus(form, message, state))
@@ -126,6 +128,7 @@ document.addEventListener("nav", () => {
     }
     window.addCleanup(() => {
       form.removeEventListener("submit", submitCorrection)
+      cleanupSelection()
       challenges.get(form)?.destroy()
       challenges.delete(form)
     })
