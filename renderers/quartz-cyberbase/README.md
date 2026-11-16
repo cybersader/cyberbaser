@@ -88,15 +88,23 @@ after transclusion expansion. SHA-256 and byte length describe the **build input
 including original CRLF and leading/trailing whitespace, not normalized Markdown
 or HTML. The normal verbatim publication projection preserves that identity. A
 caller that rewrites projected content must not equate this digest with the
-canonical source digest: it needs its own proven projection mapping or must fall
-back to source editing.
+canonical source digest, including for the source fallback. This adapter supports
+only the verbatim projection: `packages/projection/src/project.js` defaults to
+`lowercase=false` and copies each selected page with `copyFileSync`; it does not
+strip or redact body regions. Excluded files never enter this renderer. A future
+rewriting/redacting projection needs a proven original-byte coverage map and must
+mark blocks overlapping rewritten/uncovered regions non-editable (without text),
+or keep provenance disabled. Re-reading the canonical vault to recover omitted
+content is forbidden.
 
-### Contract v1
+### Contract v2 (additive block fallback)
 
 `plugins/provenanceContract.ts` is renderer-neutral. `ProvenanceSink.write(page,
 manifest)` is the small pluggable emission interface. Quartz supplies a filesystem
 sink; another renderer can produce the same manifest without depending on Quartz
-or its patch.
+or its patch. Version 2 retains the v1 source identity and leaf semantics, adding
+`blocks`; readers may accept v1 without source fallback and v2 with it. Do not
+silently reinterpret an unknown version.
 
 Example HTML for the seven-byte source `Hi 😀`:
 
@@ -110,18 +118,23 @@ hex digest of those exact seven bytes):
 ```json
 {
   "schema": "cyberbaser.source-provenance",
-  "version": 1,
+  "version": 2,
   "source": { "path": "note.md", "byteLength": 7, "sha256": "<sha256>" },
   "leaves": [{
     "id": "cb0.0", "parent": "cb0", "child": 0, "text": "Hi 😀",
     "runs": [{ "rendered": [0, 5], "source": [0, 7], "kind": "exact" }],
     "exact": [0, 7]
+  }],
+  "blocks": [{
+    "id": "block0", "parent": "cb0", "source": [0, 7],
+    "text": "Hi 😀", "editable": true
   }]
 }
 ```
 
 - `source.path` is the POSIX path relative to the published input directory, never
-  an absolute local path. Original source content is not included in the sidecar.
+  an absolute local path. Only editable `blocks[].text` contains original source;
+  the complete file and frontmatter are never emitted.
 - Each leaf identifies one DOM `Text` child using its existing parent's
   `data-cb-node` and its **`childNodes` index**, not `children` index. `$body` means
   the source body root, normally `article.popover-hint` in this adapter. `id` is
@@ -159,6 +172,60 @@ client rewriting can invalidate locators; do not guess a replacement match.
 Provenance alone is not authentication, approval, Markdown safety, a freshness
 check, or permission to apply a change. The proposal and integrity gates remain
 mandatory.
+
+### Exact block source and privacy
+
+`blocks[].parent` identifies the enclosing rendered element by `data-cb-node`, not
+a text child. `source` remains a half-open original UTF-8 byte range; editable
+`text` is exactly that slice decoded without normalizing CRLF, Unicode or Markdown.
+The editor must preserve those bytes for unchanged text, and submit only declared
+base-bound operations through the same suggestion ledger and proposal gates.
+
+Blocks cover paragraphs, headings, leaf list items (including the list marker),
+ordinary blockquote paragraphs, **whole callouts**, **whole tables** (not rows),
+math blocks, fenced/indented code and thematic breaks. Child paragraphs inside a
+callout, table or leaf item do not create overlapping fallback blocks. A parent
+list item's own paragraph can coexist with its nested leaf items. Locators are
+attached only where the original block still has one provable rendered element;
+removed, duplicated or unprovable DOM boundaries get no fallback, never a guessed
+match. Transcluded descendants have no hosting-page source authority.
+
+The initial hook parses the untransformed, trimmed original with the same configured
+Markdown parser/extensions. It matches the transformed AST to those original
+boundaries, so OFM's preprocessing cannot hide a comment by deleting it before
+classification. Internal AST metadata (never source-authored attributes) survives
+raw-HTML reparsing and the pinned KaTeX block replacement. Unknown source-boundary
+changes retain a non-editable block with `reason: "transformed-boundary"`.
+
+**Fail-closed rules:**
+
+- Any `%%` or `<!--` in a source block disables it (`obsidian-comment` or
+  `html-comment`), including comments removed before parsing, prefixes/suffixes,
+  nested table/list/callout content, unmatched delimiters and conservative false
+  positives in code examples. The emission boundary checks again.
+- Raw HTML in a block, or an authored raw-HTML ancestor around it, disables the
+  fallback (`raw-html`). This is deliberately broader than detecting stripped or
+  hidden HTML: arbitrary HTML/CSS cannot prove that all its source is visible.
+- Frontmatter is never a block. Definitions/footnote definitions nested inside a
+  block disable it (`unpublished-source`); standalone non-rendered definitions
+  produce no locator. Nothing reads a file outside the published build input.
+- Obsidian embeds and Markdown images disable their enclosing block
+  (`transclusion`). Foreign and same-file transcluded descendants cannot become
+  editable hosting-page blocks. Only the local embed directive receives a disabled
+  locator where it survives rendering; foreign source is never fetched for editing.
+- A non-editable block **omits `text` entirely**. Example:
+  `{"id":"block4","parent":"cb9","source":[100,160],"editable":false,"reason":"obsidian-comment"}`.
+  Its coordinates identify a boundary, not permission to fetch the missing text.
+- Maximum source text per block is **8 KiB in UTF-8**, not 8,192 UTF-16 code units.
+  Larger blocks omit text with `reason: "too-large"`. The complete serialized
+  sidecar, including the newline, is capped at **4 MiB**. If it exceeds that budget,
+  all editable block payloads are withheld with `too-large`; if necessary the
+  rendered leaf map is withheld too. If metadata alone still exceeds the cap, the
+  build fails before the sink writes anything. Never truncate a source slice.
+
+A blocked source fallback does not make otherwise proven visible leaf spans
+unsafe: the two surfaces retain their separate exact-range checks. Neither one
+may recover hidden source through an alternate endpoint.
 
 ### Pinned adapter patch
 
@@ -210,13 +277,24 @@ transformed atoms. All final HTML text locators were checked, and all **3,092
 exact whole-leaf ranges** matched the original source bytes. The denominator
 excludes whitespace-only leaves and collapses HTML ASCII whitespace outside
 `pre`, matching the prior research measure; raw text maps are also checked.
+The v2 corpus gate additionally verified **1,860 editable blocks and 25
+non-editable blocks**, all 25 refused as `transclusion` (Markdown image embeds).
+Every emitted block text matched its exact original UTF-8 slice and contained
+neither `%%` nor `<!--`; every disabled block omitted text.
 
 Synthetic acceptance covers emoji, CRLF, entities, escapes, alias versus
-target-derived wikilinks, callouts, tables, inline HTML, inline/fenced code,
-math, and transclusions. It proves two-worker/single-thread equivalence and an
-exact source splice whose rebuilt body changes only the declared prose. The
-uninstrumented versus disabled golden matched **all 16 emitted fixture files
-byte-for-byte**. Hash-drift rejection is exercised too.
+target-derived wikilinks, whole callouts/tables, leaf lists, quoted paragraphs,
+inline HTML, inline/fenced code, multiple math blocks and transclusions. Hidden
+comments at paragraph edges and inside lists/tables/callouts, authored hidden-HTML
+wrappers, nested non-rendered definitions, frontmatter exclusion, image embeds,
+and an oversized block prove refusal. The expanded fixtures produce 19 editable
+and 14 non-editable blocks: `raw-html=2`, `transclusion=2`, `obsidian-comment=6`,
+`html-comment=2`, `unpublished-source=1`, `too-large=1`. Unit checks cover both size
+caps, cross-source and duplicate-locator refusal. Acceptance also proves
+two-worker/single-thread equivalence and an exact source splice whose rebuilt
+body changes only the declared prose. The uninstrumented versus disabled golden
+matched **all 16 emitted fixture files byte-for-byte**. Hash-drift rejection is
+exercised too.
 
 ## Theme
 
@@ -361,12 +439,88 @@ the toggle switches between reading and suggesting without losing the draft.
    owner can apply a proposal to the source.
 
 Generated text, transformed atoms and discontinuous selections are not edited
-by guesswork. Dashed hints explain that these regions need a future source
-editor. Plain-text paste uses the same exact-range route; HTML paste, drops,
-formatting commands and native document undo cannot mutate the source model.
+by guesswork. On v2 provenance pages, clicking a dashed transformed region opens
+its exact Markdown block in the source editor described below. Discontinuous
+rendered selections still refuse editing. Plain-text paste uses the same
+exact-range route; HTML paste, drops, formatting commands and native document
+undo cannot mutate the source model.
 Use **Discard** to restore a suggestion. Selections must stay within one verified
 exact run, not cross Markdown syntax boundaries. IME input is captured separately
 from the browser's transient composition DOM.
+
+### Editing a block’s Markdown source
+
+In Suggesting mode, click a target-derived wikilink label, callout title, math
+region or other transformed text, or choose **Edit source** beside an editable
+block. The rendered block temporarily gives way to a compact, labelled editor
+headed **Editing Markdown source**. Markdown highlighting and faded syntax away
+from the cursor’s line provide a source-first live-preview feel. The editor
+shows green inserted text and red struck-through deletion widgets; it does not
+render arbitrary Markdown or execute raw HTML.
+
+**Done** translates the block’s local original-byte operations to page-base
+coordinates and adds **Source edit** cards to the same pending suggestion.
+Reopening the block resumes its tracked draft. **Cancel** or **Escape** discards
+only the current editor session and returns focus to its opener. Source edits
+persist through reload, support per-operation Discard, and use the unchanged
+five-field `/v2/suggestions` payload alongside rendered edits in other blocks.
+
+**Mixing policy:** rendered and source edits cannot coexist in the same block,
+even when their individual splices would be disjoint. Discard that block’s
+rendered-text edits before opening its source. Once it has source edits, use
+**Edit source** to continue, or discard its source edits to resume rendered
+editing. The guard includes boundary insertions and checks the merged sorted,
+non-overlapping operations again before Done and submission.
+
+Only published, editable v2 blocks are available, with an 8 KiB original-source
+cap. Hidden comments, raw HTML, embeds/transclusions, oversized or unpublished
+blocks show the provenance refusal reason without opening or loading an editor.
+A v1 sidecar without `blocks` keeps the original safe-edit refusal; it never
+infers Markdown from rendered text.
+
+The editor uses `@cyberbaser/suggestion-ledger` with the **complete block** as its
+local base. It verifies that local base, not the unavailable complete page.
+CM6’s UTF-16 transaction coordinates convert against the pre-transaction block
+view into UTF-8 ledger offsets; simultaneous changes apply right-to-left.
+Explicit LF splitting retains literal CR characters, so existing CRLF and mixed
+line endings survive without normalization. Enter uses CRLF when the block has
+it, and Backspace/Delete handle a CRLF pair together. Partial CRLF or surrogate
+edits fail closed. The source editor supports plain-text changes, not formatting
+commands or native undo; use Cancel to abandon a session or Discard on a card.
+
+### Vendored, replaceable source editor
+
+Components depend on `SourceEditor` / `SourceEditorSession` in
+`components/sourceEditor.ts`, not CM6 APIs. CM6 is the first implementation.
+A same-origin, content-addressed script under `static/source-editor.<hash>.js`
+loads only when an eligible block first opens, once per browser window. Pages
+that never open the editor fetch no additional script. No CDN, remote font,
+external editor service or install at setup/build time is required. The host’s
+CSP must allow its own static scripts; no external script origin is added.
+
+`setup.sh` verifies and copies the committed asset into the materialized Quartz
+checkout’s static directory. It does not modify the pristine seed or its pinned
+upstream dependency lock. The standalone `source-editor/package-lock.json` pins
+all 20 dependency packages; all third-party packages are MIT-licensed, with their
+full notices embedded in the asset and recorded under `source-editor/LICENSES/`.
+The first-party adapter follows the repository’s AGPL-3.0 license. The current
+bundle, including full license notices, is **353,841 bytes raw / 110,468 bytes
+gzip** (level 9).
+
+Direct versions are state **6.5.2**, view **6.38.6**, lang-markdown **6.3.4**,
+language **6.11.3**, Lezer common **1.2.3**, highlight **1.2.1**, markdown
+**1.4.3**, and lr **1.4.2**. The lock and exact overrides also pin CM autocomplete
+**6.20.4**, lang-css **6.3.1**, lang-html **6.4.12**, lang-javascript **6.2.5**,
+lint **6.9.8**, and Lezer css **1.3.9**, html **1.3.13**, javascript **1.5.6**.
+
+With its locked build dependencies installed and Bun **1.3.14**, verify a
+byte-identical rebuild with
+`build-contained -- bun renderers/quartz-cyberbase/source-editor/build.mjs`.
+The script performs no install or network request. An intentional dependency or
+implementation update uses the same command with `--write` after review; it
+updates the hashed asset, `.sha256` receipt, and generated component asset name.
+The offline test always checks the committed SHA-256; when build dependencies
+are present it also rebuilds and checks byte identity.
 
 ### Sparse source model and v2 submission
 
@@ -379,8 +533,9 @@ origins; DOM text and locator ownership are rechecked before editing or sending.
 The page's original Text nodes are retained and restored during SPA cleanup.
 
 `@cyberbaser/suggestion-ledger` requires the **complete base bytes** and verifies
-their digest. This browser deliberately has neither. `suggestModeModel.ts` is a
-thin sparse origin-token adapter instead: original Unicode tokens retain exact
+their digest. Rendered editing deliberately has neither for the complete page.
+`suggestModeModel.ts` is a thin sparse origin-token adapter instead: original
+Unicode tokens retain exact
 base-byte coordinates, inserted tokens have no original coordinates, and
 operations come only from verified run slices. It never pads unknown regions,
 invents offsets, fetches raw Markdown, serializes HTML to Markdown, or claims to
@@ -395,8 +550,9 @@ base. The batch has at most 50 operations, 16 KiB per expected/replacement span,
 and 64 KiB aggregate text. Optional rationale/evidence and stable retry keys use
 the existing intent/challenge policy. Challenge tokens remain header-only. No
 source path, author, repository, revision or candidate file enters the intent.
-The only new browser fetch is the same-origin provenance JSON; no other service
-is added beyond the configured intake and optional challenge provider.
+The browser fetches same-origin provenance JSON, and lazily fetches the vendored
+source-editor asset only if opened. No other service is added beyond the
+configured intake and optional challenge provider.
 
 ### Missing or stale provenance falls back to the block editor
 
@@ -410,19 +566,23 @@ Its Unicode/word-boundary diff supplies up to 40 code points of adjacent context
 blank **Why?** uses `Suggested an edit to this page.` Formatting can prevent exact
 quote matching, which explains that the reader should choose a smaller phrase.
 
-Disabled forms still emit no markup, CSS or browser scripts. Provenance remains
-separately opt-in; leaving both features off preserves the existing build output.
+Disabled forms attach no markup, CSS or browser scripts. The inert vendored
+asset may exist in static output, but it is not loaded. Provenance remains
+separately opt-in; leaving both features off preserves existing page markup.
 
 ### Verification
 
 Run `build-contained -- bash renderers/quartz-cyberbase/tests/run.sh` for the
 existing fallback/challenge checks plus fake-DOM provenance, sparse operations,
-strict v2 intent/receipt and 2,400 deterministic Unicode reconstruction checks.
+strict v2 intent/receipt and 2,400 deterministic Unicode reconstruction checks,
+plus fake v2 source blocks, exact block/global byte translation, mixed-EOL/CRLF,
+emoji, multi-range changes, cancellation, overlap/refusal and vendored hash/rebuild.
 Run `build-contained -- node renderers/quartz-cyberbase/tests/suggest-build.mjs`
 for an offline three-page pinned Quartz build and real headless Playwright
 selection/typing, link/bold/insert byte-splice reconstruction, inserted-text edits,
-draft reload, mobile tray, noneditable refusal, v2 receipt and stale/missing
-sidecar fallback. It uses the existing offline seed (override
+CM6 wikilink/callout/math/emoji/table source edits, CRLF preservation, lazy loading,
+tracked decorations, Done/Cancel/Escape/focus, draft reload, mobile tray,
+overlap/refusal, v2 receipt and old/stale/missing sidecar fallback. It uses the existing offline seed (override
 `QUARTZ_SEED_DIR` with an absolute path), throwaway fixture files and a random
 loopback port; it does not touch any running rehearsal or real vault.
 Strict browser checking is

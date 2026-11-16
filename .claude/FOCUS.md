@@ -2,6 +2,8 @@
 
 > Update when direction changes, milestones complete, or priorities shift.
 
+**Source-editor fallback, 2026-11-16:** suggesting mode now opens a lazily loaded, vendored CodeMirror 6 editor on a block's exact Markdown when text cannot be edited in place; edits join the same v2 suggestion. Hidden-content blocks never send source. Verified on a real page. Next polish: hide per-block Edit source buttons until hover/selection. Chronology: `agent-context/zz-log/2026-11-16-source-editor-fallback.mdx`.
+
 **Suggesting mode built (foundations), 2026-11-16:** maintainer selected the direction. Built: v2 multi-operation proposal, shared v2 trust classification, suggestion ledger, opt-in source provenance in the real Quartz build (98.83% on 57 real pages), `/v2/suggestions` intake/queue, owner per-change review with Approve all / Reject all and atomic apply, and on-page suggesting mode with block-editor fallback. Open: false stale-page refusal on real pages (being fixed), CM6 source-editor fallback, subset approval. Chronology: `agent-context/zz-log/2026-11-16-suggesting-mode-build.mdx`.
 
 **Suggesting-mode research, 2026-11-16:** the maintainer wants a WYSIWYG, Google-Docs-style tracked-suggestion experience, not form or block editing. Measured 98.83% of real rendered text maps to exact source bytes; clickable prototype at `/cyberbaser/prototypes/suggesting-mode.html`; recommended two surfaces on one source-coordinate ledger (rendered page for readers, CM6 source editor for contributors/fallback) and the single-file multi-operation proposal with Approve all / Reject all. Awaiting owner decision. Inline block editor, link-recovery and pencil fixes are a stopgap. Canonical: `research/wysiwyg-suggesting-mode.mdx`.

@@ -12,6 +12,7 @@ import {
   wrap,
 } from "./provenanceCore";
 import { trimmedSource, mapOfm } from "./provenanceText";
+import { captureSourceBlocks, renderedSourceBlocks } from "./provenanceBlocks";
 import {
   emitProvenance,
   type ProvenanceSink,
@@ -64,6 +65,9 @@ function mergeText(tree: any) {
   if (!tree.children) return;
   const children: any[] = [];
   for (const node of tree.children) {
+    // Quartz's HAST-to-JSX body renderer omits comments. Match its actual DOM
+    // before coalescing adjacent text and assigning childNodes indices.
+    if (node.type === "comment") continue;
     const previous = children.at(-1);
     if (node.type === "text" && previous?.type === "text") {
       const map = (n: any) =>
@@ -205,7 +209,7 @@ function fileSink(ctx: any): ProvenanceSink {
       if (relative.startsWith("..") || path.isAbsolute(relative))
         throw Error("source provenance output escapes build directory");
       fs.mkdirSync(path.dirname(file), { recursive: true });
-      // No original source content is emitted, only rendered text and source identity/ranges.
+      // Only safety-classified, bounded published block slices carry source text.
       fs.writeFileSync(file, JSON.stringify(manifest) + "\n");
     },
   };
@@ -239,22 +243,50 @@ export function withSourceProvenance(
     },
     markdownPlugins() {
       return [
-        () => (tree, file) => {
-          const state = file.data.sourceProvenance;
-          if (!state || state.pre.text !== String(file.value))
-            throw Error("source provenance preprocessing diverged from Quartz");
-          annotateInitial(
-            tree,
-            state.pre.text,
-            state.pre.map,
-            state.source.path,
-          );
-          delete state.pre;
+        function () {
+          const processor = this;
+          return (tree, file) => {
+            const state = file.data.sourceProvenance;
+            if (!state || state.pre.text !== String(file.value))
+              throw Error(
+                "source provenance preprocessing diverged from Quartz",
+              );
+            annotateInitial(
+              tree,
+              state.pre.text,
+              state.pre.map,
+              state.source.path,
+            );
+            const original = trimmedSource(state.raw);
+            captureSourceBlocks(
+              state.raw,
+              processor.parse(original.text),
+              original.map,
+              tree,
+              state.pre.map,
+              state.source.path,
+            );
+            delete state.pre;
+          };
         },
       ];
     },
     htmlHandlers: Object.fromEntries(
-      Object.entries(defaultHandlers).map(([name, handler]) => [
+      Object.entries({
+        ...defaultHandlers,
+        // remark-math uses the default unknown handler plus hName/hChildren.
+        // Spell out that same handler so its enclosing element gets metadata.
+        math(state, node) {
+          const result = {
+            type: "element",
+            tagName: "div",
+            properties: {},
+            children: state.all(node),
+          };
+          state.patch(node, result);
+          return state.applyData(node, result);
+        },
+      }).map(([name, handler]) => [
         name,
         (state, node, parent) => {
           const scoped = {
@@ -264,7 +296,10 @@ export function withSourceProvenance(
               annotateHast(from, to);
             },
           };
-          return handler(scoped, node, parent);
+          const result = handler(scoped, node, parent);
+          if (node._cbBlock && result?.type === "element")
+            result._cbBlock = node._cbBlock;
+          return result;
         },
       ]),
     ),
@@ -273,7 +308,14 @@ export function withSourceProvenance(
       // Synthetic directory/tag pages have no authoritative source body.
       if (!state) return;
       const leaves = annotateRenderedBody(tree, state.raw);
-      emitProvenance(sink ?? fileSink(ctx), data.slug, state.source, leaves);
+      const blocks = renderedSourceBlocks(tree, state.raw, state.source.path);
+      emitProvenance(
+        sink ?? fileSink(ctx),
+        data.slug,
+        state.source,
+        leaves,
+        blocks,
+      );
     },
   };
   return [

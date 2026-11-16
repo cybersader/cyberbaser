@@ -2,6 +2,7 @@ import { QuartzComponentConstructor, QuartzComponentProps } from "./types"
 import { classNames } from "../util/lang"
 import { pathToRoot } from "../util/path"
 import { suggestionBindingForPage } from "./suggestCorrectionConfig"
+import { sourceEditorAsset } from "./sourceEditorAsset"
 import type { SuggestCorrectionOptions } from "./suggestCorrectionConfig"
 // @ts-ignore Quartz's inline-script loader compiles this browser entry separately.
 import script from "./scripts/suggest-correction.inline"
@@ -30,6 +31,7 @@ export default ((opts: SuggestCorrectionOptions) => {
           data-binding-digest={binding.bindingDigest}
           data-page-id={binding.pageId}
           {...((fileData as any).sourceProvenance?.source ? {
+            "data-source-editor-asset": `${pathToRoot(fileData.slug!)}/static/${sourceEditorAsset}`,
             "data-source-identity": JSON.stringify((fileData as any).sourceProvenance.source),
             "data-provenance-url": `${pathToRoot(fileData.slug!)}/${fileData.slug}.provenance.json`,
           } : {})}
@@ -85,7 +87,23 @@ export default ((opts: SuggestCorrectionOptions) => {
 .cb-suggesting:focus { outline-color: var(--secondary); }
 [data-cb-run] ins, .cb-suggest-card ins, .cb-suggest-summary ins { color: #087940; background: #d8f4df; text-decoration: underline; text-decoration-thickness: 2px; white-space: pre-wrap; }
 [data-cb-run] del, .cb-suggest-card del, .cb-suggest-summary del { color: #a32c32; background: #ffe4e5; text-decoration: line-through; }
-.cb-suggest-unmapped { border-bottom: 1px dashed var(--gray); cursor: help; }
+.cb-suggest-unmapped { border-bottom: 1px dashed var(--gray); cursor: pointer; }
+.cb-source-open { display: block; font: 0.75rem var(--bodyFont); color: var(--secondary); background: var(--light); border: 1px solid var(--lightgray); border-radius: 4px; padding: 4px 8px; margin-top: 6px; cursor: pointer; min-height: 32px; }
+.cb-source-open[hidden], .cb-source-pending[hidden] { display: none; }
+.cb-source-pending { outline: 1px dashed var(--secondary); outline-offset: 4px; }
+.cb-source-editor { padding: 12px; margin-block: 12px; border: 1px solid var(--secondary); border-radius: 6px; background: var(--light); color: var(--dark); min-width: 0; }
+.cb-source-editor > p { font-size: 0.85rem; margin-block: 6px; }
+.cb-source-editor > button { min-height: 36px; padding: 4px 12px; margin-inline-end: 8px; cursor: pointer; }
+.cb-source-editor .cm-editor { border: 1px solid var(--lightgray); font-family: var(--codeFont); background: var(--light); color: var(--dark); }
+.cb-source-editor .cm-scroller { max-height: 340px; overflow: auto; }
+.cb-source-editor .cm-content { padding: 8px; min-height: 70px; caret-color: var(--dark); }
+.cb-source-editor .cm-line { white-space: pre-wrap; overflow-wrap: anywhere; }
+.cb-source-editor .cb-source-syntax { opacity: 0.4; }
+.cb-source-editor .cb-source-insert { color: #087940; background: #d8f4df; text-decoration: underline; }
+.cb-source-editor .cb-source-delete { color: #a32c32; background: #ffe4e5; text-decoration: line-through; white-space: pre-wrap; }
+.cb-source-badge { color: var(--secondary); font-size: 0.75rem; }
+:root[saved-theme='dark'] .cb-source-editor .cb-source-insert { color: #a1e8b6; background: #123b28; }
+:root[saved-theme='dark'] .cb-source-editor .cb-source-delete { color: #ffb1b1; background: #4d2329; }
 .cb-suggest-toggle, .cb-suggest-review { margin-inline-end: 0.5rem; }
 .cb-suggest-toggle[aria-pressed='true'] { background: #d8f4df; color: #087940; }
 .cb-suggest-help, .cb-suggest-status { font-size: 0.9rem; }

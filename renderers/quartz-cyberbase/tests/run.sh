@@ -7,7 +7,8 @@ WRAPPER_DIR="$(cd "$HERE/.." && pwd)"
 bun "$HERE/edit-links.test.ts"
 bun "$HERE/suggest-correction.test.ts"
 bun "$HERE/suggest-diff.test.ts"
-bun "$HERE/suggest-challenge.test.ts"
+bun "$HERE/suggest-challenge.test.ts" # imports suggest-mode.test.ts
+bun "$HERE/suggest-source-editor.test.ts"
 bun "$HERE/provenance-contract.test.ts"
 for provider_test in "$HERE"/*-provider.test.ts; do
   bun "$provider_test"

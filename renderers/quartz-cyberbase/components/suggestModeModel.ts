@@ -8,7 +8,10 @@ export interface ProvenanceLeaf {
   id: string; parent: string; child: number; text: string
   runs: { rendered: [number, number]; source?: [number, number]; kind?: string; reason?: string }[]
 }
-export interface Manifest { schema: string; version: number; source: SourceIdentity; leaves: ProvenanceLeaf[] }
+export interface ProvenanceBlock {
+  id: string; parent: string; source: [number, number]; text?: string; editable: boolean; reason?: string
+}
+export interface Manifest { schema: string; version: number; source: SourceIdentity; leaves: ProvenanceLeaf[]; blocks?: ProvenanceBlock[] }
 export const utf8 = (text: string) => new TextEncoder().encode(text)
 export function boundary(text: string, at: number) {
   if (!Number.isInteger(at) || at < 0 || at > text.length ||
@@ -16,7 +19,7 @@ export function boundary(text: string, at: number) {
 }
 export function verifyManifest(value: unknown, expected: SourceIdentity): Manifest {
   const m = value as Manifest
-  if (!m || m.schema !== "cyberbaser.source-provenance" || m.version !== 1 || !Array.isArray(m.leaves) ||
+  if (!m || m.schema !== "cyberbaser.source-provenance" || ![1, 2].includes(m.version) || !Array.isArray(m.leaves) ||
       !m.source || m.source.path !== expected.path || m.source.sha256 !== expected.sha256 || m.source.byteLength !== expected.byteLength ||
       !/^[a-f0-9]{64}$/u.test(expected.sha256) || !Number.isSafeInteger(expected.byteLength) || expected.byteLength < 0) throw Error("Page source identity changed.")
   const ids = new Set<string>()
@@ -39,7 +42,29 @@ export function verifyManifest(value: unknown, expected: SourceIdentity): Manife
     }
     if (previous !== leaf.text.length) throw Error("Incomplete rendered coverage.")
   }
+  if (m.blocks !== undefined) {
+    if (!Array.isArray(m.blocks)) throw Error("Invalid source blocks.")
+    const blockIds = new Set<string>(), parents = new Set<string>()
+    for (const block of m.blocks) {
+      if (!block || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,80}$/u.test(block.id) || blockIds.has(block.id) ||
+          typeof block.parent !== "string" || parents.has(block.parent) || !Array.isArray(block.source) || block.source.length !== 2 ||
+          !Number.isSafeInteger(block.source[0]) || !Number.isSafeInteger(block.source[1]) || block.source[0] < 0 ||
+          block.source[1] < block.source[0] || block.source[1] > expected.byteLength || typeof block.editable !== "boolean") throw Error("Invalid source block.")
+      if (block.editable) {
+        if (typeof block.text !== "string" || utf8(block.text).length !== block.source[1] - block.source[0] || utf8(block.text).length > 8192 ||
+            /[\uD800-\uDFFF]/u.test(block.text.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/gu, ""))) throw Error("Invalid source block bytes.")
+      } else if (block.text !== undefined || typeof block.reason !== "string") throw Error("Refused source block must not publish text.")
+      blockIds.add(block.id); parents.add(block.parent)
+    }
+    const editable = m.blocks.filter(block => block.editable).sort((a, b) => a.source[0] - b.source[0])
+    if (editable.some((block, i) => i > 0 && block.source[0] < editable[i - 1].source[1])) throw Error("Overlapping source blocks.")
+  }
   return m
+}
+export function verifiedBlockNode(root: HTMLElement, block: ProvenanceBlock): HTMLElement {
+  const matches = block.parent === "$body" ? [root] : [...root.querySelectorAll<HTMLElement>("[data-cb-node]")].filter(el => el.dataset.cbNode === block.parent)
+  if (matches.length !== 1 || matches[0] === root) throw Error("Missing or ambiguous source block locator.")
+  return matches[0]
 }
 export function verifiedLeafNode(root: HTMLElement, leaf: ProvenanceLeaf): Text {
   // No selector interpolation: locator strings are untrusted build metadata.

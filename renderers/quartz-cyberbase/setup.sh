@@ -159,6 +159,14 @@ if [ -d "$HERE/components" ]; then
   fi
 fi
 
+# Vendored, content-addressed source editor: offline copy only, never install into the seed.
+mkdir -p "$QUARTZ_DIR/quartz/static"
+for asset in "$HERE"/vendor/source-editor.*.js; do
+  [ -f "$asset" ] || { echo "ERROR: vendored source editor is missing." >&2; exit 1; }
+  ( cd "$HERE/vendor" && sha256sum --check "$(basename "$asset").sha256" )
+  cp "$asset" "$QUARTZ_DIR/quartz/static/"
+done
+
 # Verify/apply only in the separate materialized checkout, never in the seed.
 node "$HERE/patches/apply-provenance.mjs" "$QUARTZ_DIR"
 

@@ -1,0 +1,21 @@
+---
+title: Add the Markdown source-editor fallback to suggesting mode
+description: "Provenance v2 source blocks with hidden-content safety rules, and a lazily loaded vendored CodeMirror 6 editor whose tracked source edits join the same multi-change suggestion; verified on a real Cyberbase page."
+status: log
+tags: [contribution, translation-layer, testing]
+---
+
+The maintainer approved building the source-editor fallback ("Yep") for text suggesting mode cannot edit in place: target-derived wikilink labels, callout titles, math and transformed text.
+
+## Work
+
+- **Provenance v2 source blocks (Astra):** each sidecar now lists body blocks with exact source byte ranges and, only when safe, the exact Markdown text. Blocks containing Obsidian or HTML comments, raw HTML, embeds or images, unpublished ranges, or more than 8 KiB never send their text to the browser. Real corpus: 1,860 editable blocks and 25 refused (all images) across 57 pages; every emitted text equals its source slice and contains no comment delimiters. Leaf coverage unchanged at 98.83%. A pre-existing leaf-index bug around HTML comments was fixed.
+- **Source editor (Sol):** the first attempt stopped correctly at the dependency boundary (the pinned Quartz build cannot add npm packages). The coordinator authorized a vendored, reproducible bundle: exact-pinned CodeMirror 6 and Lezer (20 MIT packages), rebuilt byte-identically from a lockfile, 110 KB gzip, loaded from the same origin only when the editor first opens. The page talks to a vendor-neutral `SourceEditor` interface; CodeMirror is its first implementation. Edits use the shared suggestion ledger on block bytes and are translated to base offsets; rendered and source edits cannot mix within one block, and the message tells the reader how to proceed.
+
+## Verification
+
+Renderer suite and strict type checks passed; the real offline Quartz browser run produced eight exact splices across rendered and source edits, including CRLF and emoji, with one lazy editor request. Coordinator check on the real Awesome Stream Deck Alternatives page: the editor loaded once, showed the line `- Requires Subscription: $2.99 Monthly | $24.99 Yearly`, accepted escaping both dollar signs (the pre-existing bug that renders the prices as math), merged two source-edit cards and returned a receipt with no page errors.
+
+## Follow-ups
+
+In suggesting mode every block shows an **Edit source** button, which clutters the page; show it on hover, focus or selection instead. Subset approval and the dollar-sign rendering default remain open.

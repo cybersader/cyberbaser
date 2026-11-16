@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { decodeString } from "micromark-util-decode-string";
 import { decodeHTML } from "entities";
 import { toHtml } from "hast-util-to-html";
+import { blockReplacementSnapshot } from "./provenanceBlocks";
 type Span = { s: number; e: number; why?: string };
 type Mapping = (Span | null)[];
 const walk = (n: any, fn: (n: any, a: any[]) => void, a: any[] = []) => {
@@ -27,7 +28,11 @@ function joinSpan(m: Mapping, why?: string): Span | null {
   let previous = a[0];
   for (const current of a.slice(1)) {
     // Repeated units of one Unicode scalar/atom, or adjacent source atoms only.
-    if (!(current.s === previous.s && current.e === previous.e) && current.s !== previous.e) return null;
+    if (
+      !(current.s === previous.s && current.e === previous.e) &&
+      current.s !== previous.e
+    )
+      return null;
     previous = current;
   }
   return { s: a[0].s, e: previous.e, why: why ?? a[0].why };
@@ -460,6 +465,8 @@ function makeVirtual(tree: any) {
   const map: Mapping = [];
   const positions = new Map<any, any>();
   const kinds: { s: number; e: number; kind: string }[] = [];
+  const blocks: { s: number; e: number; tag: string; block: any }[] = [];
+  const authoredHtml: { s: number; e: number }[] = [];
   const add = (s: string, m?: Mapping) => {
     text += s;
     map.push(...(m ?? Array(s.length).fill(null)));
@@ -501,12 +508,46 @@ function makeVirtual(tree: any) {
     else if (n.type === "comment") add("<!--" + n.value + "-->");
     n.position = { start: point(start), end: point(text.length) };
     if (n._kind) kinds.push({ s: start, e: text.length, kind: n._kind });
+    if (n._cbBlock)
+      blocks.push({
+        s: start,
+        e: text.length,
+        tag: n.tagName,
+        block: n._cbBlock,
+      });
+    if (n.type === "raw" && !n._kind && n._prov?.some(Boolean))
+      authoredHtml.push({ s: start, e: text.length });
   };
   write(tree);
-  return { text, map, positions, kinds };
+  return { text, map, positions, kinds, blocks, authoredHtml };
 }
 function finishVirtual(tree: any, v: any) {
   walk(tree, (n) => {
+    if (n.type === "element") {
+      const s = n.position?.start?.offset,
+        e = n.position?.end?.offset;
+      if (v.authoredHtml.some((r: any) => r.s <= s && s < r.e))
+        n._cbRawHtml = true;
+      const block = v.blocks.find(
+        (b: any) => b.s === s && b.e === e && b.tag === n.tagName,
+      );
+      if (block) n._cbBlock = block.block;
+      // A standalone OFM transclusion is emitted as raw blockquote inside a
+      // paragraph. HTML parsing closes that paragraph. Its enclosing source
+      // block can still identify the transclusion, but NEVER expose its text.
+      if (
+        !block &&
+        n.tagName === "blockquote" &&
+        String(n.properties?.className ?? "")
+          .split(/[ ,]+/)
+          .includes("transclude")
+      ) {
+        const owners = v.blocks.filter(
+          (b: any) => b.s <= s && b.e >= e && b.block.reason === "transclusion",
+        );
+        if (owners.length === 1) n._cbBlock = owners[0].block;
+      }
+    }
     if (n.type !== "text") return;
     const s = n.position?.start?.offset,
       e = n.position?.end?.offset;
@@ -547,8 +588,11 @@ function wrap(plugin: any, stage: string): any {
         stage === "html:ObsidianFlavoredMarkdown" && name === "rehypeRaw"
           ? makeVirtual(tree)
           : null;
+      const restoreBlocks =
+        stage === "html:Latex" ? blockReplacementSnapshot(tree) : undefined;
       const result = await transform(tree, file);
       const next = result ?? tree;
+      if (next === tree) restoreBlocks?.();
       if (virtual) {
         finishVirtual(next, virtual);
         for (const [n, p] of virtual.positions) n.position = p;

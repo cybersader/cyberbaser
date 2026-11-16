@@ -57,6 +57,24 @@ const list = (directory) =>
   );
 const fixture =
   "  \r\n---\r\ntitle: Provenance fixture\r\ndate: 2020-01-01\r\n---\r\n# Heading 😀\r\n\r\nUnique roundtrip prose.\r\n\r\nEmoji 😀🧪, entity &amp;, escape \\*, smart \"quotes\" -- ... .\r\n\r\nBefore [[target|named alias]] between [[target]] after.\r\n\r\n> [!note] Custom title\r\n> Callout body **bold**.\r\n\r\n| A | B |\r\n| --- | --- |\r\n| cell | escaped \\| pipe |\r\n\r\nInline <span>HTML &amp; 😀</span> tail.\r\n\r\nCode `a\r\nb` and `entity &amp; literal`.\r\n\r\n```js\r\nconst emoji = '😀';\r\n\r\nconsole.log(emoji);\r\n```\r\n\r\n- list first\r\n  continuation\r\n\r\n> quoted\r\n> continuation\r\n\r\nMath $x^2$.\r\n\r\n![[target]]\r\n\r\n%% private omitted comment %%\r\n";
+const blockFixtures = [
+  "Hidden start %%paragraph-secret%% visible finish.",
+  "%%leading-secret%% Visible after a hidden prefix.",
+  "Visible before a hidden suffix. %%trailing-secret%%",
+  "HTML comment start <!-- html-secret --> end.",
+  "![Markdown image](absent.png)",
+  "<div hidden>\r\n\r\nHidden HTML wrapper paragraph.\r\n\r\n</div>",
+  "> [!warning] Safe title\r\n> Body %%callout-secret%% end.",
+  "| Private | Table |\r\n| --- | --- |\r\n| before %%table-secret%% after | public |",
+  "- before %%list-secret%% after",
+  "- [visible][ref]\r\n\r\n  [ref]: https://example.test/definition-not-displayed",
+  "$$\r\nx^2 + y^2 = z^2\r\n$$",
+  "$$\r\na + b\r\n$$",
+  "> [!tip] Second callout title\r\n> Second callout body.",
+  "- parent list item\r\n  - nested leaf 😀\r\n- sibling list item",
+  "- visible list item\r\n\r\n  <!-- hidden definition -->",
+  "x".repeat(8193),
+].join("\r\n\r\n");
 const hermetic =
   '\n// Test-only: no font downloads/social-image generation; all source transformers unchanged.\nconfig.configuration.theme.fontOrigin = "local"\nconfig.configuration.theme.cdnCaching = false\nconfig.plugins.emitters = config.plugins.emitters.filter((p) => p.name !== "CustomOgImages")\n';
 function config(text) {
@@ -87,8 +105,11 @@ try {
   if (corpus) {
     // The only permitted access to the real vault (read-only git archive of a
     // published folder). The vault path comes from the environment, never the repo.
-    const vault = process.env.CYBERBASER_CORPUS_VAULT
-    if (!vault) throw new Error("Set CYBERBASER_CORPUS_VAULT to a local vault checkout to run the corpus check")
+    const vault = process.env.CYBERBASER_CORPUS_VAULT;
+    if (!vault)
+      throw new Error(
+        "Set CYBERBASER_CORPUS_VAULT to a local vault checkout to run the corpus check",
+      );
     const archive = run("git", [
       "-C",
       vault,
@@ -100,7 +121,10 @@ try {
     run("tar", ["-x", "-C", input], { input: archive });
     assert.equal(files(input).filter((p) => p.endsWith(".md")).length, 57);
   } else {
-    fs.writeFileSync(path.join(input, "index.md"), fixture);
+    fs.writeFileSync(
+      path.join(input, "index.md"),
+      fixture + "\r\n" + blockFixtures + "\r\n",
+    );
     fs.writeFileSync(
       path.join(input, "target.md"),
       "---\ntitle: Target\ndate: 2020-01-01\n---\n# Target\n\nForeign source prose.\n",
@@ -158,6 +182,9 @@ try {
       verifiedLeaves = 0,
       rawChars = 0,
       rawMapped = 0;
+    let editableBlocks = 0,
+      nonEditableBlocks = 0;
+    const blockReasons = {};
     const reasons = {},
       manifests = new Map(),
       bodies = new Map();
@@ -167,7 +194,11 @@ try {
     for (const file of sidecars) {
       const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
       assert.equal(manifest.schema, "cyberbaser.source-provenance");
-      assert.equal(manifest.version, 1);
+      assert.equal(manifest.version, 2);
+      assert.ok(
+        fs.statSync(file).size <= 4 * 1024 * 1024,
+        "sidecar exceeds 4 MiB cap",
+      );
       const raw = fs.readFileSync(path.join(input, manifest.source.path));
       assert.equal(manifest.source.sha256, hash(raw));
       assert.equal(manifest.source.byteLength, raw.length);
@@ -194,6 +225,56 @@ try {
         }
       });
       elements.set("$body", body);
+      const blockIds = new Set(),
+        blockParents = new Set();
+      for (const block of manifest.blocks) {
+        assert.ok(
+          !blockIds.has(block.id) && !blockParents.has(block.parent),
+          "duplicate block locator",
+        );
+        blockIds.add(block.id);
+        blockParents.add(block.parent);
+        const element = elements.get(block.parent);
+        assert.ok(
+          element?.tagName,
+          `missing block element: ${manifest.source.path} ${block.id}`,
+        );
+        const [start, end] = block.source;
+        assert.ok(start >= 0 && end > start && end <= raw.length);
+        const text = new TextDecoder("utf-8", {
+          fatal: true,
+          ignoreBOM: true,
+        }).decode(raw.subarray(start, end));
+        if (block.editable) {
+          editableBlocks++;
+          assert.equal(
+            block.text,
+            text,
+            `block source differs: ${manifest.source.path} ${block.id}`,
+          );
+          assert.ok(end - start <= 8192);
+          assert.ok(
+            !text.includes("%%") && !text.includes("<!--"),
+            "hidden comment emitted in block source",
+          );
+          assert.ok(
+            !parents
+              .get(element)
+              .some((n) =>
+                (attr(n, "class") ?? "").split(" ").includes("transclude"),
+              ),
+            "foreign block exposed",
+          );
+        } else {
+          nonEditableBlocks++;
+          assert.ok(block.reason);
+          assert.ok(
+            !("text" in block),
+            "non-editable source must be omitted, not merely flagged",
+          );
+          blockReasons[block.reason] = (blockReasons[block.reason] ?? 0) + 1;
+        }
+      }
       const claimed = new Set();
       for (const leaf of manifest.leaves) {
         const parent = elements.get(leaf.parent);
@@ -249,7 +330,9 @@ try {
               kind: scalar.slice(i, j).every((x) => x.kind)
                 ? scalar[i].kind
                 : undefined,
-              reason: scalar.slice(i, j).every((x) => x.reason === scalar[i].reason)
+              reason: scalar
+                .slice(i, j)
+                .every((x) => x.reason === scalar[i].reason)
                 ? scalar[i].reason
                 : "generated-whitespace",
             });
@@ -286,6 +369,9 @@ try {
     console.log(
       `raw coverage: ${rawMapped}/${rawChars}; unmapped=${JSON.stringify(reasons)}`,
     );
+    console.log(
+      `PASS blocks: editable=${editableBlocks}, non-editable=${nonEditableBlocks}; reasons=${JSON.stringify(blockReasons)}; every emitted text equals its original UTF-8 slice and has no comment delimiters`,
+    );
     return { manifests, bodies, sidecars, mapped, chars };
   }
   const first = check();
@@ -294,6 +380,59 @@ try {
     assert.ok(first.mapped / first.chars > 0.98);
   } else {
     const fixtureManifest = first.manifests.get("index.md");
+    const blocks = fixtureManifest.blocks;
+    for (const text of [
+      "Before [[target|named alias]] between [[target]] after.",
+      "> [!note] Custom title\r\n> Callout body **bold**.",
+      "$$\r\nx^2 + y^2 = z^2\r\n$$",
+      "$$\r\na + b\r\n$$",
+      "| A | B |\r\n| --- | --- |\r\n| cell | escaped \\| pipe |",
+      "- list first\r\n  continuation",
+      "- nested leaf 😀",
+      "# Heading 😀",
+      "> quoted\r\n> continuation",
+    ])
+      assert.ok(
+        blocks.some((b) => b.editable && b.text === text),
+        `missing exact editable block: ${JSON.stringify(text)}`,
+      );
+    for (const [needle, reason] of [
+      ["paragraph-secret", "obsidian-comment"],
+      ["leading-secret", "obsidian-comment"],
+      ["trailing-secret", "obsidian-comment"],
+      ["html-secret", "html-comment"],
+      ["Inline <span>", "raw-html"],
+      ["![[target]]", "transclusion"],
+      ["![Markdown image]", "transclusion"],
+      ["Hidden HTML wrapper paragraph.", "raw-html"],
+      ["callout-secret", "obsidian-comment"],
+      ["table-secret", "obsidian-comment"],
+      ["list-secret", "obsidian-comment"],
+      ["definition-not-displayed", "unpublished-source"],
+      ["x".repeat(8193), "too-large"],
+    ]) {
+      const raw = fs.readFileSync(path.join(input, "index.md"));
+      assert.ok(
+        blocks.some(
+          (b) =>
+            !b.editable &&
+            b.reason === reason &&
+            raw
+              .subarray(...b.source)
+              .toString("utf8")
+              .includes(needle),
+        ),
+        `missing blocked source: ${reason} ${needle.slice(0, 50)}`,
+      );
+    }
+    assert.ok(!JSON.stringify(fixtureManifest).includes("paragraph-secret"));
+    assert.ok(
+      !blocks.some((b) => b.text?.includes("title: Provenance fixture")),
+      "frontmatter exposed",
+    );
+    console.log(
+      "PASS exact block fixtures: wikilink, whole callout/table, two math blocks, leaf list, quote, CRLF/emoji; comments/raw HTML/embed/oversize withheld",
+    );
     const flattened = fixtureManifest.leaves.flatMap((l) =>
       l.runs.map((r) => ({ ...r, text: l.text.slice(...r.rendered) })),
     );
