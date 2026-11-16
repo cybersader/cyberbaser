@@ -16,9 +16,9 @@ afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()();
 });
 
-async function setup() {
+async function setup({ limits = {} } = {}) {
   const fixture = await createFixture();
-  const service = await openIntakeService({ config: fixture.config });
+  const service = await openIntakeService({ config: { ...fixture.config, limits: { ...fixture.config.limits, ...limits } } });
   cleanups.push(async () => {
     await service.close();
     await fixture.cleanup();
@@ -248,7 +248,8 @@ describe('account-free HTTP boundary', () => {
   });
 
   test('maps body, contract, source, and idempotency failures without reflecting data', async () => {
-    const { fixture, service } = await setup();
+    // This test isolates error mapping rather than the independently tested quotas.
+    const { fixture, service } = await setup({ limits: { perSenderCapacity: 20, perPageCapacity: 20 } });
 
     const wrongType = await service.fetch(request('/v1/corrections', {
       method: 'POST',

@@ -15,6 +15,10 @@ Cyberbaser does not prescribe one authoring interface. Reader correction tools, 
 
 Every contribution path the product offers must still work **independently**; this does not require three named paths or a Web CMS (see [Principle 4](/cyberbaser/getting-started/principles/#4-every-offered-contribution-path-must-work-independently)). This page states the mechanisms that exist, preserves the withdrawn serializer-backed CMS proposal as history, and separates shipped mechanics from intended but unbuilt authoring spokes.
 
+## How this fits the community model
+
+Start with the [community contribution and governance model](/cyberbaser/design/contribution-trust-and-access/) for the intuitive contributor journeys, Discourse-inspired trust, scoped responsibilities and delivery horizons. This page owns the implementation and offered-path inventory. A one-splice intake and a single owner are current configurations, not the limit of the long-term community design. Future roles and richer workflows on the model page are proposals, not capabilities enabled by this inventory.
+
 ## Status at a glance
 
 | Piece | State | Where it lives |
@@ -235,6 +239,8 @@ The composition is hermetically tested for maintainer, fork, closed-unmerged, du
 ### The policy, concretely (cyberbase's own)
 
 This is the actual moderation policy for the dogfood vault, written out to prove the trust-curve story survives contact with specifics. Any maintainer using cyberbaser would write their own version of these two paragraphs, and the trust dial is exactly which parts they tighten or loosen.
+
+The historical roughly-three-edits threshold and no-appeals choice below are this vault's policy, not a universal community progression algorithm. The [community system design](/cyberbaser/design/community-system-design/#4-trust-grows-from-evidence-not-queue-volume) explores evidence-backed progression and reconsideration without silently changing this dogfood policy.
 
 > **Every shipped external proposal remains owner-reviewed; nothing proposed from outside goes live without the owner's decision.** The owner's local Markdown authoring is a separate direct lane and is not a moderation client. In the current GitHub path, the maintainer reviews **the diff on the PR page** plus `ofm-check` annotations and aims to act within a few days; "act" means merge, request changes, or reject with a one-line reason. The retained trust policy and classifier can compute a route, but the live `trust-gate.yml` workflow is currently inactive, so no current `trust:<route>` label should be assumed. Accepted proposals make the content more true, current, or clear, and cite a source for factual claims that are not self-evident. The policy intends to welcome account-free corrections on the same editorial terms, but that intake has not shipped; today an outside contributor needs GitHub.
 >

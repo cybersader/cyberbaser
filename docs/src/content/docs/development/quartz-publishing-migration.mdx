@@ -41,6 +41,25 @@ Earlier read-only observations established room/note/plugin availability, not in
 
 The [snapshot and private-preview integration candidate](/cyberbaser/design/snapshot-preview-integration/) proposes the first usable host-driven milestone: consistent source capture, trusted disposable execution, and authenticated private request/result delivery. These contracts are not selected or implemented. Preview acceptance does not authorize source cutover, exact Apply, governance, or public publication.
 
+## Vault cleanup constraints (2026-11-16)
+
+Answer to the Cyberbase vault thread, which is starting cleanup ahead of moving off Publish. Checked read-only against the vault: the desktop copy at `23415367` is **19 commits behind** `origin/main` (`0cc579a4`), and those commits add `publish.yml`, `index.md`, `.cyberbaser/`, the Pages workflow and the URL-continuity baseline. Clean up on top of `origin/main`, not the stale copy.
+
+| Vault feature | Current handling | Status |
+|---|---|---|
+| Emoji and space folder names | Kept verbatim in URLs (R16 v0); slug rules are a later projection step | Works. Renaming a published folder changes every URL under it and fails the R23 continuity gate unless each page carries an `aliases` entry |
+| Wikilinks and embeds | Resolved by Quartz v4.5.2 | Mostly works. Known defects: about 5.7% unresolved links and a 28-page relative `_attachments` link class |
+| `publish: true` | Ignored as a grant (R15: 587 stale flags, including journals) | Grants come only from the `publish.yml` folder allowlist or `cb-publish: true` (outside allowed folders also needs `slug:`) |
+| `publish: false` | Always denies, either key | Removing it inside an allowed folder makes that note public |
+| `permalink` | Not used by Cyberbaser (rejected as a second naming authority) | It is the only record of some old Publish URLs; needed to build the redirect map as `aliases` |
+| `_attachments/` | Assets selected by reachability from published pages (373 at first deploy) | Works; moving files breaks embeds |
+| Excalidraw | `_excalidraw/` is not allowlisted; drawings are not rendered from source | Degrades: embedded drawings will not appear unless an exported SVG/PNG is embedded instead. Not measured per page |
+| Canvas (`.canvas`) | Not rendered by Quartz v4.5.2 | Degrades: not shown as a page |
+| Dataview | Not executed | Degrades: queries show as code blocks. Pre-render to static Markdown where the result matters |
+| Custom `publish.js`/`publish.css` | Not used by Quartz | Keep until Publish is cancelled (step E) |
+
+**Do not change yet:** folder or file names inside the 15 allowlisted folders (URL gate); `permalink` keys (needed for the old-URL map); `publish: false` flags; `aliases`; `publish.yml`, `index.md`, `.cyberbaser/`, `.github/`; `_attachments/` paths; Publish CSS/JS. Safe now: fixing broken links and typos in place, removing stale `publish: true`, adding `cb-publish: false` to anything that must stay private, and exporting Excalidraw drawings that published pages embed.
+
 ## A. Reconcile source and pin inputs
 
 - [ ] Reconcile desktop, Git, and room copies and their active writers before any cutover; establish owner-approved source/snapshot identity. Preserve legacy history and recovery without a second authority. Room availability is not completed migration.

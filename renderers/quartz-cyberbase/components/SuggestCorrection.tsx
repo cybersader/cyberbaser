@@ -61,6 +61,14 @@ export default ((opts: SuggestCorrectionOptions) => {
             Evidence links (optional, one HTTPS URL per line)
             <textarea name="evidence" rows={2} maxlength={16 * 1024}></textarea>
           </label>
+          {opts.enabled && opts.challengeSiteKey !== undefined && (
+            <div
+              class="suggest-correction-challenge"
+              data-sitekey={opts.challengeSiteKey}
+              data-action="suggest-correction"
+              {...(opts.challengeProvider === undefined ? {} : { "data-provider": opts.challengeProvider })}
+            ></div>
+          )}
           <div class="suggest-correction-actions">
             <button type="submit" disabled>Send for review</button>
             <span class="suggest-correction-status" role="status" aria-live="polite"></span>

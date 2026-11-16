@@ -624,10 +624,44 @@ function validateGit(value) {
 const SUGGESTION_FORGE_MIN_POLL_MS = 10_000;
 const SUGGESTION_FORGE_MAX_POLL_MS = 3_600_000;
 
+// Registry membership and provider-specific key validation belong to the intake
+// and renderer. Owner policy validates only the portable public configuration.
+function validateSuggestionChallenge(value, formEnabled) {
+  const location = '$.suggestions.form.challenge';
+  const input = objectAt(value, location, ['provider', 'siteKey', 'secretFile', 'expectedHostnames']);
+  if (!formEnabled) fail('invalid-config', `${location} requires the suggestion form to be enabled`);
+  const provider = exactString(input.provider, `${location}.provider`, { max: 64 });
+  if (!/^[a-z][a-z0-9-]*$/u.test(provider)) {
+    fail('invalid-config', `${location}.provider must be one provider id`);
+  }
+  const siteKey = exactString(input.siteKey, `${location}.siteKey`, { max: 256 });
+  if (/[\s\x00-\x1f\x7f]/u.test(siteKey)) {
+    fail('invalid-config', `${location}.siteKey must be one public key without whitespace or control characters`);
+  }
+  const secretFile = exactString(input.secretFile, `${location}.secretFile`);
+  if (!path.isAbsolute(secretFile) || path.normalize(secretFile) !== secretFile
+    || secretFile.includes('\0') || secretFile.endsWith('/')
+    || path.dirname(secretFile) === path.parse(secretFile).root) {
+    fail('invalid-config-path', `${location}.secretFile must be one normalized absolute path beneath a non-root parent`);
+  }
+  const hosts = input.expectedHostnames;
+  if (!Array.isArray(hosts) || hosts.length < 1 || hosts.length > 100
+    || hosts.some((host) => typeof host !== 'string' || host.length > 253
+      || !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/u.test(host)
+      || host.split('.').some((label) => label.length > 63 || label.startsWith('-') || label.endsWith('-') || label.length === 0))
+    || new Set(hosts).size !== hosts.length) {
+    fail('invalid-config', `${location}.expectedHostnames must contain unique canonical hostnames without ports`);
+  }
+  return { provider, siteKey, secretFile, expectedHostnames: [...hosts] };
+}
+
 function validateSuggestions(value, { listen, proposalReview, repository }) {
   if (value === undefined) return { form: { enabled: false }, forge: { enabled: false } };
   const input = objectAt(value, '$.suggestions', ['form', 'forge']);
-  const form = objectAt(input.form, '$.suggestions.form', ['enabled']);
+  const form = objectAt(input.form, '$.suggestions.form', [
+    'enabled',
+    ...(isPlainObject(input.form) && Object.hasOwn(input.form, 'challenge') ? ['challenge'] : []),
+  ]);
   const formEnabled = requiredBoolean(form.enabled, '$.suggestions.form.enabled');
   if (formEnabled && listen.readerPort + 1 > 65535) {
     fail('invalid-config', '$.listen.port leaves no room for the suggestion form port (owner port + 2)');
@@ -677,7 +711,13 @@ function validateSuggestions(value, { listen, proposalReview, repository }) {
   if ((formEnabled || forgeEnabled) && !proposalReview.enabled) {
     fail('suggestions-require-proposal-review', 'suggestions reach the inbox through proposal review; enable $.proposalReview first');
   }
-  return { form: { enabled: formEnabled }, forge };
+  return {
+    form: {
+      enabled: formEnabled,
+      ...(Object.hasOwn(form, 'challenge') ? { challenge: validateSuggestionChallenge(form.challenge, formEnabled) } : {}),
+    },
+    forge,
+  };
 }
 
 /** The forge API base, owner, and repository name behind one forge clone URL. */

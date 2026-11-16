@@ -29,6 +29,8 @@ Cyberbaser, as built, is **twelve no-authority boundary packages, an append-only
 
 R23 adds no new authority-bearing component. `@cyberbaser/linkcheck` checks both rendered internal links and canonical-URL continuity from previous and candidate sitemap inventories plus emitted files. Cyberbase now retains a cumulative 931-URL baseline and pins the checker before Pages artifact upload. Run `31540402789` passed with all 931 URLs unchanged, uploaded the deterministic report, and completed deployment `5859387327`.
 
+**Controls are pluggable by protocol (maintainer direction, 2026-11-16).** Backend checks and controls follow the same replaceable-spoke rule as authoring tools and renderers. Each sits behind a small documented interface with a registry of providers; a vendor is only the first provider. A new provider is one module, one registry entry and a passing shared conformance suite, so anyone can propose their own by pull request. The core keeps safety behavior, such as failing closed, so a misbehaving provider cannot weaken it. The account-free intake's [bot-check providers, client-address sources and limit stores](/cyberbaser/development/account-free-intake/#public-readiness-protections-off-by-default) are the first implementation.
+
 The stable model is broader than today's interfaces. Local editors, forge editors, reader-correction controls, rich browser or CMS-like tools, and agents may all be authoring spokes. External spokes must emit bounded proposals against a pinned source base and converge on owner-controlled review or delegated policy; they cannot write canonical source directly. The owner may continue authoring in a preferred local tool or use the private owner-alpha wiki as a direct-authority lane. Renderers remain independently replaceable output spokes.
 
 Deployment observation is now explicitly provider-shaped without becoming a generalized deployment receipt. Owner-alpha dispatches on one strict provider field. GitHub retains its exact Actions/Pages/environment contract. Forgejo binds an exact 16.x instance, repository, run, job attempts, handles, and terminal deployment-job dependencies, then leaves publication proof to the existing live witness. Both providers remain opaque evidence to the unchanged durable pipeline. See [Forgejo Actions phase one](/cyberbaser/development/forgejo-phase-1/).
@@ -343,6 +345,10 @@ The illustrations above are the shape. These are the hand-offs, and the point of
 | 5 | Site live in roughly 3 to 5 minutes | — | — |
 
 </details>
+
+## Target community responsibilities
+
+The [community contribution and governance model](/cyberbaser/design/contribution-trust-and-access/#long-term-architecture-delivered-in-smaller-configurations) defines the destination and smaller delivery configurations. Identity, local trust, editorial workflow, scoped action authority, governance evidence and source/publication safety are separate logical responsibilities, not a mandate for separate services. Owner-only authority is the initial configuration; delegated roles and automated trust remain unselected. Embedded Better Auth/passkeys are the preferred direction, but credential custody must be explicitly reconciled with the existing identity/session restrictions below before implementation. This target does not silently amend those restrictions or give an external editor source authority.
 
 ## Boundaries: what each part must not do
 

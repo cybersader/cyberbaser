@@ -390,6 +390,56 @@ describe('local owner site rebuild', () => {
     expect(plainReuse.reused).toBe(true);
   });
 
+  test('challenge settings invalidate the policy-bound site cache and only public inputs reach the renderer', async () => {
+    const setup = await fixture('challenge-rebuild');
+    const config = {
+      ...setup.config,
+      proposalReview: { enabled: true, socketPath: '/synthetic/review.sock', requestTimeoutMs: 5000, maxListEntries: 100 },
+      suggestions: { form: { enabled: true }, forge: { enabled: false } },
+    };
+    const bindingDigest = `sha-256=:${Buffer.alloc(32, 7).toString('base64')}:`;
+    const calls = [];
+    let build = 0;
+    const options = (current) => ({
+      config: current, projectRoot: setup.projectRoot,
+      renderer: fixtureRenderer((call) => calls.push(call)),
+    });
+    const deps = {
+      assertCheckoutReady: async () => ready(setup.checkout),
+      retainPublication: async () => ({ bindingDigest, pages: 1 }),
+      verifyRetainedPublication: async () => true,
+      createBuildId: () => `build-challenge-${++build}`,
+    };
+    await ensureOwnerSite(options(config), deps);
+    expect(calls[0].suggestions).not.toHaveProperty('challenge');
+    const challenged = structuredClone(config);
+    challenged.suggestions.form.challenge = {
+      provider: 'turnstile', siteKey: 'synthetic-public-key',
+      secretFile: '/synthetic/challenge-secret', expectedHostnames: ['127.0.0.1'],
+    };
+    const enabled = await ensureOwnerSite(options(challenged), deps);
+    expect(enabled.reused).toBeUndefined();
+    expect(calls[1].suggestions.challenge).toEqual({ provider: 'turnstile', siteKey: 'synthetic-public-key' });
+    expect(JSON.stringify(calls[1].suggestions)).not.toContain('secret');
+    expect(JSON.stringify(calls[1].suggestions)).not.toContain('expectedHostnames');
+    expect((await ensureOwnerSite(options(challenged), deps)).reused).toBe(true);
+    expect(calls).toHaveLength(2);
+
+    // All four declared values are policy identity, even server-only values.
+    for (const [key, value] of Object.entries({
+      siteKey: 'second-public-key', provider: 'future-provider',
+      secretFile: '/synthetic/second-secret', expectedHostnames: ['wiki.example'],
+    })) {
+      challenged.suggestions.form.challenge[key] = value;
+      expect((await ensureOwnerSite(options(challenged), deps)).reused).toBeUndefined();
+    }
+    expect(calls).toHaveLength(6);
+    const removed = await ensureOwnerSite(options(config), deps);
+    expect(removed.reused).toBeUndefined();
+    expect(calls[6].suggestions).not.toHaveProperty('challenge');
+    expect((await ensureOwnerSite(options(config), deps)).reused).toBe(true);
+  });
+
   test('rebuilds with the new exact owner origin when only the listen host changes', async () => {
     const setup = await fixture('host-change-rebuild');
     await rebuildOwnerSite({

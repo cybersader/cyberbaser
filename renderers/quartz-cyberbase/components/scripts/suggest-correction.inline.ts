@@ -6,7 +6,11 @@ import {
   submitCorrectionIntent,
 } from "../suggestCorrectionClient"
 
+import { setupSuggestionChallenge } from "../suggestCorrectionChallenge"
+import type { SuggestionChallenge } from "../suggestCorrectionChallenge"
+
 const FORM_SELECTOR = "form.suggest-correction-form"
+const challenges = new WeakMap<HTMLFormElement, SuggestionChallenge>()
 
 function field(form: HTMLFormElement, name: string): HTMLTextAreaElement {
   const element = form.elements.namedItem(name)
@@ -55,6 +59,13 @@ async function submitCorrection(event: SubmitEvent) {
   if (!(form instanceof HTMLFormElement)) return
   const submit = form.querySelector<HTMLButtonElement>("button[type='submit']")
   if (!submit || submit.disabled) return
+  const challenge = challenges.get(form)
+  const challengeToken = challenge?.response()
+  if (challenge && !challengeToken) {
+    setStatus(form, "Please complete the human verification before sending.", "error")
+    challenge.reset()
+    return
+  }
 
   const bindingDigest = form.dataset.bindingDigest ?? ""
   const pageId = form.dataset.pageId ?? ""
@@ -79,14 +90,16 @@ async function submitCorrection(event: SubmitEvent) {
     intent = buildCorrectionIntent({ ...input, idempotencyKey })
   } catch (error) {
     setStatus(form, error instanceof Error ? error.message : "The correction form is invalid.", "error")
+    challenge?.reset()
     return
   }
 
   writeRetryState(storageKey, fingerprint, idempotencyKey)
   submit.disabled = true
+  challenge?.submitting()
   setStatus(form, "Sending correction for owner review…", "working")
   try {
-    const result = await submitCorrectionIntent(action, intent)
+    const result = await submitCorrectionIntent(action, intent, fetch, challengeToken)
     if (result.accepted) {
       clearRetryState(storageKey)
       form.reset()
@@ -97,7 +110,8 @@ async function submitCorrection(event: SubmitEvent) {
   } catch {
     setStatus(form, "The correction could not be submitted. Retry to send the same request safely.", "error")
   } finally {
-    submit.disabled = false
+    if (challenge) challenge.reset()
+    else submit.disabled = false
   }
 }
 
@@ -105,7 +119,15 @@ document.addEventListener("nav", () => {
   for (const form of document.querySelectorAll<HTMLFormElement>(FORM_SELECTOR)) {
     form.addEventListener("submit", submitCorrection)
     const submit = form.querySelector<HTMLButtonElement>("button[type='submit']")
-    if (submit) submit.disabled = false
-    window.addCleanup(() => form.removeEventListener("submit", submitCorrection))
+    if (submit) {
+      const challenge = setupSuggestionChallenge(form, submit, (message, state) => setStatus(form, message, state))
+      if (challenge) challenges.set(form, challenge)
+      else submit.disabled = false
+    }
+    window.addCleanup(() => {
+      form.removeEventListener("submit", submitCorrection)
+      challenges.get(form)?.destroy()
+      challenges.delete(form)
+    })
   }
 })

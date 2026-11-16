@@ -20,7 +20,7 @@ import { listDurableJobs, loadDurableJob, validateJobId } from './job-state.js';
 import { ensureOwnerSite } from './site.js';
 import { createEditSession as createSourceEditSession, liveUrlForSlug } from './source.js';
 import { prepareStore, storeContextFromConfig } from './store.js';
-import { startSuggestionIntake, suggestionFormOrigin } from './suggestions.js';
+import { startSuggestionIntake, suggestionFormOrigin, suggestionChallengeOrigin } from './suggestions.js';
 import { createOwnerPublicationRuntime, createPublicationSourceGuard } from './owner-publication-runtime.js';
 import { publicationDisplay } from './publication-display.js';
 
@@ -70,7 +70,10 @@ const READER_CSP = [
 function readerCsp(config) {
   const formOrigin = suggestionFormOrigin(config);
   if (formOrigin === null) return READER_CSP;
-  return READER_CSP.replace("connect-src 'self'", `connect-src 'self' ${formOrigin}`);
+  const csp = READER_CSP.replace("connect-src 'self'", `connect-src 'self' ${formOrigin}`);
+  const challengeOrigin = suggestionChallengeOrigin(config);
+  if (challengeOrigin === null) return csp;
+  return `${csp.replace("script-src 'self'", `script-src 'self' ${challengeOrigin}`)}; frame-src ${challengeOrigin}`;
 }
 
 const CONTENT_TYPES = Object.freeze({

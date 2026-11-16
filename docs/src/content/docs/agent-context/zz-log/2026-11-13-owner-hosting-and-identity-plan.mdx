@@ -1,0 +1,32 @@
+---
+title: Owner hosting and identity plan
+description: "Publication belongs in the real-use plan, subject to identity and authorization; TrueNAS placement remains a recommendation."
+status: research
+tags: [owner-workflow, architecture, governance, planning]
+---
+
+## Maintainer direction
+
+After the read-only readiness check, the maintainer approved preparing the real-use setup plan and clarified that publication is acceptable, but must be locked to identity and authorization. They also asked where Cyberbase would actually live and whether TrueNAS SCALE was its home.
+
+This corrects any implication that a permanently nonpublishing setup is the target. It does not choose an identity provider, authorize a source relocation or select TrueNAS as the deployment target. Concrete publication content/destination, live activation and the retained migration execution hold remain to be resolved at their respective boundaries.
+
+## Plan produced
+
+The canonical [real owner setup and hosting plan](/cyberbaser/development/real-owner-setup-plan/) separates authoritative notes, private app/job state, repository hosting, identity, public static output and backups.
+
+The recommendation is an isolated Linux VM on TrueNAS for the always-on private backend, with narrowly scoped storage and service credentials. Retain the desktop authoring authority and current public hosting during transition; reconcile the modified vault and explicitly bind a dedicated delivery checkout rather than silently moving authority. Forgejo-primary publishing, moving the authoring home and moving public hosting are separate later choices, not prerequisites bundled into the first ordinary publishing loop.
+
+The identity proposal uses a verified stable principal, server-side owner-only publishing authorization, deliberate exact-version consent and scoped machine credentials. Signing in does not automatically grant publishing. External contributors still need not have an account merely to propose through any separately offered account-free path.
+
+## Existing mechanism and gap
+
+Read-only inspection of the recovered owner server found one-time local bootstrap capabilities, per-device in-memory sessions and CSRF tokens, with configured owner identity used in records. This is a local single-owner capability mechanism, not proof of named-account/OIDC authentication and per-principal publishing authorization. The inspection was bounded source reading, not an exhaustive auth audit.
+
+The container guide also identifies deployment limits: private numeric-address HTTP origins and host networking, no verified arbitrary reverse-proxy/HTTPS contract, and a credential-helper client without a supplied production broker. Those requirements must be resolved rather than presenting an ingress login as a complete identity integration. TrueNAS compatibility and the older Forgejo version/catalog references were not freshly verified.
+
+## Sequence and boundaries
+
+Recover the coherent unapplied candidate; pin source and selected publication; select hosting and identity; implement and synthetically verify the missing authorization connection; integrate once; then execute one specifically scoped real publication. Preserve existing local edits, exact-operation rules, public/private separation and durable job/replay behavior. Do not turn an isolated delivery checkout into a second authoring master.
+
+Only planning and documentation changed. No code implementation, tests, build, host access, identity setup, service restart, source edit, credential use, commit, push, public deployment or domain action occurred. Documentation whitespace checks are not application acceptance. The next owner decision is the proposed private-backend placement, not a request to authorize every implementation and deployment detail at once.

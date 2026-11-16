@@ -184,3 +184,65 @@ describe('forge watcher configuration', () => {
     }
   });
 });
+
+describe('optional public intake protections', () => {
+  const botCheck = { provider: 'turnstile', secretFile: '/run/secrets/turnstile', expectedHostnames: ['wiki.example'], expectedAction: 'suggest-correction', timeoutMs: 3000 };
+  const clientAddress = { source: 'header', header: 'cf-connecting-ip', trustedPeers: ['10.0.0.0/8', '2001:db8::/32'] };
+
+  test('older exact configs load with bot check off, socket authority and default layered quotas', () => {
+    const config = validateConfig(configInput(ROOT));
+    expect(config.botCheck).toBeNull();
+    expect(config.clientAddress).toEqual({ source: 'socket' });
+    expect(config.limits).toMatchObject({ perSenderCapacity: 3, perSenderRefillPerHour: 3, perNetworkCapacity: 10, perNetworkRefillPerDay: 10, perPageCapacity: 2, perPageRefillPerDay: 2 });
+    expect(validateConfig(configInput(ROOT, { botCheck: null })).botCheck).toBeNull();
+  });
+
+  test('enabled bot and trusted proxy settings are exact and deeply frozen without freezing input arrays', () => {
+    const input = configInput(ROOT, { botCheck: structuredClone(botCheck), clientAddress: structuredClone(clientAddress) });
+    const config = validateConfig(input);
+    expect(config.botCheck).toEqual(botCheck);
+    expect(config.clientAddress).toEqual(clientAddress);
+    expect(Object.isFrozen(config.botCheck.expectedHostnames)).toBe(true);
+    expect(Object.isFrozen(config.clientAddress.trustedPeers)).toBe(true);
+    expect(Object.isFrozen(input.botCheck.expectedHostnames)).toBe(false);
+  });
+
+  test.each([
+    { ...botCheck, provider: 'other' }, { ...botCheck, secretFile: 'relative' },
+    { ...botCheck, expectedHostnames: [] }, { ...botCheck, expectedHostnames: ['https://wiki.example'] },
+    { ...botCheck, expectedHostnames: ['Wiki.example'] }, { ...botCheck, expectedHostnames: ['wiki.example:443'] },
+    { ...botCheck, expectedHostnames: ['wiki.example', 'wiki.example'] },
+    { ...botCheck, expectedHostnames: ['bad..example'] }, { ...botCheck, expectedAction: 'login' },
+    { ...botCheck, timeoutMs: 0 }, { ...botCheck, timeoutMs: 3001 }, { ...botCheck, secret: 'must-not-be-configured' },
+    { provider: 'turnstile' }, false,
+  ])('rejects incomplete or unsafe bot settings', (block) => {
+    expect(() => validateConfig(configInput(ROOT, { botCheck: block }))).toThrow();
+  });
+
+  test.each([
+    null, { source: 'other' }, { source: 'socket', header: 'cf-connecting-ip' },
+    { ...clientAddress, header: 'x-real-ip,other' }, { ...clientAddress, trustedPeers: [] },
+    { ...clientAddress, trustedPeers: ['not-a-cidr'] }, { ...clientAddress, trustedPeers: ['192.0.2.0/33'] },
+    { ...clientAddress, trustedPeers: ['2001:db8::/129'] }, { ...clientAddress, trustedPeers: ['::ffff:10.0.0.0/129'] },
+    { ...clientAddress, extra: true },
+  ])('rejects ambiguous or unsafe client-address settings', (block) => {
+    expect(() => validateConfig(configInput(ROOT, { clientAddress: block }))).toThrow();
+  });
+
+  test('layered limits accept bounded positive integers only and retain unknown-key rejection', () => {
+    const keys = ['perSenderCapacity', 'perSenderRefillPerHour', 'perNetworkCapacity', 'perNetworkRefillPerDay', 'perPageCapacity', 'perPageRefillPerDay'];
+    for (const key of keys) {
+      for (const value of [0, -1, 1.5, '3', null, 1_000_001, Number.MAX_SAFE_INTEGER + 1]) {
+        const input = configInput(ROOT);
+        input.limits[key] = value;
+        expect(() => validateConfig(input)).toThrow(/integer from 1 through 1000000/);
+      }
+      const input = configInput(ROOT);
+      input.limits[key] = 7;
+      expect(validateConfig(input).limits[key]).toBe(7);
+    }
+    const input = configInput(ROOT);
+    input.limits.perUnknownCapacity = 5;
+    expect(() => validateConfig(input)).toThrow(/unknown field/);
+  });
+});

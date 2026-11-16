@@ -835,6 +835,12 @@ export async function rebuildOwnerSite({
         bindingDigest: retained.bindingDigest,
         sourceRepository: config.repository.remote.url,
         sourceRevision: before.head,
+        ...(config.suggestions.form.challenge ? {
+          challenge: {
+            provider: config.suggestions.form.challenge.provider,
+            siteKey: config.suggestions.form.challenge.siteKey,
+          },
+        } : {}),
       };
       suggestions = {
         form: true,

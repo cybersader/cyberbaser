@@ -1,0 +1,19 @@
+---
+import journey from './community-diagrams/journey.html?raw';
+import trust from './community-diagrams/trust.html?raw';
+import authority from './community-diagrams/authority.html?raw';
+import horizons from './community-diagrams/horizons.html?raw';
+import './community-diagrams/diagrams.css';
+
+interface Props {
+  kind: 'journey' | 'trust' | 'authority' | 'horizons';
+}
+
+// Only repository-authored static markup is allowed here. No request, content
+// submission or identity field is interpolated into these diagram templates.
+const diagrams = { journey, trust, authority, horizons };
+const { kind } = Astro.props;
+if (!Object.hasOwn(diagrams, kind)) throw new Error('Unknown community diagram');
+---
+
+<Fragment set:html={diagrams[kind]} />

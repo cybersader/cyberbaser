@@ -1,0 +1,12 @@
+---
+title: Vault cleanup constraints for leaving Publish
+description: "Read-only answer to the Cyberbase vault thread: the desktop vault is 19 commits behind the Cyberbaser-enabled remote; which vault features render, degrade or must not change before the Publish migration."
+status: log
+tags: [planning, setup]
+---
+
+The Cyberbase vault thread relayed the owner's goal of moving off Obsidian Publish onto Cyberbaser with this vault as the first real content, and asked which cleanup changes are safe.
+
+Read-only checks: the desktop vault `main` is `23415367`, 19 commits behind `origin/main` `0cc579a4` (already present locally; no fetch, checkout or edit). Those commits contain the July publishing setup: `publish.yml` (15 allowlisted folders), `index.md`, `.cyberbaser/`, the Pages workflow and the R23 URL baseline. The vault already publishes through Cyberbaser and Quartz to `cybersader.github.io/cyberbase`; `cybersader.com` still serves Publish. The pipeline repository is `cybersader/cyberbase`, not the mirror the vault thread named.
+
+The feature-by-feature handling, the do-not-change list and the safe cleanup list were added to the [Quartz publishing migration plan](/cyberbaser/development/quartz-publishing-migration/#vault-cleanup-constraints-2026-11-16). Excalidraw, canvas and Dataview degradation is stated from renderer behavior, not measured page by page. The hands-on launcher uses a fixed fixture today and cannot yet load a copy of a real folder.

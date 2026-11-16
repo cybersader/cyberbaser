@@ -7,20 +7,117 @@ This app is optional and refuses to start unless `enabled` is literal `true`. It
 ## Boundary
 
 - `POST /v1/corrections` accepts only `application/json` from an exact configured HTTPS `Origin` and exact public `Host`.
-- `OPTIONS /v1/corrections` permits only `POST` and `Content-Type`. It never enables credentialed CORS.
+- `OPTIONS /v1/corrections` permits only `POST` and `Content-Type`, plus `Cyberbaser-Challenge-Token` only when bot checking is enabled. It never enables credentialed CORS.
 - `GET /healthz` requires the exact `127.0.0.1:<port>` Host, an actual loopback socket peer, no Origin, no credentials, no body, and no query.
-- `Authorization`, `Proxy-Authorization`, and `Cookie` are rejected. `Forwarded` and `X-Forwarded-*` are never authority inputs.
-- The body ceiling is exactly 98,304 bytes. The complete body, binding resolution, local Git object inspection, derivation, and replay probe share one five-second deadline. Git is cancelled through the core resolver's injected executor seam.
-- Abuse control is global rather than IP-derived: a 20-token process-wide bucket refills at one token per second, with at most four active submissions. This remains an origin control, not a substitute for edge DDoS protection.
+- `Authorization`, `Proxy-Authorization`, and `Cookie` are rejected. Forwarded headers never control Host, Origin, health authorization, or CORS. One explicitly configured address header (for example `cf-connecting-ip` or `x-real-ip`) can supply only the abuse-control address, and only behind an explicitly trusted TCP peer.
+- The body ceiling is exactly 98,304 bytes. The complete body, optional bot verification, binding resolution, local Git object inspection, derivation, and replay probe share one five-second deadline. Git is cancelled through the core resolver's injected executor seam.
+- Abuse control combines a 20-token global bucket (one token per second), at most four active submissions, and bounded sender, network, and page buckets. Optional Turnstile verification gates the queue and source resolver. These are application controls, not substitutes for edge DDoS protection.
 - Success returns only a bounded queue receipt. Untrusted rationale, evidence, source bytes, repository paths, and raw idempotency keys are never reflected.
 
 For a public HTTPS origin the process binds `0.0.0.0` for a later isolated-container deployment. Do not publish that listener directly. For the owner's own private site, `publicOrigin` may be one exact private numeric IPv4 HTTP origin with an explicit port, and `listen` then binds exactly that address; the owner app derives and writes that config and runs this process beside itself. A separately configured reverse proxy must preserve the exact public Host and expose only `/v1/corrections`; it must not expose `/healthz`. TLS and edge abuse controls are outside this app.
 
 ## Configuration
 
-Copy `account-free-intake.example.json` and replace every example origin, repository, and absolute path. The schema is exact: unknown fields fail closed, credentialed/non-HTTPS URLs fail, paths must be normalized and symlink-free, and the fixed HTTP abuse limits cannot be weakened through configuration.
+Copy `account-free-intake.example.json` and replace every example origin, repository, and absolute path. The schema is exact: unknown fields fail closed, credentialed/non-HTTPS URLs fail, paths must be normalized and symlink-free, and the fixed body/deadline/global/concurrency bounds cannot be weakened through configuration. The additional sender/network/page limits accept integers from 1 through 1,000,000. Existing configs without the new settings still load.
 
 The configured bare Git directory and retained binding directory are read-only inputs. The proposal queue is the only durable write location. The queue root must be private and must not be shared by a simultaneously running second process.
+
+## Public abuse protections
+
+The example keeps bot verification off (`"botCheck": null`) and derives the client address from the socket (`"clientAddress": { "source": "socket" }`). To enable Turnstile, add this exact block to the operator's config:
+
+```json
+{
+  "botCheck": {
+    "provider": "turnstile",
+    "secretFile": "/run/secrets/turnstile",
+    "expectedHostnames": ["wiki.example"],
+    "expectedAction": "suggest-correction",
+    "timeoutMs": 3000
+  }
+}
+```
+
+The secret file must be a bounded (at most 4,096 bytes), regular, singly linked file at a normalized absolute, symlink-free path. Keep it owner-readable only (for example mode 0600), mount it read-only, and never place it in source control. It is read once at service startup, held only in the verifier closure, and requires a restart to rotate. Startup fails if the configured secret cannot be read safely. Hostnames are the exact frontend hostnames returned by Turnstile, without schemes or ports; do not include local/test hostnames in a production allowlist.
+
+The browser sends a fresh token in `Cyberbaser-Challenge-Token`, outside the intent JSON. After method/Host/Origin/content-type/body checks and sender/network limits, the service posts the secret, token, and available client IP to Cloudflare's fixed HTTPS siteverify endpoint. It requires literal `success: true`, an exact allowed hostname, and action `suggest-correction`. Missing or rejected tokens return 403 `challenge-failed`; upstream network, HTTP, JSON, or timeout failures return 503 `challenge-unavailable`. The three-second verification budget is bounded by the remaining shared five-second deadline. There is no retry or bypass. Tokens, secrets, and raw IPs are never placed in proposals, queue entries, public responses, or application logs. The configured client IP is disclosed to Cloudflare as `remoteip` during verification.
+
+If a trusted reverse proxy supplies `cf-connecting-ip`, opt in explicitly:
+
+```json
+{
+  "clientAddress": {
+    "source": "header",
+    "header": "cf-connecting-ip",
+    "trustedPeers": ["10.20.0.2/32", "2001:db8:1234::2/128"]
+  }
+}
+```
+
+The `header` value accepts any single lowercase HTTP header token, for example `x-real-ip`; `source: "header"` remains the backward-compatible alias for `source: "trusted-header"`. A configured `x-forwarded-for` still accepts only one numeric IP, never a forwarded chain.
+
+Use only the actual proxy's socket CIDRs, not arbitrary client ranges. Prevent direct bypass of the proxy; the proxy must replace, not preserve, visitor-supplied address headers. Only a peer inside `trustedPeers` can supply that header. Missing, comma-separated, zoned, port-bearing, or otherwise malformed values fall back to the socket address. No forwarded header changes Host, Origin, health authorization, or CORS authority. IPv4-mapped socket addresses normalize to IPv4 for quotas; both their IPv4 and mapped IPv6 trusted CIDRs are supported. Missing/invalid socket addresses share one fail-closed `unknown` quota and omit Turnstile's optional `remoteip`.
+
+### Layered quotas and retention
+
+| Limit | Default capacity | Refill |
+| --- | --- | --- |
+| Sender (`perSenderCapacity`, `perSenderRefillPerHour`) | 3 | 3/hour |
+| Network (`perNetworkCapacity`, `perNetworkRefillPerDay`) | 10 | 10/day |
+| Opaque page ID (`perPageCapacity`, `perPageRefillPerDay`) | 2 | 2/day |
+
+Network identities use IPv4 /24 or IPv6 /64. Alternate IPv6 spellings and mapped IPv4 addresses share the same canonical sender identity. Senders and networks are keyed by HMAC-SHA256 with a random per-process salt; no raw address is retained in the maps. Page IDs are HMAC-keyed too. Each of the three in-memory maps retains at most **10,000 keys**, evicting the oldest inserted key before adding another. Eviction forgets that key's quota; restart resets all quotas and the salt. These limits are local to one service process, not a persistent or distributed abuse ledger.
+
+Order is global admission, bounded body/intent validation, sender then network admission, optional bot verification, then page admission before any queue/source lookup. OPTIONS uses only the existing global bucket. Sender/network buckets count eligible parsed attempts even if bot verification later fails; a sender rejection does not charge the network bucket. Page buckets count every parsed, challenge-approved attempt, including idempotent replays, rejected source/quote operations, queue-capacity failures, and other downstream failures. Rejected requests do not refund consumed tokens. A quota rejection returns 429 `rate-limited` with the existing `Retry-After: 1` hint; that hint is not the time until a sender/network/page token refills.
+
+The durable queue's existing pending-entry, per-source, and retained-byte capacity limits remain the inbox circuit breaker. A full queue returns 503 `queue-capacity`; bot verification and rate limits do not replace or weaken that cap.
+
+## Adding a provider
+
+Backend controls use small app-local contracts. Provider modules are reviewed code, not runtime plugins: configuration selects only a frozen registry entry, never a script path or arbitrary verification URL. Turnstile is the first challenge provider, not the challenge interface. Each contribution should include its module, registry entry where selection exists, synthetic harness, and a test file invoking the shared suite. No live account, network, or real secret is needed to prove conformance.
+
+### Challenge provider
+
+1. Add `src/challenge/providers/<id>.js`, exporting a frozen object with this contract:
+
+   ```js
+   {
+     id,
+     validateOptions(input), // frozen cloned options, or throw with code 'invalid-config'
+     async create(options, deps) {
+       return {
+         async verify({ token, clientAddress, signal }) {
+           return { outcome: 'pass' }; // exactly 'pass', 'fail', or 'unavailable'
+         },
+       };
+     },
+   }
+   ```
+
+2. Register the module under its exact `id` in `src/challenge/registry.js`. Config stays `botCheck: { provider: '<id>', ...providerOptions }`; the core removes `provider` and passes every remaining key to `validateOptions`. Reject unknown/missing fields, copy and deeply freeze option arrays/objects, and throw `IntakeConfigError('invalid-config', safeMessage)` (or use helpers from `src/control-config.js`). Do not include secret values or filesystem diagnostics in errors.
+3. Put vendor endpoints, request/response formats, hostname/action binding rules, and option validation only in that module. `deps` supplies injectable `fetch` and shared `readSecretFile(path)`. Load secrets at startup into the private verifier closure, never into returned options, results, queues, responses, or logs. `clientAddress` is a canonical parsed IP record with `.address`, or `null`; do not derive it from request headers yourself. Honor the supplied `AbortSignal` and do not retry.
+4. Add `test/harnesses/<id>.js` with `options`, nonempty `invalidOptions`, `malformedOutcome` (`'fail'` or `'unavailable'`), and `transport(scenario)` for `pass`, `fail`, `malformed`, `slow`, and `throw`. Each transport returns `{ deps: { fetch, readSecretFile }, calls, signal() }`. Its slow transport deliberately never settles even after abort. See the Turnstile harness for the complete runnable shape.
+5. Add one `test/<id>-provider.test.js` importing the module and harness and calling `challengeProviderConformance(provider, harness)` from `test/conformance/challenge-provider.js`. Add vendor-specific response/binding tests where needed. Submit the module, registry entry, harness, and test together.
+
+Core `src/bot-check.js` owns `Cyberbaser-Challenge-Token` extraction (1–2,048 characters, no whitespace or comma), the maximum three-second verification budget and enclosing request deadline, cancellation, and public error mapping. CORS advertisement remains in core `src/server.js`. A provider may omit `timeoutMs`; if present, core caps it at three seconds and the remaining deadline. The legacy Turnstile config still requires exactly `timeoutMs: 3000` and `expectedAction: 'suggest-correction'`.
+
+Only an exact single-own-data-field `{ outcome: 'pass' }` result passes. Explicit `outcome: 'fail'` means 403 `challenge-failed`. Throws (even a forged `ChallengeError`), aborts, timeouts, unknown outcomes, inherited/accessor outcomes, and malformed or extra-field pass results mean 503 `challenge-unavailable`. Invalid/missing tokens remain 403 before invoking the provider. Turnstile's well-formed JSON with failed/missing binding fields remains an explicit provider failure (403); HTTP, JSON parsing, and network failures remain unavailable (503). Shared conformance covers both provider transport behavior and core fail-closed enforcement.
+
+### Client-address source
+
+1. Add `src/client-address/sources/<id>.js` exporting a frozen `{ id, validateOptions(input), create(options) }`. Validation returns deeply frozen cloned options or throws `invalid-config`. `create` returns a synchronous `(request, socketPeer) => numericIpStringOrNull` resolver. It must not mutate inputs. Use the shared numeric parsing/CIDR helpers in `src/client-address/ip.js` rather than implementing an alternate IP identity format.
+2. Register it under its `id` in `src/client-address/registry.js`; config is `{ source: '<id>', ...sourceOptions }`. The existing `header` alias continues to select `trusted-header` without changing existing config output. All header-derived identities must remain gated by the actual trusted socket peer, with malformed/missing values falling back to that socket. Source selection never grants authority over Host, Origin, health authorization, or CORS.
+3. Add a synthetic harness with `options`, `invalidOptions`, and `cases: [{ headers, peer, address }]`, then call `clientAddressSourceConformance(source, harness)` from `test/conformance/client-address-source.js` in a test file. Include untrusted-peer, missing-peer, malformed-address, and canonicalization cases. Core re-parses every source result before challenge verification and HMAC keying.
+
+### Limit store
+
+The synchronous store contract is `{ take(key, { capacity, refillPerMs }, nowMs) -> boolean }`. `key` is an opaque scope-separated HMAC, never an IP or page ID. Core owns normalization, the private process salt, HMAC keying, policies, clock injection, admission order, and three independent stores for sender/network/page limits. Only literal `true` grants admission.
+
+1. Add a module exporting `createStore({ maxKeys })`. Implement bounded retained memory, fractional refill capped at capacity, independent keys, and no refill credit from clock regression. The existing default `src/limit-store/in-memory.js` uses FIFO eviction and at most 10,000 keys per store; eviction forgets quota. Its diagnostic `size` getter exposes only a count, not keys.
+2. Add a test file calling `limitStoreConformance('<id>', { createStore, size: store => retainedCount })` from `test/conformance/limit-store.js`. `size` is harness instrumentation, not a required runtime method. The suite checks capacity, refill, clock regression, key/store independence, bounded memory, and FIFO eviction.
+3. Use the programmatic `createLayeredAbuseLimiter({ limits, createStore })` seam for evaluation. There is deliberately no operator config key or registry for stores while only one implementation exists. A future selectable store needs an explicit registry/config decision; an asynchronous or distributed store needs a separate interface decision, not a Promise returned from `take`. The global token bucket/concurrency gate and durable queue circuit breakers remain separate controls.
+
+Run `build-contained -- bun test apps/account-free-intake/test` and `build-contained -- bun test deploy/account-free-intake/test` before submitting a provider PR. The latter protects deployment-config compatibility without deploying anything.
 
 ## Run
 
@@ -56,6 +153,6 @@ The review CLI must run while the server is stopped because its shared inspectio
 bun test apps/account-free-intake/test
 ```
 
-The app-local suite covers strict credential-free configuration, exact Host/Origin/CORS behavior, loopback-only health, forbidden credentials, fixed body bounds, total request deadlines, global token/concurrency limits, forwarded-header non-authority, durable enqueue/recovery/idempotency, anonymous full-review routing, bounded public receipts, Bun HTTP serving, and safe text/static-HTML review rendering.
+The app-local suite covers strict credential-free configuration, exact Host/Origin/CORS behavior, loopback-only health, forbidden credentials, fixed body bounds, total request deadlines, global token/concurrency limits, HMAC sender/network/page limits with clock-driven refill and bounded eviction, trusted proxy CIDRs and malformed-header fallback, optional fail-closed Turnstile verification with injected fetch, conditional CORS headers, secret non-disclosure, forwarded-header non-authority, durable enqueue/recovery/idempotency, anonymous full-review routing, bounded public receipts, Bun HTTP serving, and safe text/static-HTML review rendering.
 
 `.github/workflows/account-free-intake.yml` runs the proposal queue, derivation, app, and disabled renderer checks. `.github/workflows/account-free-intake-container.yml` runs deployment structure, a local image build, and isolated container acceptance. Both have only `contents: read`, credential-free checkout, immutable action pins, no secrets, and no repository or publication action.

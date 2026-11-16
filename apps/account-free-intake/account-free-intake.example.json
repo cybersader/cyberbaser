@@ -32,6 +32,16 @@
     "requestTimeoutMs": 5000,
     "maxConcurrentRequests": 4,
     "tokenBucketCapacity": 20,
-    "tokenBucketRefillPerSecond": 1
+    "tokenBucketRefillPerSecond": 1,
+    "perSenderCapacity": 3,
+    "perSenderRefillPerHour": 3,
+    "perNetworkCapacity": 10,
+    "perNetworkRefillPerDay": 10,
+    "perPageCapacity": 2,
+    "perPageRefillPerDay": 2
+  },
+  "botCheck": null,
+  "clientAddress": {
+    "source": "socket"
   }
 }

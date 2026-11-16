@@ -9,7 +9,7 @@ tags: [architecture, contribution, governance, testing]
 
 **Status: implemented and mechanically tested, off by default, not offered publicly.** WP4 Lane B now has a strict correction-intent contract, exact retained-source derivation, a local durable proposal queue, an optional HTTP intake app, a Quartz form that public builds leave absent, and local-only OCI/Compose packaging. Its same-host review seam and owner-alpha decision-only consumer are also implemented and mechanically accepted. Since 2026-09-30 the owner can turn the form on for their own private local site from one `suggestions` section of the owner app's config; the owner app then derives the intake's settings and starts and stops it beside itself ([Suggestions on the private site](/cyberbaser/development/suggestions-on-the-private-site/)). Repository CI is read-only and exercises the package, app, renderer, deployment-structure, image-build, and isolated runtime-acceptance paths.
 
-This is implementation evidence, not product or human evidence. No public endpoint is deployed. No ordinary reader or independent owner has used the path. No reverse proxy, TLS endpoint, edge DDoS control, service installation, image publication, hosted console, source writer, merge path, approval-to-application authority, or production authority exists. Q09 remains open.
+This is implementation evidence, not product or human evidence. No public endpoint is deployed. No ordinary reader or independent owner has used the path. No running reverse proxy, TLS endpoint, edge DDoS control, service installation, image publication, hosted console, source writer, merge path, approval-to-application authority, or production authority exists. Since 2026-11-16 the [public-readiness protections](#public-readiness-protections-off-by-default) are built and tested but not deployed. Q09 remains open.
 
 ## The implemented path
 
@@ -92,6 +92,27 @@ When enabled, the browser receives only the public intake action, retained bindi
 `deploy/account-free-intake` packages the sibling service as one Linux/amd64 image and an off-by-default Compose profile. A plain `docker compose up` starts nothing. The service has a read-only image root, runs as `65532:65532`, drops all capabilities, uses `no-new-privileges`, publishes no host port, joins only a dedicated internal bridge, mounts source evidence read-only, and writes only one dedicated proposal-queue volume.
 
 The repository provides no reverse proxy. Joining one to the internal network, terminating TLS, exposing `/v1/corrections`, preserving the exact Host, and adding edge DDoS controls are separate design and authorization steps.
+
+## Public-readiness protections (off by default)
+
+Built 2026-11-16 by maintainer direction (see [access tiers](/cyberbaser/design/contribution-trust-and-access/#access-tiers-abuse-protection-without-a-forced-account)). Everything below is disabled unless explicitly configured; existing configs and builds behave as before. Nothing is deployed and no Cloudflare account, tunnel or key was used.
+
+| Layer | Where | Behavior |
+|---|---|---|
+| Edge rate limit and TLS | Cloudflare, configured by the operator | Documented in the deploy README; not automated. |
+| Bot check | `apps/account-free-intake/src/bot-check.js`; renderer `suggestCorrectionChallenge.ts` | Optional `botCheck` config (Cloudflare Turnstile). The page sends the token only in header `Cyberbaser-Challenge-Token`. The server verifies success, hostname and action on every submission before source lookup and fails closed: `challenge-failed` (403) or `challenge-unavailable` (503). The secret is read from a file and never logged or queued. |
+| Real client address | `apps/account-free-intake/src/client-address.js` | Optional `clientAddress` honors `cf-connecting-ip` only from configured trusted peers; anything malformed falls back to the socket address. |
+| Per-sender, per-network and per-page limits | `apps/account-free-intake/src/abuse.js` | Defaults: 3 per sender (refill 3/hour), 10 per IPv4 /24 or IPv6 /64 (refill 10/day), 2 per page (refill 2/day). Keys are HMAC values with a per-process random salt; raw addresses are never stored or logged. Maps hold at most 10,000 keys with oldest-first eviction. Exceeding returns `rate-limited` (429). |
+| Inbox cap | Existing queue capacity | A full queue returns `queue-capacity` (503); the form says suggestions are paused. Suggestions still never write to the vault. |
+| Public entry | `deploy/account-free-intake/compose.public.yaml` | Opt-in overlay adding a Cloudflare Tunnel connector (no inbound ports), a pinned internal subnet trusted for the client-address header, separate egress for Turnstile verification, file-mounted secrets, and a required operator-supplied connector image digest. |
+
+**Adding your own provider.** Each control is a registry of providers rather than vendor code in the service. Server side: challenge providers in `apps/account-free-intake/src/challenge/` (contract: `validateOptions`, `create` → `verify` returning `pass`, `fail` or `unavailable`), client-address sources in `src/client-address/`, and limit stores in `src/limit-store/` (injectable; no config switch yet). Browser side: widget providers in `renderers/quartz-cyberbase/components/challenge/` (contract: `scriptUrl`, `validateSiteKey`, `mount` → `reset`/`remove`). A new provider is one module, one registry line and one test that runs the shared conformance suite in `test/conformance/`. The core owns the token header, deadlines, CORS and fail-closed mapping: any provider error, timeout or unexpected result is refused, never passed. Both READMEs give the exact steps. Turnstile is the first and only provider so far.
+
+Known limits: rate limits reset on restart, and key eviction lets a high-churn attacker forget old quotas (the inbox cap still bounds the outcome). Per-page counts include replays and failed attempts that passed the bot check. Cloudflare terminates browser TLS, so it can see submitted corrections; the deploy README states this. Turning on Turnstile requires outbound HTTPS from the intake, which relaxes outbound isolation in the public overlay only.
+
+Since the same day, the owner app can also turn the bot check on for the private site through an optional `suggestions.form.challenge` block, and [Try suggestions on a throwaway vault](/cyberbaser/development/try-suggestions/) exercises it with Cloudflare's published test keys. Not done: enabling the form in the public Cyberbase build, a receipt status page, contributor accounts, and any live Turnstile or tunnel test.
+
+Evidence after the provider refactor: intake app 160/160 including the conformance suites; deploy structure 20 pass, 1 opt-in skip; `packages/account-free-intake` 24/24; renderer suite including Turnstile provider conformance passed. Earlier evidence before the refactor: intake app 125/125 tests; `packages/account-free-intake` plus `packages/proposal-queue` 51/51; deploy structure 20 pass and 1 opt-in image test skipped; renderer suite passed. One existing review-socket test was updated because it submits three corrections to one page and now meets the per-page limit. An independent static security review found no defects in the scoped changes; it did not execute tests or exercise live services.
 
 ## Mechanical evidence
 

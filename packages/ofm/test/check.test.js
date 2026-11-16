@@ -1,6 +1,6 @@
 import { test, expect } from 'bun:test';
 import { checkChange } from '../src/check.js';
-import { roundtrip } from '../src/pipeline.js';
+import { roundtrip, makePipeline } from '../src/pipeline.js';
 
 const DOC = `---
 title: Sample
@@ -42,7 +42,9 @@ test('wikilink degraded to a markdown link is damage', () => {
 });
 
 test('a re-serializing tool leaves fingerprints: remark output on a real doc is at least suspect', () => {
-  const { out } = roundtrip(DOC);
+  // Explicit remark defaults still model a tool that rewrites list markers;
+  // the diagnostic's own default now adopts the source marker.
+  const { out } = roundtrip(DOC, makePipeline());
   const r = checkChange(DOC, out);
   expect(['suspect', 'damage']).toContain(r.verdict);
 });

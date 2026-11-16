@@ -5,7 +5,7 @@
 //   ofm-check diff <before.md> <after.md>      classify a change: clean|suspect|damage
 //   ofm-check roundtrip <file.md> [...]        per-file diagnostic (prints first divergence)
 //
-// Exit codes: 0 = clean/ok · 1 = damage (diff) or mask leak (corpus) · 2 = usage
+// Exit codes: 0 = clean/ok · 1 = damage, checker error or mask leak · 2 = usage
 import { readFileSync, writeFileSync } from 'node:fs';
 import { runCorpus } from '../src/corpus.js';
 import { checkChange } from '../src/check.js';
@@ -24,7 +24,7 @@ if (cmd === 'corpus') {
   const jsonIdx = args.indexOf('--json');
   const r = runCorpus(dir);
   console.log(`corpus: ${r.dir}`);
-  console.log(`files: ${r.n}  elapsed: ${r.elapsedSec}s  parse errors: ${r.parseErrors}  mask collisions: ${r.maskCollisions}  MASK LEAKS: ${r.maskLeaks}`);
+  console.log(`files: ${r.n}  elapsed: ${r.elapsedSec}s  parse errors: ${r.parseErrors}  checker errors: ${r.checkerErrors}  mask collisions: ${r.maskCollisions}  MASK LEAKS: ${r.maskLeaks}`);
   console.log(`byte-identical: ${r.byteOk}/${r.n} (${((100 * r.byteOk) / r.n).toFixed(2)}%)`);
   console.log(`norm-equal:     ${r.normOk}/${r.n} (${((100 * r.normOk) / r.n).toFixed(2)}%)`);
   console.log('histogram:', Object.entries(r.histo).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}=${v}`).join(' '));
@@ -33,7 +33,7 @@ if (cmd === 'corpus') {
     writeFileSync(args[jsonIdx + 1], JSON.stringify({ ...summary, fails: results.filter((x) => !x.normOk).slice(0, 500) }, null, 2));
     console.log(`json -> ${args[jsonIdx + 1]}`);
   }
-  process.exit(r.maskLeaks > 0 || r.parseErrors > 0 ? 1 : 0);
+  process.exit(r.maskLeaks > 0 || r.parseErrors > 0 || r.checkerErrors > 0 || r.maskCollisions > 0 ? 1 : 0);
 } else if (cmd === 'diff') {
   const [beforePath, afterPath] = args;
   if (!beforePath || !afterPath) usage();
@@ -43,7 +43,7 @@ if (cmd === 'corpus') {
   const jsonIdx = args.indexOf('--json');
   if (jsonIdx > -1) writeFileSync(args[jsonIdx + 1], JSON.stringify(r, null, 2));
   console.log(`verdict: ${r.verdict}  (churn ${r.stats.churn}, escapes ${r.stats.escapesBefore}->${r.stats.escapesAfter})`);
-  for (const f of r.findings) console.log(`  - ${f.type}${f.construct ? `: ${f.construct}` : ''}${f.count ? `: +${f.count}` : ''}${f.churn ? `: ${f.churn}` : ''}`);
+  for (const f of r.findings) console.log(`  - ${f.type}${f.severity === 'info' ? ' (info)' : ''}${f.construct ? `: ${f.construct}` : ''}${f.replacement ? ` -> ${f.replacement}` : ''}${f.count ? `: +${f.count}` : ''}${f.churn ? `: ${f.churn}` : ''}`);
   process.exit(r.verdict === 'damage' ? 1 : 0);
 } else if (cmd === 'roundtrip') {
   if (!args.length) usage();
@@ -61,6 +61,9 @@ if (cmd === 'corpus') {
         console.log(`  line ${i + 1}:`);
         console.log(`   in : ${JSON.stringify(o[i] ?? '')}`);
         console.log(`   out: ${JSON.stringify(r2[i] ?? '')}`);
+        if (o[i] && r2[i] === '' && r2[i + 1] === o[i]) {
+          console.log(`  (serializer inserted a blank line; input text retained at output line ${i + 2})`);
+        }
       }
       if (maskLeak) worst = 1;
     } catch (e) {

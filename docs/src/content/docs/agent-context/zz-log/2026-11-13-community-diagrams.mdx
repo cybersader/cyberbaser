@@ -1,0 +1,41 @@
+---
+title: Add visual explanations to the community design
+description: "Four responsive diagrams embedded in the canonical community model and system design, with accessible text alternatives, bounded visual checks and a successful local docs build."
+status: log
+tags: [documentation, architecture, contribution, governance]
+---
+
+**Superseded presentation:** the maintainer rejected this icon/card treatment later in the same session. The [replacement diagrams and Unslop reference review](/cyberbaser/agent-context/zz-log/2026-11-13-community-diagrams-redesign/) record the redesign. The checks below remain evidence of this earlier implementation, not human visual acceptance.
+
+## Outcome
+
+The maintainer requested diagrams directly in the MDX pages rather than more text-only explanations. Four static illustrated diagrams now live in the canonical docs:
+
+- [Community contribution and governance model](/cyberbaser/design/contribution-trust-and-access/): contributor journeys and the separation of earned trust from granted responsibility.
+- [Community system design](/cyberbaser/design/community-system-design/): authority boundaries and near-to-long-term delivery on a shared foundation.
+
+The first page's introductory rules use a disclosure so the visual explanation leads without deleting the underlying definition. The diagrams distinguish target architecture from implemented or offered capabilities. Local account custody remains a proposed amendment requiring explicit owner approval; this presentation work does not approve it.
+
+## Implementation
+
+`CommunityDiagram.astro` selects one of four repository-authored HTML templates and imports a shared stylesheet. The static templates use inline SVG illustrations, labelled relationships, semantic figures and expandable text alternatives. No submitted content or identity values enter the raw-markup boundary. No client JavaScript, remote image assets or new runtime diagram dependency was added.
+
+The diagrams inherit the existing silver/emerald Starlight theme. Container queries adapt the layouts to narrow reading columns. Scoped margin resets address Starlight's consecutive-flow spacing, and explicit SVG sizes avoid the site's generic SVG rules overriding mobile illustrations. Independent responsibilities remain visibly separate; the diagram does not imply that today's combined Apply/publication action already supports apply-only delegation.
+
+## Verification
+
+One initial desktop/mobile inspection, one combined repair batch and one confirmation batch were completed. Repairs addressed SVG selector specificity, mobile illustration sizing, a misleading trust-divider arrow and source-to-renderer flow connectors.
+
+- Final standalone-template previews: dark desktop at 728 CSS pixels and light mobile at 390 CSS pixels. No page-level horizontal overflow was measured; all four figures retained text alternatives. Screenshots were inspected for wrapping and icon/text collisions.
+- The element-level overflow probe still reported decorative connectors extending beyond their own boxes: downward arrowheads, between-step connectors, familiarity-track lines, renderer arrows and horizon lines. Source inspection matched these reports to intentional connector geometry. This is not a zero-element-overflow claim.
+- The mechanical design detector returned an empty finding list for the component, templates and stylesheet.
+- One contained production docs build passed: **212 pages in 16.74 seconds**. Both canonical routes compiled with two intended figures each and the shared diagram stylesheet. Warnings included plugin component overrides, browser-externalized dependencies, a large bundle and the missing 404 content entry; the build was not warning-free.
+- Pinned dependencies were installed with lifecycle scripts disabled. Package manifests and lockfiles were unchanged. Scoped whitespace checks passed.
+
+The preview fixtures use the exact diagram templates and stylesheet with thread-theme token mapping and a Starlight-like flow-margin stress rule. They are not screenshots of the full deployed Starlight pages, an automated accessibility audit, independent design acceptance or human usability acceptance. The production build covered the visual implementation; this chronology entry and its orientation pointer were added afterward without a second full build.
+
+## Review through the normal docs experience
+
+From the repository root, run `bun run --cwd docs dev`, then follow the canonical page links above on the local docs site. The diagrams are part of those pages, not a separate product mockup. The same authored visuals were also displayed inline in the conversation.
+
+No service was started for the preview. No product authentication, source application, container configuration, deployment, commit or push occurred. The [system-design proposal](/cyberbaser/agent-context/zz-log/2026-11-13-community-system-design/) and its unresolved approval boundaries remain unchanged.

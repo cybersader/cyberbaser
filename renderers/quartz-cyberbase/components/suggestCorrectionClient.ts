@@ -256,6 +256,7 @@ export async function submitCorrectionIntent(
   action: string,
   intent: CorrectionIntent,
   fetcher: typeof fetch = fetch,
+  challengeToken?: string,
 ): Promise<SubmissionResult> {
   const response = await fetcher(action, {
     method: "POST",
@@ -267,6 +268,7 @@ export async function submitCorrectionIntent(
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
+      ...(challengeToken === undefined ? {} : { "Cyberbaser-Challenge-Token": challengeToken }),
     },
     body: serializeCorrectionIntent(intent),
   })
@@ -289,9 +291,18 @@ export async function submitCorrectionIntent(
     }
   }
   const code = errorCodeFromResponse(payload)
+  const friendlyMessage = response.status === 403 && code === "challenge-failed"
+    ? "Couldn't confirm you're human. Please try again."
+    : response.status === 503 && code === "challenge-unavailable"
+      ? "Verification is temporarily unavailable. Please try again later."
+      : response.status === 429 && code === "rate-limited"
+        ? "Too many suggestions from here right now. Please try again later."
+        : response.status === 503 && code === "queue-capacity"
+          ? "Suggestions are paused while the owner reviews the backlog."
+          : null
   return {
     accepted: false,
     replayed: false,
-    message: code === null ? "Submission failed. Try again." : `Submission failed (${code}). Try again.`,
+    message: friendlyMessage ?? (code === null ? "Submission failed. Try again." : `Submission failed (${code}). Try again.`),
   }
 }

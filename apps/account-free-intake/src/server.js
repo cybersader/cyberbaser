@@ -9,7 +9,9 @@ import {
   validateCorrectionIntent,
 } from '@cyberbaser/account-free-intake';
 import { openProposalQueue, ProposalQueueError } from '@cyberbaser/proposal-queue';
-import { createGlobalAbuseLimiter } from './abuse.js';
+import { createGlobalAbuseLimiter, createLayeredAbuseLimiter } from './abuse.js';
+import { createClientAddressResolver } from './client-address.js';
+import { CHALLENGE_TOKEN_HEADER, ChallengeError, createBotVerifier } from './bot-check.js';
 import { validateRuntimePaths } from './config.js';
 import { startReviewIpcServer } from './review-ipc.js';
 import { createForgejoWatcher } from './forgejo-watcher.js';
@@ -147,7 +149,7 @@ function emptyResponse(status, options = {}) {
 }
 
 function publicError(error) {
-  if (error instanceof RequestError) return { status: error.status, code: error.code };
+  if (error instanceof RequestError || error instanceof ChallengeError) return { status: error.status, code: error.code };
   const code = error?.code;
   if (code === 'stale-publication' || code === 'idempotency-conflict') return { status: 409, code };
   if (CONTRACT_422_CODES.has(code)) return { status: 422, code };
@@ -208,7 +210,9 @@ function validatePreflight(request, config) {
   const requestedHeaders = request.headers.get('access-control-request-headers');
   if (requestedHeaders === null) requestFail('invalid-preflight', 403);
   const normalized = requestedHeaders.split(',').map((value) => value.trim().toLowerCase()).filter(Boolean);
-  if (normalized.length !== 1 || normalized[0] !== 'content-type') requestFail('invalid-preflight', 403);
+  const allowed = config.botCheck ? ['content-type', CHALLENGE_TOKEN_HEADER] : ['content-type'];
+  if (!normalized.includes('content-type') || new Set(normalized).size !== normalized.length
+    || normalized.some((header) => !allowed.includes(header))) requestFail('invalid-preflight', 403);
   return origin;
 }
 
@@ -345,8 +349,12 @@ export async function openIntakeService({
   gitFactory = null,
   validatePaths = true,
   forgejo: forgejoDependencies = {},
+  fetch: fetchChallenge = globalThis.fetch,
+  now = () => performance.now(),
 } = {}) {
   if (validatePaths) await validateRuntimePaths(config);
+  const verifyBot = await createBotVerifier(config.botCheck, { fetch: fetchChallenge });
+  const resolveClientAddress = createClientAddressResolver(config.clientAddress);
   // The watcher is created before the queue opens because queue recovery may
   // need it to prove retained Lane A entries. It holds no queue reference until
   // the queue exists, and polls nothing until started.
@@ -395,9 +403,11 @@ export async function openIntakeService({
     capacity: config.limits.tokenBucketCapacity,
     refillPerSecond: config.limits.tokenBucketRefillPerSecond,
     maxConcurrent: config.limits.maxConcurrentRequests,
+    now,
   });
+  const layeredLimiter = createLayeredAbuseLimiter({ limits: config.limits, now });
 
-  async function submit(request, origin) {
+  async function submit(request, origin, peer) {
     if (request.headers.get('content-type') !== 'application/json') {
       requestFail('invalid-content-type', 400);
     }
@@ -407,6 +417,13 @@ export async function openIntakeService({
     try {
       const intent = await readBoundedBody(request, config.limits.maxBodyBytes, deadline);
       deadline.assert();
+      const clientIp = resolveClientAddress(request, peer);
+      if (!layeredLimiter.trySender(clientIp)) requestFail('rate-limited', 429);
+      await verifyBot(request, clientIp, deadline);
+      deadline.assert();
+      // Charge every parsed, challenge-approved attempt, including replays and
+      // downstream failures, before any queue or source lookup.
+      if (!layeredLimiter.tryPage(intent.pageId)) requestFail('rate-limited', 429);
       const requestDigest = correctionIntentDigest(intent);
       const carrier = {
         lane: 'lane-b',
@@ -509,14 +526,14 @@ export async function openIntakeService({
           origin: corsOrigin,
           cors: true,
           extra: {
-            'Access-Control-Allow-Headers': 'content-type',
+            'Access-Control-Allow-Headers': config.botCheck ? `content-type, ${CHALLENGE_TOKEN_HEADER}` : 'content-type',
             'Access-Control-Allow-Methods': 'POST',
           },
         });
       }
 
       corsOrigin = allowedOrigin(request, config);
-      return await submit(request, corsOrigin);
+      return await submit(request, corsOrigin, peer);
     } catch (error) {
       const mapped = publicError(error);
       const origin = corsOrigin ?? (

@@ -1,0 +1,92 @@
+---
+title: Try suggestions on a throwaway vault
+description: "One command to try an account-free correction, owner approval, and application on disposable local pages."
+sidebar:
+  order: 11.56
+status: research
+tags: [setup, testing, contribution, governance]
+---
+
+Try the complete suggestion loop in your own browser without opening your real vault or owner configuration. The launcher creates three short security notes, a fresh Git vault, a local bare remote, and a private owner workspace. All three HTTP listeners bind **127.0.0.1 only**. Nothing is deployed.
+
+This is a hands-on companion to [Suggestions on the private site](/cyberbaser/development/suggestions-on-the-private-site/), not the [first real application run](/cyberbaser/development/first-real-application/).
+
+## Launch
+
+From the repository root:
+
+```bash
+bun run --cwd docs try:suggestions
+```
+
+Keep that terminal open. The launcher prints the owned temporary directory, private site URL, **MFA methods** page URL, **Proposals** URL, a one-time sign-in URL, and the six steps below. It does not launch or attach to a browser. Open the printed one-time bootstrap URL in your own browser to sign in, then use the page and Proposals links in that same browser. Enter **b** then Enter in the terminal for a fresh sign-in link if the first expires or you switch browsers. Do not share the sign-in link or terminal output.
+
+### Prepare once if asked
+
+You need Bun, Git, Node.js/npm, rsync, Linux `flock`, `sha256sum`, and the `build-contained` helper installed on this development machine. The launcher checks its app dependencies and pinned Quartz renderer before creating a vault. If they are missing, it prints this exact preparation command:
+
+```bash
+bun run --cwd docs try:suggestions --prepare
+```
+
+Preparation runs inside `build-contained`. It installs the two apps' frozen dependency closures without install scripts, then downloads the pinned Quartz checkout and installs its pinned npm dependencies. It does not update project lockfiles. Internet access is needed for preparation. Its reusable renderer seed lives at `.workspace/suggestions-rehearsal-renderer`; it is not part of the disposable vault. The normal launcher never downloads dependencies or a browser. The first real site build can take a minute.
+
+## Try the six steps
+
+1. **Sign in and open MFA methods.** Open the bootstrap URL, then the printed MFA methods URL on the private site. You should see a short page containing the deliberately wrong sentence **SMS codes are phishing-resistant.**
+2. **Suggest the correction.** Select and copy that exact sentence, open **Suggest a correction**, and paste it into **Text to replace**. The current form does not capture selections automatically. Enter **SMS codes are not phishing-resistant.** as the replacement, add a short explanation, and send. You should get a receipt. This creates a proposal, not a source edit.
+3. **Deliberately hit the page limit before applying.** Send two more distinct suggestions about that same page, with different explanations or replacements. The second attempt should get a receipt; the third should show the rate-limit message and create no additional proposal. The page budget is two attempts, including replays or later source-validation failures, not two successful edits. Do this before applying: the rebuild creates a new publication-bound page ID. The sender also has a three-attempt budget, so do not spend attempts on other pages first.
+4. **Review and Approve.** Open the printed **Proposals** URL. Open your first correction, inspect the before/after change, and choose **Approve**. The page is still unchanged; approval records the owner's decision only.
+5. **Apply to page.** On the approved receipt choose **Apply to page**, confirm, and follow the job. You should reach **Local rehearsal complete**. The exact splice, commit, push to the local bare remote, and private-site rebuild are real. Deployment and live confirmation are explicitly simulated.
+6. **Reload the private page.** Reload MFA methods. It should now say **SMS codes are not phishing-resistant.** Recovery codes and the other unchanged source bytes should stay unchanged. The second proposal may now be stale because it was bound to the old revision; it is not silently rebased.
+
+## Optional bot-check rehearsal
+
+These variants use only Cloudflare's **published Turnstile test keys**, never a production credential:
+
+```bash
+bun run --cwd docs try:suggestions --challenge pass
+```
+
+The visible test widget passes. Try the same six steps. The browser and local intake need internet access to `challenges.cloudflare.com` for the widget and verification request. Test responses use `example.com`, so the generated config pins `expectedHostnames: ["example.com"]`, not the loopback browser hostname.
+
+```bash
+bun run --cwd docs try:suggestions --challenge fail
+```
+
+The widget and test secret deliberately fail. You should get no receipt and no new proposal. This mode cannot continue through approval and application.
+
+```bash
+bun run --cwd docs try:suggestions --challenge spent
+```
+
+The visible test widget passes, but verification uses Cloudflare's already-spent-token test secret. Expect refusal and no new proposal. Failed challenges still consume sender attempts. Restart in ordinary or **pass** mode to try the full loop.
+
+The launcher writes the test secret into a mode-0600 file inside its owned temporary directory and points the optional owner `suggestions.form.challenge` block at it. It never reads your production secret or real owner config. These tests check the integration shape, not resistance to actual bots or a production Cloudflare configuration.
+
+## Stop and clean up
+
+Press **Ctrl-C**, **q** then Enter, or send SIGTERM to the launcher. It stops its owner and reader listeners and the owner-supervised intake, waits for any active local source-writing job, and removes the owned throwaway directory. If cleanup cannot finish, it reports the retained path rather than claiming success.
+
+To keep the throwaway files after stopping:
+
+```bash
+bun run --cwd docs try:suggestions --keep
+```
+
+The printed directory contains the disposable vault, local remote, owner config and private runtime evidence. `--keep` retains test secrets too when combined with a challenge mode. Delete only that exact printed directory after all owned services and jobs stop. The reusable Quartz seed remains after normal cleanup; a later run creates a fresh vault and empty queue. A kept directory is evidence for inspection, not a resumable launcher state.
+
+## Troubleshooting
+
+- **Missing dependencies or Quartz seed:** run the printed `--prepare` command. Preparation uses the existing pinned renderer setup and may need npm/Git network access. The launcher does not silently install anything.
+- **A port is occupied:** stop the other rehearsal, or choose another three consecutive ports, for example `bun run --cwd docs try:suggestions --port 46537`. Only loopback addresses are accepted; there is no host option.
+- **Proposals asks you to sign in:** use the bootstrap link in the same browser. The private reader page being accessible does not authenticate the separate owner origin. Enter **b** for a fresh one-time link.
+- **The third suggestion is not accepted:** that is the intended page-limit check. Restart for a clean queue and limit state. Replays and malformed source-bound requests can use the budget too.
+- **No widget or challenge refusal:** check access to `challenges.cloudflare.com`, browser blocking extensions and the selected test mode. A disconnected widget fails closed. If this checkout does not yet accept the optional challenge block, use ordinary mode until the matching owner configuration change is present.
+- **The page has not updated:** approval alone never applies. Use **Apply to page**, wait for the local job to finish, then reload the private site, not a public site. The terminal remains open throughout.
+
+## What this proves, and what it does not
+
+The rehearsal uses the real private-site Quartz form, retained source binding, separate intake process, queue, authenticated Proposals review, immutable owner decision and separate application act. Rendering, exact source checks, source application, commit, local push and private-site rebuild run against disposable data. A fixture-local Git seam verifies the local bare remote before presenting the policy's synthetic HTTPS repository identity. That identity is not a network destination.
+
+It does **not** deploy, contact GitHub Actions, verify a public page, open your real vault, offer public contribution access, establish usability acceptance, or settle Q09. Deployment discovery, deployment success and live confirmation are explicitly simulated and labelled on the owner screens. The optional bot-check modes contact Cloudflare but do not validate production keys or real abuse handling. Actual browser selection, the visual widget and the owner's experience still require the human walkthrough above; an HTTP test is not a browser acceptance result.

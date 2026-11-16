@@ -144,6 +144,11 @@ if [ -d "$HERE/components" ]; then
     echo "    + $(basename "$f")"
     cp "$f" "$QUARTZ_DIR/quartz/components/"
   done
+  if [ -d "$HERE/components/challenge" ]; then
+    echo "    + challenge/ (registry and provider modules)"
+    mkdir -p "$QUARTZ_DIR/quartz/components/challenge"
+    cp -R "$HERE/components/challenge/." "$QUARTZ_DIR/quartz/components/challenge/"
+  fi
   if [ -d "$HERE/components/scripts" ]; then
     mkdir -p "$QUARTZ_DIR/quartz/components/scripts"
     for f in "$HERE"/components/scripts/*.inline.ts; do

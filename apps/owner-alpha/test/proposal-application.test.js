@@ -155,7 +155,16 @@ test('an approved suggestion reaches the page only through the separate apply ac
   const fixture = await createFixture({ pages: CHECKPOINT_PAGES });
   cleanup.push(() => fixture.cleanup());
   fixture.bare = path.join(fixture.root, 'objects.git');
-  const intake = await openIntakeService({ config: fixture.config });
+  // This application fixture deliberately submits a bounded corpus at once;
+  // abuse-default capacity is tested by the intake's own admission suite.
+  const intake = await openIntakeService({ config: {
+    ...fixture.config,
+    limits: { ...fixture.config.limits,
+      perSenderCapacity: CHECKPOINT_PROPOSALS.length,
+      perNetworkCapacity: CHECKPOINT_PROPOSALS.length,
+      perPageCapacity: CHECKPOINT_PROPOSALS.length,
+    },
+  } });
   cleanup.push(() => intake.close());
   const submit = async (id) => {
     const proposal = CHECKPOINT_PROPOSALS.find((item) => item.id === id);

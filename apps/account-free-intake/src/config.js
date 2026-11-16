@@ -1,6 +1,10 @@
 import { constants } from 'node:fs';
 import { lstat, open, realpath } from 'node:fs/promises';
 import path from 'node:path';
+import { validateClientAddress } from './client-address.js';
+import { validateChallengeConfig } from './challenge/registry.js';
+import { IntakeConfigError, fail, isRecord, exactObject, exactInteger, normalizedAbsolutePath } from './control-config.js';
+export { IntakeConfigError } from './control-config.js';
 import { validateProposalQueueConfig } from '@cyberbaser/proposal-queue';
 
 const CONFIG_MAX_BYTES = 64 * 1024;
@@ -49,6 +53,14 @@ const FORGEJO_REPOSITORY_KEYS = Object.freeze(['url', 'owner', 'name', 'baseBran
 const FORGEJO_MIN_POLL_MS = 10_000;
 const FORGEJO_MAX_POLL_MS = 3_600_000;
 const FORGEJO_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/u;
+export const LAYERED_LIMIT_DEFAULTS = Object.freeze({
+  perSenderCapacity: 3,
+  perSenderRefillPerHour: 3,
+  perNetworkCapacity: 10,
+  perNetworkRefillPerDay: 10,
+  perPageCapacity: 2,
+  perPageRefillPerDay: 2,
+});
 const LIMIT_KEYS = Object.freeze([
   'maxBodyBytes',
   'requestTimeoutMs',
@@ -56,48 +68,6 @@ const LIMIT_KEYS = Object.freeze([
   'tokenBucketCapacity',
   'tokenBucketRefillPerSecond',
 ]);
-
-export class IntakeConfigError extends Error {
-  constructor(code, message) {
-    super(message);
-    this.name = 'IntakeConfigError';
-    this.code = code;
-  }
-}
-
-function fail(code, message) {
-  throw new IntakeConfigError(code, message);
-}
-
-function isRecord(value) {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
-
-function exactObject(value, keys, label) {
-  if (!isRecord(value)) fail('invalid-config', `${label} must be an object`);
-  const unknown = Object.keys(value).find((key) => !keys.includes(key));
-  if (unknown !== undefined) fail('invalid-config', `${label} contains unknown field ${unknown}`);
-  const missing = keys.find((key) => !Object.hasOwn(value, key));
-  if (missing !== undefined) fail('invalid-config', `${label} is missing field ${missing}`);
-  return value;
-}
-
-function exactInteger(value, expected, label) {
-  if (value !== expected) fail('invalid-config', `${label} must be ${expected}`);
-  return value;
-}
-
-function normalizedAbsolutePath(value, label) {
-  if (typeof value !== 'string' || !path.isAbsolute(value) || path.normalize(value) !== value) {
-    fail('invalid-config', `${label} must be one normalized absolute path`);
-  }
-  if (value === path.parse(value).root || value.includes('\0')) {
-    fail('invalid-config', `${label} must not be a filesystem root or contain NUL`);
-  }
-  return value;
-}
 
 function canonicalHttpsOrigin(value, label) {
   if (typeof value !== 'string' || value.length === 0 || value.length > 2048) {
@@ -291,11 +261,14 @@ function canonicalHttpsUrlWithPort(value, label) {
 }
 
 export function validateConfig(input) {
-  const keys = isRecord(input) && Object.hasOwn(input, 'forgejo') ? [...TOP_LEVEL_KEYS, 'forgejo'] : TOP_LEVEL_KEYS;
+  const optional = ['forgejo', 'botCheck', 'clientAddress'].filter((key) => isRecord(input) && Object.hasOwn(input, key));
+  const keys = [...TOP_LEVEL_KEYS, ...optional];
   exactObject(input, keys, 'config');
   if (input.schemaVersion !== 1) fail('invalid-config', 'schemaVersion must be 1');
   if (input.enabled !== true) fail('intake-disabled', 'enabled must be literal true');
   const forgejo = validateForgejo(input.forgejo);
+  const botCheck = validateChallengeConfig(input.botCheck);
+  const clientAddress = validateClientAddress(input.clientAddress);
 
   // The public form endpoint is off when listen is null. The service then runs
   // for the review socket and the forge watcher only; at least one input must be on.
@@ -367,8 +340,18 @@ export function validateConfig(input) {
     maxListEntries: exactInteger(input.reviewIpc.maxListEntries, 100, 'reviewIpc.maxListEntries'),
   });
 
-  exactObject(input.limits, LIMIT_KEYS, 'limits');
+  const layeredKeys = Object.keys(LAYERED_LIMIT_DEFAULTS).filter((key) => isRecord(input.limits) && Object.hasOwn(input.limits, key));
+  exactObject(input.limits, [...LIMIT_KEYS, ...layeredKeys], 'limits');
+  const layeredLimits = {};
+  for (const [key, fallback] of Object.entries(LAYERED_LIMIT_DEFAULTS)) {
+    const value = Object.hasOwn(input.limits, key) ? input.limits[key] : fallback;
+    if (!Number.isSafeInteger(value) || value < 1 || value > 1_000_000) {
+      fail('invalid-config', `limits.${key} must be an integer from 1 through 1000000`);
+    }
+    layeredLimits[key] = value;
+  }
   const limits = Object.freeze({
+    ...layeredLimits,
     maxBodyBytes: exactInteger(input.limits.maxBodyBytes, 98_304, 'limits.maxBodyBytes'),
     requestTimeoutMs: exactInteger(input.limits.requestTimeoutMs, 5_000, 'limits.requestTimeoutMs'),
     maxConcurrentRequests: exactInteger(input.limits.maxConcurrentRequests, 4, 'limits.maxConcurrentRequests'),
@@ -384,6 +367,8 @@ export function validateConfig(input) {
     listen,
     allowedFormOrigins,
     forgejo,
+    botCheck,
+    clientAddress,
     repository: canonicalRepository(input.repository),
     bindingsRoot: normalizedAbsolutePath(input.bindingsRoot, 'bindingsRoot'),
     gitDir: normalizedAbsolutePath(input.gitDir, 'gitDir'),
@@ -431,6 +416,9 @@ export async function validateRuntimePaths(config) {
   await assertPathComponents(config.bindingsRoot, { mustExist: true, directory: true }, 'bindingsRoot');
   await assertPathComponents(config.gitDir, { mustExist: true, directory: true }, 'gitDir');
   await assertPathComponents(config.queue.root, { mustExist: false, directory: true }, 'queue.root');
+  if (config.botCheck) {
+    await assertPathComponents(config.botCheck.secretFile, { mustExist: true, directory: false }, 'botCheck.secretFile');
+  }
   if (config.forgejo?.enabled) {
     await assertPathComponents(config.forgejo.cloneDir, { mustExist: false, directory: true }, 'forgejo.cloneDir');
     if (config.forgejo.tokenFile !== null) {

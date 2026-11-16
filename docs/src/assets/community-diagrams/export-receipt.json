@@ -1,0 +1,93 @@
+{
+  "format": 1,
+  "renderer": "Playwright Chromium",
+  "imageScale": 2,
+  "figures": [
+    {
+      "kind": "journey",
+      "title": "How a contribution reaches the source",
+      "explanation": "Readers, recurring contributors and replaceable tools submit source-bound proposals, not source writes. The example sentence is synthetic. Review may close the proposal, request a new revision or record approval. A new revision needs its own review; the feedback loop is proposed, not implemented. Approval alone changes no source. A separate authorized owner act starts exact application and permitted publication. Today's Apply action combines those effects. Account-free public participation, passkey accounts and richer revision workflows remain target capabilities.",
+      "background": "rgb(250, 251, 252)",
+      "color": "rgb(10, 14, 20)",
+      "hostForeground": "",
+      "pageOverflow": false,
+      "labelsOutside": [],
+      "sha256": "b618aa72e1709c460f722d20d6a549e55a53003c4962100368211afea20a5f30",
+      "bytes": 197765
+    },
+    {
+      "kind": "trust",
+      "title": "Contribution history does not assign permissions",
+      "explanation": "This counterexample separates familiarity from authority: an established contributor can have no effectful grants, while a newcomer can receive a narrow review grant. These are illustrative assignments, not automatic defaults. Trust can shape review effort but cannot create grants. Private access remains independent. In the proposed first configuration only the owner holds effect authority. Today's Apply action includes publication, so any future delegation of that combined action would need permission for all its effects. General delegated grants and automated trust progression are unimplemented.",
+      "background": "rgb(250, 251, 252)",
+      "color": "rgb(10, 14, 20)",
+      "hostForeground": "",
+      "pageOverflow": false,
+      "labelsOutside": [],
+      "sha256": "d4423690e8ba9769cfd87770a983aec2b0cbb56d24bd95234727148484490555",
+      "bytes": 145180
+    },
+    {
+      "kind": "authority",
+      "title": "Where source-write authority begins and ends",
+      "explanation": "External adapters send proposals to editorial review, which records a version-specific decision. Private account state supplies an actor for current authorization. An approved version and a separate explicit act reach the executor only under current actor, action, scope and grant checks. The executor applies exact source changes and gates each later effect. The canonical source provides only a selected projection to an isolated renderer. The renderer returns checked output, not source authority or credentials. The trusted publisher holds machine credentials, releases to the permitted destination and checks the live outcome. The dashed enclosure marks logical owner authority, not a selected container layout. Solid lines carry content or evidence, dashed arrows carry authorization checks, and labelled accent lines identify source or publication effects. Account custody needs approval; named-principal authorization, phase revocation and renderer isolation are target design rather than completed implementation.",
+      "background": "rgb(250, 251, 252)",
+      "color": "rgb(10, 14, 20)",
+      "hostForeground": "",
+      "pageOverflow": false,
+      "labelsOutside": [],
+      "sha256": "5a59b6c8a0357866c7590a40bcbe34c309617560178ca539f643fefb8250130a",
+      "bytes": 261474
+    },
+    {
+      "kind": "horizons",
+      "title": "Delivery gates, not a replacement architecture",
+      "explanation": "First select account custody, origin, recovery and authority contracts. Prove owner authority synthetically before separately authorizing a real source-bound publication loop. Finish usable account-free participation, then support recurring contributors with revision, feedback, history and credit contracts, and narrowly delegated review. Delegated release needs separate scoped authority decisions. Private collaboration and independent-peer evidence are optional later directions, not consequences of a publishing grant or a mandatory linear rollout; their dashed connections show conditional follow-on work rather than implementation prerequisites. Protocol work waits for demonstrated independent peer need. All stages retain the same authoritative source, exact-change boundary and evidence model. None of the nodes claims completion.",
+      "background": "rgb(250, 251, 252)",
+      "color": "rgb(10, 14, 20)",
+      "hostForeground": "",
+      "pageOverflow": false,
+      "labelsOutside": [],
+      "sha256": "8d4b57d7d6249f539059078b85cb8a010c9ad522bebbb41d8affbbec14588039",
+      "bytes": 243691
+    }
+  ],
+  "portableChecks": [
+    {
+      "name": "community-model",
+      "width": 390,
+      "pageOverflow": false,
+      "imagesReady": true,
+      "background": "rgb(250, 251, 252)",
+      "color": "rgb(10, 14, 20)",
+      "hostForeground": ""
+    },
+    {
+      "name": "community-model",
+      "width": 1040,
+      "pageOverflow": false,
+      "imagesReady": true,
+      "background": "rgb(250, 251, 252)",
+      "color": "rgb(10, 14, 20)",
+      "hostForeground": ""
+    },
+    {
+      "name": "community-system",
+      "width": 390,
+      "pageOverflow": false,
+      "imagesReady": true,
+      "background": "rgb(250, 251, 252)",
+      "color": "rgb(10, 14, 20)",
+      "hostForeground": ""
+    },
+    {
+      "name": "community-system",
+      "width": 1040,
+      "pageOverflow": false,
+      "imagesReady": true,
+      "background": "rgb(250, 251, 252)",
+      "color": "rgb(10, 14, 20)",
+      "hostForeground": ""
+    }
+  ]
+}

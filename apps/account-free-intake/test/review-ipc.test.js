@@ -64,6 +64,9 @@ async function liveFixture({ enabled = true, requestTimeoutMs = 5000, queueIds =
   await chmod(runtime, 0o700);
   const socketPath = path.join(runtime, 'review.sock');
   const config = validateConfig(configInput(fixture.root, {
+    // These protocol tests deliberately submit several corrections to one page;
+    // the per-page abuse limit is covered in server.test.js.
+    limits: { ...configInput(fixture.root).limits, perPageCapacity: 10 },
     reviewIpc: {
       enabled,
       socketPath: enabled ? socketPath : null,

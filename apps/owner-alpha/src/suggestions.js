@@ -12,6 +12,7 @@ import {
   sourceBindingDigest,
 } from '@cyberbaser/account-free-intake';
 import { parseConfig as parseTrustPolicy } from '@cyberbaser/trust';
+import { getChallengeProvider } from '../../account-free-intake/src/challenge/registry.js';
 import { forgeIdentity, suggestionsEnabled, validateOwnerAlphaConfig } from './config.js';
 import { fail, OwnerAlphaError } from './errors.js';
 import { canonicalJson, deepFreeze } from './json.js';
@@ -23,7 +24,7 @@ import { PINNED_QUARTZ_COMMIT } from './quartz-renderer.js';
  * The owner config says which lanes are on. From that, this module derives the
  * intake service's complete settings, keeps the retained publication binding
  * and bare object store the intake reads from, and starts and stops the intake
- * beside the owner app. Owner-alpha still never imports the intake app or reads
+ * beside the owner app. Only trusted provider metadata is imported; it never reads
  * queue files: the intake stays its own process with its own exclusive queue
  * lock, and suggestions reach the inbox through the same private review socket
  * as before. Nothing here writes source or the forge.
@@ -86,6 +87,22 @@ export function suggestionFormOrigin(configInput) {
   return `http://${config.listen.host}:${config.listen.readerPort + 1}`;
 }
 
+/** A registered provider owns its browser origin, never owner config or core. */
+export function suggestionChallengeOrigin(configInput) {
+  const config = validateOwnerAlphaConfig(configInput);
+  const challenge = config.suggestions.form.challenge;
+  if (!challenge) return null;
+  const provider = getChallengeProvider(challenge.provider);
+  let url;
+  try { url = new URL(provider.scriptOrigin); } catch {
+    fail('invalid-suggestion-challenge-provider', 'the registered challenge provider must declare its HTTPS browser origin');
+  }
+  if (url.protocol !== 'https:' || url.username !== '' || url.password !== '' || url.origin !== provider.scriptOrigin) {
+    fail('invalid-suggestion-challenge-provider', 'the registered challenge provider must declare its HTTPS browser origin');
+  }
+  return url.origin;
+}
+
 /**
  * The intake's complete settings, derived from the owner config. The owner
  * never edits these; the same values are written for the intake process.
@@ -115,6 +132,15 @@ export function deriveIntakeConfig(configInput, projectRoot) {
       maxListEntries: config.proposalReview.maxListEntries,
     },
     limits: { ...SUGGESTION_INTAKE_LIMITS },
+    ...(config.suggestions.form.challenge ? {
+      botCheck: {
+        provider: config.suggestions.form.challenge.provider,
+        secretFile: config.suggestions.form.challenge.secretFile,
+        expectedHostnames: config.suggestions.form.challenge.expectedHostnames,
+        expectedAction: 'suggest-correction',
+        timeoutMs: 3000,
+      },
+    } : {}),
     ...(forge.enabled ? {
       forgejo: {
         enabled: true,

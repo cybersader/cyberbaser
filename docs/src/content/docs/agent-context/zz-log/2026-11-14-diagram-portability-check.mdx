@@ -1,0 +1,18 @@
+---
+title: Complete the bounded diagram fallback check
+description: "Successful retry of compiled diagram fallback hiding after a stalled check, with matching image hashes and portable HTML exports; live T3 frontend and visual acceptance remain unverified."
+status: log
+tags: [documentation, testing, design]
+---
+
+## Outcome
+
+The maintainer asked to retry after the previous background check was stopped at its time limit. The prior docs build had already passed: 214 pages in 18.94 seconds, with the existing plugin override, browser-externalized dependency, bundle-size and missing-404 warnings. The hang occurred in the subsequent verification process, not the build. Its exact cause was not established.
+
+The retry used a 40-second outer timeout, a 10-second browser launch limit and 10-second operation limits. Instead of loading the entire generated site, it extracted the actual emitted image-zoom wrappers and loaded their compiled diagram CSS in an isolated local document with all network requests blocked. This is a narrow integration check, not full-site browser acceptance.
+
+Both canonical pages passed: each contained two portable fallback images; computed styles hid both the image and its containing paragraph on the compiled site, including the plugin's zoom controls. The four exported PNG hashes matched the export receipt. The generated public HTML, built copies and repaired earlier private links matched byte-for-byte. The retry closed its browser normally. No full build was repeated for this retry or log-only closeout.
+
+This completes the local checks for the [portability correction](/cyberbaser/agent-context/zz-log/2026-11-13-community-diagrams-redesign/#file-viewer-failure-and-portability-correction). Ordinary MDX viewers use relative image embeds without Astro execution; the Starlight site keeps its live figures without duplicate images. The standalone exports supply their own colors and fonts. Phone overviews still require zoom or full-size viewing for small labels.
+
+No currently loaded T3 frontend acceptance, owner visual acceptance, deployment, account change or publishing authority follows. The confirmed rendering defect and the owner's dissatisfaction with the design remain separate issues.

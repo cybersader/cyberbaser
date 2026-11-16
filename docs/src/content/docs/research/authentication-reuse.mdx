@@ -1,0 +1,47 @@
+---
+title: Reusing authentication without sharing publishing authority
+description: "Embedded Better Auth direction within the broader account-free contribution, trust and governance model."
+status: research
+tags: [architecture, governance, security, research]
+---
+
+## Current direction
+
+**The maintainer prefers a basic embedded Better Auth setup, not shared SSO.** This clarification on 2026-11-13 supersedes the earlier recommendation to reuse an upstream SSO provider. It selects the planning direction, not an implemented account system, registration policy, authentication factor or credential-storage design.
+
+Authentication is one component of the [contribution, trust and governance model](/cyberbaser/design/contribution-trust-and-access/). Public readers do not need publisher accounts. Account-free proposals must remain possible where offered. A signed-in contributor does not automatically become trusted, gain access to private source, or acquire review, application or publishing authority.
+
+## What the reference inspection established
+
+The inspected sibling uses Better Auth headlessly for embedded credential verification and maintains application-owned session and authorization behavior. Its separate OIDC flow is a relying party, not an established central identity provider for other applications. That SSO service was deployed alongside the sibling; it is not a selected Cyberbaser dependency.
+
+The coordinator checked embedded account options, code-flow/PKCE construction and exact issuer/subject account-binding guards. Broader session and migration observations remain the researcher's bounded source findings. No tests or live authentication requests were run. Precise sibling implementation details, private locators and version provenance remain in the ignored research receipt.
+
+## Where embedded authentication fits
+
+1. Use maintained authentication primitives behind a small replaceable adapter, rather than copying an entire sibling runtime.
+2. Give local accounts stable identifiers and explicit session expiry, logout, revocation and recovery behavior. Do not identify a privileged account by matching a display name alone.
+3. Keep account admission, verified identity, content access, editorial trust and privileged action permissions distinct. Open registration, invitations and account recovery are still design questions, not selected defaults.
+4. Authorize Save-and-publish, Apply and Publish server-side for the exact source, candidate, policy and destination. Proposal approval remains decision-only.
+5. Keep machine Git/deployment credentials outside browser sessions and authoring tools. Retain token-free action evidence, not credential material, in proposal and publication records.
+6. Preserve anonymous intake as a separate no-authority route. It must not inherit the owner's session or depend on the account system to submit an ordinary correction.
+
+### Storage boundary still needs explicit reconciliation
+
+Existing architecture rules prohibit Cyberbaser components from becoming identity sources of record or persisting browser-session credentials as durable authority. Embedded accounts introduce local credential custody that those rules did not select. Before implementation, specify which replaceable authentication component owns accounts and sessions, its recovery and deletion duties, and any narrow amendment required by the selected deployment. The preference for Better Auth is not permission to silently put credential storage into the proposal core or weaken the existing rule.
+
+## What to reuse, and what not to copy
+
+Reuse maintained upstream libraries where suitable, explicit identity provenance, account-binding refusal patterns and negative-test scenarios. Check licensing before copying sibling implementation code; pattern reuse is not source-code extraction.
+
+Do not import the sibling account store, application roles, cookies, workspace membership semantics or SSO integration. A host-issued Cyberbaser publishing capability was not established by the inspection. Existing host read, sync or workspace permission cannot be relabelled as permission to publish.
+
+Optional future forge identities, signing keys or portable provenance remain research signals, not a requirement to deploy SSO and not a network-wide trust score. See [federated identity](/cyberbaser/research/federated-identity/).
+
+## Remaining work
+
+The [community system design](/cyberbaser/design/community-system-design/) now proposes the smallest embedded-account and action-authority boundary, a narrow custody amendment, one-owner first configuration, named secure origins and job-phase revocation. Select that custody amendment explicitly, then freeze account admission, recovery, session lifecycle and atomic effect-admission behavior before implementation. Prove unauthenticated and nonpublisher refusal, expired/revoked sessions, account collisions, CSRF, forged identity headers and alternate-writer bypass using synthetic fixtures before activation.
+
+Source reconciliation, scoped Git credentials, renderer containment and TrueNAS compatibility remain separate [container viability](/cyberbaser/research/truenas-container-viability/) requirements. The [real owner setup plan](/cyberbaser/development/real-owner-setup-plan/) retains source, renderer and host independence.
+
+The [initial inspection log](/cyberbaser/agent-context/zz-log/2026-11-13-authentication-reuse/) preserves the earlier recommendation; the [maintainer correction](/cyberbaser/agent-context/zz-log/2026-11-13-contribution-model-restored/) records why it is no longer current. No authentication implementation or live authority changed.

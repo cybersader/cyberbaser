@@ -1,0 +1,39 @@
+---
+title: Container viability and publishing boundaries
+description: "Four bounded researchers assessed the existing package, TrueNAS support, identity and deployment authority; native Apps is the first conditional candidate."
+status: research
+tags: [research, architecture, setup, security]
+---
+
+## Outcome
+
+**Assess TrueNAS-managed Custom Apps/Compose first; do not require a VM by default.** A VM remains useful if the platform cannot preserve required controls or the chosen threat model requires a separate kernel from NAS services. This is the coordinator's evidence-based recommendation, not a maintainer-selected installation or permission to deploy.
+
+The current package is not a drop-in TrueNAS deployment satisfying the maintainer's named-identity publishing requirement. The proposed minimum arrangement separates trusted owner control/publication, rendering and scoped credential custody. Source binding, hosted identity/origins and platform acceptance remain open.
+
+The canonical findings are in [Container deployment on TrueNAS](/cyberbaser/research/truenas-container-viability/). The [real owner setup plan](/cyberbaser/development/real-owner-setup-plan/) now incorporates this recommendation instead of its earlier VM-first placement.
+
+## Authorized work and research method
+
+The maintainer explicitly requested Astra and Sol research on container viability within the project's architecture. One bounded wave used two Sol researchers for package/platform evidence and two Astra researchers for security/identity and deployment/source-authority analysis. All four returned reports. Workers were leaves, with no further delegation, and wrote separate private reports. The coordinator synthesized their findings rather than treating any one report as a final architecture decision.
+
+The package report traced manifests, initialization, networking, storage, credentials, renderer, recovery and intake seams. The platform report retrieved ten focused official pages, preserving their version scope. The security report inspected current and later candidate authentication/authority boundaries separately. The deployment report compared native Apps, a VM and off-NAS hosting without assuming the earlier recommendation was correct.
+
+The coordinator independently fetched official 25.10 Custom App and 27 Early system-container documentation, and inspected the Compose runtime, renderer process launch, credential-helper matching, session records and font configuration. This checked the decisive claims, not every worker citation or effective runtime behavior.
+
+## Findings carried into the plan
+
+- Custom YAML is a documented TrueNAS deployment route. Syntax acceptance does not prove exact runtime hardening, image availability, state initialization or lifecycle compatibility.
+- System containers are not equivalent to OCI Apps. The retrieved 27 Early nested-Docker instructions require privileged mapping and warn of host-root consequences. No installed or latest-release version is inferred.
+- Existing Docker packaging is real, with fixed Linux/amd64, networking, identity and mount assumptions. Historical rootless/ext4 evidence is not rootful TrueNAS/ZFS acceptance.
+- Local bootstrap plus configured owner identity is not named-principal publishing authorization. Save, Apply and Publish all need a consistent action boundary; proxy login alone is insufficient.
+- Current renderer processes share the application's source/state/credential capabilities. The proposed renderer sandbox is additional design and implementation, not a property already supplied by a read-only container root or a VM.
+- Offline dependencies do not establish no-egress rendering; baseline font configuration can fetch external resources. Resource limits, runtime containment and output checks need explicit proof.
+- The package supplies a credential-helper client, not a production broker. Exact host/path matching is not authenticated per-job authorization. Non-default-port Forgejo helper behavior remains a focused compatibility question, not an executed defect finding.
+- Publishing-copy reconciliation must preserve one authoring authority. Ordinary authoring-to-Publish differs from a correction written only in the delivery UI; do not hide that difference behind automatic sync.
+
+## Next step and evidence limits
+
+Obtain the actual NAS version/hardware and available identity-service facts, then freeze a release-specific container/authorization design before execution. Proposed synthetic validation uses disposable data and a local bare remote; no real source, credentials or live endpoint are needed for the initial proof. Existing migration/source-execution holds are not released or rerouted through containers.
+
+No tests, builds, containers, live host access, credential use, source movement, commits, pushes, publication or domain changes occurred. No application code was edited. Documentation/link checks are not operational acceptance. Private evidence contains provenance and local locators; public synthesis excludes those details. The earlier illustrative VM diagram is historical, not an updated deployment receipt.

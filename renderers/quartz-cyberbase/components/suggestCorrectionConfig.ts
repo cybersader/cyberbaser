@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto"
 import { isPrivateNetworkIpv4Host } from "./editLink"
+import { DEFAULT_CHALLENGE_PROVIDER, getChallengeProvider } from "./challenge/registry"
 
 export const SUGGEST_CORRECTION_ENABLE_VALUE = "enabled"
 export const ACCOUNT_FREE_INTAKE_PATH = "/v1/corrections"
@@ -21,6 +22,8 @@ export interface SuggestCorrectionEnabledOptions {
   sourceRepository: string
   sourceRevision: string
   text?: string
+  challengeSiteKey?: string
+  challengeProvider?: string
 }
 
 export type SuggestCorrectionOptions =
@@ -33,6 +36,8 @@ export interface SuggestCorrectionEnvironment {
   bindingDigest: string | undefined
   sourceRepository: string | undefined
   sourceRevision: string | undefined
+  challengeSiteKey?: string
+  challengeProvider?: string
 }
 
 export interface PublicSuggestionBinding {
@@ -201,6 +206,21 @@ export function computePageId({
   return `page-v1:${digest}`
 }
 
+/** Public site keys only; absence is distinct from a malformed empty key. */
+export function resolveChallengeSiteKey(
+  value: string | undefined,
+  providerId = DEFAULT_CHALLENGE_PROVIDER,
+): string | undefined {
+  const provider = getChallengeProvider(providerId)
+  if (!provider) throw new Error("CYBERBASER_SUGGESTION_CHALLENGE_PROVIDER must match a registered provider id")
+  if (value === undefined) return undefined
+  if (!provider.validateSiteKey(value)) {
+    // Preserve the existing build diagnostic; acceptance belongs to the provider.
+    throw new Error("CYBERBASER_SUGGESTION_CHALLENGE_SITE_KEY must contain 1 to 256 ASCII letters, digits, underscores or hyphens")
+  }
+  return value
+}
+
 export function resolveSuggestCorrectionOptions(
   env: SuggestCorrectionEnvironment,
 ): SuggestCorrectionOptions {
@@ -211,12 +231,19 @@ export function resolveSuggestCorrectionOptions(
       `CYBERBASER_ACCOUNT_FREE_INTAKE must be unset or '${SUGGEST_CORRECTION_ENABLE_VALUE}'`,
     )
   }
-  return {
+  const options: SuggestCorrectionEnabledOptions = {
     enabled: true,
     intakeOrigin: resolveIntakeOrigin(env.intakeOrigin),
     bindingDigest: requireBindingDigest(env.bindingDigest),
     sourceRepository: requireSourceRepository(env.sourceRepository),
     sourceRevision: requireSourceRevision(env.sourceRevision),
+  }
+  const challengeProvider = env.challengeProvider ?? DEFAULT_CHALLENGE_PROVIDER
+  const challengeSiteKey = resolveChallengeSiteKey(env.challengeSiteKey, challengeProvider)
+  return {
+    ...options,
+    ...(challengeSiteKey === undefined ? {} : { challengeSiteKey }),
+    ...(challengeSiteKey === undefined || challengeProvider === DEFAULT_CHALLENGE_PROVIDER ? {} : { challengeProvider }),
   }
 }
 

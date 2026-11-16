@@ -94,9 +94,9 @@ async function runFixed(command, args, options, code) {
 const DIGEST_RE = /^sha-256=:[A-Za-z0-9+/]{43}=:$/u;
 const COMMIT_RE = /^[0-9a-f]{40}$/u;
 
-// The suggestion form's build inputs. Only the intake action, binding digest,
-// and opaque page ID reach the browser; the renderer validates the rest itself.
-function suggestionEnvironment(suggestions) {
+// Public suggestion-form build inputs only. Secret paths and server verification
+// policy stay outside this description; the renderer validates its own registry.
+export function suggestionEnvironment(suggestions) {
   if (suggestions === null || suggestions === undefined) return {};
   if (typeof suggestions !== 'object' || Array.isArray(suggestions)) {
     fail('invalid-render-suggestions', 'suggestions must be null or one binding description');
@@ -117,6 +117,10 @@ function suggestionEnvironment(suggestions) {
     CYBERBASER_ACCOUNT_FREE_BINDING_DIGEST: suggestions.bindingDigest,
     CYBERBASER_ACCOUNT_FREE_SOURCE_REPOSITORY: suggestions.sourceRepository,
     CYBERBASER_ACCOUNT_FREE_SOURCE_REVISION: suggestions.sourceRevision,
+    ...(suggestions.challenge ? {
+      CYBERBASER_SUGGESTION_CHALLENGE_PROVIDER: suggestions.challenge.provider,
+      CYBERBASER_SUGGESTION_CHALLENGE_SITE_KEY: suggestions.challenge.siteKey,
+    } : {}),
   };
 }
 

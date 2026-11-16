@@ -1,0 +1,31 @@
+---
+title: Make platform controls pluggable by protocol
+description: "Maintainer principle that backend checks use vendor-neutral interfaces with provider registries and conformance suites; the new intake bot check, client-address handling, limit storage and form widget were refactored accordingly."
+status: log
+tags: [architecture, contribution, testing]
+---
+
+## Direction
+
+Right after the public-form protections were built, the maintainer stated how controls should be designed: "the interfaces that make that possible within the platform need to be relatively agnostic and protocol driven", so that someone can modify the code and submit a pull request with their own system. It is recorded as hard constraint 8 in the orientation layer, in [architecture](/cyberbaser/design/architecture/) and in the decision log.
+
+## Gap found
+
+The new code used vendor-neutral request headers and error codes, but Cloudflare Turnstile's verification address and response shape were built into the service, the trusted client-address header was fixed to Cloudflare's, and rate limits could only live in memory. The browser widget was Turnstile-specific too.
+
+## Refactor
+
+Two Sol workers ran in parallel with disjoint file ownership, no sub-delegation, no network and no deployment.
+
+- **Intake service:** a challenge-provider registry (Turnstile moved into its own module), client-address sources (`socket`, `trusted-header` with any single header name from trusted peers), and a limit-store interface with the existing bounded in-memory store. The core keeps the token header, deadlines, CORS and fail-closed mapping: any provider throw, timeout or result other than exactly `pass` or `fail` becomes `challenge-unavailable`. Existing configs keep their exact meaning. Shared conformance suites cover challenge providers, address sources and limit stores.
+- **Form widget:** a browser provider registry with Turnstile as one adapter, a new optional build input naming the provider, a conformance suite and automatic test discovery. Without a site key the output is unchanged.
+
+Both READMEs and the [intake page](/cyberbaser/development/account-free-intake/#public-readiness-protections-off-by-default) document how to add a provider.
+
+## Verification
+
+Coordinator reruns: intake app 160 pass, 0 fail; deploy structure 20 pass, 1 opt-in image test skipped; `packages/account-free-intake` 24 pass; renderer suite including Turnstile provider conformance passed; whitespace checks passed. No Cloudflare address remains in the core intake files. No independent review was repeated for the refactor, and nothing was exercised against live services.
+
+## Not yet pluggable
+
+Limit stores have no operator config switch and asynchronous or shared stores need an interface decision. Authentication does not exist yet; when built it must follow the same rule.

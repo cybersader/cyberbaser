@@ -20,15 +20,67 @@ export function makePipeline(stringifyOptions = {}) {
 
 const defaultPipeline = makePipeline();
 
+export class RoundtripContentLossError extends Error {
+  constructor(message) {
+    super(`checker error: round-trip lost non-whitespace content (${message})`);
+    this.name = 'RoundtripContentLossError';
+  }
+}
+
+// Compare parsed content, not Markdown delimiters: a serializer may legitimately
+// change emphasis, entities or list punctuation, but must not drop text, code,
+// math, frontmatter, link destinations, image labels or other content payloads.
+function contentText(tree) {
+  const chunks = [];
+  function visit(node) {
+    for (const key of ['value', 'url', 'title', 'alt', 'lang', 'meta', 'label']) {
+      if (typeof node[key] === 'string') chunks.push(node[key].replace(/\s/gu, ''));
+    }
+    for (const child of node.children ?? []) visit(child);
+  }
+  visit(tree);
+  return chunks.join('');
+}
+
+function assertContentRetained(original, rendered) {
+  const before = [...contentText(original)], after = contentText(defaultPipeline.parse(rendered));
+  let retained = 0;
+  for (const ch of after) if (ch === before[retained]) retained++;
+  if (retained !== before.length) {
+    throw new RoundtripContentLossError('content no longer retained in source order');
+  }
+}
+
+function sourceBullet(tree, src) {
+  if (tree.type === 'list' && !tree.ordered) {
+    const offset = tree.children[0]?.position.start.offset;
+    if (offset !== undefined) return src[offset];
+  }
+  for (const child of tree.children ?? []) {
+    const marker = sourceBullet(child, src);
+    if (marker) return marker;
+  }
+}
+
 /**
  * Diagnostic round-trip: mask -> parse -> stringify -> unmask.
- * Returns { out, maskLeak }. Byte-inequality of `out` vs the input is EXPECTED
- * on most real files (measured 4.6% identity over 1430 vault files, R12) —
- * that is why this is a diagnostic, not a gate.
+ * Returns { out, maskLeak }. Byte-inequality is EXPECTED on most real files.
+ * The default serializer adopts the source's first unordered-list marker;
+ * an explicitly supplied pipeline retains its own stringify options.
+ * Lost content (including completely missing mask tokens) throws a checker
+ * error instead of passing a broken diagnostic. This is never a write path.
  */
-export function roundtrip(src, pipeline = defaultPipeline) {
+export function roundtrip(src, pipeline) {
   const { text, store } = mask(src);
-  const rendered = pipeline.processSync(text).toString();
+  const original = defaultPipeline.parse(text);
+  const bullet = sourceBullet(original, text);
+  const activePipeline = pipeline ?? (bullet ? makePipeline({ bullet }) : defaultPipeline);
+  const rendered = activePipeline.processSync(text).toString();
+  assertContentRetained(original, rendered);
+  // A missing token is not a "leak": there would be no sentinel left to see.
+  for (let i = 0; i < store.length; i++) {
+    if (!rendered.includes(`${i}`)) throw new RoundtripContentLossError(`missing mask token ${i}`);
+  }
   const out = unmask(rendered, store);
   return { out, maskLeak: hasMaskLeak(out) };
 }

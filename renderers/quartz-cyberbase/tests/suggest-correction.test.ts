@@ -275,4 +275,65 @@ assert.equal(await readBoundedJsonResponse(new Response("server text", {
   headers: { "content-type": "text/plain" },
 })), null)
 
+// Challenge inputs are public and opt-in. An unused key cannot enable the form.
+const challengeEnvironment = {
+  enabled: "enabled", intakeOrigin, bindingDigest,
+  sourceRepository: repository, sourceRevision: revision,
+}
+const challengeSiteKey = "0x4AAAAAAA-test_site-key"
+assert.equal(resolveSuggestCorrectionOptions({ ...challengeEnvironment, challengeSiteKey }).enabled, true)
+const challenged = resolveSuggestCorrectionOptions({ ...challengeEnvironment, challengeSiteKey })
+assert.ok(challenged.enabled)
+assert.equal(challenged.challengeSiteKey, challengeSiteKey)
+// Omitting the provider keeps the previous options/output shape byte-compatible.
+assert.deepEqual(challenged, { ...enabled, challengeSiteKey })
+assert.deepEqual(resolveSuggestCorrectionOptions({
+  ...challengeEnvironment, challengeSiteKey, challengeProvider: "turnstile",
+}), challenged)
+assert.deepEqual(resolveSuggestCorrectionOptions({
+  ...challengeEnvironment, challengeProvider: "turnstile",
+}), enabled)
+for (const challengeProvider of ["", "missing", "Turnstile", "__proto__", "toString", "https://untrusted.example/sdk.js"]) {
+  for (const key of [undefined, challengeSiteKey]) {
+    assert.throws(() => resolveSuggestCorrectionOptions({
+      ...challengeEnvironment, challengeSiteKey: key, challengeProvider,
+    }), /CYBERBASER_SUGGESTION_CHALLENGE_PROVIDER/)
+  }
+}
+assert.deepEqual(resolveSuggestCorrectionOptions({
+  ...challengeEnvironment, enabled: undefined, challengeProvider: "unused-provider",
+}), { enabled: false })
+assert.ok(enabled.enabled)
+assert.equal(Object.hasOwn(enabled, "challengeSiteKey"), false)
+for (const badKey of ["", " ", "bad key", "x".repeat(257), "x\n", "key<script>", "é", "key/", "\u0000"]) {
+  assert.throws(() => resolveSuggestCorrectionOptions({
+    ...challengeEnvironment, challengeSiteKey: badKey,
+  }), /CYBERBASER_SUGGESTION_CHALLENGE_SITE_KEY/)
+}
+assert.deepEqual(resolveSuggestCorrectionOptions({
+  ...challengeEnvironment, enabled: undefined, challengeSiteKey: "unused malformed key",
+}), { enabled: false })
+
+const challengeCalls: RequestInit[] = []
+await submitCorrectionIntent(`${intakeOrigin}${ACCOUNT_FREE_INTAKE_PATH}`, intent, (async (_input, init) => {
+  challengeCalls.push(init!)
+  return new Response("{}", { status: 202, headers: { "content-type": "application/json" } })
+}) as typeof fetch, "test-challenge-token")
+assert.equal(new Headers(challengeCalls[0].headers).get("Cyberbaser-Challenge-Token"), "test-challenge-token")
+assert.equal(challengeCalls[0].body, text)
+assert.equal(String(challengeCalls[0].body).includes("test-challenge-token"), false)
+
+for (const [status, code, message] of [
+  [403, "challenge-failed", "Couldn't confirm you're human. Please try again."],
+  [503, "challenge-unavailable", "Verification is temporarily unavailable. Please try again later."],
+  [429, "rate-limited", "Too many suggestions from here right now. Please try again later."],
+  [503, "queue-capacity", "Suggestions are paused while the owner reviews the backlog."],
+] as const) {
+  const result = await submitCorrectionIntent(`${intakeOrigin}${ACCOUNT_FREE_INTAKE_PATH}`, intent, (async () =>
+    new Response(JSON.stringify({ error: { code, message: "never display server text" } }), {
+      status, headers: { "content-type": "application/json" },
+    })) as typeof fetch)
+  assert.deepEqual(result, { accepted: false, replayed: false, message })
+}
+
 console.log("suggest-correction unit checks passed")

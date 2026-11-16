@@ -35,6 +35,11 @@
 
 | Topic | Canonical page |
 |---|---|
+| Real owner setup: proposed hosting, identity-authorized publishing and source preservation | `development/real-owner-setup-plan.mdx` |
+| TrueNAS container viability: package/platform evidence, publisher-renderer boundaries and conditional VM choice | `research/truenas-container-viability.mdx` |
+| Community operating model: people, four journeys, earned trust versus scoped grants, private sharing, near/next/long-term configurations | `design/contribution-trust-and-access.mdx` |
+| Community system design: contracts, records, authority, revisions and evidence-backed delivery gates (working proposal) | `design/community-system-design.mdx` |
+| Authentication reuse: embedded Better Auth preferred, no shared SSO or contributor account wall | `research/authentication-reuse.mdx` |
 | Apply is a second owner act | `design/owner-application-event.mdx`, `development/applying-approved-suggestion.mdx`, `development/approved-proposal-input.mdx` |
 | First real suggestion run (maintainer's sheet) | `development/first-real-application.mdx` |
 | Cyberbase Publish replacement: Quartz selected, content/URLs preserved, activation gated | `development/quartz-publishing-migration.mdx` |

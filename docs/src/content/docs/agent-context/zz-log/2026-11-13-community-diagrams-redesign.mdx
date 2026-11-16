@@ -1,0 +1,54 @@
+---
+title: Replace the rejected community diagrams with relational figures
+description: "Maintainer rejection of generic icon-and-card diagrams, Unslop reference review, and replacement with proposal routing, a permission matrix, an authority topology and conditional delivery dependencies."
+status: log
+tags: [documentation, design, contribution, governance]
+---
+
+## Why the first version was replaced
+
+The maintainer rejected the [first diagram presentation](/cyberbaser/agent-context/zz-log/2026-11-13-community-diagrams/) as generic AI design and asked to look up **Unslop** on GitHub. Its passing build and layout checks were mechanical evidence, not visual acceptance. The repeated icon/heading/copy groups did not adequately explain relationships.
+
+The redesign keeps the canonical pages and product claims but replaces all four figures in place. It removes the common rounded-card shell, decorative participant icons and slogan captions. Each figure now uses a form chosen for its particular question:
+
+- [Community model](/cyberbaser/design/contribution-trust-and-access/): proposal routes converge on a concrete synthetic edit, then branch into closure, revision feedback or a separate owner-controlled application route. A permission matrix provides a counterexample to automatic promotion: an established contributor without grants and a new reviewer with only a narrow review grant.
+- [System design](/cyberbaser/design/community-system-design/): a topology separates editorial evidence, private identity, current authorization, the executor, canonical source, isolated rendering and the trusted publisher. The delivery graph distinguishes prerequisites from optional later branches above the unchanged foundation.
+
+The permission assignments and edit text are illustrative, not real content, selected roles or active policy. The logical authority enclosure does not select a container arrangement. Local account custody still needs approval; the diagram request does not activate accounts, delegated grants, public intake, renderer isolation or federation.
+
+## Reference and attribution
+
+The coordinator consulted [Unslop by Damir Sokolovsky](https://github.com/heydamir/unslop), including its [skill instructions](https://github.com/heydamir/unslop/blob/main/skills/unslop/SKILL.md), [design-tell inventory](https://github.com/heydamir/unslop/blob/main/skills/unslop/references/signs.md) and [tokens](https://github.com/heydamir/unslop/blob/main/skills/unslop/references/tokens.md). Its useful directions here were to remove interchangeable card layouts, omit decoration without explanatory value, preserve product truth and give each visual a concrete purpose. Design guidance attribution: Damir Sokolovsky (@heydamir), CC BY 4.0. The diagrams and implementation were authored locally rather than copied from upstream examples.
+
+The separate [mshumer/unslop](https://github.com/mshumer/unslop) skill was also inspected. Its sampled-output pattern-detection process was not run. No upstream skill was installed, no repository scripts were executed, and no paid sampling pipeline or new delegate wave was launched.
+
+## Verification and limits
+
+The replacement received one batched desktop/mobile inspection, one repair batch and one confirmation batch. The repair batch connected the feedback/approval routes, moved an authority label away from a connector, routed the conditional branch above its label and shortened one out-of-bounds annotation.
+
+Initial thread-rendered previews covered the model at 728 pixels in light mode, the system diagrams at 728 pixels in dark mode, and all four figures at 390 pixels in light mode. All three SVG diagrams reported zero text-to-text bounding-box collisions and zero labels outside their view boxes. No page-level horizontal overflow was measured. These checks do not prove every connector-label interaction or every viewport/theme combination.
+
+On phones, the diagrams intentionally preserve readable geometry inside keyboard-focusable horizontal scroll regions, with visible scroll guidance and text alternatives. They do not collapse the graph into unrelated stacked cards. The generic overflow probe reports those intended scroll regions and one SVG multi-line text metric; it is not a zero-element-overflow result. The permission matrix uses semantic table headers. The mechanical design detector returned no findings.
+
+The previews use exact authored templates/CSS with thread-theme mapping, not the full deployed Starlight page. No independent accessibility audit or human acceptance is claimed. One contained local production build passed: **214 pages in 17.46 seconds**, including both canonical diagram pages and this log. Plugin override, browser-externalized dependency, large-chunk and missing-404 warnings remained. Only this result sentence and the orientation build receipt were added after that build; the visual implementation did not change afterward.
+
+## File-viewer failure and portability correction
+
+The maintainer then reported that the MDX diagrams were absent in T3 and that opening the HTML files looked unreadable. They authorized collaboration with the agentic-workflow project and shared a mobile screenshot there. Two bounded peer source checks found separate causes:
+
+1. T3 recognizes MDX as Markdown but does not compile imported Astro components. A successful Starlight build or chat rendering does not establish file-viewer compatibility.
+2. Ordinary HTML files do not receive the theme injection used by `html_render`. The previously linked review files aliased their diagram colors to host variables without local definitions or fallbacks. Their stylesheets were present, but the unresolved color chains could yield black fills and missing strokes. The peer described the screenshot as near-black shapes/text on a dark backdrop; the exact live-client backdrop mechanism was not established.
+
+The earlier horizontal slice was intentional minimum-width diagram scrolling, not proof of a broken T3 scroller. It was still poor mobile presentation. Neither the initial mechanical passes nor this diagnosis establishes visual acceptance; the maintainer remains dissatisfied with the presentation.
+
+The artifact-side correction adds:
+
+- Four opaque, high-resolution PNG exports with the canonical light palette and no dependency on host theme variables. The MDX pages now include ordinary relative Markdown image fallbacks. The compiled Starlight stylesheet hides only the duplicate fallback images because the live diagrams remain there.
+- Self-contained [community model HTML](/cyberbaser/community-diagrams/community-model.html) and [system design HTML](/cyberbaser/community-diagrams/community-system.html) with literal palette tokens, explicit document foreground/background/font/color scheme and inlined image data. They show the whole diagram at the available width; full-size scrolling and explanations are optional disclosures. Whole-map phone text still requires zoom or the full-size view.
+- A reproducible exporter, `build-contained -- bun docs/scripts/export-community-diagrams.mjs`. Its manifest records image hashes and local geometry/color checks. The private earlier HTML links were replaced with the portable exports, and chat-only preview generation now uses different filenames so it cannot overwrite those links.
+
+The first export attempt failed closed on one label extending beyond the SVG view box with the standalone font. The label was shortened, and two nearby annotations were tightened for the same font. The next contained export passed for all four figures. A fresh Chromium context with network requests blocked and **no T3 theme variables** checked both portable HTML documents at 390 and 1040 pixels: images decoded, literal light background/dark foreground resolved, and no page-level horizontal overflow occurred. All PNGs were independently identified as opaque. This proves local theme-independent artifacts, not acceptance in the owner's currently loaded T3 frontend. No T3 runtime change, restart, install or deployment was made.
+
+## Review and authority
+
+Run `bun run --cwd docs dev` from the repository root and open the canonical model/system-design pages linked above. Their existing MDX imports now select the replacement figures. The revised figures are also shown inline in the conversation. No server was started for the standalone previews, and no deployment, commit, push, real source edit or account change was performed.

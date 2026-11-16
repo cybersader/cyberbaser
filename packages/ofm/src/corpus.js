@@ -49,7 +49,7 @@ function firstDivergenceClass(orig, out) {
 export function runCorpus(dir) {
   const t0 = performance.now();
   const results = [];
-  let parseErrors = 0, maskCollisions = 0;
+  let parseErrors = 0, maskCollisions = 0, checkerErrors = 0;
   for (const p of mdFiles(dir)) {
     const rel = relative(dir, p);
     const src = readFileSync(p, 'utf8');
@@ -63,6 +63,7 @@ export function runCorpus(dir) {
       if (!rec.normOk) rec.class = firstDivergenceClass(src, out);
     } catch (e) {
       if (e.name === 'MaskCollisionError') maskCollisions++;
+      else if (e.name === 'RoundtripContentLossError') checkerErrors++;
       else parseErrors++;
       rec.err = e.message;
       rec.byteOk = rec.normOk = false;
@@ -83,7 +84,7 @@ export function runCorpus(dir) {
     byteOk: results.filter((r) => r.byteOk).length,
     normOk: results.filter((r) => r.normOk).length,
     maskLeaks: results.filter((r) => r.maskLeak).length,
-    parseErrors, maskCollisions, histo, featStats,
+    parseErrors, maskCollisions, checkerErrors, histo, featStats,
     elapsedSec: +((performance.now() - t0) / 1000).toFixed(1),
     results,
   };

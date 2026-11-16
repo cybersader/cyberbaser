@@ -168,7 +168,86 @@ Quartz exit code. Useful env vars:
   only the intake action, binding digest, and opaque page ID. Current public
   builds leave this unset; the form is not offered publicly. The owner app sets
   these itself for the private local site when its `suggestions.form` is on.
+- `CYBERBASER_SUGGESTION_CHALLENGE_SITE_KEY=…` — optional public challenge site
+  key, meaningful only when the correction form is enabled. The default provider
+  is Turnstile, whose keys use 1–256 ASCII letters, digits, underscores or hyphens.
+  Empty or provider-rejected values fail the enabled build. Without a key, the
+  existing form and request are unchanged and no widget or provider script loads.
+  With a key, source-backed forms load the selected provider's script on browser
+  initialization and render a `suggest-correction` widget before the submit
+  button. The single-use token goes only in `Cyberbaser-Challenge-Token`, never
+  the JSON intent or URL, and the widget resets after every attempt. Server-side
+  verification and a matching CORS header allowlist are required separately;
+  this renderer neither verifies tokens nor holds a secret.
+- `CYBERBASER_SUGGESTION_CHALLENGE_PROVIDER=…` — optional registry id; defaults to
+  `turnstile`. An unknown id (including an empty string) fails an enabled build,
+  even without a site key. A valid provider id alone never enables a widget.
+  Disabled correction forms ignore both challenge inputs.
 - `QUARTZ_REF=…` — override the pin in `setup.sh` (for evaluating a bump only).
+
+This renderer emits no Content-Security-Policy meta tag or hosting header.
+A host that supplies its own CSP must allow `https://challenges.cloudflare.com`
+in both `script-src` and `frame-src` only when the challenge is configured.
+Owner-alpha's separate reader CSP and explicit build-environment allowlist do
+not yet pass or allow this optional key; exporting it in the parent shell alone
+will not enable the widget through that app. These offline tests do not validate
+live Turnstile or authorize enabling a public form. Other providers require their
+own reviewed script/frame CSP permissions; no provider adds host policy itself.
+
+## Adding a challenge provider
+
+The browser contract is `ChallengeProvider` in `components/challenge/registry.ts`:
+
+```ts
+{
+  id: string,
+  scriptUrl: string, // constant credential-free HTTPS URL
+  validateSiteKey(key: string): boolean,
+  mount(container, { siteKey, action, onToken, onExpire, onError }): {
+    reset(): void,
+    remove(): void,
+  },
+}
+```
+
+The core form owns script loading once per URL, bounded in-memory tokens, the
+`Cyberbaser-Challenge-Token` header, keeping tokens out of the body and URL,
+disabling submit without a token, resetting after each attempt, SPA cleanup, and
+plain error messages. Providers only render and report tokens or lifecycle
+callbacks. They must disable SDK-generated response form fields, avoid script
+loading, requests and token storage, and access browser globals only inside
+`mount`. `validateSiteKey` is pure and rejects unsafe configuration. Build-time
+imports must work without a browser. Script URLs must never depend on site keys,
+form fields, environment values, or other runtime input.
+
+To contribute one provider:
+
+1. Add `components/challenge/providers/<id>.ts`, exporting an object that satisfies
+   `ChallengeProvider`. Use a stable lowercase id, one constant HTTPS script URL,
+   provider-specific safe public-key validation, and an adapter from the SDK's
+   callbacks and widget handle to the contract. Start from `providers/turnstile.ts`.
+2. Statically import that object in `components/challenge/registry.ts` and add
+   `[provider.id, provider]` to its `providers` map. No core form branch, dynamic
+   import, or custom script loader is needed. `setup.sh` copies the entire
+   challenge directory, and the inline browser entry bundles the static registry.
+3. Add `tests/<id>-provider.test.ts`. Import the provider and call
+   `runChallengeProviderConformance` from `tests/conformance/challenge-provider.ts`
+   with a safe fake site key and an `install(fakeWindow)` SDK fixture. That fixture
+   returns token/expiry/error triggers, mount assertions, and reset/remove
+   counters; see `tests/turnstile-provider.test.ts`. The shared suite supplies the
+   fake DOM/global and prohibits script loading and requests. It checks constant
+   HTTPS script configuration, unsafe-key rejection, token delivery, expiry,
+   errors, reset, and removal. The runner discovers `*-provider.test.ts` files.
+4. From the repository root run
+   `build-contained -- bash renderers/quartz-cyberbase/tests/run.sh`. The lifecycle
+   suite also bundles the real inline entry and tests header-only transport,
+   submission gating, per-attempt resets, loader failures, and SPA cleanup offline.
+5. Add the matching server-side verifier provider with **the same id** in
+   `apps/account-free-intake`, using that side's registry and conformance suite.
+   Configure `botCheck.provider: '<id>'` there and
+   `CYBERBASER_SUGGESTION_CHALLENGE_PROVIDER=<id>` here. Document the provider's
+   host CSP requirements and verification configuration in the PR. Browser
+   conformance alone is not server verification or permission to offer the lane.
 
 ## How CI uses it
 

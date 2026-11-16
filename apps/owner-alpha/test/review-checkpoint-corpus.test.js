@@ -71,7 +71,15 @@ function changedBlockKinds(view) {
 test('every checkpoint proposal enters through real intake, revalidates in owner review, and exercises what the pack claims', async () => {
   const fixture = await createFixture({ pages: CHECKPOINT_PAGES });
   cleanup.push(() => fixture.cleanup());
-  const intake = await openIntakeService({ config: fixture.config });
+  // Admit this bounded synthetic batch without weakening product defaults.
+  const intake = await openIntakeService({ config: {
+    ...fixture.config,
+    limits: { ...fixture.config.limits,
+      perSenderCapacity: CHECKPOINT_PROPOSALS.length,
+      perNetworkCapacity: CHECKPOINT_PROPOSALS.length,
+      perPageCapacity: CHECKPOINT_PROPOSALS.length,
+    },
+  } });
   cleanup.push(() => intake.close());
 
   expect(new Set(CHECKPOINT_PROPOSALS.map((proposal) => proposal.id)).size).toBe(CHECKPOINT_PROPOSALS.length);
