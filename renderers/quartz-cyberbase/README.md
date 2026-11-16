@@ -193,7 +193,9 @@ Run real-CLI synthetic acceptance (requires the installed pinned offline seed):
 Run the 57-page corpus gate, extracting only the permitted curation folder through
 `git archive origin/main` into a fresh temporary directory:
 
-`build-contained -- node renderers/quartz-cyberbase/tests/provenance-build.mjs --corpus`
+`CYBERBASER_CORPUS_VAULT=/path/to/vault build-contained -- node renderers/quartz-cyberbase/tests/provenance-build.mjs --corpus`
+
+The vault path is supplied by the operator and never stored in the repository.
 
 `QUARTZ_SEED_DIR` can select another pristine, pin-verified offline seed. The test
 materializes its own checkout and never uses a running rehearsal. Test-only config
