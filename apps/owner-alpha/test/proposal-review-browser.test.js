@@ -1,3 +1,4 @@
+import { prepareProposal, createChangeSetProposal, applyChangeSetProposal, describeChangeSet, changeSetProposalDigest } from '@cyberbaser/proposal';
 import { afterEach, expect, test } from 'bun:test';
 import { mkdir, readFile } from 'node:fs/promises';
 import net from 'node:net';
@@ -47,28 +48,12 @@ function reviewEntry(number, { replacement, rationale }) {
   const reviewDigest = digest(number);
   const evidence = {
     queueId,
-    proposal: {
+    proposal: prepareProposal(Buffer.from('Correct teh typo.\n\n## Notes\n\nA second paragraph that stays untouched.\n\n- first item\n- second item\n'), {
       proposalId: `browser-review:${number}`,
-      source: {
-        repository: 'https://forge.example/owner/wiki.git',
-        revision: 'a'.repeat(40),
-        path: 'docs/notes.md',
-      },
-      operation: {
-        type: 'quote',
-        selector: { prefix: 'Correct ', quote: 'teh', suffix: ' typo.' },
-        start: 8,
-        end: 11,
-        baseDigest: digest(7),
-        candidateDigest: digest(number + 10),
-        expectedOldBytesBase64: Buffer.from('teh').toString('base64'),
-        replacementBytesBase64: Buffer.from(replacement).toString('base64'),
-      },
-      submission: {
-        rationale,
-        evidence: ['https://example.com/reference'],
-      },
-    },
+      source: { repository: 'https://forge.example/owner/wiki.git', revision: 'a'.repeat(40), path: 'docs/notes.md' },
+      operation: { type: 'quote', selector: { quote: 'teh', prefix: 'Correct ', suffix: ' typo.' }, replacement },
+      submission: { submittedAt: `2026-08-21T12:00:0${number}Z`, rationale, evidence: ['https://example.com/reference'], identityClaim: null },
+    }),
     classification: {
       verifiedSubject: null,
       policyStatus: 'valid',
@@ -126,7 +111,7 @@ function decisionSummary(decision, entry) {
   };
 }
 
-function statefulReviewService() {
+function statefulReviewService({ multi = false } = {}) {
   const entries = [
     reviewEntry(1, {
       replacement: 'the',
@@ -137,9 +122,26 @@ function statefulReviewService() {
       rationale: 'Prefer a demonstrative determiner in this sentence.',
     }),
   ];
+  if (multi) {
+    const entry = entries[0];
+    const original = entry.evidence.proposal;
+    const base = Buffer.from(entry.document.baseText);
+    const proposal = createChangeSetProposal(base, {
+      proposalId: original.proposalId, source: original.source, submission: original.submission,
+      operations: [
+        { operationId: 'spelling', start: base.indexOf('teh'), end: base.indexOf('teh') + 3, expected: 'teh', replacement: 'the' },
+        { operationId: 'list-word', start: base.indexOf('second item'), end: base.indexOf('second item') + 6, expected: 'second', replacement: 'another' },
+      ],
+    });
+    entry.evidence.proposal = proposal;
+    entry.changes = describeChangeSet(base, proposal);
+    entry.document.candidateText = applyChangeSetProposal(base, proposal).toString('utf8');
+    entry.summary.proposalDigest = changeSetProposalDigest(proposal);
+    entry.summary.candidateDigest = proposal.changeSet.files[0].candidate.digest;
+  }
   const decisions = new Map();
   const applications = new Map();
-  let failNextRecord = true;
+  let failNextRecord = !multi;
 
   function history() {
     return [...decisions.values()]
@@ -223,7 +225,7 @@ function statefulReviewService() {
   });
 }
 
-async function browserFixture() {
+async function browserFixture(options = {}) {
   let ownerPort;
   while (true) {
     ownerPort = await freePort();
@@ -247,7 +249,7 @@ async function browserFixture() {
   raw.proposalReview.enabled = true;
   raw.proposalReview.socketPath = '/run/user/1000/cyberbaser/review.sock';
   const config = validateOwnerAlphaConfig(raw);
-  const proposalReview = statefulReviewService();
+  const proposalReview = statefulReviewService(options);
   const ownerFetch = createOwnerAlphaHandler({
     config,
     proposalReview,
@@ -482,3 +484,58 @@ acceptanceTest('browser review is content-first, deliberate, recoverable, and re
     await browser.close();
   }
 }, 120_000);
+
+
+acceptanceTest('browser v2 reviews every change and makes one whole-set decision before a separate application', async () => {
+  const { chromium } = await import(pathToFileURL(PLAYWRIGHT).href);
+  const browser = await chromium.launch({ headless: true });
+  try {
+    for (const action of ['approve', 'reject']) {
+      const fixture = await browserFixture({ multi: true });
+      const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+      const page = await context.newPage();
+      const decisions = [];
+      page.on('request', (request) => {
+        if (request.method() === 'POST' && request.url().endsWith('/decision')) decisions.push(request.postDataJSON());
+      });
+      await page.goto(`${fixture.ownerOrigin}/owner/bootstrap?token=${fixture.servers.bootstrapToken}`);
+      await page.waitForURL(`${fixture.readerOrigin}/cyberbase/`);
+      await page.click('#review-link');
+      await page.waitForURL(`${fixture.ownerOrigin}/owner/review`);
+      expect(await page.locator('#needs-review .proposal-row').first().textContent()).toContain('docs/notes.md — 2 changes');
+      await page.locator('#needs-review .proposal-row-link').first().click();
+      await page.waitForURL(`${fixture.ownerOrigin}/owner/review/**`);
+      expect(await page.locator('.inspected-change').count()).toBe(2);
+      expect(await page.locator('.inspected-change').first().textContent()).toContain('Line 1, column 9');
+      expect(await page.locator('.inspected-change').last().textContent()).toContain('another');
+      expect(await page.locator('.mode-panel-changes .md-source del').count()).toBe(2);
+      await page.getByRole('link', { name: 'Proposed', exact: true }).click();
+      await page.waitForURL(/[?]mode=proposed$/u);
+      expect(await page.locator('.mode-panel-proposed').textContent()).toContain('Correct the typo.');
+      expect(await page.locator('.mode-panel-proposed').textContent()).toContain('another item');
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      const label = action === 'approve' ? 'Approve all' : 'Reject all';
+      await page.getByRole('button', { name: label, exact: true }).click();
+      expect(await page.locator('#decision-dialog-title').textContent()).toBe(action === 'approve' ? 'Approve all changes?' : 'Reject all changes?');
+      await page.locator('#decision-reason').fill('Decide both changes as one suggestion.');
+      await page.locator('#decision-confirm').click();
+      await page.waitForURL(`${fixture.ownerOrigin}/owner/decisions/**`);
+      expect(decisions).toHaveLength(1);
+      expect(decisions[0].action).toBe(action);
+      expect(Object.keys(decisions[0]).sort()).toEqual(['action', 'csrf', 'queueId', 'reason', 'reviewEvidenceDigest']);
+      expect(fixture.proposalReview.applications.size).toBe(0);
+      expect(await page.locator('.inspected-change').count()).toBe(2);
+      if (action === 'approve') {
+        await page.getByRole('button', { name: 'Apply to page', exact: true }).click();
+        await page.locator('#apply-confirm').click();
+        await page.waitForURL(`${fixture.ownerOrigin}/owner/jobs/OA-browser-1`);
+        expect(fixture.proposalReview.applications.size).toBe(1);
+      } else {
+        expect(await page.getByRole('button', { name: 'Apply to page', exact: true }).count()).toBe(0);
+      }
+      await context.close();
+    }
+  } finally {
+    await browser.close();
+  }
+}, 60_000);

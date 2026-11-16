@@ -1,3 +1,4 @@
+import { applyOwnerChangeSet, proveChangeSetOutsideBytes } from './change-set-operation.js';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import path from 'node:path';
@@ -289,15 +290,16 @@ export async function verifyExactCommit({
   ]);
   let reconstructed;
   try {
-    reconstructed = applyCorrection(baseBytes, binding.correction);
+    reconstructed = binding.correction.operationType === 'change-set' ? applyOwnerChangeSet(baseBytes, binding.correction) : applyCorrection(baseBytes, binding.correction);
   } catch (error) {
     fail('commit-splice-reconstruction-failed', 'accepted correction could not be reconstructed from the commit parent', {
       correctionCode: error?.code ?? 'unknown',
     });
   }
-  const prefixIdentical = committedBytes.subarray(0, binding.correction.start)
+  const multiProof = binding.correction.operationType === 'change-set' ? proveChangeSetOutsideBytes(baseBytes, committedBytes, binding.correction.proposal) : null;
+  const prefixIdentical = multiProof !== null || committedBytes.subarray(0, binding.correction.start)
     .equals(baseBytes.subarray(0, binding.correction.start));
-  const suffixIdentical = committedBytes.subarray(
+  const suffixIdentical = multiProof !== null || committedBytes.subarray(
     binding.correction.start + binding.correction.replacementBytes.length,
   ).equals(baseBytes.subarray(binding.correction.end));
   if (!committedBytes.equals(binding.candidateBytes)
@@ -318,7 +320,7 @@ export async function verifyExactCommit({
     parentBlob: baseEntry.objectId,
     candidateBlob: candidateEntry.objectId,
     candidateDigest: binding.candidateDigest,
-    exactSplice: {
+    exactSplice: multiProof ?? {
       start: binding.correction.start,
       end: binding.correction.end,
       prefixIdentical,

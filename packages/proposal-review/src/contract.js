@@ -1,10 +1,6 @@
 import { createHash } from 'node:crypto';
-import {
-  parseProposal,
-  proposalDigest,
-  serializeProposal,
-  validateProposal,
-} from '@cyberbaser/proposal';
+import { parseVersionedProposal } from '@cyberbaser/proposal';
+import { validateReviewProposal as validateProposal, serializeReviewProposal as serializeProposal, reviewProposalDigest as proposalDigest, reviewProposalBinding } from './versioned-proposal.js';
 import {
   validateClassificationArtifact,
   validateDigest,
@@ -215,8 +211,9 @@ export function validateReviewEvidence(value) {
 }
 
 export function createReviewEvidence(entry) {
-  exactObject(entry, ['queueId', 'proposalText', 'receipt', 'carrier', 'classification', 'state'], 'queue review entry');
-  const proposal = dependency('queue proposalText', () => parseProposal(entry.proposalText));
+  exactObject(entry, ['queueId', 'proposalText', 'receipt', 'carrier', 'classification', 'state', ...(Object.hasOwn(entry, 'proposalVersion') ? ['proposalVersion'] : [])], 'queue review entry');
+  const { version, proposal } = dependency('queue proposalText', () => parseVersionedProposal(entry.proposalText));
+  if (Object.hasOwn(entry, 'proposalVersion') && entry.proposalVersion !== version) fail('proposal-version-mismatch', 'IPC version must match the exact artifact');
   return validateReviewEvidence({
     schemaVersion: PROPOSAL_REVIEW_SCHEMA_VERSION,
     artifactType: REVIEW_EVIDENCE_ARTIFACT_TYPE,
@@ -242,7 +239,10 @@ export function reviewEvidenceDigest(value) {
 }
 
 function normalizeReviewSummary(value) {
-  exactObject(value, ['schemaVersion', 'artifactType', 'queueId', 'proposalId', 'proposalDigest', 'candidateDigest', 'reviewEvidenceDigest', 'source', 'receivedAt', 'expiresAt', 'state', 'lane', 'tier', 'route'], 'review summary');
+  exactObject(value, ['schemaVersion', 'artifactType', 'queueId', 'proposalId', 'proposalDigest', 'candidateDigest', 'reviewEvidenceDigest', 'source', 'receivedAt', 'expiresAt', 'state', 'lane', 'tier', 'route', ...(Object.hasOwn(value, 'proposalVersion') ? ['proposalVersion'] : [])], 'review summary');
+  if (Object.hasOwn(value, 'proposalVersion') && ![1, 2].includes(value.proposalVersion)) {
+    fail('proposal-version-mismatch', 'review summary proposalVersion must be 1 or 2');
+  }
   if (value.schemaVersion !== PROPOSAL_REVIEW_SCHEMA_VERSION || value.artifactType !== REVIEW_SUMMARY_ARTIFACT_TYPE) {
     fail('unsupported-review-summary', 'review summary schema or artifact type is unsupported');
   }
@@ -283,9 +283,9 @@ function summaryFromEvidence(evidence) {
     queueId: evidence.queueId,
     proposalId: evidence.proposal.proposalId,
     proposalDigest: evidence.receipt.proposalDigest,
-    candidateDigest: evidence.proposal.operation.candidateDigest,
+    candidateDigest: reviewProposalBinding(evidence.proposal).candidate.digest,
     reviewEvidenceDigest: reviewEvidenceDigest(evidence),
-    source: evidence.proposal.source,
+    source: reviewProposalBinding(evidence.proposal).source,
     receivedAt: evidence.receipt.receivedAt,
     expiresAt: evidence.receipt.expiresAt,
     state: evidence.state.state,
@@ -299,6 +299,9 @@ export function validateReviewSummary(value, evidenceInput) {
   if (evidenceInput === undefined) fail('review-evidence-required', 'review summary validation requires its exact review evidence');
   const evidence = validateReviewEvidence(evidenceInput);
   const normalized = normalizeReviewSummary(value);
+  if (Object.hasOwn(value, 'proposalVersion') && value.proposalVersion !== evidence.proposal.schemaVersion) {
+    fail('proposal-version-mismatch', 'review summary version must match its exact evidence');
+  }
   const expected = normalizeReviewSummary(summaryFromEvidence(evidence));
   if (canonicalJson(normalized, 'review summary') !== canonicalJson(expected, 'review summary')) {
     fail('summary-evidence-mismatch', 'review summary does not match its exact review evidence');

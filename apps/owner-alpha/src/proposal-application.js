@@ -1,3 +1,5 @@
+import { reviewProposalBinding } from '@cyberbaser/proposal-review';
+import { changeSetCorrection, changeSetStats } from './change-set-operation.js';
 // The owner application event: the second, explicit owner act that puts an
 // approved suggestion on the page.
 //
@@ -17,7 +19,7 @@ import { createJsonArtifactOnce, readJsonArtifact } from './artifacts.js';
 import { computePolicyRevision, validateOwnerAlphaConfig } from './config.js';
 import { fail, OwnerAlphaError } from './errors.js';
 import { withFileLock } from './flock.js';
-import { artifactJson, deepFreeze, isPlainObject } from './json.js';
+import { artifactJson, canonicalJson, deepFreeze, isPlainObject } from './json.js';
 import { loadDurableJob, validateJobId } from './job-state.js';
 import {
   applyEditorOperation,
@@ -375,7 +377,8 @@ export function deriveProposalApplication({ config: configInput, input: inputVal
   }
   if (slug === null || slug === undefined) return unapplicable('page-not-rendered');
   if (typeof slug !== 'string' || slug.length === 0) fail('invalid-application-dependency', 'slug must be a rendered page slug or null');
-  if (baseBytes.length > config.limits.maxSourceBytes) return unapplicable('source-too-large');
+  if (baseBytes.length > config.limits.maxSourceBytes
+    || (input.schemaVersion === 2 && input.candidate.byteLength > config.limits.maxSourceBytes)) return unapplicable('source-too-large');
   let text;
   try {
     text = UTF8_DECODER.decode(baseBytes);
@@ -384,11 +387,13 @@ export function deriveProposalApplication({ config: configInput, input: inputVal
   }
   if (text.includes('\r')) return unapplicable('source-not-lf-only');
 
-  const expectedOld = Buffer.from(input.operation.expectedOldBytesBase64, 'base64');
-  const replacement = Buffer.from(input.operation.replacementBytesBase64, 'base64');
-  const changedBytes = Math.max(expectedOld.length, replacement.length);
-  const changedLines = Math.max(lineCount(expectedOld), lineCount(replacement));
-  if (replacement.length > config.limits.maxReplacementBytes) return unapplicable('replacement-limit', { limit: config.limits.maxReplacementBytes });
+  const multi = input.schemaVersion === 2;
+  const expectedOld = multi ? Buffer.alloc(0) : Buffer.from(input.operation.expectedOldBytesBase64, 'base64');
+  const replacement = multi ? Buffer.alloc(0) : Buffer.from(input.operation.replacementBytesBase64, 'base64');
+  const stats = multi ? changeSetStats(input.operation.proposal) : null;
+  const changedBytes = stats?.changedBytes ?? Math.max(expectedOld.length, replacement.length);
+  const changedLines = stats?.changedLines ?? Math.max(lineCount(expectedOld), lineCount(replacement));
+  if ((stats?.replacementBytes ?? replacement.length) > config.limits.maxReplacementBytes) return unapplicable('replacement-limit', { limit: config.limits.maxReplacementBytes });
   if (changedBytes > config.limits.maxChangedBytes) return unapplicable('changed-bytes-limit', { limit: config.limits.maxChangedBytes });
   if (changedLines > config.limits.maxChangedLines) return unapplicable('changed-lines-limit', { limit: config.limits.maxChangedLines });
 
@@ -420,7 +425,7 @@ export function deriveProposalApplication({ config: configInput, input: inputVal
     },
   });
   const operation = deepFreeze({
-    schemaVersion: SOURCE_OPERATION_SCHEMA_VERSION,
+    schemaVersion: multi ? 2 : SOURCE_OPERATION_SCHEMA_VERSION,
     artifactType: SOURCE_OPERATION_ARTIFACT_TYPE,
     source: {
       relativePath: session.relativePath,
@@ -429,6 +434,7 @@ export function deriveProposalApplication({ config: configInput, input: inputVal
       baseCommit: branchTip,
       policyRevision,
     },
+    ...(multi ? changeSetCorrection(input.operation.proposal) : {
     operationType: 'offset',
     baseByteLength: baseBytes.length,
     baseDigest: input.source.baseDigest,
@@ -438,6 +444,7 @@ export function deriveProposalApplication({ config: configInput, input: inputVal
     replacementBytesBase64: input.operation.replacementBytesBase64,
     candidateByteLength: input.candidate.byteLength,
     candidateDigest: input.candidate.digest,
+    }),
     changedBytes,
     changedLines,
     frontmatter,
@@ -540,6 +547,11 @@ async function evaluateUnlocked({ context, config, queueId, git, resolveSlug, pr
   // the input the adapter would write, so the receipt can already say whether
   // the pipeline could apply this suggestion. Nothing is written.
   const input = storedInput ?? previewInput(decision, assessment, config);
+  if (decision.reviewEvidence.proposal.schemaVersion === 2
+    && (input.schemaVersion !== 2 || input.decision.digest !== decisionDigest(decision)
+      || canonicalJson(input.operation.proposal) !== canonicalJson(decision.reviewEvidence.proposal))) {
+    fail('input-decision-mismatch', 'prepared change set differs from the complete approved proposal');
+  }
   const slug = await resolveSlug(input.source.path);
   const baseBytes = await readBlob(git, config.repository.checkout, assessment.source.gitObjectId, 'approved source blob', config.limits.maxSourceBytes);
   const derived = deriveProposalApplication({ config, input, baseBytes, branchTip: assessment.branchTip, slug });
@@ -597,8 +609,9 @@ export async function assessProposalApplication({
 function previewInput(decision, assessment, config) {
   const evidence = decision.reviewEvidence;
   const { proposal } = evidence;
+  const binding = reviewProposalBinding(proposal);
   return validateApprovedProposalInput({
-    schemaVersion: 1,
+    schemaVersion: proposal.schemaVersion,
     artifactType: 'owner-alpha-approved-proposal-input',
     queueId: decision.queueId,
     preparedAt: '1970-01-01T00:00:00Z',
@@ -616,17 +629,17 @@ function previewInput(decision, assessment, config) {
       route: evidence.classification.classification.route,
     },
     source: {
-      repository: proposal.source.repository,
-      path: proposal.source.path,
-      revision: proposal.source.revision,
+      repository: binding.source.repository,
+      path: binding.source.path,
+      revision: binding.source.revision,
       branch: config.repository.branch,
       branchTip: assessment.branchTip,
       gitMode: assessment.source.gitMode,
       gitObjectId: assessment.source.gitObjectId,
       baseByteLength: assessment.source.baseByteLength,
-      baseDigest: proposal.operation.baseDigest,
+      baseDigest: binding.base.digest,
     },
-    operation: {
+    operation: proposal.schemaVersion === 2 ? { type: 'change-set', proposal } : {
       type: proposal.operation.type,
       start: proposal.operation.start,
       end: proposal.operation.end,
@@ -721,4 +734,36 @@ export async function applyApprovedProposal({
     });
     return deepFreeze({ applied: true, status, event, job: { jobId, state: job.state ?? 'accepted' } });
   });
+}
+
+/** Final pre-effect and restart gate for v2. The owner act, immutable decision,
+ * input, session and complete operation must still describe the same change set.
+ * Git/policy freshness is separately checked by the pipeline at this boundary.
+ */
+export async function guardChangeSetApplication({ context, config, jobId, session, operation }) {
+  const queueId = validateQueueId(session.origin?.queueId);
+  const input = await readApprovedProposalInput(context, queueId);
+  const recovered = await recoverProposalDecisions(context);
+  const decision = recovered.decisions.find((item) => item.queueId === queueId);
+  const events = await listProposalApplicationEvents(context, { queueId });
+  const event = events.find((item) => item.job.jobId === jobId);
+  if (!input || !decision || !event || decision.action !== 'approve'
+    || input.schemaVersion !== 2 || decision.reviewEvidence.proposal.schemaVersion !== 2
+    || input.decision.digest !== decisionDigest(decision)
+    || event.decision.digest !== input.decision.digest
+    || canonicalJson(input.operation.proposal) !== canonicalJson(decision.reviewEvidence.proposal)
+    || canonicalJson(operation.proposal) !== canonicalJson(decision.reviewEvidence.proposal)
+    || session.origin.inputDigest !== digestBytes(Buffer.from(artifactJson(input)))
+    || event.input.digest !== session.origin.inputDigest
+    || event.source.branchTip !== session.baseCommit
+    || event.policyRevision !== computePolicyRevision(config)
+    || event.candidate.digest !== input.candidate.digest) {
+    fail('application-authority-mismatch', 'complete change set does not match its immutable owner application act');
+  }
+  const derived = deriveProposalApplication({ config, input,
+    baseBytes: Buffer.from(session.source.bytesBase64, 'base64'), branchTip: session.baseCommit, slug: session.slug });
+  if (!derived.applicable || canonicalJson(derived.session) !== canonicalJson(session)
+    || canonicalJson(derived.operation) !== canonicalJson(operation)) {
+    fail('application-authority-mismatch', 'durable v2 job differs from the exact authorized input or current eligibility');
+  }
 }

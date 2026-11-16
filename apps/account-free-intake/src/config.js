@@ -61,6 +61,12 @@ export const LAYERED_LIMIT_DEFAULTS = Object.freeze({
   perPageCapacity: 2,
   perPageRefillPerDay: 2,
 });
+// Preserve the original attempt-default export for existing operator tooling.
+export const WORK_LIMIT_DEFAULTS = Object.freeze({
+  perSenderOperationBudget: 50,
+  perSenderByteBudget: 64 * 1024,
+});
+const ALL_LAYERED_LIMIT_DEFAULTS = Object.freeze({ ...LAYERED_LIMIT_DEFAULTS, ...WORK_LIMIT_DEFAULTS });
 const LIMIT_KEYS = Object.freeze([
   'maxBodyBytes',
   'requestTimeoutMs',
@@ -340,10 +346,10 @@ export function validateConfig(input) {
     maxListEntries: exactInteger(input.reviewIpc.maxListEntries, 100, 'reviewIpc.maxListEntries'),
   });
 
-  const layeredKeys = Object.keys(LAYERED_LIMIT_DEFAULTS).filter((key) => isRecord(input.limits) && Object.hasOwn(input.limits, key));
+  const layeredKeys = Object.keys(ALL_LAYERED_LIMIT_DEFAULTS).filter((key) => isRecord(input.limits) && Object.hasOwn(input.limits, key));
   exactObject(input.limits, [...LIMIT_KEYS, ...layeredKeys], 'limits');
   const layeredLimits = {};
-  for (const [key, fallback] of Object.entries(LAYERED_LIMIT_DEFAULTS)) {
+  for (const [key, fallback] of Object.entries(ALL_LAYERED_LIMIT_DEFAULTS)) {
     const value = Object.hasOwn(input.limits, key) ? input.limits[key] : fallback;
     if (!Number.isSafeInteger(value) || value < 1 || value > 1_000_000) {
       fail('invalid-config', `limits.${key} must be an integer from 1 through 1000000`);

@@ -246,3 +246,16 @@ describe('optional public intake protections', () => {
     expect(() => validateConfig(input)).toThrow(/unknown field/);
   });
 });
+
+
+test('weighted sender limits are optional, bounded integer hourly budgets', () => {
+  const defaults = validateConfig(configInput(ROOT)).limits;
+  expect(defaults.perSenderOperationBudget).toBe(50);
+  expect(defaults.perSenderByteBudget).toBe(65536);
+  for (const key of ['perSenderOperationBudget', 'perSenderByteBudget']) {
+    for (const value of [0, -1, 1.5, '50', 1000001]) {
+      const input = configInput(ROOT); input.limits[key] = value;
+      expect(() => validateConfig(input)).toThrow(/integer from 1 through 1000000/);
+    }
+  }
+});

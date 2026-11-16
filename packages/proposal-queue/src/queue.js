@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { applyProposal, classifyProposal, parseProposal, proposalDigest, serializeProposal, validateProposal } from '@cyberbaser/proposal';
+import { applyProposal, classifyProposal, proposalDigest, serializeProposal, validateProposal } from '@cyberbaser/proposal';
+import { parseVersionedProposal, validateChangeSetProposal, serializeChangeSetProposal, changeSetProposalDigest, applyChangeSetProposal, classifyChangeSetProposal } from '@cyberbaser/proposal';
 import { fail } from './errors.js';
 import { createQueueFilesystem } from './filesystem.js';
 import {
@@ -28,10 +29,29 @@ function exactBytes(value, label) {
   if (value instanceof Uint8Array) return Buffer.from(value);
   fail('invalid-bytes', `${label} must be text or bytes`);
 }
-const sourcePartitionDigest = (proposal) => digestBytes(Buffer.from(`${proposal.source.repository}\0${proposal.source.path}`, 'utf8'));
+// Artifact bytes and queue metadata remain unchanged. Dispatch only the pure
+// validation/application/trust seams, including during restart recovery.
+const parseProposal = (bytes) => parseVersionedProposal(bytes).proposal;
+const serializeVersioned = (proposal) => proposal.schemaVersion === 2 ? serializeChangeSetProposal(proposal) : serializeProposal(proposal);
+const digestVersioned = (proposal) => proposal.schemaVersion === 2 ? changeSetProposalDigest(proposal) : proposalDigest(proposal);
+const applyVersioned = (base, proposal) => proposal.schemaVersion === 2 ? applyChangeSetProposal(base, proposal) : applyProposal(base, proposal);
+const classifyVersioned = (base, proposal, config, subject) => proposal.schemaVersion === 2
+  ? classifyChangeSetProposal(base, proposal, config, subject) : classifyProposal(base, proposal, config, subject);
+const sourceOf = (proposal) => proposal.schemaVersion === 2
+  ? { repository: proposal.changeSet.repository, revision: proposal.changeSet.baseRevision, path: proposal.changeSet.files[0].path }
+  : proposal.source;
+const sourcePartitionDigest = (proposal) => {
+  const source = sourceOf(proposal);
+  return digestBytes(Buffer.from(`${source.repository}\0${source.path}`, 'utf8'));
+};
 
 export function proposalSemantics(value) {
-  const proposal = typeof value === 'string' || value instanceof Uint8Array ? parseProposal(value) : validateProposal(value);
+  const proposal = typeof value === 'string' || value instanceof Uint8Array ? parseProposal(value) : value?.schemaVersion === 2 ? validateChangeSetProposal(value) : validateProposal(value);
+  if (proposal.schemaVersion === 2) {
+    const file = proposal.changeSet.files[0];
+    return deepFreeze({ source: sourceOf(proposal), baseByteLength: file.base.byteLength, baseDigest: file.base.digest,
+      operations: file.operations, candidateByteLength: file.candidate.byteLength, candidateDigest: file.candidate.digest });
+  }
   return deepFreeze({
     source: { repository: proposal.source.repository, revision: proposal.source.revision, path: proposal.source.path },
     baseByteLength: proposal.operation.baseByteLength,
@@ -97,11 +117,11 @@ function parseEntryArtifacts(queueId, location, artifacts) {
   const state = parseCanonicalMetadata(artifacts['state.json'], validateStateArtifact, 'state.json');
   if (receipt.queueId !== queueId || state.queueId !== queueId) fail('queue-id-mismatch', 'entry artifacts do not bind their directory identifier');
   if (receipt.lane !== carrier.lane) fail('queue-lane-mismatch', 'receipt and carrier lane disagree');
-  if (receipt.proposalDigest !== proposalDigest(proposal) || receipt.proposalByteLength !== proposalBytes.length) fail('proposal-digest-mismatch', 'receipt does not bind the exact canonical proposal bytes');
+  if (receipt.proposalDigest !== digestVersioned(proposal) || receipt.proposalByteLength !== proposalBytes.length) fail('proposal-digest-mismatch', 'receipt does not bind the exact canonical proposal bytes');
   if (receipt.sourcePartitionDigest !== sourcePartitionDigest(proposal)) fail('source-partition-mismatch', 'receipt source partition does not match the proposal');
   if (state.createdAt !== receipt.receivedAt) fail('queue-time-mismatch', 'state creation must match receipt time');
   if (state.state === 'pending-review' && state.updatedAt !== receipt.receivedAt) fail('queue-time-mismatch', 'pending state update time must match receipt time');
-  if (!Buffer.from(serializeProposal(proposal), 'utf8').equals(proposalBytes)) fail('noncanonical-proposal', 'proposal.json must contain exact canonical proposal bytes');
+  if (!Buffer.from(serializeVersioned(proposal), 'utf8').equals(proposalBytes)) fail('noncanonical-proposal', 'proposal.json must contain exact canonical proposal bytes');
   return freezeEntry({
     queueId, location, proposalText: proposalBytes.toString('utf8'), proposal, receipt,
     carrier, classification, state, semantics: proposalSemantics(proposal),
@@ -152,8 +172,8 @@ async function verifyEvidence(entry, resolveEvidence) {
   const baseBytes = exactBytes(evidence.baseBytes, 'resolved baseBytes');
   const policy = validatePolicyInput(evidence.policy);
   if (policy.status !== entry.classification.policyStatus || policy.digest !== entry.classification.policyDigest) fail('policy-evidence-mismatch', 'resolved base policy does not match durable classification evidence');
-  applyProposal(baseBytes, entry.proposal);
-  const recomputed = classifyProposal(baseBytes, entry.proposal, policy.config, entry.classification.verifiedSubject);
+  applyVersioned(baseBytes, entry.proposal);
+  const recomputed = classifyVersioned(baseBytes, entry.proposal, policy.config, entry.classification.verifiedSubject);
   if (!compareJson(recomputed, entry.classification.classification)) fail('classification-mismatch', 'durable classification does not match recomputed proposal evidence');
 }
 function buildIndexes(entries) {
@@ -390,7 +410,7 @@ export async function openProposalQueue(options = {}) {
         const replay = digests.replayScope === null ? null : indexes.replay.get(digests.replayScope) ?? null;
         if (replay !== null) {
           if (replay.receipt.requestDigest !== digests.requestDigest) fail('idempotency-conflict', 'lane-scoped idempotency identity is bound to a different request digest');
-          if (input.proposalText !== null && proposalDigest(parseProposal(exactBytes(input.proposalText, 'proposalText'))) !== replay.receipt.proposalDigest) fail('idempotency-conflict', 'lane-scoped idempotency identity is bound to a different proposal');
+          if (input.proposalText !== null && digestVersioned(parseProposal(exactBytes(input.proposalText, 'proposalText'))) !== replay.receipt.proposalDigest) fail('idempotency-conflict', 'lane-scoped idempotency identity is bound to a different proposal');
           return deepFreeze({ replayed: true, receipt: replay.receipt });
         }
         if (input.proposalText === null && input.baseBytes === null && input.policy === null) return deepFreeze({ replayed: false, receipt: null });
@@ -400,15 +420,15 @@ export async function openProposalQueue(options = {}) {
         const policy = validatePolicyInput(input.policy);
         const verifiedSubject = normalizeVerifiedSubject(input.verifiedSubject);
         if (carrierInput.lane === 'lane-b' && verifiedSubject !== null) fail('lane-b-subject-forbidden', 'Lane B queue submissions must remain anonymous');
-        applyProposal(baseBytes, proposal);
-        const classification = createClassificationArtifact(policy, verifiedSubject, classifyProposal(baseBytes, proposal, policy.config, verifiedSubject));
+        applyVersioned(baseBytes, proposal);
+        const classification = createClassificationArtifact(policy, verifiedSubject, classifyVersioned(baseBytes, proposal, policy.config, verifiedSubject));
         const receivedAt = utcSecond(clock(), 'queue clock');
         const queueId = queueIdFromFactory(idFactory);
         if (indexes.byId.has(queueId)) fail('queue-id-collision', 'idFactory returned an existing queue identifier');
         const receipt = createReceipt({
           queueId, lane: carrierInput.lane, receivedAt,
           expiresAt: addDays(receivedAt, config.pendingRetentionDays),
-          digest: proposalDigest(proposal), proposalByteLength: proposalBytes.length,
+          digest: digestVersioned(proposal), proposalByteLength: proposalBytes.length,
           requestDigest: digests.requestDigest, idempotencyKeyDigest: digests.idempotencyKeyDigest,
           sourcePartition: sourcePartitionDigest(proposal),
         });

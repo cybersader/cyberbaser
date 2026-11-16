@@ -6,6 +6,17 @@ export function limitStoreConformance(name, { createStore, size }) {
   describe(`${name} limit store conformance`, () => {
     const policy = { capacity: 2, refillPerMs: 0.001 };
 
+    test('weighted charges are atomic, bounded and refill in the same units', () => {
+      const store = createStore({ maxKeys: 4 });
+      const work = { capacity: 10, refillPerMs: 0.001 };
+      expect(store.take('opaque-work', { ...work, cost: 11 }, 0)).toBe(false);
+      expect(store.take('opaque-work', { ...work, cost: 7 }, 0)).toBe(true);
+      expect(store.take('opaque-work', { ...work, cost: 4 }, 0)).toBe(false);
+      expect(store.take('opaque-work', { ...work, cost: 3 }, 0)).toBe(true);
+      expect(store.take('opaque-work', { ...work, cost: 2 }, 1000)).toBe(false);
+      expect(store.take('opaque-work', { ...work, cost: 2 }, 2000)).toBe(true);
+    });
+
     test('capacity is exact and exhausted takes remain false', () => {
       const store = createStore({ maxKeys: 4 });
       expect(store.take('opaque-a', policy, 0)).toBe(true);

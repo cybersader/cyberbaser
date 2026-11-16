@@ -10,6 +10,11 @@
 - **Limits:** authorization to define/document is not approval of every recommended default or permission schema. Registration/recovery and credential custody, trust thresholds, reviewer conflicts, delegated Apply/Publish, revision contracts and automation remain unresolved before their implementation. Current identity/session/source restrictions and live-execution gates stand.
 - **Chronology:** `docs/src/content/docs/agent-context/zz-log/2026-11-13-community-model-definition.mdx`. No application code or live capabilities changed.
 
+### Suggesting mode direction selected (2026-11-16, no R-number)
+- **Maintainer decision:** "I like that idea. Let's move forward with that one." Build the WYSIWYG suggesting direction from `research/wysiwyg-suggesting-mode.mdx`.
+- **Selected:** one shared source-coordinate suggestion ledger with two surfaces: readers suggest on the rendered page (provenance-mapped spans); contributors and unmappable text use a source-first CodeMirror 6 live-preview editor. Several edits travel as one single-file multi-operation proposal (ordered, non-overlapping exact byte operations on one pinned base), reviewed per change, decided Approve all / Reject all first; subsets produce a new candidate with fresh approval.
+- **Build order:** renderer source-position annotation and the multi-operation core contract and ledger first; then intake, owner review/apply; then the rendered-page suggesting UI; then the CM6 fallback. v1 proposals and records stay valid. CriticMarkup is a display/import/export adapter, not the integrity envelope. Workers: mainly Astra and Sol by maintainer direction.
+
 ### Controls are protocol-driven and pluggable (2026-11-16, no R-number)
 - **Maintainer direction:** backend checks and controls must use relatively agnostic, protocol-driven interfaces so new systems can be added by modifying code and submitting a pull request.
 - **Rule:** vendor-neutral interface + provider registry + shared conformance suite; core owns fail-closed safety; vendors are first providers only. Applies to bot checks, limit storage, client-address sources, authentication, intake carriers and renderers. Recorded as hard constraint 8 in `PROJECT_CONTEXT.md` and in `design/architecture.mdx`.

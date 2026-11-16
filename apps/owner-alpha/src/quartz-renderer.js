@@ -113,6 +113,9 @@ export function suggestionEnvironment(suggestions) {
   }
   return {
     CYBERBASER_ACCOUNT_FREE_INTAKE: 'enabled',
+    // Suggesting mode maps rendered text to exact source bytes; the renderer
+    // emits that provenance only when asked (off = byte-identical output).
+    CYBERBASER_SOURCE_PROVENANCE: 'enabled',
     CYBERBASER_ACCOUNT_FREE_INTAKE_ORIGIN: suggestions.intakeOrigin,
     CYBERBASER_ACCOUNT_FREE_BINDING_DIGEST: suggestions.bindingDigest,
     CYBERBASER_ACCOUNT_FREE_SOURCE_REPOSITORY: suggestions.sourceRepository,
@@ -145,6 +148,9 @@ export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, 
         QUARTZ_LOCK_SHA256: PINNED_QUARTZ_LOCK_SHA256,
         QUARTZ_INSTALL_SHA256: PINNED_QUARTZ_INSTALL_SHA256,
         ...seedEnvironment,
+        ...(formEnvironment.CYBERBASER_SOURCE_PROVENANCE
+          ? { CYBERBASER_SOURCE_PROVENANCE: formEnvironment.CYBERBASER_SOURCE_PROVENANCE }
+          : {}),
       }),
     },
     'quartz-setup-failed',

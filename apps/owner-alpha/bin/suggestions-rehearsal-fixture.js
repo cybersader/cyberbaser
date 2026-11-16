@@ -165,20 +165,15 @@ export async function createSuggestionsFixture({ port = 46437, keep = false, cha
 /** A fixture-local renderer seam reuses the pinned setup/build scripts offline. */
 export function createRehearsalRenderer({ seed = RENDERER_SEED } = {}) {
   return async ({ contentDir, outputDir, workspaceDir, ownerOrigin, suggestions = null }) => {
-    const { PINNED_QUARTZ_COMMIT, PINNED_QUARTZ_REF } = await import('../src/quartz-renderer.js');
+    const { PINNED_QUARTZ_COMMIT, PINNED_QUARTZ_REF, suggestionEnvironment } = await import('../src/quartz-renderer.js');
     const quartz = path.join(workspaceDir, 'quartz');
     const renderer = path.join(PROJECT_ROOT, 'renderers/quartz-cyberbase');
     await mkdir(workspaceDir, { recursive: true });
-    const env = { ...environment(), QUARTZ_OFFLINE: '1', QUARTZ_SEED_DIR: seed };
+    // Same build inputs as the real owner renderer (form, challenge, provenance).
+    const form = suggestionEnvironment(suggestions);
+    const env = { ...environment(), QUARTZ_OFFLINE: '1', QUARTZ_SEED_DIR: seed,
+      ...(form.CYBERBASER_SOURCE_PROVENANCE ? { CYBERBASER_SOURCE_PROVENANCE: form.CYBERBASER_SOURCE_PROVENANCE } : {}) };
     await command('bash', [path.join(renderer, 'setup.sh'), quartz], { env });
-    const form = suggestions === null ? {} : {
-      CYBERBASER_ACCOUNT_FREE_INTAKE: 'enabled', CYBERBASER_ACCOUNT_FREE_INTAKE_ORIGIN: suggestions.intakeOrigin,
-      CYBERBASER_ACCOUNT_FREE_BINDING_DIGEST: suggestions.bindingDigest,
-      CYBERBASER_ACCOUNT_FREE_SOURCE_REPOSITORY: suggestions.sourceRepository,
-      CYBERBASER_ACCOUNT_FREE_SOURCE_REVISION: suggestions.sourceRevision,
-      ...(suggestions.challenge ? { CYBERBASER_SUGGESTION_CHALLENGE_PROVIDER: suggestions.challenge.provider,
-        CYBERBASER_SUGGESTION_CHALLENGE_SITE_KEY: suggestions.challenge.siteKey } : {}),
-    };
     await command('bash', [path.join(renderer, 'build.sh'), contentDir, quartz], { env: { ...env, COPY_CONTENT: '1', OUTPUT_DIR: outputDir,
       CYBERBASER_EDIT_LINK_MODE: 'owner', CYBERBASER_OWNER_ORIGIN: ownerOrigin, ...form } });
     return { renderer: 'quartz-cyberbase', revision: PINNED_QUARTZ_COMMIT, tag: PINNED_QUARTZ_REF, outputDir, suggestionForm: suggestions !== null };

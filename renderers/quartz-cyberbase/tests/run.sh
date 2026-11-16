@@ -8,6 +8,7 @@ bun "$HERE/edit-links.test.ts"
 bun "$HERE/suggest-correction.test.ts"
 bun "$HERE/suggest-diff.test.ts"
 bun "$HERE/suggest-challenge.test.ts"
+bun "$HERE/provenance-contract.test.ts"
 for provider_test in "$HERE"/*-provider.test.ts; do
   bun "$provider_test"
 done

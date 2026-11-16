@@ -126,7 +126,9 @@ function reviewSummary(value) {
     'lane',
     'tier',
     'route',
+    ...(Object.hasOwn(value, 'proposalVersion') ? ['proposalVersion'] : []),
   ], 'review summary');
+  if (Object.hasOwn(value, 'proposalVersion') && ![1, 2].includes(value.proposalVersion)) fail('invalid-review-response', 'unsupported proposal version');
   if (value.schemaVersion !== 1 || value.artifactType !== 'cyberbaser-proposal-review-summary') {
     fail('invalid-review-response', 'review summary schema or artifact type is unsupported');
   }
@@ -157,6 +159,7 @@ function reviewSummary(value) {
   }
   return deepFreeze({
     schemaVersion: 1,
+    ...(Object.hasOwn(value, 'proposalVersion') ? { proposalVersion: value.proposalVersion } : {}),
     artifactType: value.artifactType,
     queueId,
     proposalId: boundedString(value.proposalId, 'review summary proposalId', 1024),

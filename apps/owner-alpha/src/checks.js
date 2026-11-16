@@ -1,3 +1,4 @@
+import { applyOwnerChangeSet, validateChangeSetCorrection, proveChangeSetOutsideBytes } from './change-set-operation.js';
 import { TextDecoder } from 'node:util';
 import { cp, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -78,6 +79,12 @@ function canonicalBase64Bytes(value, name) {
 }
 
 function correctionFromOperation(operation) {
+  if (operation?.operationType === 'change-set') {
+    const correction = validateChangeSetCorrection(operation);
+    const first = correction.proposal.changeSet.files[0].operations[0];
+    // A rendered witness observes the whole candidate; it is not an application span.
+    return { correction, expectedOldBytes: Buffer.from(first.expected), replacementBytes: Buffer.from(first.replacement) };
+  }
   if (operation && Object.hasOwn(operation, 'replacementBytes')) {
     return {
       correction: operation,
@@ -126,7 +133,7 @@ export function runImmediateChecks({
   const normalizedOperation = correctionFromOperation(operation);
   let reproduced;
   try {
-    reproduced = applyCorrection(base, normalizedOperation.correction);
+    reproduced = (operation?.operationType === 'change-set' ? applyOwnerChangeSet(base, normalizedOperation.correction) : applyCorrection(base, normalizedOperation.correction));
   } catch (error) {
     fail('operation-reproduction-failed', 'the bound operation could not be applied to the supplied base', {
       cause: error?.code ?? error?.name ?? 'unknown',
@@ -136,17 +143,20 @@ export function runImmediateChecks({
     fail('operation-candidate-mismatch', 'the bound operation does not reproduce the exact candidate bytes');
   }
 
+  const multi = operation?.operationType === 'change-set';
   const start = operation?.start;
   const end = operation?.end;
   const replacement = normalizedOperation.replacementBytes;
-  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start || end > base.length) {
-    fail('invalid-operation-range', 'operation.start and operation.end must bound one exact base byte range');
-  }
-  const candidateSuffixStart = start + replacement.length;
-  const prefixIdentical = base.subarray(0, start).equals(candidate.subarray(0, start));
-  const suffixIdentical = base.subarray(end).equals(candidate.subarray(candidateSuffixStart));
-  if (!prefixIdentical || !suffixIdentical) {
-    fail('outside-operation-bytes-changed', 'candidate bytes outside the declared operation are not identical');
+  let multiProof = null;
+  if (multi) multiProof = proveChangeSetOutsideBytes(base, candidate, normalizedOperation.correction.proposal);
+  else {
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start || end > base.length) {
+      fail('invalid-operation-range', 'operation.start and operation.end must bound one exact base byte range');
+    }
+    if (!base.subarray(0, start).equals(candidate.subarray(0, start))
+      || !base.subarray(end).equals(candidate.subarray(start + replacement.length))) {
+      fail('outside-operation-bytes-changed', 'candidate bytes outside the declared operation are not identical');
+    }
   }
 
   const before = decodeUtf8(base, 'baseBytes');
@@ -183,7 +193,7 @@ export function runImmediateChecks({
 
   return deepFreeze({
     ok: true,
-    operation: {
+    operation: multi ? { reproducesCandidate: true, ...multiProof } : {
       reproducesCandidate: true,
       outsideBytesIdentical: true,
       start,
@@ -697,7 +707,7 @@ export async function runPreApplyChecks({
   let candidate;
   if (candidateBytes === undefined) {
     try {
-      candidate = applyCorrection(base, normalizedOperation.correction);
+      candidate = (operation?.operationType === 'change-set' ? applyOwnerChangeSet(base, normalizedOperation.correction) : applyCorrection(base, normalizedOperation.correction));
     } catch (error) {
       fail('operation-reproduction-failed', 'the bound operation could not produce candidate bytes', {
         cause: error?.code ?? error?.name ?? 'unknown',

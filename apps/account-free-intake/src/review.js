@@ -15,6 +15,12 @@ function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
+function sourceOf(proposal) {
+  return proposal.schemaVersion === 2
+    ? { repository: proposal.changeSet.repository, revision: proposal.changeSet.baseRevision, path: proposal.changeSet.files[0].path }
+    : proposal.source;
+}
+
 function decodedOperation(proposal) {
   return {
     oldText: Buffer.from(proposal.operation.expectedOldBytesBase64, 'base64').toString('utf8'),
@@ -47,18 +53,43 @@ export function renderListText(entries) {
     entry.state.state,
     entry.receipt.receivedAt,
     entry.classification.classification.route,
-    visible(entry.proposal.source.path),
+    visible(sourceOf(entry.proposal).path),
   ].join('\t')).join('\n')}\n`;
 }
 
 export function renderListHtml(entries) {
   const rows = entries.length === 0
     ? '<tr><td colspan="5">No retained proposals.</td></tr>'
-    : entries.map((entry) => `<tr><td><code>${escapeHtml(entry.queueId)}</code></td><td>${escapeHtml(entry.state.state)}</td><td>${escapeHtml(entry.receipt.receivedAt)}</td><td>${escapeHtml(entry.classification.classification.route)}</td><td><code>${escapeHtml(entry.proposal.source.path)}</code></td></tr>`).join('');
+    : entries.map((entry) => `<tr><td><code>${escapeHtml(entry.queueId)}</code></td><td>${escapeHtml(entry.state.state)}</td><td>${escapeHtml(entry.receipt.receivedAt)}</td><td>${escapeHtml(entry.classification.classification.route)}</td><td><code>${escapeHtml(sourceOf(entry.proposal).path)}</code></td></tr>`).join('');
   return htmlDocument('Account-free proposal queue', `<h1>Account-free proposal queue</h1><table><thead><tr><th>Queue ID</th><th>State</th><th>Received</th><th>Route</th><th>Source path</th></tr></thead><tbody>${rows}</tbody></table>`);
 }
 
+function renderChangeSetText(entry) {
+  const source = sourceOf(entry.proposal);
+  return [
+    `Queue ID: ${entry.queueId}`, `State: ${entry.state.state}`,
+    `Received: ${entry.receipt.receivedAt}`, `Expires: ${entry.receipt.expiresAt}`,
+    'Proposal version: 2', `Trust tier: ${entry.classification.classification.tier}`,
+    `Review route: ${entry.classification.classification.route}`,
+    `Repository: ${visible(source.repository)}`, `Revision: ${visible(source.revision)}`,
+    `Path: ${visible(source.path)}`, '', 'Rationale:', visible(entry.proposal.submission.rationale ?? ''),
+    '', 'Evidence:', ...entry.proposal.submission.evidence.map(visible),
+    ...entry.proposal.changeSet.files[0].operations.flatMap((operation) => [
+      '', `Operation: ${visible(operation.operationId)}`, `Bytes: ${operation.start}..${operation.end}`,
+      'Exact old text:', visible(operation.expected), 'Exact replacement text:', visible(operation.replacement),
+    ]), '',
+  ].join('\n');
+}
+
+function renderChangeSetHtml(entry) {
+  const source = sourceOf(entry.proposal);
+  const operations = entry.proposal.changeSet.files[0].operations.map((operation) =>
+    `<section><h2>Operation ${escapeHtml(operation.operationId)}</h2><p>Bytes ${operation.start}..${operation.end}</p><h3>Exact old text</h3><pre class="old">${escapeHtml(operation.expected)}</pre><h3>Exact replacement text</h3><pre class="new">${escapeHtml(operation.replacement)}</pre></section>`).join('');
+  return htmlDocument(`Proposal ${entry.queueId}`, `<h1>Account-free proposal</h1><p>Queue ID: <code>${escapeHtml(entry.queueId)}</code></p><p>Proposal version: 2; ${escapeHtml(entry.state.state)}; ${escapeHtml(entry.classification.classification.route)}</p><p>Source: <code>${escapeHtml(source.repository)} ${escapeHtml(source.revision)} ${escapeHtml(source.path)}</code></p><h2>Rationale</h2><pre>${escapeHtml(entry.proposal.submission.rationale ?? '')}</pre><h2>Evidence</h2><ul>${entry.proposal.submission.evidence.map((url) => `<li><code>${escapeHtml(url)}</code></li>`).join('')}</ul>${operations}`);
+}
+
 export function renderShowText(entry) {
+  if (entry.proposal.schemaVersion === 2) return renderChangeSetText(entry);
   const { oldText, replacementText } = decodedOperation(entry.proposal);
   const evidence = entry.proposal.submission.evidence.length === 0
     ? '(none)'
@@ -72,7 +103,7 @@ export function renderShowText(entry) {
     `Review route: ${entry.classification.classification.route}`,
     `Repository: ${visible(entry.proposal.source.repository)}`,
     `Revision: ${visible(entry.proposal.source.revision)}`,
-    `Path: ${visible(entry.proposal.source.path)}`,
+    `Path: ${visible(sourceOf(entry.proposal).path)}`,
     `Bytes: ${entry.proposal.operation.start}..${entry.proposal.operation.end}`,
     '',
     'Rationale:',
@@ -91,6 +122,7 @@ export function renderShowText(entry) {
 }
 
 export function renderShowHtml(entry) {
+  if (entry.proposal.schemaVersion === 2) return renderChangeSetHtml(entry);
   const { oldText, replacementText } = decodedOperation(entry.proposal);
   const evidence = entry.proposal.submission.evidence.length === 0
     ? '<p>None.</p>'
@@ -107,7 +139,7 @@ export function renderShowHtml(entry) {
     ['Review route', entry.classification.classification.route],
     ['Repository', entry.proposal.source.repository],
     ['Revision', entry.proposal.source.revision],
-    ['Path', entry.proposal.source.path],
+    ['Path', sourceOf(entry.proposal).path],
     ['Byte range', `${entry.proposal.operation.start}..${entry.proposal.operation.end}`],
   ].map(([label, value]) => `<div class="label">${escapeHtml(label)}</div><div><code>${escapeHtml(value)}</code></div>`).join('');
   return htmlDocument(`Proposal ${entry.queueId}`, `<h1>Account-free proposal</h1><div class="grid">${details}</div><h2>Rationale</h2><pre>${escapeHtml(entry.proposal.submission.rationale)}</pre><h2>Evidence</h2>${evidence}<h2>Classification reasons</h2>${reasons}<h2>Exact old text</h2><pre class="old">${escapeHtml(oldText)}</pre><h2>Exact replacement text</h2><pre class="new">${escapeHtml(replacementText)}</pre>`);

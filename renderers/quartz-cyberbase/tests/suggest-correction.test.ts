@@ -204,9 +204,12 @@ for (const missing of ["intakeOrigin", "bindingDigest", "sourceRepository", "sou
   assert.throws(() => resolveSuggestCorrectionOptions(environment), /required/)
 }
 
-// The rendered component may expose only the canonical action and opaque binding values.
+// Published provenance identity is permitted only from the opt-in provenance state.
+// Repository/revision/owner/private account values must still never reach the form.
 const componentSource = readFileSync(join(import.meta.dir, "../components/SuggestCorrection.tsx"), "utf8")
-assert.doesNotMatch(componentSource, /data-(?:source|repository|revision|path|owner|identity|contact|account)/iu)
+assert.doesNotMatch(componentSource, /data-(?:repository|revision|path|owner|identity|contact|account)/iu)
+assert.match(componentSource, /sourceProvenance\?\.source \? \{/u)
+assert.match(componentSource, /"data-source-identity": JSON.stringify\(\(fileData as any\).sourceProvenance.source\)/u)
 const formNames = [...componentSource.matchAll(/name="([^"]+)"/gu)].map((match) => match[1])
 assert.deepEqual(formNames, ["edited", "rationale", "evidence"])
 assert.doesNotMatch(componentSource, /Text to replace|Context immediately (?:before|after)/u)

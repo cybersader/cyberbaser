@@ -198,6 +198,7 @@ function entryAfterCursor(entry, cursor) {
 function loadProjection(entry) {
   return Object.freeze({
     queueId: entry.queueId,
+    proposalVersion: entry.proposal.schemaVersion,
     proposalText: entry.proposalText,
     receipt: entry.receipt,
     carrier: entry.carrier,
@@ -247,7 +248,7 @@ export function createReviewIpcHandler({ review, maxListEntries = 100 } = {}) {
       const page = remaining.slice(0, request.limit);
       const entries = page.map((entry) => {
         const evidence = createReviewEvidence(loadProjection(entry));
-        return createReviewSummary(evidence);
+        return Object.freeze({ ...createReviewSummary(evidence), proposalVersion: entry.proposal.schemaVersion });
       });
       const nextCursor = remaining.length > page.length && page.length > 0
         ? encodeCursor(page.at(-1), request.state, digest)

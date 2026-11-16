@@ -1,3 +1,4 @@
+import { applyOwnerChangeSet, proveChangeSetOutsideBytes } from './change-set-operation.js';
 import { createHash } from 'node:crypto';
 import {
   applyCorrection,
@@ -113,7 +114,7 @@ function correctionFromOperation(operation) {
 
 function assertOperationBinding(session, operation) {
   if (!isPlainObject(operation)
-    || operation.schemaVersion !== SOURCE_OPERATION_SCHEMA_VERSION
+    || ![SOURCE_OPERATION_SCHEMA_VERSION, 2].includes(operation.schemaVersion)
     || operation.artifactType !== SOURCE_OPERATION_ARTIFACT_TYPE
     || !isPlainObject(operation.source)) {
     fail('invalid-source-operation', 'operation must be one owner-alpha source operation');
@@ -130,7 +131,8 @@ function assertOperationBinding(session, operation) {
       fail('operation-source-binding-mismatch', `operation source ${key} does not match the edit session`);
     }
   }
-  if (operation.operationType !== 'offset') {
+  if (operation.schemaVersion === 2 && operation.operationType === 'change-set') return;
+  if (operation.schemaVersion !== 1 || operation.operationType !== 'offset') {
     fail('invalid-source-operation', 'owner-alpha source operation must be one offset splice');
   }
 }
@@ -240,6 +242,14 @@ export function deriveEditorOperation({ session, editedText, config: configInput
 export function applyEditorOperation(session, operation) {
   const { base, frontmatter } = validateEditSession(session);
   assertOperationBinding(session, operation);
+  if (operation.schemaVersion === 2) {
+    if (session.origin?.type !== 'approved-proposal') fail('invalid-source-operation', 'multi-change operations require approved-proposal provenance');
+    const candidate = applyOwnerChangeSet(base, operation);
+    assertLfOnlyCandidate(candidate);
+    for (const span of operation.proposal.changeSet.files[0].operations) assertFrontmatterUnchanged(base, candidate, span, frontmatter);
+    proveChangeSetOutsideBytes(base, candidate, operation.proposal);
+    return candidate;
+  }
   const correction = correctionFromOperation(operation);
   let candidate;
   try {

@@ -1,3 +1,4 @@
+import { prepareProposal } from '@cyberbaser/proposal';
 import { afterEach, describe, expect, test } from 'bun:test';
 import { execFile } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
@@ -110,26 +111,12 @@ const REVIEW_SUMMARY = Object.freeze({
 });
 const REVIEW_EVIDENCE = Object.freeze({
   queueId: REVIEW_QUEUE_ID,
-  proposal: {
-    operation: {
-      type: 'quote',
-      selector: {
-        prefix: 'Correct ',
-        quote: 'teh',
-        suffix: ' safely.',
-      },
-      start: 13,
-      end: 16,
-      baseDigest: REVIEW_DIGEST,
-      candidateDigest: REVIEW_DIGEST,
-      expectedOldBytesBase64: Buffer.from('teh').toString('base64'),
-      replacementBytesBase64: Buffer.from('</pre><script>the</script>').toString('base64'),
-    },
-    submission: {
-      rationale: 'Correct </pre><script>globalThis.pwned = true</script> safely.',
-      evidence: ['https://example.invalid/evidence?x=1&y=2'],
-    },
-  },
+  proposal: prepareProposal(Buffer.from('IntroCorrect teh safely.\n'), {
+    proposalId: REVIEW_SUMMARY.proposalId,
+    source: REVIEW_SUMMARY.source,
+    operation: { type: 'quote', selector: { quote: 'teh', prefix: 'Correct ', suffix: ' safely.' }, replacement: '</pre><script>the</script>' },
+    submission: { submittedAt: '2026-08-20T12:00:00Z', rationale: 'Correct </pre><script>globalThis.pwned = true</script> safely.', evidence: ['https://example.invalid/evidence?x=1&y=2'], identityClaim: null },
+  }),
   classification: {
     verifiedSubject: null,
     policyStatus: 'valid',
@@ -657,15 +644,14 @@ describe('privileged proposal review routes', () => {
     const entry = structuredClone(REVIEW_ENTRY);
     const startByte = start ?? Buffer.byteLength(baseText.slice(0, baseText.indexOf(oldText)), 'utf8');
     const endByte = startByte + Buffer.byteLength(oldText, 'utf8');
-    entry.evidence.proposal.operation = {
-      ...entry.evidence.proposal.operation,
-      type,
-      selector: type === 'quote' ? { prefix: null, quote: oldText, suffix: null } : null,
-      start: startByte,
-      end: endByte,
-      expectedOldBytesBase64: Buffer.from(oldText).toString('base64'),
-      replacementBytesBase64: Buffer.from(replacementText).toString('base64'),
-    };
+    entry.evidence.proposal = prepareProposal(Buffer.from(baseText), {
+      proposalId: entry.evidence.proposal.proposalId,
+      source: entry.evidence.proposal.source,
+      submission: entry.evidence.proposal.submission,
+      operation: type === 'quote'
+        ? { type, selector: { quote: oldText }, replacement: replacementText }
+        : { type, start: startByte, end: endByte, replacement: replacementText },
+    });
     const buffer = Buffer.from(baseText, 'utf8');
     const candidateText = Buffer.concat([buffer.subarray(0, startByte), Buffer.from(replacementText), buffer.subarray(endByte)]).toString('utf8');
     entry.document = { baseText, candidateText, reason: null };

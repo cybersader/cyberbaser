@@ -213,3 +213,16 @@ test.each(['queue-pending-capacity', 'queue-source-capacity', 'queue-retained-ca
     expect(await response.json()).toEqual({ error: { code: 'queue-capacity' } });
   } finally { await service.close(); }
 });
+
+
+test('weighted sender work uses normalized HMAC identity and hourly refill independently of attempt quotas', () => {
+  let time = 0;
+  const limiter = createLayeredAbuseLimiter({ limits: { ...config.limits, perSenderOperationBudget: 5, perSenderByteBudget: 10 }, now: () => time });
+  expect(limiter.tryWork(parseIp('192.0.2.1'), 2, 5)).toBe(true);
+  expect(limiter.tryWork(parseIp('::ffff:c000:201'), 2, 5)).toBe(true);
+  expect(limiter.tryWork(parseIp('192.0.2.1'), 2, 1)).toBe(false);
+  expect(limiter.tryWork(parseIp('192.0.2.2'), 5, 10)).toBe(true);
+  time = 3_600_000;
+  expect(limiter.tryWork(parseIp('192.0.2.1'), 5, 10)).toBe(true);
+  expect(limiter.tryWork(parseIp('192.0.2.1'), 1, 1)).toBe(false);
+});

@@ -1,6 +1,7 @@
 import { QuartzConfig } from "./quartz/cfg"
 import * as Plugin from "./quartz/plugins"
 import { RelativeFolderLinks } from "./quartz/cyberbase/RelativeFolderLinks"
+import { provenanceMode, withSourceProvenance } from "./quartz/cyberbase/SourceProvenance"
 
 /**
  * Quartz renderer config for the cyberbase site.
@@ -123,6 +124,10 @@ const config: QuartzConfig = {
       Plugin.CustomOgImages(),
     ],
   },
+}
+
+if (provenanceMode(process.env.CYBERBASER_SOURCE_PROVENANCE)) {
+  config.plugins.transformers = withSourceProvenance(config.plugins.transformers)
 }
 
 export default config

@@ -159,6 +159,9 @@ if [ -d "$HERE/components" ]; then
   fi
 fi
 
+# Verify/apply only in the separate materialized checkout, never in the seed.
+node "$HERE/patches/apply-provenance.mjs" "$QUARTZ_DIR"
+
 # Quartz ships a sample content/ dir; build.sh replaces it with the projection.
 echo "==> setup complete: $QUARTZ_DIR"
 echo "    next: ./build.sh <CONTENT_DIR> $QUARTZ_DIR"

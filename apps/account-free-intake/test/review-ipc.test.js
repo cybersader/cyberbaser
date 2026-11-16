@@ -152,6 +152,7 @@ describe('review IPC protocol', () => {
       'carrier',
       'classification',
       'proposalText',
+      'proposalVersion',
       'queueId',
       'receipt',
       'state',

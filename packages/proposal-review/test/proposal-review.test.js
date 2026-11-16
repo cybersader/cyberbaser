@@ -6,7 +6,7 @@ import path from 'node:path';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { parseConfig } from '@cyberbaser/trust';
-import { prepareProposal, serializeProposal } from '@cyberbaser/proposal';
+import { prepareProposal, serializeProposal, createChangeSetProposal, serializeChangeSetProposal } from '@cyberbaser/proposal';
 import { openProposalQueue } from '@cyberbaser/proposal-queue';
 import reviewSchema from '../schema/proposal-review-v1.schema.json' with { type: 'json' };
 import {
@@ -74,10 +74,10 @@ function expectCode(action, code) {
   throw new Error(`expected ProposalReviewError(${code})`);
 }
 
-async function evidenceFixture({ rationale = 'Correct the misspelling without changing meaning.' } = {}) {
+async function evidenceFixture({ rationale = 'Correct the misspelling without changing meaning.', version = 1 } = {}) {
   const parent = await mkdtemp(path.join(os.tmpdir(), 'proposal-review-'));
   cleanup.push(parent);
-  const proposal = prepareProposal(BASE, {
+  const legacy = prepareProposal(BASE, {
     proposalId: 'lane-b:review-1',
     source: {
       repository: 'https://forge.example/owner/wiki.git',
@@ -96,6 +96,10 @@ async function evidenceFixture({ rationale = 'Correct the misspelling without ch
       identityClaim: null,
     },
   });
+  const proposal = version === 1 ? legacy : createChangeSetProposal(BASE, { proposalId: legacy.proposalId, source: legacy.source, submission: legacy.submission, operations: [
+    { operationId: 'spelling', start: BASE.indexOf('teh'), end: BASE.indexOf('teh') + 3, expected: 'teh', replacement: 'the' },
+    { operationId: 'tail', start: BASE.indexOf('Tail'), end: BASE.indexOf('Tail') + 4, expected: 'Tail', replacement: 'Ending' },
+  ] });
   const queue = await openProposalQueue({
     config: { root: path.join(parent, 'queue') },
     clock: () => stamp(1),
@@ -107,7 +111,7 @@ async function evidenceFixture({ rationale = 'Correct the misspelling without ch
   });
   queues.push(queue);
   const accepted = await queue.enqueue({
-    proposalText: serializeProposal(proposal),
+    proposalText: version === 1 ? serializeProposal(proposal) : serializeChangeSetProposal(proposal),
     baseBytes: BASE,
     policy: { status: 'valid', digest: POLICY_DIGEST, config: TRUST_CONFIG },
     verifiedSubject: null,
@@ -184,6 +188,8 @@ describe('canonical review evidence', () => {
     });
     const text = serializeReviewSummary(summary, evidence);
     expect(parseReviewSummary(text, evidence)).toEqual(summary);
+    expect(serializeReviewSummary({ ...summary, proposalVersion: 1 }, evidence)).toBe(text);
+    expectCode(() => validateReviewSummary({ ...summary, proposalVersion: 2 }, evidence), 'proposal-version-mismatch');
     expect(validateReviewSummary(summary, evidence)).toEqual(summary);
     expect(validateAgainstSchema(summary)).toBe(true);
 
@@ -349,5 +355,36 @@ describe('decision-only owner artifacts', () => {
     const credential = mutable(blank);
     credential.reason = 'Bearer abcdefghijklmnopqrstuvwxyz';
     expectCode(() => validateOwnerDecision(credential), 'credential-material');
+  });
+});
+
+
+describe('complete v2 review and decision bindings', () => {
+  test('retains canonical two-change evidence and one immutable all-false decision', async () => {
+    const { evidence, entry } = await evidenceFixture({ version: 2 });
+    expect(evidence.proposal.schemaVersion).toBe(2);
+    expect(evidence.proposal.changeSet.files[0].operations).toHaveLength(2);
+    expect(parseReviewEvidence(serializeReviewEvidence(evidence))).toEqual(evidence);
+    const summary = createReviewSummary(evidence);
+    expect(summary.source.path).toBe('docs/example.md');
+    expect(summary.candidateDigest).toBe(evidence.proposal.changeSet.files[0].candidate.digest);
+    expect(validateReviewSummary({ ...summary, proposalVersion: 2 }, evidence)).toEqual(summary);
+    expectCode(() => validateReviewSummary({ ...summary, proposalVersion: 1 }, evidence), 'proposal-version-mismatch');
+    expectCode(() => validateReviewSummary({ ...summary, proposalVersion: 3 }, evidence), 'proposal-version-mismatch');
+    expect(createReviewEvidence({ queueId: entry.queueId, proposalVersion: 2, proposalText: entry.proposalText,
+      receipt: entry.receipt, carrier: entry.carrier, classification: entry.classification, state: entry.state })).toEqual(evidence);
+    for (const action of ['approve', 'reject']) {
+      const decision = createOwnerDecision({ action, reason: 'Decide the complete set.', decidedAt: stamp(2),
+        decisionAuthority: { type: 'owner-alpha-local', identity: 'owner' }, reviewEvidence: evidence });
+      expect(parseOwnerDecision(serializeOwnerDecision(decision))).toEqual(decision);
+      expect(Object.values(decision.effectBoundary).every((value) => value === false)).toBe(true);
+      expect(decision.reviewEvidence.proposal).toEqual(evidence.proposal);
+      const altered = mutable(decision);
+      altered.reviewEvidence.proposal.changeSet.files[0].operations[1].replacement = 'Different';
+      expect(() => validateOwnerDecision(altered)).toThrow();
+    }
+    const mislabelled = { queueId: entry.queueId, proposalVersion: 1, proposalText: entry.proposalText,
+      receipt: entry.receipt, carrier: entry.carrier, classification: entry.classification, state: entry.state };
+    expectCode(() => createReviewEvidence(mislabelled), 'proposal-version-mismatch');
   });
 });

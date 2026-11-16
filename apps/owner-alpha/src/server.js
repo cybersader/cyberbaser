@@ -3,7 +3,7 @@ import { constants } from 'node:fs';
 import { lstat, open, realpath, rename, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { OWNER_DECISION_REASON_MAX_BYTES } from '@cyberbaser/proposal-review';
+import { reviewProposalBinding, OWNER_DECISION_REASON_MAX_BYTES } from '@cyberbaser/proposal-review';
 import { validateDigest, validateQueueId } from '@cyberbaser/proposal-queue';
 import { loadOwnerAlphaConfig, validateOwnerAlphaConfig } from './config.js';
 import {
@@ -372,18 +372,31 @@ function reviewTime(value) {
 }
 
 function proposalView(entry) {
-  const operation = entry.evidence.proposal.operation;
+  const proposal = entry.evidence.proposal;
+  const binding = reviewProposalBinding(proposal);
+  const operations = entry.changes?.operations ?? binding.operations;
+  const first = operations[0];
+  const legacy = proposal.schemaVersion === 1 ? proposal.operation : null;
   return Object.freeze({
-    operation,
-    oldText: proposalText(operation.expectedOldBytesBase64),
-    replacementText: proposalText(operation.replacementBytesBase64),
-    prefix: operation.selector?.prefix ?? '',
-    suffix: operation.selector?.suffix ?? '',
-    hasContext: operation.selector !== null,
+    version: proposal.schemaVersion, path: binding.source.path, operations,
+    operation: legacy ?? { ...first, type: 'offset' },
+    oldText: first.expected, replacementText: first.replacement,
+    prefix: first.context?.before ?? legacy?.selector?.prefix ?? '',
+    suffix: first.context?.after ?? legacy?.selector?.suffix ?? '',
+    hasContext: first.context !== undefined || legacy?.selector != null,
   });
 }
 
+function changeInspection(entry) {
+  const view = proposalView(entry);
+  return `<section class="change-inspection" aria-label="Each exact change"><h2>${view.operations.length} ${view.operations.length === 1 ? 'change' : 'changes'}</h2>${view.operations.map((op, index) => {
+    const position = op.startPosition ? `Line ${op.startPosition.line}, column ${op.startPosition.column}` : `Bytes ${op.start}–${op.end}`;
+    return `<article class="inspected-change"><h3>Change ${index + 1} · ${escapeHtml(position)}</h3><p class="context-note">${escapeHtml(op.context?.before ?? '')}</p><div class="exact-change-grid"><div><h4>Before</h4><pre>${escapeHtml(op.expected)}</pre></div><div><h4>After</h4><pre>${escapeHtml(op.replacement)}</pre></div></div><p class="context-note">${escapeHtml(op.context?.after ?? '')}</p></article>`;
+  }).join('')}</section>`;
+}
+
 function changeName(view) {
+  if (view.version === 2) return `${view.path} — ${view.operations.length} ${view.operations.length === 1 ? 'change' : 'changes'}`;
   const oldText = compactReviewText(view.oldText, 64);
   const replacementText = compactReviewText(view.replacementText, 64);
   if (oldText.length === 0) return `Add “${replacementText}”`;
@@ -417,6 +430,7 @@ function proposalContext(view, mode, { compact = false } = {}) {
 }
 
 function changeSummaryHtml(view, { compact = false } = {}) {
+  if (view.version === 2) return `<span class="proposal-prose">${escapeHtml(changeName(view))}</span>`;
   const prefix = compact ? compactContext(view.prefix, 60, { fromEnd: true }) : view.prefix;
   const suffix = compact ? compactContext(view.suffix, 60) : view.suffix;
   const oldText = compact ? compactReviewText(view.oldText, 80) : view.oldText;
@@ -597,7 +611,7 @@ function reviewProjection(entry) {
   // A stated reason (for example the reading bound) means there is no text to
   // project; passing nulls on would misreport the page as absent from the base.
   if (document === null || document.reason !== null) return null;
-  const operation = entry.evidence.proposal.operation;
+  const operations = proposalView(entry).operations;
   const path = entry.summary.source.path;
   return documentProjection({
     files: [{
@@ -606,13 +620,7 @@ function reviewProjection(entry) {
       baseText: document.baseText,
       candidateText: document.candidateText,
     }],
-    operations: [{
-      path,
-      start: operation.start,
-      end: operation.end,
-      oldText: proposalText(operation.expectedOldBytesBase64),
-      replacementText: proposalText(operation.replacementBytesBase64),
-    }],
+    operations: operations.map((operation) => ({ path, start: operation.start, end: operation.end, oldText: operation.expected, replacementText: operation.replacement })),
   });
 }
 
@@ -744,6 +752,7 @@ function operationNote(view) {
 }
 
 function unavailableModeHtml(reason, entry) {
+  if (entry.evidence.proposal.schemaVersion === 2) return `<p class="mode-unavailable">${escapeHtml(reason)}</p>${changeInspection(entry)}`;
   const view = proposalView(entry);
   return `<div class="mode-unavailable">
 <p class="section-kicker">This view cannot be shown</p>
@@ -991,8 +1000,8 @@ function technicalEvidence(entry, { decision = null, queueRetained = null, title
 <div><dt>Repository</dt><dd>${escapeHtml(summary.source.repository)}</dd></div>
 <div><dt>Revision</dt><dd>${escapeHtml(summary.source.revision)}</dd></div>
 <div><dt>Git blob</dt><dd>${escapeHtml(sourceVerification?.gitObjectId ?? 'embedded decision evidence')}</dd></div>
-<div><dt>Base digest</dt><dd>${escapeHtml(evidence.proposal.operation.baseDigest)}</dd></div>
-<div><dt>Candidate digest</dt><dd>${escapeHtml(evidence.proposal.operation.candidateDigest)}</dd></div>
+<div><dt>Base digest</dt><dd>${escapeHtml(reviewProposalBinding(evidence.proposal).base.digest)}</dd></div>
+<div><dt>Candidate digest</dt><dd>${escapeHtml(reviewProposalBinding(evidence.proposal).candidate.digest)}</dd></div>
 </dl></section>
 <section><h3>Proposal record</h3><dl class="technical-facts">
 <div><dt>Queue ID</dt><dd>${escapeHtml(summary.queueId)}</dd></div>
@@ -1061,14 +1070,14 @@ function decisionStep({ entry, csrfToken, view }) {
 <div class="decision-bar-inner">
 <p class="decision-bar-change"><strong>${change}</strong><span>${sourcePath}</span></p>
 <div class="decision-actions">
-<button type="button" data-action="reject" class="decision-reject">Reject</button>
-<button type="button" data-action="approve" class="decision-approve">Approve</button>
+<button type="button" data-action="reject" class="decision-reject">${view.version === 2 ? 'Reject all' : 'Reject'}</button>
+<button type="button" data-action="approve" class="decision-approve">${view.version === 2 ? 'Approve all' : 'Approve'}</button>
 </div>
 <noscript><p class="decision-noscript">Recording a decision needs scripting enabled in this browser.</p></noscript>
 </div>
 </aside>
 <dialog id="decision-dialog" aria-labelledby="decision-dialog-title">
-<form id="review-decision-form" class="decision-sheet" data-queue-id="${escapeHtml(summary.queueId)}" data-review-evidence-digest="${escapeHtml(summary.reviewEvidenceDigest)}" data-csrf="${escapeHtml(csrfToken)}" data-max-reason-bytes="${OWNER_DECISION_REASON_MAX_BYTES}" data-suggestion-label="${change}">
+<form id="review-decision-form" class="decision-sheet" data-queue-id="${escapeHtml(summary.queueId)}" data-review-evidence-digest="${escapeHtml(summary.reviewEvidenceDigest)}" data-csrf="${escapeHtml(csrfToken)}" data-max-reason-bytes="${OWNER_DECISION_REASON_MAX_BYTES}" data-suggestion-label="${change}" data-proposal-version="${view.version}">
 <h2 id="decision-dialog-title">Approve this suggestion?</h2>
 <p class="dialog-suggestion" id="decision-dialog-suggestion"><strong>${change}</strong><span>${sourcePath}</span></p>
 ${advisory}
@@ -1091,6 +1100,7 @@ function reviewDetailPage({ entry, csrfToken, mode = REVIEW_MODE_KEYS[0] }) {
     bodyClass: 'proposal-review-page',
     body: `<main class="owner-shell review-shell" id="owner-review-detail">
 ${reviewIdentityHeader(entry, view)}
+${changeInspection(entry)}
 ${comparisonPanel(entry, mode)}
 ${technicalEvidence(entry, { title: 'Details for the record' })}
 </main>
@@ -1209,6 +1219,7 @@ function decisionDetailPage({ decision, summary, queueRetained, application = nu
 <blockquote class="decision-note">${escapeHtml(decision.reason)}</blockquote>
 ${boundary}
 </section>
+${view.version === 2 ? changeInspection(entry) : ''}
 ${approved ? applicationStep({ application, view, summary, csrfToken, entry }) : ''}
 ${technicalEvidence(entry, {
   decision,

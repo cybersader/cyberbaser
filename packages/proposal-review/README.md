@@ -10,6 +10,14 @@ The package defines three schema-version-1 artifacts:
 
 Owner decisions have `authorityScope: "decision-only"`. Every source, Git, rebuild, deployment, and publication effect flag is required to be `false`. Approval here does not apply a proposal or authorize another component to do so.
 
+## Proposal versions
+
+Review evidence accepts either the original single-splice proposal (v1) or the atomic single-file change set (v2). `createReviewEvidence` dispatches the exact canonical `proposalText` through `parseVersionedProposal`. An optional IPC `proposalVersion` must agree with those bytes; it is not added to stored review artifacts. Existing v1 evidence, summaries, decisions and their canonical bytes remain unchanged.
+
+For v2, the receipt binds the digest of the **complete proposal**, including every operation and submission metadata. One owner decision approves or rejects that whole proposal. There is no subset approval or per-operation authority. `reviewProposalBinding` supplies one normalized source/base/candidate view without rewriting the embedded proposal. `applyReviewProposal` and `classifyReviewProposal` dispatch by version; classification evaluates the combined before/after file and never trusts sender identity claims.
+
+Owner-alpha separately records the application act and retains the canonical v2 proposal in a version-2 prepared input/source operation. Its existing pipeline checks, exact atomic file replacement, one-path commit verification and durable recovery consume that same change set. No presentation diff is an application instruction, and an interrupted application without durable effect evidence is never replayed automatically.
+
 ## Boundaries
 
 - Pure and no-I/O: no filesystem, queue, Git, network, clock, identity verification, source write, or publication work.

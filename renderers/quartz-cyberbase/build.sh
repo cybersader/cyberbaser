@@ -61,6 +61,9 @@ if [ ! -d "$QUARTZ_DIR/quartz" ]; then
   exit 1
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+node "$SCRIPT_DIR/patches/apply-provenance.mjs" "$QUARTZ_DIR"
+
 echo "==> content   : $CONTENT_DIR"
 echo "==> quartz    : $QUARTZ_DIR"
 echo "==> output    : $OUTPUT_DIR"

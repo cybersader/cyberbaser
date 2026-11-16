@@ -550,3 +550,4 @@ for (const fail of ["error", "timeout"] as const) {
 }
 console.log("suggest-challenge render, header-only token, gating, retry and SPA cleanup checks passed")
 console.log("suggest-inline selection, pencil, exact restoration, receipt, mismatch and mobile-class checks passed")
+await import("./suggest-mode.test")

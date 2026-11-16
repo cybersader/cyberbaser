@@ -1,3 +1,14 @@
+import { createChangeSetProposal, prepareProposal, serializeChangeSetProposal, serializeProposal, applyChangeSetProposal } from '@cyberbaser/proposal';
+import { openProposalQueue, digestBytes } from '@cyberbaser/proposal-queue';
+import { createReviewSummary } from '@cyberbaser/proposal-review';
+import { createReviewIpcHandler } from '../../account-free-intake/src/review-ipc.js';
+import { createProposalReviewClient } from '../src/proposal-review-client.js';
+import { readTrustPolicy } from '../src/proposal-review.js';
+import { runPreApplyChecks, runImmediateChecks } from '../src/checks.js';
+import { createOwnerAlphaHandler, createOwnerProposalReviewService } from '../src/server.js';
+import { createJsonArtifactOnce } from '../src/artifacts.js';
+import { initializeDurableJob, transitionDurableJob } from '../src/job-state.js';
+import { computePolicyRevision } from '../src/config.js';
 import { afterEach, expect, test } from 'bun:test';
 import { execFile } from 'node:child_process';
 import { lstat, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
@@ -91,7 +102,7 @@ function policyGitFor(config) {
   };
 }
 
-async function ownerRuntime(fixture) {
+async function ownerRuntime(fixture, overrides = {}) {
   await git(fixture.checkout, ['remote', 'set-url', 'origin', fixture.bare]);
   await git(fixture.checkout, ['push', '-q', 'origin', 'main']);
   const ownerProject = path.join(fixture.root, 'owner-runtime');
@@ -142,13 +153,14 @@ async function ownerRuntime(fixture) {
       return { status: 'local-rebuilt', commit, sourcePath };
     },
   };
+  Object.assign(dependencies, overrides);
   const handler = createSaveHandler({ config, projectRoot: ownerProject, context, dependencies });
   const saveEdit = async (input) => {
     const started = handler.startEdit(input);
     completions.set(input.jobId, started.completion);
     return started.accepted;
   };
-  return { config, context, policyGit, checkoutReady, saveEdit, completions, ownerProject };
+  return { config, context, policyGit, checkoutReady, saveEdit, completions, ownerProject, dependencies, handler };
 }
 
 test('an approved suggestion reaches the page only through the separate apply act, once, through the owner pipeline', async () => {
@@ -344,3 +356,13 @@ test('the rendered owner site is the only source of a page slug, and a page it d
   await writeFile(path.join(siteRoot, 'conflict.html'), `<html><body>${link('handbook/backup-retention.md', 'elsewhere/backup-retention')}</body></html>`);
   await expectCode(() => resolveRenderedPageSlug({ siteRoot, ownerOrigin, relativePath: 'handbook/backup-retention.md' }), 'page-slug-ambiguous');
 });
+
+// The same throwaway checkout and ordinary Save harness exercises both versions.
+import { registerV2ApplicationCases } from './v2-application-cases.js';
+registerV2ApplicationCases({ test, expect, cleanup, createFixture, git, path, mkdir, writeFile, readFile, ownerRuntime,
+  createChangeSetProposal, prepareProposal, serializeChangeSetProposal, serializeProposal, applyChangeSetProposal,
+  openProposalQueue, digestBytes, createReviewIpcHandler, createProposalReviewClient, createOwnerProposalReviewSource,
+  readTrustPolicy, createOwnerAlphaHandler, createOwnerProposalReviewService, runPreApplyChecks, runImmediateChecks,
+  recordProposalDecision, applyApprovedProposal, assessProposalApplication, listProposalApplicationEvents,
+  listApprovedProposalInputs, readJsonArtifact, pipelineArtifactPaths, defineStoreContext, prepareStore,
+  initializeDurableJob, transitionDurableJob, createJsonArtifactOnce, computePolicyRevision, createSaveHandler, gitState });

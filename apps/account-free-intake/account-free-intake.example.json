@@ -35,6 +35,8 @@
     "tokenBucketRefillPerSecond": 1,
     "perSenderCapacity": 3,
     "perSenderRefillPerHour": 3,
+    "perSenderOperationBudget": 50,
+    "perSenderByteBudget": 65536,
     "perNetworkCapacity": 10,
     "perNetworkRefillPerDay": 10,
     "perPageCapacity": 2,

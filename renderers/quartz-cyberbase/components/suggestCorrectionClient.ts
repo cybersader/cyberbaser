@@ -1,3 +1,5 @@
+import type { SuggestionIntent } from "./suggestModeClient"
+
 const ACCOUNT_FREE_INTENT_ARTIFACT_TYPE = "cyberbaser-account-free-correction-intent" as const
 const ACCOUNT_FREE_INTENT_SCHEMA_VERSION = 1 as const
 const INTENT_MAX_BYTES = 96 * 1024
@@ -122,7 +124,7 @@ export function buildCorrectionIntent(input: CorrectionIntentInput): CorrectionI
   return intent
 }
 
-export function serializeCorrectionIntent(intent: CorrectionIntent): string {
+export function serializeCorrectionIntent(intent: CorrectionIntent | SuggestionIntent): string {
   return `${JSON.stringify(intent)}\n`
 }
 
@@ -254,7 +256,7 @@ export async function readBoundedJsonResponse(
 
 export async function submitCorrectionIntent(
   action: string,
-  intent: CorrectionIntent,
+  intent: CorrectionIntent | SuggestionIntent,
   fetcher: typeof fetch = fetch,
   challengeToken?: string,
 ): Promise<SubmissionResult> {

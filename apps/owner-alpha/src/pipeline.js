@@ -1,3 +1,5 @@
+import { digestBytes } from '@cyberbaser/proposal-queue';
+import { validateChangeSetCorrection } from './change-set-operation.js';
 import { randomUUID } from 'node:crypto';
 import { applyAcceptedOperation } from './apply.js';
 import { createJsonArtifactOnce, readJsonArtifact } from './artifacts.js';
@@ -132,7 +134,7 @@ function serializeApplication(application) {
     candidateDigest: application.candidateDigest,
     candidateByteLength: application.candidateByteLength,
     candidateBytesBase64: Buffer.from(application.candidateBytes).toString('base64'),
-    correction: {
+    correction: application.correction.operationType === 'change-set' ? validateChangeSetCorrection(application.correction) : {
       operationType: application.correction.operationType,
       baseByteLength: application.correction.baseByteLength,
       baseDigest: application.correction.baseDigest,
@@ -155,6 +157,13 @@ function deserializeApplication(value) {
   const candidateBytes = Buffer.from(value.candidateBytesBase64, 'base64');
   if (candidateBytes.toString('base64') !== value.candidateBytesBase64) {
     fail('invalid-source-applied-artifact', 'durable candidate bytes are not canonical base64');
+  }
+  if (value.correction.operationType === 'change-set') {
+    const correction = validateChangeSetCorrection(value.correction);
+    if (candidateBytes.length !== correction.candidateByteLength || digestBytes(candidateBytes) !== correction.candidateDigest
+      || value.candidateDigest !== correction.candidateDigest || value.baseDigest !== correction.baseDigest
+      || value.sourcePath !== correction.proposal.changeSet.files[0].path) fail('invalid-source-applied-artifact', 'durable change-set effect bindings disagree');
+    return deepFreeze({ ...value, candidateBytes, correction });
   }
   const expectedOldBytes = Buffer.from(value.correction.expectedOldBytesBase64, 'base64');
   const replacementBytes = Buffer.from(value.correction.replacementBytesBase64, 'base64');
@@ -490,6 +499,10 @@ async function executeLocked(input, config, context, dependencies) {
               'canonical checkout or remote branch advanced after the edit was bound',
               { expected: bindings.session.baseCommit, actual: checkout.head },
             );
+          }
+          if (bindings.operation.schemaVersion === 2) {
+            const { guardChangeSetApplication } = await import('./proposal-application.js');
+            await guardChangeSetApplication({ context, config, jobId, ...bindings });
           }
           // A publication source is an injected candidate, not a second source
           // authority. Recheck it at the final pre-effect gate, also on recovery.

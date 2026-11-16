@@ -3,9 +3,9 @@ import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import {
-  applyProposal,
-  classifyProposal,
+  describeChangeSet,
 } from '@cyberbaser/proposal';
+import { applyReviewProposal as applyProposal, classifyReviewProposal as classifyProposal, reviewProposalBinding } from '@cyberbaser/proposal-review';
 import {
   createReviewSummary,
   validateReviewEvidence,
@@ -272,6 +272,7 @@ export async function validateOwnerReviewEvidence({
 } = {}) {
   const config = validateOwnerAlphaConfig(configInput);
   const evidence = dependency('proposal review evidence', () => validateReviewEvidence(evidenceInput));
+  const binding = reviewProposalBinding(evidence.proposal);
   const startedAt = clockMilliseconds(clock);
 
   if (evidence.state.state !== 'pending-review'
@@ -280,12 +281,12 @@ export async function validateOwnerReviewEvidence({
     fail('review-not-actionable', 'owner review requires exact pending-review queue evidence');
   }
   assertReviewWindow(evidence, startedAt);
-  if (!repositoryMatchesPolicy(config, evidence.proposal.source.repository)) {
+  if (!repositoryMatchesPolicy(config, binding.source.repository)) {
     fail('review-repository-mismatch', 'proposal repository does not match owner policy');
   }
-  pathMatchesPolicy(evidence.proposal.source.path, config.paths);
+  pathMatchesPolicy(binding.source.path, config.paths);
   const sourcePartition = digestBytes(Buffer.from(
-    `${evidence.proposal.source.repository}\0${evidence.proposal.source.path}`,
+    `${binding.source.repository}\0${binding.source.path}`,
     'utf8',
   ));
   if (sourcePartition !== evidence.receipt.sourcePartitionDigest) {
@@ -293,7 +294,7 @@ export async function validateOwnerReviewEvidence({
   }
 
   const checkout = await validateCheckout(config, git);
-  const revision = exactObjectId(evidence.proposal.source.revision, 'proposal source revision');
+  const revision = exactObjectId(binding.source.revision, 'proposal source revision');
   const revisionType = trimFinalLf(
     await runGit(git, checkout, ['cat-file', '-t', revision]),
     'proposal source revision type',
@@ -324,7 +325,7 @@ export async function validateOwnerReviewEvidence({
     fail('review-revision-unreachable', 'proposal source revision is not reachable from the configured branch');
   }
 
-  const sourcePath = evidence.proposal.source.path;
+  const sourcePath = binding.source.path;
   const tree = await runGit(git, checkout, [
     'ls-tree', '-z', revision, '--', literalPathspec(sourcePath),
   ]);
@@ -368,15 +369,16 @@ export async function validateOwnerReviewEvidence({
     summary,
     evidence,
     document: readableDocument(baseBytes, candidateBytes),
+    changes: describeChangeSet(baseBytes, evidence.proposal),
     sourceVerification: {
       revision,
       path: sourcePath,
       gitMode: entry.mode,
       gitObjectId: entry.objectId,
       baseByteLength: baseBytes.length,
-      baseDigest: evidence.proposal.operation.baseDigest,
+      baseDigest: binding.base.digest,
       candidateByteLength: candidateBytes.length,
-      candidateDigest: evidence.proposal.operation.candidateDigest,
+      candidateDigest: binding.candidate.digest,
       policyStatus: policy.status,
       policyDigest: policy.digest,
     },

@@ -1,0 +1,234 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cyberbaser.dev/schema/proposal-v2.schema.json",
+  "title": "Cyberbaser single-file atomic change set v2",
+  "description": "Structural schema only. Runtime validation additionally enforces canonical bytes and URLs, UTF-8 byte caps, exact ranges, unique IDs and starts, non-overlap, full-file/no-op rejection and digests. Full source verification requires the pinned base bytes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "artifactType",
+    "proposalId",
+    "changeSet",
+    "submission"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 2
+    },
+    "artifactType": {
+      "const": "cyberbaser-proposal"
+    },
+    "proposalId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "changeSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "atomic",
+        "repository",
+        "baseRevision",
+        "files",
+        "changeSetDigest"
+      ],
+      "properties": {
+        "atomic": {
+          "const": true
+        },
+        "repository": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048,
+          "pattern": "^https://[^/?#@]+/[^?#]*[^/?#]$"
+        },
+        "baseRevision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+        },
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "kind",
+              "base",
+              "operations",
+              "candidate"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "maxLength": 4096,
+                "pattern": "^(?!.*[\\u0000-\\u001F\\u007F])(?!/)(?!.*\\\\)(?!.*//)(?!\\.?\\.?/)(?!.*\\/\\.\\.?\\/)(?!.*\\/\\.\\.?$)(?!\\.git/)(?!.*\\/\\.git(?:/|$)).+\\.md$"
+              },
+              "kind": {
+                "const": "modify"
+              },
+              "base": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "byteLength",
+                  "digest"
+                ],
+                "properties": {
+                  "byteLength": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4194304
+                  },
+                  "digest": {
+                    "type": "string",
+                    "pattern": "^sha-256=:[A-Za-z0-9+/]{43}=:$"
+                  }
+                }
+              },
+              "operations": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 50,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "operationId",
+                    "start",
+                    "end",
+                    "expected",
+                    "replacement"
+                  ],
+                  "properties": {
+                    "operationId": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                    },
+                    "start": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 4194304
+                    },
+                    "end": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 4194304
+                    },
+                    "expected": {
+                      "type": "string",
+                      "maxLength": 16384
+                    },
+                    "replacement": {
+                      "type": "string",
+                      "maxLength": 16384,
+                      "pattern": "^(?:[^\\r]|\\r\\n)*$"
+                    }
+                  }
+                }
+              },
+              "candidate": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "byteLength",
+                  "digest"
+                ],
+                "properties": {
+                  "byteLength": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4194304
+                  },
+                  "digest": {
+                    "type": "string",
+                    "pattern": "^sha-256=:[A-Za-z0-9+/]{43}=:$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "changeSetDigest": {
+          "type": "string",
+          "pattern": "^sha-256=:[A-Za-z0-9+/]{43}=:$"
+        }
+      }
+    },
+    "submission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "submittedAt",
+        "rationale",
+        "evidence",
+        "identityClaim"
+      ],
+      "properties": {
+        "submittedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16384,
+          "pattern": "^(?=.*\\S)[^\\r]*$"
+        },
+        "evidence": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048,
+            "pattern": "^https://"
+          }
+        },
+        "identityClaim": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "issuer",
+                "subject"
+              ],
+              "properties": {
+                "type": {
+                  "enum": [
+                    "human",
+                    "agent"
+                  ]
+                },
+                "issuer": {
+                  "type": "string",
+                  "format": "uri",
+                  "maxLength": 2048,
+                  "pattern": "^(?!(?:file|data|javascript):)(?![A-Za-z][A-Za-z0-9+.-]*://[^/?#]*@)[^?#]+$"
+                },
+                "subject": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024,
+                  "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

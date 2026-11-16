@@ -2,12 +2,14 @@ import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import {
   AccountFreeIntakeError,
-  correctionIntentDigest,
+  versionedIntentDigest,
+  ACCOUNT_FREE_SUGGESTION_INTENT_MAX_BYTES,
   createBareGitObjectResolver,
   createRetainedSourceBindingResolver,
   deriveAccountFreeProposal,
-  validateCorrectionIntent,
+  validateCorrectionIntent, validateSuggestionIntent,
 } from '@cyberbaser/account-free-intake';
+import { ProposalError } from '@cyberbaser/proposal';
 import { openProposalQueue, ProposalQueueError } from '@cyberbaser/proposal-queue';
 import { createGlobalAbuseLimiter, createLayeredAbuseLimiter } from './abuse.js';
 import { createClientAddressResolver } from './client-address.js';
@@ -148,13 +150,14 @@ function emptyResponse(status, options = {}) {
   return new Response(null, { status, headers });
 }
 
-function publicError(error) {
+function publicError(error, version = 1) {
   if (error instanceof RequestError || error instanceof ChallengeError) return { status: error.status, code: error.code };
   const code = error?.code;
   if (code === 'stale-publication' || code === 'idempotency-conflict') return { status: 409, code };
   if (CONTRACT_422_CODES.has(code)) return { status: 422, code };
   if (SOURCE_RESOLUTION_CODES.has(code)) return { status: 422, code: 'unresolvable-binding' };
   if (QUEUE_CAPACITY_CODES.has(code)) return { status: 503, code: 'queue-capacity' };
+  if (version === 2 && error instanceof ProposalError) return { status: code === 'old-bytes-mismatch' ? 422 : 400, code };
   if (error instanceof AccountFreeIntakeError) return { status: 400, code };
   if (error instanceof ProposalQueueError) return { status: 500, code: 'internal-error' };
   if (code === 'quote-not-found' || code === 'quote-ambiguous') return { status: 422, code };
@@ -226,7 +229,7 @@ function parseDeclaredLength(request, maximum) {
   return length;
 }
 
-async function readBoundedBody(request, maximum, deadline) {
+async function readBoundedBody(request, maximum, deadline, version = 1) {
   const declared = parseDeclaredLength(request, maximum);
   if (request.body === null) requestFail('malformed-json', 400);
   const reader = request.body.getReader();
@@ -263,7 +266,7 @@ async function readBoundedBody(request, maximum, deadline) {
     requestFail('malformed-json', 400);
   }
   try {
-    return validateCorrectionIntent(parsed);
+    return version === 2 ? validateSuggestionIntent(parsed) : validateCorrectionIntent(parsed);
   } catch (error) {
     throw error;
   }
@@ -281,7 +284,14 @@ function receiptBody(receipt) {
   };
 }
 
+function proposalSource(proposal) {
+  return proposal.schemaVersion === 2
+    ? { repository: proposal.changeSet.repository, revision: proposal.changeSet.baseRevision, path: proposal.changeSet.files[0].path }
+    : proposal.source;
+}
+
 function assertCapturedEvidence({ config, intent, binding, evidence, result }) {
+  const source = proposalSource(result.proposal);
   if (
     binding.bindingDigest !== intent.bindingDigest
     || binding.page.pageId !== intent.pageId
@@ -289,9 +299,9 @@ function assertCapturedEvidence({ config, intent, binding, evidence, result }) {
     || result.binding.source.repository !== config.repository
     || result.binding.source.revision !== binding.manifest.source.revision
     || result.binding.source.path !== binding.page.path
-    || result.proposal.source.repository !== config.repository
-    || result.proposal.source.revision !== binding.manifest.source.revision
-    || result.proposal.source.path !== binding.page.path
+    || source.repository !== config.repository
+    || source.revision !== binding.manifest.source.revision
+    || source.path !== binding.page.path
     || result.basePolicy.status !== evidence.policy.status
     || result.basePolicy.digest !== evidence.policy.digest
   ) {
@@ -325,12 +335,13 @@ export function createIntakeEvidenceContext({
       throw new ProposalQueueError('unsupported-queue-lane', 'the account-free runtime queue may contain only Lane A and Lane B entries');
     }
     const metadata = entry.carrier.metadata;
+    const source = proposalSource(entry.proposal);
     const binding = await bindings.resolve(metadata.bindingDigest, metadata.pageId);
     if (
       binding.manifest.source.repository !== config.repository
-      || entry.proposal.source.repository !== binding.manifest.source.repository
-      || entry.proposal.source.revision !== binding.manifest.source.revision
-      || entry.proposal.source.path !== binding.page.path
+      || source.repository !== binding.manifest.source.repository
+      || source.revision !== binding.manifest.source.revision
+      || source.path !== binding.page.path
     ) {
       throw new AccountFreeIntakeError('repository-binding-mismatch', 'durable proposal source contradicts its configured Lane B binding');
     }
@@ -407,7 +418,7 @@ export async function openIntakeService({
   });
   const layeredLimiter = createLayeredAbuseLimiter({ limits: config.limits, now });
 
-  async function submit(request, origin, peer) {
+  async function submit(request, origin, peer, version) {
     if (request.headers.get('content-type') !== 'application/json') {
       requestFail('invalid-content-type', 400);
     }
@@ -415,7 +426,8 @@ export async function openIntakeService({
     if (release === null) requestFail('too-many-active-requests', 429);
     const deadline = createDeadline(config.limits.requestTimeoutMs);
     try {
-      const intent = await readBoundedBody(request, config.limits.maxBodyBytes, deadline);
+      const maximum = version === 2 ? ACCOUNT_FREE_SUGGESTION_INTENT_MAX_BYTES : config.limits.maxBodyBytes;
+      const intent = await readBoundedBody(request, maximum, deadline, version);
       deadline.assert();
       const clientIp = resolveClientAddress(request, peer);
       if (!layeredLimiter.trySender(clientIp)) requestFail('rate-limited', 429);
@@ -424,7 +436,13 @@ export async function openIntakeService({
       // Charge every parsed, challenge-approved attempt, including replays and
       // downstream failures, before any queue or source lookup.
       if (!layeredLimiter.tryPage(intent.pageId)) requestFail('rate-limited', 429);
-      const requestDigest = correctionIntentDigest(intent);
+      const operationCount = version === 2 ? intent.operations.length : 1;
+      const changedBytes = version === 2
+        ? intent.operations.reduce((sum, operation) => sum
+          + Buffer.byteLength(operation.expected) + Buffer.byteLength(operation.replacement), 0)
+        : Buffer.byteLength(intent.selection.quote) + Buffer.byteLength(intent.replacement);
+      if (!layeredLimiter.tryWork(clientIp, operationCount, changedBytes)) requestFail('rate-limited', 429);
+      const requestDigest = versionedIntentDigest(intent);
       const carrier = {
         lane: 'lane-b',
         metadata: { bindingDigest: intent.bindingDigest, pageId: intent.pageId },
@@ -488,7 +506,8 @@ export async function openIntakeService({
   async function fetch(request, peer = null) {
     const url = new URL(request.url);
     let corsOrigin = null;
-    const corsPath = url.pathname === '/v1/corrections';
+    const version = url.pathname === '/v2/suggestions' ? 2 : 1;
+    const corsPath = url.pathname === '/v1/corrections' || url.pathname === '/v2/suggestions';
     const healthHost = config.listen === null ? null : `127.0.0.1:${config.listen.port}`;
     try {
       if (config.listen === null) requestFail('not-found', 404);
@@ -510,7 +529,7 @@ export async function openIntakeService({
       }
 
       requireExactHost(request, config.publicHost);
-      if (url.pathname !== '/v1/corrections') requestFail('not-found', 404);
+      if (!corsPath) requestFail('not-found', 404);
       if (!['OPTIONS', 'POST'].includes(request.method)) {
         return jsonResponse({ error: { code: 'method-not-allowed' } }, 405, {
           cors: true,
@@ -533,9 +552,9 @@ export async function openIntakeService({
       }
 
       corsOrigin = allowedOrigin(request, config);
-      return await submit(request, corsOrigin, peer);
+      return await submit(request, corsOrigin, peer, version);
     } catch (error) {
-      const mapped = publicError(error);
+      const mapped = publicError(error, version);
       const origin = corsOrigin ?? (
         corsPath && config.allowedFormOrigins.includes(request.headers.get('origin'))
           ? request.headers.get('origin')

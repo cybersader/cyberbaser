@@ -1,0 +1,30 @@
+---
+title: Build the suggesting mode foundations
+description: "After the maintainer selected the WYSIWYG suggesting direction, Astra and Sol workers built source provenance in the real Quartz build, the v2 multi-operation proposal, the suggestion ledger, v2 intake/queue, owner review/apply, and the on-page suggesting mode."
+status: log
+tags: [contribution, translation-layer, testing]
+---
+
+## Decision
+
+The maintainer approved the [suggesting-mode direction](/cyberbaser/research/wysiwyg-suggesting-mode/) and asked to use mainly Astra and Sol workers. Recorded in `.claude/41-QUESTIONS-RESOLVED.md` ("Suggesting mode direction selected").
+
+## Built (uncommitted at this entry unless noted)
+
+| Piece | Worker | Result |
+|---|---|---|
+| v2 single-file multi-operation proposal (`packages/proposal`) | Astra | Additive; v1 bytes and APIs unchanged. 1–50 ordered non-overlapping UTF-8 byte operations, caps 16 KiB per span, 64 KiB aggregate. CriticMarkup is a display adapter |
+| Shared v2 trust classification | Coordinator | `classifyChangeSetProposal` classifies the combined candidate (receiver-only subject, leading-BOM guard). Proposal package 63 pass |
+| Suggestion ledger (`packages/suggestion-ledger`) | Sol | Origin-aware piece table emitting the frozen operation shape; 136 pass including 10,000 fuzzed actions |
+| Source provenance in the real Quartz build | Astra | Opt-in `CYBERBASER_SOURCE_PROVENANCE=enabled`; hash-verified patch of four pinned Quartz files (applied only to materialized checkouts); per-page sidecars plus `data-cb-node` attributes. Real build: 98.83% of substantive characters on 57 real pages mapped; disabled output byte-identical |
+| v2 intake and queue | Sol | `POST /v2/suggestions`; per-sender operation and byte budgets; mixed v1/v2 queue and IPC (`proposalVersion`). 266 pass; deploy 20 pass, 1 skip |
+| Owner review and apply for v2 | Astra | Per-change inspection, one Approve all / Reject all decision bound to the full digest, one atomic Apply and commit, restart reconciliation. Owner-alpha 578 pass, 8 skip; HTTP and browser acceptance pass |
+| On-page suggesting mode | Sol | Tracked insertions/deletions on the rendered page, cards/tray, review, one v2 send, persistence, fallback to the block editor when provenance is missing or stale. Renderer suite and an offline 3-page Quartz browser run passed |
+
+The first resumed provenance attempt stopped correctly at a boundary: Quartz trims input before any plugin hook. The coordinator authorized a minimal, hash-verified patch rather than a parallel parser. Intake and owner workers were briefly blocked on the missing shared trust export, which the coordinator added.
+
+## Integration findings
+
+- Owner-alpha now passes `CYBERBASER_SOURCE_PROVENANCE=enabled` whenever the suggestion form is on. The hands-on rehearsal had its own copy of the build inputs and silently omitted it; it now reuses the owner renderer's `suggestionEnvironment`. Its real-Quartz tests did not detect the gap and should gain a provenance assertion.
+- On a real page (Awesome Stream Deck Alternatives) suggesting mode mapped 172 runs and tracked two edits, but sending was refused with a false "Rendered text changed" stale-page error. Root cause: the coordinator's Playwright screenshot hid the caret and left `style=""` on a deletion mark; the safety check compared serialized markup and refused. The check now ignores only empty style attributes on a detached snapshot, keeping text, tags, nonempty attributes and locators strict, with a screenshot regression test. After rebuilding, the real page sent both edits as one v2 suggestion and returned a receipt, with marks cleared and no page errors. A real reader is unlikely to hit the original case, but extensions can make the same harmless change.
+- The page renders `$2.99/Monthly | $24.99` as inline math: Quartz treats paired dollar signs as LaTeX. Pre-existing, separate from suggesting mode.

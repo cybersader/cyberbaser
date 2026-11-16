@@ -41,3 +41,9 @@ export {
 
 export { createBareGitObjectResolver } from './git-resolver.js';
 export { deriveAccountFreeProposal } from './derive.js';
+
+export {
+  ACCOUNT_FREE_SUGGESTION_INTENT_MAX_BYTES,
+  validateSuggestionIntent, serializeSuggestionIntent, parseSuggestionIntent,
+  suggestionIntentDigest, validateVersionedIntent, versionedIntentDigest,
+} from './suggestion-intent.js';

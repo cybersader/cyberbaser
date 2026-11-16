@@ -66,9 +66,10 @@ if (form && reason && status && byteCount && dialog && dialogTitle && confirmBut
     selectedAction = action;
     actionTrigger = trigger;
     const approving = action === 'approve';
-    dialogTitle.textContent = approving ? 'Approve this suggestion?' : 'Reject this suggestion?';
+    const multi = form.dataset.proposalVersion === '2';
+    dialogTitle.textContent = multi ? (approving ? 'Approve all changes?' : 'Reject all changes?') : (approving ? 'Approve this suggestion?' : 'Reject this suggestion?');
     confirmButton.dataset.action = action;
-    confirmButton.textContent = approving ? 'Approve suggestion' : 'Reject suggestion';
+    confirmButton.textContent = multi ? (approving ? 'Approve all' : 'Reject all') : (approving ? 'Approve suggestion' : 'Reject suggestion');
     showStatus('');
     dialog.showModal();
     reason.focus();

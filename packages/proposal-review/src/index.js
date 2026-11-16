@@ -23,3 +23,5 @@ export {
   validateReviewEvidence,
   validateReviewSummary,
 } from './contract.js';
+
+export { validateReviewProposal, serializeReviewProposal, reviewProposalDigest, applyReviewProposal, reviewProposalBinding, classifyReviewProposal } from './versioned-proposal.js';

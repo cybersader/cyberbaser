@@ -11,7 +11,7 @@
 
 import { readdir } from 'node:fs/promises';
 import path from 'node:path';
-import { applyProposal, classifyProposal } from '@cyberbaser/proposal';
+import { applyReviewProposal as applyProposal, classifyReviewProposal as classifyProposal, reviewProposalBinding, validateReviewProposal, reviewProposalDigest } from '@cyberbaser/proposal-review';
 import { serializeOwnerDecision, validateOwnerDecision } from '@cyberbaser/proposal-review';
 import { digestBytes, validateDigest, validateQueueId } from '@cyberbaser/proposal-queue';
 import { createJsonArtifactOnce } from './artifacts.js';
@@ -117,7 +117,8 @@ export function validateApprovedProposalInput(value) {
     'schemaVersion', 'artifactType', 'queueId', 'preparedAt', 'decision', 'proposal',
     'source', 'operation', 'candidate', 'trustPolicy', 'applicationGate', 'effectBoundary',
   ], 'approved proposal input');
-  if (value.schemaVersion !== APPROVED_INPUT_SCHEMA_VERSION || value.artifactType !== APPROVED_INPUT_ARTIFACT_TYPE) {
+  const multi = value.schemaVersion === 2;
+  if (![APPROVED_INPUT_SCHEMA_VERSION, 2].includes(value.schemaVersion) || value.artifactType !== APPROVED_INPUT_ARTIFACT_TYPE) {
     fail('invalid-approved-input', 'approved proposal input schema or artifact type is unsupported');
   }
   let queueId;
@@ -131,7 +132,20 @@ export function validateApprovedProposalInput(value) {
   if (value.decision.authority.type !== 'owner-alpha-local') fail('invalid-approved-input', 'decision authority must be owner-alpha-local');
   exactObject(value.proposal, ['proposalId', 'proposalDigest', 'lane', 'tier', 'route'], 'input proposal');
   exactObject(value.source, ['repository', 'path', 'revision', 'branch', 'branchTip', 'gitMode', 'gitObjectId', 'baseByteLength', 'baseDigest'], 'input source');
-  exactObject(value.operation, ['type', 'start', 'end', 'expectedOldBytesBase64', 'replacementBytesBase64'], 'input operation');
+  exactObject(value.operation, multi ? ['type', 'proposal'] : ['type', 'start', 'end', 'expectedOldBytesBase64', 'replacementBytesBase64'], 'input operation');
+  let multiProposal = null;
+  if (multi) {
+    multiProposal = validateReviewProposal(value.operation.proposal);
+    const binding = reviewProposalBinding(multiProposal);
+    if (multiProposal.schemaVersion !== 2 || value.operation.type !== 'change-set'
+      || multiProposal.proposalId !== value.proposal.proposalId
+      || reviewProposalDigest(multiProposal) !== value.proposal.proposalDigest
+      || Object.entries(binding.source).some(([key, item]) => value.source[key] !== item)
+      || binding.base.digest !== value.source.baseDigest || binding.base.byteLength !== value.source.baseByteLength
+      || binding.candidate.digest !== value.candidate.digest || binding.candidate.byteLength !== value.candidate.byteLength) {
+      fail('invalid-approved-input', 'change set must match the complete approved proposal and source bindings');
+    }
+  }
   exactObject(value.candidate, ['byteLength', 'digest'], 'input candidate');
   exactObject(value.trustPolicy, ['status', 'digest'], 'input trust policy');
   exactObject(value.applicationGate, ['state', 'event', 'note'], 'input application gate');
@@ -142,7 +156,7 @@ export function validateApprovedProposalInput(value) {
   for (const key of EFFECT_KEYS) {
     if (value.effectBoundary[key] !== false) fail('invalid-approved-input', `effectBoundary.${key} must be false`);
   }
-  if (!['offset', 'quote'].includes(value.operation.type)) fail('invalid-approved-input', 'operation type is unsupported');
+  if (!multi && !['offset', 'quote'].includes(value.operation.type)) fail('invalid-approved-input', 'operation type is unsupported');
   if (!GIT_OBJECT_ID_RE.test(value.source.revision) || !GIT_OBJECT_ID_RE.test(value.source.branchTip)
     || !GIT_OBJECT_ID_RE.test(value.source.gitObjectId) || !REGULAR_BLOB_MODES.has(value.source.gitMode)) {
     fail('invalid-approved-input', 'source Git identity is invalid');
@@ -151,13 +165,13 @@ export function validateApprovedProposalInput(value) {
     || (value.trustPolicy.status === 'valid') !== (value.trustPolicy.digest !== null)) {
     fail('invalid-approved-input', 'trust policy evidence is inconsistent');
   }
-  const start = exactInteger(value.operation.start, 'operation.start');
-  const end = exactInteger(value.operation.end, 'operation.end');
+  const start = multi ? 0 : exactInteger(value.operation.start, 'operation.start');
+  const end = multi ? 0 : exactInteger(value.operation.end, 'operation.end');
   if (end < start || end > exactInteger(value.source.baseByteLength, 'source.baseByteLength')) {
     fail('invalid-approved-input', 'operation span must lie inside the base');
   }
   return deepFreeze({
-    schemaVersion: APPROVED_INPUT_SCHEMA_VERSION,
+    schemaVersion: value.schemaVersion,
     artifactType: APPROVED_INPUT_ARTIFACT_TYPE,
     queueId,
     preparedAt: utcSecond(value.preparedAt, 'preparedAt'),
@@ -185,7 +199,7 @@ export function validateApprovedProposalInput(value) {
       baseByteLength: value.source.baseByteLength,
       baseDigest: digestField(value.source.baseDigest, 'source.baseDigest'),
     },
-    operation: {
+    operation: multi ? { type: 'change-set', proposal: multiProposal } : {
       type: value.operation.type,
       start,
       end,
@@ -234,13 +248,14 @@ export async function assessApprovedProposal({
   if (decision.action !== 'approve') fail('decision-not-approval', 'only an Approve decision can prepare an input', { queueId: decision.queueId });
   const evidence = decision.reviewEvidence;
   const { proposal } = evidence;
-  if (!repositoryMatchesPolicy(config, proposal.source.repository)) {
+  const binding = reviewProposalBinding(proposal);
+  if (!repositoryMatchesPolicy(config, binding.source.repository)) {
     fail('input-repository-mismatch', 'approved proposal repository does not match owner policy');
   }
 
   const checkout = await validateCheckout(config, git);
   const branch = config.repository.branch;
-  const revision = exactObjectId(proposal.source.revision, 'approved proposal source revision');
+  const revision = exactObjectId(binding.source.revision, 'approved proposal source revision');
   const branchTip = trimFinalLf(
     await runGit(git, checkout, ['rev-parse', '--verify', `refs/heads/${branch}^{commit}`]),
     'configured branch tip',
@@ -255,7 +270,7 @@ export async function assessApprovedProposal({
   }
   if (mergeBase !== revision) return stale('revision-unreachable', { branchTip });
 
-  const sourcePath = proposal.source.path;
+  const sourcePath = binding.source.path;
   const pinned = parseTreeEntry(
     await runGit(git, checkout, ['ls-tree', '-z', revision, '--', literalPathspec(sourcePath)]),
     sourcePath,
@@ -276,7 +291,7 @@ export async function assessApprovedProposal({
   }
 
   const baseBytes = await readBlob(git, checkout, current.objectId, 'approved source blob', config.limits.maxSourceBytes);
-  if (digestBytes(baseBytes) !== proposal.operation.baseDigest) {
+  if (digestBytes(baseBytes) !== binding.base.digest) {
     fail('input-base-digest-mismatch', 'the current blob does not match the reviewed base digest');
   }
   let candidate;
@@ -286,7 +301,7 @@ export async function assessApprovedProposal({
     fail('input-application-failed', 'the approved proposal no longer applies to its base', { cause: error?.code ?? 'unknown' });
   }
   const candidateDigest = digestBytes(candidate);
-  if (candidateDigest !== proposal.operation.candidateDigest) {
+  if (candidateDigest !== binding.candidate.digest) {
     fail('input-candidate-mismatch', 'replaying the approved proposal did not reproduce the reviewed candidate');
   }
 
@@ -316,8 +331,9 @@ export async function assessApprovedProposal({
 function createInput({ decision, assessment, preparedAt, branch }) {
   const evidence = decision.reviewEvidence;
   const { proposal } = evidence;
+  const binding = reviewProposalBinding(proposal);
   return validateApprovedProposalInput({
-    schemaVersion: APPROVED_INPUT_SCHEMA_VERSION,
+    schemaVersion: proposal.schemaVersion === 2 ? 2 : APPROVED_INPUT_SCHEMA_VERSION,
     artifactType: APPROVED_INPUT_ARTIFACT_TYPE,
     queueId: decision.queueId,
     preparedAt,
@@ -335,17 +351,17 @@ function createInput({ decision, assessment, preparedAt, branch }) {
       route: evidence.classification.classification.route,
     },
     source: {
-      repository: proposal.source.repository,
-      path: proposal.source.path,
-      revision: proposal.source.revision,
+      repository: binding.source.repository,
+      path: binding.source.path,
+      revision: binding.source.revision,
       branch,
       branchTip: assessment.branchTip,
       gitMode: assessment.source.gitMode,
       gitObjectId: assessment.source.gitObjectId,
       baseByteLength: assessment.source.baseByteLength,
-      baseDigest: proposal.operation.baseDigest,
+      baseDigest: binding.base.digest,
     },
-    operation: {
+    operation: proposal.schemaVersion === 2 ? { type: 'change-set', proposal } : {
       type: proposal.operation.type,
       start: proposal.operation.start,
       end: proposal.operation.end,

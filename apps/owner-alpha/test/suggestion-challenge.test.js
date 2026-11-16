@@ -112,7 +112,8 @@ describe('public-only challenge renderer inputs', () => {
   test('absent challenge produces exactly the previous environment and off produces none', () => {
     expect(suggestionEnvironment(null)).toEqual({});
     expect(suggestionEnvironment(binding)).toEqual({
-      CYBERBASER_ACCOUNT_FREE_INTAKE: 'enabled', CYBERBASER_ACCOUNT_FREE_INTAKE_ORIGIN: binding.intakeOrigin,
+      CYBERBASER_ACCOUNT_FREE_INTAKE: 'enabled', CYBERBASER_SOURCE_PROVENANCE: 'enabled',
+      CYBERBASER_ACCOUNT_FREE_INTAKE_ORIGIN: binding.intakeOrigin,
       CYBERBASER_ACCOUNT_FREE_BINDING_DIGEST: binding.bindingDigest,
       CYBERBASER_ACCOUNT_FREE_SOURCE_REPOSITORY: binding.sourceRepository,
       CYBERBASER_ACCOUNT_FREE_SOURCE_REVISION: binding.sourceRevision,
