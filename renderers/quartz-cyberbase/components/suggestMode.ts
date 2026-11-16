@@ -1,3 +1,4 @@
+import { createSuggestModeUI, activeSourceBlock } from "./suggestModeUI"
 import { SparseRun, sortedOperations, verifiedLeafNode, verifiedBlockNode, verifyManifest, utf8, validateOperations } from "./suggestModeModel"
 import type { Operation, SourceIdentity, ProvenanceBlock } from "./suggestModeModel"
 import { buildSuggestionIntent, submitSuggestionIntent } from "./suggestModeClient"
@@ -98,15 +99,15 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     const parent = node.parentNode!
     node.remove(); originals.push({ marker, node, hosts, parent, locator: leaf.parent })
   }
-  const section = form.closest<HTMLElement>(".suggest-correction")!
-  const toggle = element("button", "Suggesting", "cb-suggest-toggle")
-  toggle.type = "button"; toggle.setAttribute("aria-pressed", "false")
-  const review = element("button", "Your changes", "cb-suggest-review")
-  review.type = "button"; review.setAttribute("aria-expanded", "false")
-  const hint = element("p", "Click to insert. Select and type to replace. Backspace or Delete suggests a deletion. The page stays unchanged until the owner applies it.", "cb-suggest-help")
-  hint.hidden = true
   const status = element("p", "", "cb-suggest-status"); status.setAttribute("role", "status"); status.setAttribute("aria-live", "polite")
-  const tray = element("aside", undefined, "cb-suggest-tray"); tray.setAttribute("aria-label", "Your suggestion cards")
+  const formStatus = form.querySelector<HTMLElement>(".suggest-correction-status")!
+  const ui = createSuggestModeUI(entry, () => onToggle(), () => onReview())
+  const activateBlock = activeSourceBlock(blocks)
+  const backdrop = element("div", undefined, "cb-suggest-backdrop"); backdrop.hidden = true
+  const formMarker = document.createComment("suggestion review")
+  form.before(formMarker); form.classList.add("cb-suggest-review-sheet")
+  form.setAttribute("role", "dialog"); form.setAttribute("aria-modal", "true"); form.setAttribute("aria-label", "Review & send suggestions")
+  document.body.append(backdrop, form, status)
   const heading = element("h2", "Your changes")
   const summary = element("div", undefined, "cb-suggest-summary")
   const editedLabel = form.querySelector("textarea[name='edited']")?.closest("label") as HTMLElement | null
@@ -114,15 +115,13 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
   form.prepend(heading, summary)
   const submit = form.querySelector<HTMLButtonElement>("button[type='submit']")!
   const cancel = form.querySelector<HTMLButtonElement>(".suggest-correction-cancel")!
-  cancel.textContent = "Close review"
-  section.prepend(toggle, review, hint, status)
-  document.body.append(tray)
+  cancel.textContent = "Back to editing"
   let enabled = false, busy = false, composing = false, composition: { a: Point; b: Point } | null = null
   let challenge: SuggestionChallenge | undefined
   const comments: Record<string, string> = {}
   const key = `cyberbaser:suggesting:v2:${form.dataset.pageId}:${manifest.source.sha256}`
   const retryKey = `${key}:retry`
-  const say = (message: string) => { status.textContent = message }
+  const say = (message: string) => { status.textContent = message; formStatus.textContent = message }
   const operations = () => {
     const ops = [...sortedOperations(views.map(v => v.model)), ...[...sourceEdits.values()].flat()].sort((a, b) => a.start - b.start)
     validateOperations(ops); return ops
@@ -132,24 +131,38 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     const count = operations().length
     submit.textContent = `Send ${count} suggestion${count === 1 ? "" : "s"}`
     submit.disabled = busy || !!activeSource || !count || (!!challenge && !challenge.response())
-    review.textContent = `Your changes (${count})`
+    ui.setCount(count)
+    ui.review.disabled = busy || !!activeSource || !count
   }
   const setMode = (on: boolean) => {
-    enabled = on; root.contentEditable = String(on && !busy && !activeSource)
+    enabled = on; root.contentEditable = String(on && !busy && !activeSource && form.hidden)
     root.classList.toggle("cb-suggesting", on); root.setAttribute("aria-label", "Page text, suggesting editor")
     if (on) { root.setAttribute("role", "textbox"); root.setAttribute("aria-multiline", "true") }
     else { root.removeAttribute("role"); root.removeAttribute("aria-multiline") }
-    toggle.setAttribute("aria-pressed", String(on)); toggle.textContent = on ? "Suggesting" : "Suggesting: off"
-    hint.hidden = !on; tray.hidden = !on
-    for (const { button } of blocks) button.hidden = !on
+    ui.setMode(on)
+    if (!on) activateBlock()
   }
   const showReview = (show: boolean) => {
-    form.hidden = !show; review.setAttribute("aria-expanded", String(show))
+    form.hidden = !show; backdrop.hidden = !show
+    document.body.classList.toggle("cb-suggest-review-open", show)
+    ui.review.setAttribute("aria-expanded", String(show))
+    root.contentEditable = String(enabled && !busy && !activeSource && !show)
     if (show && !challenge) challenge = setupSuggestionChallenge(form, submit, say, () => !busy && operations().length > 0)
     updateSubmit()
+    if (show) cancel.focus({ preventScroll: true })
+    else if (enabled) ui.review.focus({ preventScroll: true })
+  }
+  const reviewKeys = (event: KeyboardEvent) => {
+    if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); showReview(false) }
+    if (event.key === "Tab") {
+      const items = [...form.querySelectorAll<HTMLElement>("button:not([disabled]), input, textarea:not([name='edited']), iframe, [tabindex='0']")].filter(item => !item.closest("[hidden]"))
+      const first = items[0], last = items.at(-1)
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
+    }
   }
   const renderCards = () => {
-    tray.replaceChildren(); summary.replaceChildren()
+    ui.cards.replaceChildren(); summary.replaceChildren()
     for (const op of operations()) {
       const card = element("section", undefined, "cb-suggest-card")
       card.dataset.operationId = op.operationId
@@ -168,21 +181,13 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
       const comment = element("textarea"); comment.value = comments[op.operationId] ?? ""; comment.placeholder = "Add a comment (optional)"
       comment.maxLength = 2048; comment.setAttribute("aria-label", `Comment on ${op.operationId}`)
       comment.addEventListener("input", () => { comments[op.operationId] = comment.value; persist() })
-      card.append(comment, discard); tray.append(card)
+      card.append(comment, discard); ui.cards.append(card)
       const line = element("p")
       if (op.expected) line.append(element("del", op.expected))
       if (op.replacement) line.append(element("ins", op.replacement))
       summary.append(line)
     }
-    updateSubmit(); layout()
-  }
-  const layout = () => {
-    tray.classList.toggle("cb-suggest-bottom-tray", window.innerWidth <= 800)
-    if (window.innerWidth > 800) {
-      const rect = root.getBoundingClientRect()
-      tray.style.left = `${Math.min(rect.right + 16, window.innerWidth - 270)}px`
-      tray.style.top = `${Math.max(16, rect.top)}px`
-    } else { tray.style.left = ""; tray.style.top = "" }
+    updateSubmit()
   }
   const restore = (point?: Point) => {
     if (!point || !enabled) return
@@ -294,7 +299,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     } catch (failure) { if (activeSource === current) error.textContent = failure instanceof Error ? failure.message : "Could not open the source editor." }
   }
   for (const { host, button } of blocks) {
-    button.type = "button"; button.contentEditable = "false"
+    button.type = "button"; button.contentEditable = "false"; button.hidden = true
     button.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); void openSource(button) })
     host.append(button)
   }
@@ -353,6 +358,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
   const click = (event: MouseEvent) => {
     if (!enabled || activeSource) return
     const target = event.target as HTMLElement
+    activateBlock(target)
     // Quartz's window SPA handler does not honor defaultPrevented.
     if (target.closest("a")) { event.preventDefault(); event.stopPropagation() }
     if (target.closest(".cb-suggest-unmapped")) { event.preventDefault(); void openSource(target) }
@@ -374,9 +380,27 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
   const drop = (event: DragEvent) => { if (enabled && !activeSource) { event.preventDefault(); say("Paste plain text at the cursor instead of dropping content.") } }
   const compositionStart = () => { if (enabled && !busy && !activeSource) { composing = true; composition = selection() } }
   const compositionEnd = (event: CompositionEvent) => { if (!composing) return; composing = false; render(); edit(event.data, "insertFromComposition", composition); composition = null }
-  const onEntry = () => { setMode(true); say("Suggesting mode is on."); root.focus({ preventScroll: true }) }
-  const onToggle = () => { if (activeSource) say("Choose Done or Cancel in the source editor first."); else setMode(!enabled) }
-  const onReview = () => showReview(form.hidden === true)
+  const onToggle = () => {
+    if (activeSource) { say("Choose Done or Cancel in the source editor first."); return }
+    if (!form.hidden) showReview(false)
+    setMode(!enabled); say("")
+  }
+  const selectionStamp = () => {
+    const s = getSelection()
+    return [s?.anchorNode, s?.anchorOffset, s?.focusNode, s?.focusOffset] as const
+  }
+  let lastSelection = selectionStamp()
+  const onActiveBlock = (event: Event) => {
+    if (enabled && !activeSource) { lastSelection = selectionStamp(); activateBlock(event.target as Node) }
+  }
+  const onSelection = () => {
+    const stamp = selectionStamp()
+    if (stamp.every((value, i) => value === lastSelection[i])) return
+    lastSelection = stamp
+    const node = stamp[0]
+    if (enabled && !activeSource && node && root.contains(node)) activateBlock(node)
+  }
+  const onReview = () => { if (!activeSource) showReview(form.hidden === true) }
   const onCancel = () => showReview(false)
   const onSubmit = async (event: SubmitEvent) => {
     event.preventDefault(); if (busy || destroyed || activeSource) return
@@ -408,7 +432,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
       }
       say(result.message)
     } catch (error) { if (!destroyed) say(error instanceof Error ? error.message : "Could not send. Retry safely.") }
-    finally { busy = false; if (!destroyed) { root.contentEditable = String(enabled); challenge?.reset(); updateSubmit() } }
+    finally { busy = false; if (!destroyed) { root.contentEditable = String(enabled && form.hidden); challenge?.reset(); updateSubmit() } }
   }
   try {
     const saved = JSON.parse(stored(key) ?? "null")
@@ -443,25 +467,30 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
   root.addEventListener("drop", drop)
   root.addEventListener("compositionstart", compositionStart)
   root.addEventListener("compositionend", compositionEnd)
-  entry.addEventListener("click", onEntry); toggle.addEventListener("click", onToggle)
-  review.addEventListener("click", onReview); cancel.addEventListener("click", onCancel)
+  root.addEventListener("pointerover", onActiveBlock); root.addEventListener("focusin", onActiveBlock)
+  document.addEventListener("selectionchange", onSelection)
+  cancel.addEventListener("click", onCancel); backdrop.addEventListener("click", onCancel)
+  form.addEventListener("keydown", reviewKeys)
   form.addEventListener("submit", onSubmit)
-  window.addEventListener("resize", layout); window.addEventListener("scroll", layout, { passive: true })
   render(); setMode(operations().length > 0)
   window.addCleanup(() => {
     destroyed = true; challenge?.destroy(); closeSource(false)
-    for (const { host, button } of blocks) { button.remove(); host.classList.remove("cb-source-pending") }
+    for (const { host, button } of blocks) { button.remove(); host.classList.remove("cb-source-pending", "cb-source-active") }
     root.removeEventListener("beforeinput", beforeInput); root.removeEventListener("keydown", keydown)
     root.removeEventListener("click", click); root.removeEventListener("paste", paste); root.removeEventListener("drop", drop)
     root.removeEventListener("cut", cut); root.removeEventListener("input", input)
     root.removeEventListener("compositionstart", compositionStart); root.removeEventListener("compositionend", compositionEnd)
-    entry.removeEventListener("click", onEntry); toggle.removeEventListener("click", onToggle)
-    review.removeEventListener("click", onReview); cancel.removeEventListener("click", onCancel); form.removeEventListener("submit", onSubmit)
-    window.removeEventListener("resize", layout); window.removeEventListener("scroll", layout)
+    root.removeEventListener("pointerover", onActiveBlock); root.removeEventListener("focusin", onActiveBlock)
+    document.removeEventListener("selectionchange", onSelection)
+    cancel.removeEventListener("click", onCancel); backdrop.removeEventListener("click", onCancel)
+    form.removeEventListener("keydown", reviewKeys); form.removeEventListener("submit", onSubmit)
     root.removeAttribute("contenteditable"); root.removeAttribute("role"); root.removeAttribute("aria-label"); root.removeAttribute("aria-multiline"); root.classList.remove("cb-suggesting")
     for (const { marker, node, hosts } of originals) { marker.replaceWith(node); hosts.forEach(host => host.remove()) }
     for (const [parent, attrs] of refusedParents) for (const [name, value] of attrs) { if (value === null) parent.removeAttribute(name); else parent.setAttribute(name, value) }
-    tray.remove(); toggle.remove(); review.remove(); hint.remove(); status.remove(); heading.remove(); summary.remove()
+    ui.destroy(); backdrop.remove(); status.remove(); heading.remove(); summary.remove()
+    document.body.classList.remove("cb-suggest-review-open")
+    formMarker.replaceWith(form); form.hidden = true; form.classList.remove("cb-suggest-review-sheet")
+    form.removeAttribute("role"); form.removeAttribute("aria-modal"); form.removeAttribute("aria-label")
     if (editedLabel) editedLabel.hidden = false
   })
   return true

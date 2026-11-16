@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { copyCommittedFolder, DEFAULT_MAX_PAGES, validateCopyOptions } from './suggestions-rehearsal-source.js';
+import { validatePrivateNetworkIpv4Host } from '../src/network.js';
 
 const exec = promisify(execFile);
 export const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -24,7 +25,7 @@ const TEST_KEYS = Object.freeze({
 });
 
 export function optionsFromArgs(args) {
-  const result = { keep: false, challenge: null, prepare: false, port: 46437 };
+  const result = { keep: false, challenge: null, prepare: false, port: 46437, host: '127.0.0.1' };
   const copy = { from: null, folder: null, ref: 'origin/main', maxPages: DEFAULT_MAX_PAGES };
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -32,9 +33,11 @@ export function optionsFromArgs(args) {
     else if (arg === '--prepare') result.prepare = true;
     else if (arg === '--challenge' && Object.hasOwn(TEST_KEYS, args[i + 1])) result.challenge = args[++i];
     else if (arg === '--port' && /^\d+$/u.test(args[i + 1] ?? '')) result.port = Number(args[++i]);
+    // One private IPv4 address (loopback, RFC 1918 or a Tailscale 100.64.0.0/10 address) so a phone on the tailnet can reach it.
+    else if (arg === '--host' && args[i + 1] && !args[i + 1].startsWith('--')) result.host = validatePrivateNetworkIpv4Host(args[++i], '--host');
     else if (['--from', '--folder', '--ref'].includes(arg) && args[i + 1] && !args[i + 1].startsWith('--')) copy[{ '--from': 'from', '--folder': 'folder', '--ref': 'ref' }[arg]] = args[++i];
     else if (arg === '--max-pages' && /^\d+$/u.test(args[i + 1] ?? '')) copy.maxPages = Number(args[++i]);
-    else throw new Error('Use --keep, --port NUMBER, --prepare, --challenge pass|fail|spent, or --from VAULT --folder FOLDER [--ref origin/main] [--max-pages 400].');
+    else throw new Error('Use --keep, --port NUMBER, --host PRIVATE_IPV4, --prepare, --challenge pass|fail|spent, or --from VAULT --folder FOLDER [--ref origin/main] [--max-pages 400].');
   }
   if (!Number.isSafeInteger(result.port) || result.port < 1024 || result.port > 65533) throw new Error('Choose an owner port from 1024 through 65533; this rehearsal uses three consecutive ports.');
   if (copy.from === null && args.some((arg) => ['--folder', '--ref', '--max-pages'].includes(arg))) throw new Error('--folder, --ref and --max-pages require --from.');
@@ -77,8 +80,8 @@ export async function assertPrerequisites({ seed = RENDERER_SEED } = {}) {
 }
 
 /** Only fresh fixture-owned files are written. The real owner config is never read. */
-export async function createSuggestionsFixture({ port = 46437, keep = false, challenge = null, from = null, folder = null, ref = 'origin/main', maxPages = DEFAULT_MAX_PAGES } = {}) {
-  optionsFromArgs(['--port', String(port), ...(challenge === null ? [] : ['--challenge', challenge])]);
+export async function createSuggestionsFixture({ port = 46437, host = '127.0.0.1', keep = false, challenge = null, from = null, folder = null, ref = 'origin/main', maxPages = DEFAULT_MAX_PAGES } = {}) {
+  optionsFromArgs(['--port', String(port), '--host', host, ...(challenge === null ? [] : ['--challenge', challenge])]);
   validateCopyOptions({ from, folder, ref, maxPages });
   await mkdir(path.join(PROJECT_ROOT, '.workspace'), { recursive: true, mode: 0o700 });
   const root = await mkdtemp(path.join(PROJECT_ROOT, '.workspace/try-suggestions-'));
@@ -132,7 +135,7 @@ export async function createSuggestionsFixture({ port = 46437, keep = false, cha
     await git(checkout, ['remote', 'add', 'origin', remote]);
     await git(checkout, ['push', '-q', '-u', 'origin', 'main']);
     const config = {
-      schemaVersion: 1, listen: { host: '127.0.0.1', port, readerPort: port + 1 },
+      schemaVersion: 1, listen: { host, port, readerPort: port + 1 },
       repository: { checkout, remote: { name: 'origin', url: REPOSITORY }, branch: 'main' },
       owner: { identity: 'rehearsal', allowedTrustRoutes: ['auto-merge', 'quick-review'] },
       live: { baseUrl: 'https://rehearsal.github.io/suggestions-fixture/' },
@@ -155,7 +158,7 @@ export async function createSuggestionsFixture({ port = 46437, keep = false, cha
     }
     await writeFile(configFile, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
     return { root, checkout, remote, config, configFile, projectRoot, challenge, keep, copied, git, cleanup,
-      ownerOrigin: `http://127.0.0.1:${port}`, readerOrigin: `http://127.0.0.1:${port + 1}`, intakeOrigin: `http://127.0.0.1:${port + 2}`,
+      ownerOrigin: `http://${host}:${port}`, readerOrigin: `http://${host}:${port + 1}`, intakeOrigin: `http://${host}:${port + 2}`,
       track(promise) { active.add(promise); promise.then(() => active.delete(promise), () => active.delete(promise)); return promise; },
       attachRuntime(value) { runtime = value; },
     };

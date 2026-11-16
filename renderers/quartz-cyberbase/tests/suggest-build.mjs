@@ -58,9 +58,13 @@ try {
   const sourceBlock = needle => {
     const block = provenance.blocks.find(block => block.editable && block.text.includes(needle))
     assert.ok(block, `Missing editable source block ${needle}`)
-    return { block, button: page.locator(`[data-cb-node="${block.parent}"] > .cb-source-open`) }
+    return { block, button: { click: async () => {
+      const host = page.locator(".page .center > article.popover-hint").locator(`[data-cb-node="${block.parent}"]`)
+      await host.hover({ position: { x: 5, y: 5 } })
+      await host.locator(":scope > .cb-source-open").click()
+    } } }
   }
-  const { chromium } = await import(pathToFileURL(path.join(repo, "docs/node_modules/@playwright/test/index.mjs")).href)
+  const { chromium, devices } = await import(pathToFileURL(path.join(repo, "docs/node_modules/@playwright/test/index.mjs")).href)
   browser = await chromium.launch({ headless: true })
   const context = await browser.newContext({ viewport: { width: 1680, height: 1050 } })
   const page = await context.newPage()
@@ -72,10 +76,11 @@ try {
     blocked.push(route.request().url()); return route.abort()
   })
   await page.goto(origin)
-  await page.waitForSelector(".cb-suggest-toggle")
+  await page.waitForSelector(".cb-suggest-toggle", { state: "attached" })
   assert.equal(await page.locator("article style > span, article math span").count(), 0)
   assert.equal(await page.locator("article style").evaluate(el => el.childNodes[0].nodeType), 3)
   await page.locator(".suggest-correction-entry").first().click()
+  await page.locator(".cb-suggest-hint-dismiss").click()
   async function select(needle, a, b, tag = "[data-cb-view]") {
     await page.evaluate(({ needle, a, b, tag }) => {
       const parts = [...document.querySelectorAll(`article [data-cb-run] ${tag}`)]
@@ -137,7 +142,7 @@ try {
   await page.locator(".cb-suggest-toggle").click()
   await page.locator("article a").filter({ hasText: "target" }).first().click()
   await page.waitForURL(`${origin}/target`)
-  await page.waitForSelector(".cb-suggest-toggle")
+  await page.waitForSelector(".cb-suggest-toggle", { state: "attached" })
   assert.equal(await page.locator(".cb-suggest-tray").count(), 1)
   await page.goBack(); await page.waitForSelector(".cb-suggest-card")
   assert.equal(await page.locator(".cb-suggest-card").count(), 3)
@@ -195,6 +200,7 @@ try {
   assert.equal(await page.locator(".cb-suggest-card").count(), 8)
   const rejected = provenance.blocks.find(block => !block.editable && block.reason === "obsidian-comment")
   assert.ok(rejected)
+  await page.locator(".page .center > article.popover-hint").locator(`[data-cb-node="${rejected.parent}"]`).hover({ position: { x: 5, y: 5 } })
   await page.locator(`[data-cb-node="${rejected.parent}"] > .cb-source-open`).click()
   assert.equal(await page.locator(".cb-source-editor").count(), 0)
   assert.match(await page.locator(".cb-suggest-status").textContent(), /obsidian-comment/)
@@ -211,8 +217,8 @@ try {
   await sourceBlock("[[target]]").button.click(); await editor.waitFor()
   assert.ok((await editor.textContent()).includes("third"))
   await editor.press("Escape")
-  await page.locator(".cb-suggest-review").click()
   await page.locator(".cb-suggest-card textarea").first().fill("Please use this wording.")
+  await page.locator(".cb-suggest-send-review").click()
   await page.locator(".suggest-correction-form:visible input[name=rationale]").fill("Batch rationale.")
   await page.screenshot()
   await page.locator(".suggest-correction-form:visible button[type=submit]").click()
@@ -224,6 +230,96 @@ try {
   assert.equal(await page.locator(".cb-suggest-card").count(), 0)
   assert.equal(await page.locator("input[name=rationale]").first().inputValue(), "")
   assert.equal(await page.evaluate(() => Object.keys(sessionStorage).filter(key => key.startsWith("cyberbaser:suggesting:v2:")).length), 0)
+  // Independent synthetic drafts for phone/desktop visual acceptance. Never use the live rehearsal.
+  const screenshots = path.join(repo, ".workspace/concrete-flow/mobile-polish")
+  fs.mkdirSync(screenshots, { recursive: true })
+  for (const [name, device] of [["iphone13", devices["iPhone 13"]], ["desktop", { viewport: { width: 1280, height: 900 } }]]) {
+    const visualContext = await browser.newContext(device)
+    await visualContext.route("**/*", route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort())
+    const visual = await visualContext.newPage()
+    visual.on("pageerror", error => errors.push(error.message))
+    const capture = async state => {
+      await visual.screenshot({ path: path.join(screenshots, `${name}-${state}.png`), animations: "disabled" })
+    }
+    await visual.goto(origin)
+    await visual.waitForSelector(".cb-suggest-toggle", { state: "attached" })
+    assert.equal(await visual.locator(".suggest-correction-entry:visible").count(), 1)
+    assert.equal(await visual.locator(".cb-suggest-toolbar").isVisible(), false)
+    await capture("01-off")
+    await visual.locator(".suggest-correction-entry").click()
+    await capture("02-hint")
+    await visual.locator(".cb-suggest-hint-dismiss").click()
+    for (const [needle, a, b, value] of [["Hello", 5, 5, ", reader"], ["brown", 0, 5, "red"]]) {
+      await visual.evaluate(({ needle, a, b }) => {
+        const part = [...document.querySelectorAll("article [data-cb-view]")].find(el => el.textContent.includes(needle))
+        const at = part.textContent.indexOf(needle)
+        document.querySelector("article").focus()
+        const range = document.createRange(); range.setStart(part.firstChild, at + a); range.setEnd(part.firstChild, at + b)
+        getSelection().removeAllRanges(); getSelection().addRange(range)
+      }, { needle, a, b })
+      await visual.keyboard.type(value)
+    }
+    await visual.evaluate(() => window.scrollTo(0, 0))
+    assert.equal(await visual.locator(".cb-suggest-review").textContent(), "2 changes")
+    assert.equal(await visual.locator(".suggest-correction-entry:visible").count(), 0)
+    assert.equal(await visual.locator(".edit-this-page:visible").count(), 0)
+    assert.ok(await visual.locator(".cb-source-open:visible").count() <= 1)
+    assert.equal(await visual.locator(".cb-suggest-tray").isVisible(), false, "cards start collapsed on phone and medium desktop")
+    await capture("03-two-edits")
+    await visual.locator(".cb-suggest-review").click()
+    await capture("04-changes-expanded")
+    const trayBox = await visual.locator(".cb-suggest-tray").boundingBox()
+    const toolbarBox = await visual.locator(".cb-suggest-toolbar").boundingBox()
+    assert.ok(trayBox.y + trayBox.height <= toolbarBox.y + 1, "changes do not cover toolbar")
+    if (name === "desktop") {
+      const textBox = await visual.locator("article").boundingBox()
+      assert.ok(textBox.x + textBox.width <= trayBox.x || textBox.y + textBox.height <= trayBox.y, "medium desktop cards do not cover article")
+    }
+    await visual.locator(".cb-suggest-card textarea").first().fill("A clearer greeting.")
+    await visual.locator(".cb-suggest-tray-close").click()
+    await visual.locator(".cb-suggest-send-review").click()
+    await visual.locator("input[name=rationale]").fill("Make the introduction clearer.")
+    await visual.locator("input[name=evidence]").fill("https://example.org/reference")
+    await capture("05-review-send")
+    if (name === "iphone13") {
+      const box = await visual.locator(".cb-suggest-review-sheet").boundingBox()
+      assert.equal(box.x, 0); assert.equal(box.y, 0)
+      assert.ok(Math.abs(box.height - device.viewport.height) < 2)
+    }
+    await visual.locator(".suggest-correction-cancel").click()
+    await visual.locator("article .cb-suggest-unmapped").filter({ hasText: "target" }).first().click()
+    await visual.getByRole("textbox", { name: "Markdown source for this block" }).waitFor()
+    await visual.locator(".cb-source-editor").scrollIntoViewIfNeeded()
+    await capture("06-source-editor")
+    await visual.locator(".cb-source-cancel").click()
+    // Layout checks share this render: small phones, intermediate widths and dark appearance.
+    for (const width of name === "iphone13" ? [360, 390, 430] : [800, 1024, 1280]) {
+      await visual.setViewportSize({ width, height: 900 })
+      const overflow = await visual.evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth,
+        wide: [...document.querySelectorAll("body *")].map(el => ({ tag: el.tagName, class: String(el.className), right: el.getBoundingClientRect().right })).filter(el => el.right > innerWidth + 1).slice(0, 8) }))
+      assert.ok(overflow.scroll <= overflow.width, `no horizontal overflow at ${width}: ${JSON.stringify(overflow)}`)
+      await visual.locator(".cb-suggest-review").click()
+      assert.ok(await visual.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `expanded sheet fits ${width}`)
+      if (width > 800) {
+        const articleBox = await visual.locator(".page .center > article").boundingBox()
+        const cardsBox = await visual.locator(".cb-suggest-tray").boundingBox()
+        assert.ok(articleBox.x + articleBox.width <= cardsBox.x, `cards reserve the text column at ${width}`)
+      }
+      await visual.locator(".cb-suggest-tray-close").click()
+    }
+    await visual.evaluate(() => { document.documentElement.setAttribute("saved-theme", "dark"); window.scrollTo(0, 0) })
+    await capture("07-dark")
+    await visual.reload(); await visual.waitForSelector(".cb-suggest-toolbar")
+    assert.equal(await visual.locator(".cb-suggest-help").isVisible(), false, "dismissed hint stays dismissed across reload")
+    assert.equal(await visual.locator(".cb-suggest-card").count(), 2)
+    await visual.locator(".cb-suggest-send-review").click()
+    await visual.locator("button[type=submit]").click()
+    await visual.waitForFunction(() => document.querySelector(".cb-suggest-status")?.textContent.includes("Q-built-page"))
+    assert.equal(body.operations.length, 2)
+    assert.equal(await visual.locator("article ins, article del").count(), 0)
+    await visualContext.close()
+  }
+  console.log("suggest-build mobile-polish: iPhone 13 emulation + 1280x900 desktop, single entry, 2 edits, collapsed/expanded cards, review/send, source editor, dark theme, 360/390/430/800/1024/1280 widths, persisted hint, fixture sends and screenshots passed")
   // Mutated text after mapping refuses a suggestion without inventing offsets.
   await page.locator(".suggest-correction-entry").first().click()
   await page.evaluate(() => { document.querySelector("article [data-cb-view]").firstChild.textContent = "stale DOM" })
@@ -235,7 +331,7 @@ try {
     const value = { ...provenance, version: 1 }; delete value.blocks
     await route.fulfill({ contentType: "application/json", body: JSON.stringify(value) })
   })
-  await page.reload(); await page.waitForSelector(".cb-suggest-toggle")
+  await page.reload(); await page.waitForSelector(".cb-suggest-toggle", { state: "attached" })
   await page.locator(".suggest-correction-entry").first().click()
   await page.locator("article .cb-suggest-unmapped").filter({ hasText: "target" }).first().click()
   assert.equal(await page.locator(".cb-source-open").count(), 0)

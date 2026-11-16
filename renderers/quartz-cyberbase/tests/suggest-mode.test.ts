@@ -113,3 +113,71 @@ for (let n = 0; n < 300; n++) {
   }
 }
 console.log("suggest-mode fake-DOM provenance, empty-style snapshot regression, sparse insert/replace/delete, inserted edits, refusal, persistence, v2 payload, receipt and 2,400 Unicode reconstruction checks passed")
+
+// Presentation fake DOM exercises the actual controls independently of source mapping.
+const { createSuggestModeUI, activeSourceBlock, suggestingHintKey } = await import("../components/suggestModeUI")
+class UIElement {
+  children: UIElement[] = []
+  parent: UIElement | null = null
+  attributes = new Map<string, string>()
+  events = new Map<string, () => void>()
+  hidden = false; disabled = false; type = ""; textContent = ""; className = ""
+  get classList() { return {
+    add: (c: string) => { this.className = [...new Set([...this.className.split(" "), c])].join(" ") },
+    remove: (c: string) => { this.className = this.className.split(" ").filter(x => x !== c).join(" ") },
+    toggle: (c: string, on: boolean) => on ? this.classList.add(c) : this.classList.remove(c),
+  } }
+  append(...children: UIElement[]) { for (const c of children) { c.parent = this; this.children.push(c) } }
+  setAttribute(name: string, value: string) { this.attributes.set(name, value) }
+  getAttribute(name: string) { return this.attributes.get(name) }
+  addEventListener(name: string, fn: () => void) { this.events.set(name, fn) }
+  removeEventListener(name: string) { this.events.delete(name) }
+  click() { this.events.get("click")?.() }
+  focus() {}
+  contains(node: UIElement): boolean { return this === node || this.children.some(c => c.contains(node)) }
+  remove() { if (this.parent) this.parent.children = this.parent.children.filter(c => c !== this) }
+}
+const previous = { document: globalThis.document, window: globalThis.window, localStorage: globalThis.localStorage }
+const body = new UIElement(), local = new Map<string, string>()
+Object.assign(globalThis, {
+  document: { body, createElement: () => new UIElement() },
+  window: { innerWidth: 390, addEventListener() {}, removeEventListener() {} },
+  localStorage: { getItem: (key: string) => local.get(key) ?? null, setItem: (key: string, value: string) => local.set(key, value) },
+})
+try {
+  const entry = new UIElement()
+  let enabled = false, reviews = 0
+  const ui = createSuggestModeUI(entry as any, () => { enabled = !enabled; ui.setMode(enabled) }, () => { reviews++ })
+  ui.setMode(false); ui.setCount(0)
+  assert.equal(entry.textContent, "Suggest edits"); assert.equal(entry.hidden, false)
+  assert.equal(ui.toolbar.hidden, true); assert.equal(ui.tray.hidden, true)
+  ;(entry as any).click()
+  assert.equal(entry.hidden, true); assert.equal(ui.toolbar.hidden, false)
+  assert.equal(ui.toggle.getAttribute("aria-pressed"), "true")
+  assert.equal(ui.hint.hidden, false)
+  ;(ui.hint as any).children[1].click()
+  assert.equal(local.get(suggestingHintKey), "1"); assert.equal(ui.hint.hidden, true)
+  ui.setCount(2); assert.equal(ui.count.textContent, "2 changes"); assert.equal(ui.review.disabled, false)
+  ;(ui.count as any).click(); assert.equal(ui.count.getAttribute("aria-expanded"), "true")
+  ;(ui.review as any).click(); assert.equal(reviews, 1)
+  ;(ui.toggle as any).click(); assert.equal(entry.hidden, false); assert.equal(ui.toolbar.hidden, true)
+  ui.destroy(); assert.equal(body.children.length, 0)
+  const again = createSuggestModeUI(entry as any, () => {}, () => {})
+  again.setMode(true); assert.equal(again.hint.hidden, true, "hint dismissal survives another installation")
+  again.destroy()
+  ;(globalThis.window as any).innerWidth = 1680
+  const wide = createSuggestModeUI(entry as any, () => {}, () => {})
+  wide.setMode(false); wide.setMode(true); wide.setCount(2)
+  assert.equal(wide.count.getAttribute("aria-expanded"), "true", "roomy desktop starts with margin cards")
+  ;(wide.tray as any).children[0].children[1].click()
+  assert.equal(wide.count.getAttribute("aria-expanded"), "false", "desktop margin cards can also be closed")
+  wide.destroy()
+  const blocks = [0, 1, 2].map(() => ({ host: new UIElement(), button: new UIElement() }))
+  blocks.forEach(b => { b.button.hidden = true; b.host.append(b.button) })
+  const activate = activeSourceBlock(blocks as any)
+  activate(blocks[0].host as any); assert.deepEqual(blocks.map(b => b.button.hidden), [false, true, true])
+  activate(blocks[1].button as any); assert.deepEqual(blocks.map(b => b.button.hidden), [true, false, true])
+  activate(new UIElement() as any); assert.deepEqual(blocks.map(b => b.button.hidden), [true, false, true], "unmapped root selection cannot erase the active tap/hover")
+  activate(); assert.deepEqual(blocks.map(b => b.button.hidden), [true, true, true])
+} finally { Object.assign(globalThis, previous) }
+console.log("suggest-mode UI fake-DOM: single entry, toolbar state/count, collapsed changes, active-block-only source chip, persisted hint dismissal and cleanup passed")

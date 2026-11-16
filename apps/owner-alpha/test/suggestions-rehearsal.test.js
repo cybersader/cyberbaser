@@ -146,10 +146,13 @@ describe('suggestions rehearsal fixture (hermetic)', () => {
     expect(output).not.toContain('/cyberbase/📁');
   });
 
-  test('arguments allow only bounded loopback port selection and published test modes', () => {
-    expect(optionsFromArgs([])).toEqual({ keep: false, challenge: null, prepare: false, port: 46437 });
-    expect(optionsFromArgs(['--keep', '--challenge', 'spent', '--port', '49000'])).toEqual({ keep: true, challenge: 'spent', prepare: false, port: 49000 });
-    for (const args of [['--port', '65534'], ['--port', '0'], ['--port', 'no'], ['--host', '0.0.0.0'], ['--challenge', 'real'], ['--prepare', '--keep']]) expect(() => optionsFromArgs(args)).toThrow();
+  test('arguments allow bounded ports, one private host and published test modes', () => {
+    expect(optionsFromArgs([])).toEqual({ keep: false, challenge: null, prepare: false, port: 46437, host: '127.0.0.1' });
+    expect(optionsFromArgs(['--keep', '--challenge', 'spent', '--port', '49000'])).toEqual({ keep: true, challenge: 'spent', prepare: false, port: 49000, host: '127.0.0.1' });
+    // A tailnet (RFC 6598) or LAN address lets a phone reach the throwaway site; public and wildcard addresses are refused.
+    expect(optionsFromArgs(['--host', '100.64.12.34']).host).toBe('100.64.12.34');
+    expect(optionsFromArgs(['--host', '192.168.1.20']).host).toBe('192.168.1.20');
+    for (const args of [['--port', '65534'], ['--port', '0'], ['--port', 'no'], ['--host', '0.0.0.0'], ['--host', '8.8.8.8'], ['--host', 'example.com'], ['--challenge', 'real'], ['--prepare', '--keep']]) expect(() => optionsFromArgs(args)).toThrow();
   });
 
   test('creates fresh three-page vault, private valid config and an owned local-only remote', async () => {
@@ -220,7 +223,7 @@ describe('suggestions rehearsal fixture (hermetic)', () => {
 
   test('copy arguments require an explicit folder and bound, while keeping optional modes', () => {
     expect(optionsFromArgs(['--from', '/source', '--folder', SOURCE_FOLDER, '--keep', '--challenge', 'pass'])).toEqual({
-      keep: true, challenge: 'pass', prepare: false, port: 46437, from: '/source', folder: SOURCE_FOLDER, ref: 'origin/main', maxPages: 400,
+      keep: true, challenge: 'pass', prepare: false, port: 46437, host: '127.0.0.1', from: '/source', folder: SOURCE_FOLDER, ref: 'origin/main', maxPages: 400,
     });
     expect(optionsFromArgs(['--from', '/source', '--folder', SOURCE_FOLDER, '--ref', 'HEAD~1', '--max-pages', '800']).maxPages).toBe(800);
     for (const args of [

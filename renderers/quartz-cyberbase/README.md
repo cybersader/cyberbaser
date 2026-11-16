@@ -419,17 +419,33 @@ own reviewed script/frame CSP permissions; no provider adds host policy itself.
 
 ## Suggesting an edit on the page
 
+The UI uses 44px touch targets, 16px input/source-editor text, theme-aware colors,
+and a subtle active-block background rather than outlining the article. Only the
+block containing the caret, selection, tap or desktop hover exposes its **Edit
+source** chip. There are no permanent buttons below every paragraph or heading.
+
 With the account-free form enabled and `CYBERBASER_SOURCE_PROVENANCE=enabled`
 passed to **both setup and build**, readers can suggest changes directly on the
-rendered page. The existing **Suggest an edit** entry turns on **Suggesting**;
-the toggle switches between reading and suggesting without losing the draft.
+rendered page. One **Suggest edits** entry turns on **Suggesting** and disappears
+while editing. The forge’s **Edit this page** remains a quiet alternate link only
+while reading. A compact toolbar holds the suggesting toggle, change count and
+**Review & send**. It stays above the phone’s safe area at the bottom and in the
+bottom-right corner on desktop. Turning suggesting off keeps the draft.
+
+A small first-use hint explains that changes remain suggestions until the owner
+applies them. **Got it** remembers dismissal in localStorage; blocked storage does
+not prevent editing. The hint never inserts instructions above the article.
 
 1. Click into mapped text and type to insert. Select words and type to replace.
    Backspace/Delete suggests a deletion. The original text stays visible in red
    strikethrough; additions appear in green underline. Link labels and bold text
    retain their links/formatting. Edits inside green text update that same change.
-2. Each change has a desktop margin card or mobile bottom-tray card with an
-   optional comment and **Discard**. **Your changes** reviews the complete batch.
+2. Tap the count chip to open the changes sheet on phones and medium desktops.
+   It starts collapsed and stays above, not over, the toolbar. Roomy desktops show
+   margin cards; medium-width layouts reserve space when cards are opened so they
+   do not cover the article. Cards have an optional comment and **Discard**.
+   **Review & send** opens the complete batch in a full-height phone sheet or
+   desktop side panel. Escape or **Back to editing** closes review.
    Draft operations and local comments survive reload in sessionStorage, keyed
    by opaque page ID and the pinned base digest. Discard restores original text.
 3. Add an optional **Why?**, HTTPS **Source link**, and configured bot check, then
@@ -451,7 +467,7 @@ from the browser's transient composition DOM.
 ### Editing a block’s Markdown source
 
 In Suggesting mode, click a target-derived wikilink label, callout title, math
-region or other transformed text, or choose **Edit source** beside an editable
+region or other transformed text, or choose **Edit source** on the active editable
 block. The rendered block temporarily gives way to a compact, labelled editor
 headed **Editing Markdown source**. Markdown highlighting and faded syntax away
 from the cursor’s line provide a source-first live-preview feel. The editor
