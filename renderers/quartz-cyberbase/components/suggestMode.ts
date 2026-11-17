@@ -170,11 +170,12 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
   const key = `cyberbaser:suggesting:v2:${form.dataset.pageId}:${manifest.source.sha256}`
   const retryKey = `${key}:retry`
   let navigating = false
+  const ownerEntry = document.querySelector<HTMLAnchorElement>(".edit-this-page a[href*='/owner/in-place?']")
+  const resumeOwnerDraft = () => store(`${key}:paused`, null)
+  ownerEntry?.addEventListener("click", resumeOwnerDraft)
   if (!finish.needsChallenge) {
     for (const name of ["rationale", "evidence"]) (form.elements.namedItem(name) as HTMLElement)?.closest("label")?.setAttribute("hidden", "")
     form.querySelector<HTMLElement>(".suggest-correction-challenge")?.setAttribute("hidden", "")
-    const raw = element("a", "Edit whole file as Markdown", "cb-suggest-raw"); raw.href = finish.rawHref!
-    ui.toolbar.append(raw)
   }
   const say = (message: string) => { status.textContent = message; formStatus.textContent = message }
   const operations = () => {
@@ -529,7 +530,12 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
   const cancelTitle = element("h2"), discard = element("button", "Discard"), draft = element("button", "Save draft"), keep = element("button", "Keep editing")
   for (const button of [discard, draft, keep]) button.type = "button"
   cancelSheet.setAttribute("aria-label", "Discard changes?")
-  cancelSheet.append(cancelTitle, discard, draft, keep); document.body.append(cancelSheet)
+  cancelSheet.append(cancelTitle, discard, draft, keep)
+  if (finish.rawHref) {
+    const raw = element("a", "Edit whole file as Markdown", "cb-suggest-raw"); raw.href = finish.rawHref
+    cancelSheet.append(raw)
+  }
+  document.body.append(cancelSheet)
   const exit = () => {
     cancelSheet.close(); setMode(false); say("")
     // Keep the immutable ledger locally, but return the reading surface to base.
@@ -589,7 +595,10 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
   }
   const onReview = () => {
     if (activeSource && !activeSource.commit?.()) return
-    if (operations().length) showReview(form.hidden === true)
+    if (operations().length) {
+      if (finish.needsChallenge) showReview(form.hidden === true)
+      else { persist(); void onSubmit(new SubmitEvent("submit", { cancelable: true })) }
+    }
   }
   const onCancel = () => showReview(false)
   const onSubmit = async (event: SubmitEvent) => {
@@ -705,6 +714,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     document.removeEventListener("click", guardNavigation, true); window.removeEventListener("beforeunload", unload)
     window.removeEventListener("resize", positionChrome); window.removeEventListener("scroll", positionChrome, true)
     ui.markdown.removeEventListener("click", markdown); ui.undo.removeEventListener("click", undo); ui.redo.removeEventListener("click", redo)
+    ownerEntry?.removeEventListener("click", resumeOwnerDraft)
     prompt.remove(); leave.remove(); cancelSheet.remove()
     destroyed = true; viewportUI.destroy(); challenge?.destroy(); closeSource(false)
     for (const { host, button } of blocks) { button.remove(); host.classList.remove("cb-source-pending", "cb-source-active") }

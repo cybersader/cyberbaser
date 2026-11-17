@@ -1133,3 +1133,16 @@ body.publication-document-review { height: 100dvh; min-height: 0; margin: 0; pad
   .owner-cancel-sheet { margin: auto 0 0; width: 100%; max-width: 100%; border-radius: 16px 16px 0 0; padding-bottom: max(24px, env(safe-area-inset-bottom)); }
   .owner-cancel-sheet button { display: block; width: 100%; margin: 8px 0 0; }
 }
+
+/* A single plain-language save indicator; recovery remains in Details. */
+.save-progress { max-width: 640px; }
+.save-progress [hidden] { display: none !important; }
+.save-progress .job-steps { display: flex; gap: 12px; flex-wrap: wrap; }
+.save-progress .job-step { font-size: .85rem; padding-left: 1.4rem; }
+.save-progress .job-step::before { width: .7rem; height: .7rem; top: .3rem; }
+.save-result-links { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+.save-view-page { display: inline-block; border-radius: 8px; padding: 12px 20px; background: #245fc7; color: #fff; text-decoration: none; font-weight: 600; }
+.save-view-page:hover { background: #1b4da4; color: #fff; }
+.job-details { margin-top: 24px; font-size: .9rem; overflow-wrap: anywhere; }
+.job-details summary { cursor: pointer; color: inherit; }
+.job-details .rehearsal-notice { margin: 16px 0; padding: 12px; width: auto; }

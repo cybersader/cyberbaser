@@ -1,5 +1,6 @@
 import { QuartzComponentConstructor, QuartzComponentProps } from "./types"
 import { classNames } from "../util/lang"
+import { EditPencil, editEntryCss } from "./editEntry"
 import { editLinkForPage } from "./editLink"
 import type { EditThisPageOptions } from "./editLink"
 export { encodeRepoPath } from "./editLink"
@@ -34,21 +35,23 @@ export default ((opts: EditThisPageOptions) => {
     const link = editLinkForPage(relativePath, fileData.slug, opts, Boolean((fileData as any).sourceProvenance?.source))
     if (!link) return null
 
+    const pencil = opts.mode === "owner" && opts.inPlace && !link.external && link.href.includes("/owner/in-place?")
     const externalProps = link.external
       ? { target: "_blank", rel: "noopener noreferrer" }
       : undefined
     return (
       <p class={classNames(displayClass, "edit-this-page")}>
-        <a href={link.href} {...externalProps} title={relativePath}>
-          <span aria-hidden="true">&#9998;</span> {label}
+        <a href={link.href} {...externalProps} class={pencil ? "cb-edit-entry" : undefined} data-placement={pencil ? opts.editEntry ?? "auto" : undefined} title={pencil ? "Edit" : relativePath} aria-label="Edit this page">
+          {pencil ? <EditPencil /> : <><span aria-hidden="true">&#9998;</span> {label}</>}
         </a>
+        {pencil && <a class="cb-edit-markdown" href={link.href.replace("/owner/in-place?", "/owner/edit?")}>Markdown</a>}
       </p>
     )
   }
 
   // Raw CSS string (Quartz accepts `string | string[]` here). Uses the existing
   // Quartz theme variables so it needs no stylesheet of its own.
-  EditThisPage.css = `
+  EditThisPage.css = editEntryCss + `
 .edit-this-page {
   margin: 0.25rem 0 0 0;
   font-size: 0.8rem;

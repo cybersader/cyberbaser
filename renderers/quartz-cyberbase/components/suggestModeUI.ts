@@ -51,7 +51,6 @@ export function createSuggestModeUI(entry: HTMLButtonElement, onToggle: () => vo
     try { localStorage.setItem(suggestingHintKey, "1") } catch { /* optional storage */ }
   }
   const enter = () => onToggle()
-  entry.textContent = "Edit"
   entry.addEventListener("click", enter); toggle.addEventListener("click", onToggle)
   count.addEventListener("click", showCards); review.addEventListener("click", onReview)
   collapse.addEventListener("click", closeCards); dismiss.addEventListener("click", dismissHint)

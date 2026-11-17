@@ -1,3 +1,4 @@
+import { resolveEditEntry } from "../components/editEntryConfig"
 import assert from "node:assert/strict"
 import {
   editLinkForPage,
@@ -122,3 +123,7 @@ for (const inPlace of [undefined, false, true]) {
   }
 }
 assert.equal(new URL(editLinkForPage(relativePath, slug, publicOptions, true)!.href).host, "github.com")
+
+assert.equal(resolveEditEntry(undefined), "auto")
+for (const value of ["auto", "floating", "inline"]) assert.equal(resolveEditEntry(value), value)
+for (const value of ["", "left", "AUTO"]) assert.throws(() => resolveEditEntry(value), /CYBERBASER_EDIT_ENTRY/)

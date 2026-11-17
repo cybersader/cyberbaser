@@ -722,3 +722,12 @@ leaked into a spoke.
 - `packages/publish` — the `publish.yml` boundary and `sluggify()` used by the projection
 - `packages/projection` — produces the projected content tree this renderer consumes
 - Upstream: <https://github.com/jackyzha0/quartz> · <https://quartz.jzhao.xyz/configuration>
+
+### Edit entry placement
+
+With the shared editor enabled, `CYBERBASER_EDIT_ENTRY` accepts `auto` (default),
+`floating`, or `inline`. `auto` uses a 56 px safe-area-aware bottom-right pencil
+on coarse-pointer devices or widths up to 600 px, and a quiet 36 px metadata icon
+on desktop. Both owner navigation and visitor entry use the same presentation.
+Unknown values fail closed. Owner-app config exposes this as
+`suggestions.editEntry`; it changes rendered cache identity, not source authority.

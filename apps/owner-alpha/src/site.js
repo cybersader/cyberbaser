@@ -511,10 +511,11 @@ async function publishCandidate({ projectRoot, workspaceRoot, candidateSite, sit
 
 // The built pages either carry no form, or carry the form bound to exactly the
 // intake origin the current config would use plus one retained binding digest.
-function suggestionsMatch(value, formOrigin) {
+function suggestionsMatch(value, formOrigin, editEntry) {
   if (!isPlainObject(value)) return false;
   if (formOrigin === null) return value.form === false;
   return value.form === true
+    && (value.editEntry ?? 'auto') === editEntry
     && value.intakeOrigin === formOrigin
     && typeof value.bindingDigest === 'string';
 }
@@ -540,7 +541,7 @@ function reusableManifest(value, config, checkout, htmlPages, resources, outputT
     || value.renderer.resources?.digest !== resources.digest
     || value.renderer.resources?.files !== resources.files
     || value.renderer.resources?.bytes !== resources.bytes
-    || !suggestionsMatch(value.suggestions, suggestionFormOrigin(config))
+    || !suggestionsMatch(value.suggestions, suggestionFormOrigin(config), config.suggestions.editEntry ?? 'auto')
     || value.site.manifest !== OWNER_SITE_MANIFEST_FILENAME
     || value.site.htmlPages !== htmlPages
     || value.site.outputTree?.digest !== outputTree.digest
@@ -831,6 +832,7 @@ export async function rebuildOwnerSite({
         fail('site-suggestion-binding-failed', 'retainPublication did not return one binding digest');
       }
       rendererSuggestions = {
+        editEntry: config.suggestions.editEntry ?? 'auto',
         intakeOrigin: formOrigin,
         bindingDigest: retained.bindingDigest,
         sourceRepository: config.repository.remote.url,
@@ -844,6 +846,7 @@ export async function rebuildOwnerSite({
       };
       suggestions = {
         form: true,
+        ...(config.suggestions.editEntry !== undefined ? { editEntry: config.suggestions.editEntry } : {}),
         intakeOrigin: formOrigin,
         bindingDigest: retained.bindingDigest,
         pages: safeCount(retained.pages, 'retained pages'),

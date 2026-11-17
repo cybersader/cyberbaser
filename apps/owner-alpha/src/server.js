@@ -311,45 +311,47 @@ function jobStageCopy(state) {
   return step ? step.label : state;
 }
 
+// Display groups only. The underlying job state machine and recovery are unchanged.
+const SAVE_STEPS = Object.freeze([
+  { key: 'check', label: 'Checking', states: JOB_STEPS[0].states },
+  { key: 'save', label: 'Saving', states: [...JOB_STEPS[1].states, ...JOB_STEPS[2].states] },
+  { key: 'site', label: 'Updating the site', states: JOB_STEPS.slice(3).flatMap(step => step.states) },
+  { key: 'done', label: 'Done', states: ['completed'] },
+]);
+const SAVE_STOPS = Object.freeze(Object.fromEntries(Object.entries(JOB_STOPS).map(([state, value]) => [state, {
+  step: state === 'completed' ? 3 : value.step === 0 ? 0 : value.step < 3 ? 1 : 2,
+  copy: state === 'completed' ? 'Saved' : state === 'live-verification-failed' ? 'Updating the site' : 'The save did not finish. Open Details for what happened.',
+}])));
 function jobPage(job, readerOrigin) {
   const safe = publicJob(job);
-  const fromSuggestion = safe.origin?.type === 'approved-proposal';
-  const fromPublication = safe.origin?.type === 'owner-publication';
-  if (fromPublication) return publicationJobPage(safe);
-  const current = jobStepIndex(safe.state);
+  if (safe.origin?.type === 'owner-publication') return publicationJobPage(safe);
   const done = safe.state === 'completed';
-  const stopped = Object.hasOwn(JOB_STOPS, safe.state) && !done;
-  const steps = JOB_STEPS.map((step, index) => {
-    const status = done || index < current ? 'done' : index === current ? (stopped ? 'stopped' : 'current') : 'pending';
-    return `<li class="job-step job-step-${status}" data-step="${step.key}" data-status="${status}">${escapeHtml(step.label)}</li>`;
-  }).join('\n');
-  const back = fromSuggestion
-    ? `<a href="/owner/decisions/${encodeURIComponent(safe.origin.queueId)}">Back to the suggestion</a>`
-    : fromPublication ? '<a href="/owner/publication">Back to publication</a>'
-      : `<a href="${escapeHtml(readerOrigin)}/cyberbase/">Return to Cyberbase</a>`;
-  const stageJson = escapeHtml(JSON.stringify({
-    steps: JOB_STEPS.map((step) => ({ key: step.key, label: step.label, states: step.states })),
-    stops: JOB_STOPS,
-  }));
+  const stopped = Object.hasOwn(SAVE_STOPS, safe.state) && !done && safe.state !== 'live-verification-failed';
+  const current = SAVE_STEPS.findIndex(step => step.states.includes(safe.state));
+  const active = current === -1 ? SAVE_STOPS[safe.state]?.step ?? 0 : current;
+  const copy = SAVE_STOPS[safe.state]?.copy ?? SAVE_STEPS[active].label;
+  const title = job.page?.title || safe.origin?.relativePath?.split('/').at(-1)?.replace(/\.md$/u, '') || 'Your page';
+  const slug = job.page?.slug ?? safe.origin?.relativePath?.replace(/\.md$/u, '');
+  const view = slug ? liveUrlForSlug(`${readerOrigin}/cyberbase/`, slug) : `${readerOrigin}/cyberbase/`;
+  const edit = safe.origin?.relativePath && slug ? `/owner/in-place?relativePath=${encodeURIComponent(safe.origin.relativePath)}&slug=${encodeURIComponent(slug)}` : `${readerOrigin}/cyberbase/`;
+  const steps = SAVE_STEPS.map((step, index) => {
+    const status = done || index < active ? 'done' : index === active ? (stopped ? 'stopped' : 'current') : 'pending';
+    return `<li class="job-step job-step-${status}" data-step="${step.key}" data-status="${status}">${step.label}</li>`;
+  }).join('');
+  const stages = escapeHtml(JSON.stringify({ steps: SAVE_STEPS, stops: SAVE_STOPS, technical: { steps: JOB_STEPS, stops: JOB_STOPS } }));
   return pageShell({
-    title: fromSuggestion ? 'Putting the suggestion on the page' : fromPublication ? 'Publishing your page' : 'Saving your change',
-    script: '/owner/assets/job.js',
-    body: `<main class="owner-shell" id="owner-job" data-job-id="${escapeHtml(safe.jobId)}" data-stages="${stageJson}">
-<header class="owner-header">
-<h1>${fromSuggestion ? 'Putting the suggestion on the page' : fromPublication ? 'Publishing your page' : 'Saving your change'}</h1>
-<p class="lede">${safe.origin?.relativePath ? `<span class="identity-path">${escapeHtml(safe.origin.relativePath)}</span>. ` : ''}This runs on the server in the background. You can close this page and come back; nothing here needs a click.</p>
-</header>
-<section class="job-card" aria-live="polite">
-<p class="job-stage"><strong id="job-stage">${escapeHtml(jobStageCopy(safe.state))}</strong></p>
-<ol class="job-steps" id="job-steps">
-${steps}
-</ol>
-<p id="job-recovery" class="status">${escapeHtml(safe.recovery?.instruction ?? '')}</p>
-<p id="job-error" class="error" role="alert">${safe.failure ? `Stopped (${escapeHtml(safe.failure.code)}).` : ''}</p>
-<p class="job-technical">Job <span id="job-id">${escapeHtml(safe.jobId)}</span> · state <span id="job-state">${escapeHtml(safe.state)}</span> · updated <span id="job-updated">${escapeHtml(safe.updatedAt ?? '')}</span></p>
+    title: done ? 'Saved' : 'Saving…', script: '/owner/assets/job.js',
+    body: `<main class="owner-shell save-progress" id="owner-job" data-job-id="${escapeHtml(safe.jobId)}" data-stages="${stages}">
+<header class="owner-header"><h1 id="save-heading">${done ? 'Saved' : stopped ? 'Save needs attention' : 'Saving…'}</h1><p class="lede">${escapeHtml(title)}</p></header>
+<section class="job-card" aria-live="polite"><p class="job-stage"><strong id="job-stage">${escapeHtml(copy)}</strong></p>
+<ol class="job-steps" id="job-steps"${done || stopped ? ' hidden' : ''}>${steps}</ol>
+<div class="save-result-links" id="save-result-links"${done ? '' : ' hidden'}><a class="save-view-page" href="${escapeHtml(view)}">View page</a><a href="${escapeHtml(edit)}">Edit again</a></div>
 </section>
-<p class="job-links">${back}${fromSuggestion ? ` · <a href="${escapeHtml(readerOrigin)}/cyberbase/">Return to Cyberbase</a>` : ''}</p>
-</main>`,
+<details class="job-details" id="job-details"><summary>Details</summary><div id="job-rehearsal-details"></div>
+<p id="job-technical-stage">${escapeHtml(jobStageCopy(safe.state))}</p><p id="job-recovery" class="status">${escapeHtml(safe.recovery?.instruction ?? '')}</p>
+<p id="job-error" class="error">${safe.failure ? `Stopped (${escapeHtml(safe.failure.code)}).` : ''}</p>
+<p class="job-technical">Job <span id="job-id">${escapeHtml(safe.jobId)}</span> · state <span id="job-state">${escapeHtml(safe.state)}</span> · updated <span id="job-updated">${escapeHtml(safe.updatedAt ?? '')}</span></p></details>
+<p class="job-links">${safe.origin?.type === 'approved-proposal' ? `<a href="/owner/decisions/${encodeURIComponent(safe.origin.queueId)}">Back to the suggestion</a> · ` : ''}<a href="${escapeHtml(readerOrigin)}/cyberbase/">Return to Cyberbase</a></p></main>`,
   });
 }
 

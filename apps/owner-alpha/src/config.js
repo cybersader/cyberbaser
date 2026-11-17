@@ -657,7 +657,8 @@ function validateSuggestionChallenge(value, formEnabled) {
 
 function validateSuggestions(value, { listen, proposalReview, repository }) {
   if (value === undefined) return { form: { enabled: false }, forge: { enabled: false } };
-  const input = objectAt(value, '$.suggestions', ['form', 'forge']);
+  const input = objectAt(value, '$.suggestions', ['form', 'forge', ...(isPlainObject(value) && Object.hasOwn(value, 'editEntry') ? ['editEntry'] : [])]);
+  if (Object.hasOwn(input, 'editEntry') && !['auto', 'floating', 'inline'].includes(input.editEntry)) fail('invalid-config', '$.suggestions.editEntry must be auto, floating, or inline');
   const form = objectAt(input.form, '$.suggestions.form', [
     'enabled',
     ...(isPlainObject(input.form) && Object.hasOwn(input.form, 'challenge') ? ['challenge'] : []),
@@ -717,6 +718,7 @@ function validateSuggestions(value, { listen, proposalReview, repository }) {
       ...(Object.hasOwn(form, 'challenge') ? { challenge: validateSuggestionChallenge(form.challenge, formEnabled) } : {}),
     },
     forge,
+    ...(Object.hasOwn(input, 'editEntry') ? { editEntry: input.editEntry } : {}),
   };
 }
 
@@ -808,8 +810,8 @@ export function policyDocument(configInput) {
     limits: config.limits,
     checks: config.checks,
     git: config.git,
-    // Only present when a lane is on, so the pinned policy revision is unchanged.
-    ...(suggestionsEnabled(config) ? { suggestions: config.suggestions } : {}),
+    // Only lane authority enters the policy revision. editEntry is presentation only.
+    ...(suggestionsEnabled(config) ? { suggestions: { form: config.suggestions.form, forge: config.suggestions.forge } } : {}),
     ...(config.ownerPublication.enabled ? { ownerPublication: config.ownerPublication } : {}),
   });
 }

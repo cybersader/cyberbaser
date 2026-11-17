@@ -1,3 +1,4 @@
+import type { EditEntryPlacement } from "./editEntryConfig"
 import { createHash } from "node:crypto"
 import { isPrivateNetworkIpv4Host } from "./editLink"
 import { DEFAULT_CHALLENGE_PROVIDER, getChallengeProvider } from "./challenge/registry"
@@ -22,6 +23,7 @@ export interface SuggestCorrectionEnabledOptions {
   sourceRepository: string
   sourceRevision: string
   text?: string
+  editEntry?: EditEntryPlacement
   challengeSiteKey?: string
   challengeProvider?: string
 }

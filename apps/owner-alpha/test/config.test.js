@@ -925,3 +925,16 @@ describe('config file safety', () => {
     );
   });
 });
+
+for (const editEntry of ['auto', 'floating', 'inline']) test(`pencil placement ${editEntry} is display-only config`, async () => {
+  const raw = await exampleConfig();
+  raw.proposalReview.enabled = true;
+  raw.proposalReview.socketPath = '/run/cyberbaser/review.sock';
+  raw.suggestions = { form: { enabled: true }, forge: { enabled: false } };
+  const base = validateOwnerAlphaConfig(raw);
+  const placed = validateOwnerAlphaConfig({ ...raw, suggestions: { ...raw.suggestions, editEntry } });
+  expect(placed.suggestions.editEntry).toBe(editEntry);
+  expect(computePolicyRevision(placed)).toBe(computePolicyRevision(base));
+  expect(validateOwnerAlphaConfig(placed)).toEqual(placed);
+  for (const invalid of ['', 'unknown', null, 1]) expect(() => validateOwnerAlphaConfig({ ...raw, suggestions: { ...raw.suggestions, editEntry: invalid } })).toThrow(/editEntry/);
+});

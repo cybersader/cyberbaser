@@ -1,3 +1,4 @@
+import type { EditEntryPlacement } from "./editEntryConfig"
 export type EditLinkMode = "public" | "owner"
 
 export interface PublicEditThisPageOptions {
@@ -16,6 +17,7 @@ export interface OwnerEditThisPageOptions {
   ownerOrigin: string
   /** The shared rendered editor is included in this build. Off by default. */
   inPlace?: boolean
+  editEntry?: EditEntryPlacement
   /** Link text. */
   text?: string
 }

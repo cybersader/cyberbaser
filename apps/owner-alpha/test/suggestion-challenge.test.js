@@ -112,6 +112,7 @@ describe('public-only challenge renderer inputs', () => {
   test('absent challenge produces exactly the previous environment and off produces none', () => {
     expect(suggestionEnvironment(null)).toEqual({});
     expect(suggestionEnvironment(binding)).toEqual({
+      CYBERBASER_EDIT_ENTRY: 'auto',
       CYBERBASER_ACCOUNT_FREE_INTAKE: 'enabled', CYBERBASER_SOURCE_PROVENANCE: 'enabled',
       CYBERBASER_ACCOUNT_FREE_INTAKE_ORIGIN: binding.intakeOrigin,
       CYBERBASER_ACCOUNT_FREE_BINDING_DIGEST: binding.bindingDigest,
@@ -162,4 +163,10 @@ describe('provider-owned private reader CSP', () => {
     raw.suggestions.form.challenge.provider = 'not-registered';
     expect(() => createReaderHandler({ config: raw })).toThrow(/registered/);
   });
+});
+
+for (const editEntry of ['auto', 'floating', 'inline']) test(`renderer forwards pencil placement ${editEntry}`, () => {
+  const binding = { intakeOrigin: 'http://127.0.0.1:4319', bindingDigest: `sha-256=:${Buffer.alloc(32, 7).toString('base64')}:`, sourceRepository: 'https://github.com/owner/vault.git', sourceRevision: 'a'.repeat(40) };
+  expect(suggestionEnvironment({ ...binding, editEntry }).CYBERBASER_EDIT_ENTRY).toBe(editEntry);
+  expect(() => suggestionEnvironment({ ...binding, editEntry: 'unknown' })).toThrow(/editEntry/);
 });

@@ -111,7 +111,9 @@ export function suggestionEnvironment(suggestions) {
   if (typeof suggestions.sourceRevision !== 'string' || !COMMIT_RE.test(suggestions.sourceRevision)) {
     fail('invalid-render-suggestions', 'suggestions.sourceRevision must be one commit ID');
   }
+  if (suggestions.editEntry !== undefined && !['auto', 'floating', 'inline'].includes(suggestions.editEntry)) fail('invalid-render-suggestions', 'suggestions.editEntry must be auto, floating, or inline');
   return {
+    CYBERBASER_EDIT_ENTRY: suggestions.editEntry ?? 'auto',
     CYBERBASER_ACCOUNT_FREE_INTAKE: 'enabled',
     // Suggesting mode maps rendered text to exact source bytes; the renderer
     // emits that provenance only when asked (off = byte-identical output).

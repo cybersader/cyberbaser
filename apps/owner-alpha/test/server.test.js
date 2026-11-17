@@ -1924,11 +1924,11 @@ describe('job status routes', () => {
     const page = await fetch(request('/owner/jobs/OA-from-suggestion', { headers: { Cookie: opened.cookie } }));
     const pageBody = await page.text();
     expect(page.status).toBe(200);
-    expect(pageBody).toContain('<h1>Putting the suggestion on the page</h1>');
-    expect(pageBody).toContain('<strong id="job-stage">Pushing to your repository</strong>');
+    expect(pageBody).toContain('<h1 id="save-heading">Saving…</h1>');
+    expect(pageBody).toContain('<strong id="job-stage">Saving</strong>');
     expect(pageBody).toContain('data-step="check" data-status="done"');
-    expect(pageBody).toContain('data-step="change" data-status="done"');
-    expect(pageBody).toContain('data-step="push" data-status="current"');
+    expect(pageBody).toContain('data-step="save" data-status="current"');
+    expect(pageBody).toContain('data-step="site" data-status="pending"');
     expect(pageBody).toContain(`href="/owner/decisions/${REVIEW_QUEUE_ID}">Back to the suggestion</a>`);
     expect(pageBody).not.toContain('must-not-leak');
 
@@ -1937,7 +1937,7 @@ describe('job status routes', () => {
     });
     const stoppedOpened = await openEdit(stopped.fetch);
     const stoppedBody = await (await stopped.fetch(request('/owner/jobs/OA-stopped', { headers: { Cookie: stoppedOpened.cookie } }))).text();
-    expect(stoppedBody).toContain('<strong id="job-stage">Stopped before changing the page. Nothing changed.</strong>');
+    expect(stoppedBody).toContain('<strong id="job-stage">The save did not finish. Open Details for what happened.</strong>');
     expect(stoppedBody).toContain('data-step="check" data-status="stopped"');
     expect(stoppedBody).toContain('Stopped (ofm-damage).');
     expect(stoppedBody).not.toContain('must-not-leak');
@@ -1968,10 +1968,10 @@ describe('job status routes', () => {
     const page = await fetch(request('/owner/jobs/job-1', { headers: { Cookie: opened.cookie } }));
     const pageBody = await page.text();
     expect(page.status).toBe(200);
-    expect(pageBody).toContain('<h1>Saving your change</h1>');
-    expect(pageBody).toContain('<strong id="job-stage">Checking the page</strong>');
+    expect(pageBody).toContain('<h1 id="save-heading">Saving…</h1>');
+    expect(pageBody).toContain('<strong id="job-stage">Checking</strong>');
     expect(pageBody).toContain('data-step="check" data-status="current"');
-    expect(pageBody).toContain('data-step="push" data-status="pending"');
+    expect(pageBody).toContain('data-step="save" data-status="pending"');
     expect(pageBody).toContain('<span id="job-state">checking</span>');
     expect(pageBody).toContain('Return to Cyberbase');
     expect(pageBody).not.toContain('Back to the suggestion');

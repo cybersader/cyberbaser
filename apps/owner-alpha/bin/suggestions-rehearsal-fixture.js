@@ -266,7 +266,10 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
         ]) body = body.replaceAll(before, after);
         const notice = '<aside class="owner-shell rehearsal-notice"><strong>Disposable suggestions rehearsal.</strong> Real local render, review, exact change, commit and push to a local bare remote. Deployment and live confirmation are simulated. No public site changes.</aside>';
         const headers = new Headers(result.headers); headers.delete('content-length');
-        return new Response(body.replace(/(<body[^>]*>)/u, `$1${notice}`), { status: result.status, headers });
+        const labelledBody = body.includes('id="job-rehearsal-details"')
+          ? body.replace('<div id="job-rehearsal-details"></div>', `<div id="job-rehearsal-details">${notice}</div>`)
+          : body.replace(/(<body[^>]*>)/u, `$1${notice}`);
+        return new Response(labelledBody, { status: result.status, headers });
       };
       Object.defineProperties(labelled, { bootstrapToken: { value: handler.bootstrapToken }, issueBootstrap: { value: handler.issueBootstrap } });
       return labelled;

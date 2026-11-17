@@ -4,6 +4,7 @@ import * as Component from "./quartz/components"
 import EditThisPage from "./quartz/components/EditThisPage"
 import { resolveEditLinkMode, resolveOwnerOrigin } from "./quartz/components/editLink"
 import type { EditThisPageOptions } from "./quartz/components/editLink"
+import { resolveEditEntry } from "./quartz/components/editEntryConfig"
 import SuggestCorrection from "./quartz/components/SuggestCorrection"
 import { resolveSuggestCorrectionOptions } from "./quartz/components/suggestCorrectionConfig"
 
@@ -14,6 +15,7 @@ const VAULT_REPO_BRANCH = "main"
 
 // Build-time only. Public is the fail-closed default; owner mode is an explicit
 // local opt-in and is rejected in CI by resolveEditLinkMode.
+const EDIT_ENTRY = resolveEditEntry(process.env.CYBERBASER_EDIT_ENTRY)
 const EDIT_LINK_MODE = resolveEditLinkMode(process.env.CYBERBASER_EDIT_LINK_MODE, process.env.CI)
 // Account-free suggestions are a separate public proposal spoke. They remain
 // absent unless every retained-publication input is supplied with an explicit
@@ -29,11 +31,11 @@ const SUGGEST_CORRECTION_OPTIONS = resolveSuggestCorrectionOptions({
 })
 const EDIT_THIS_PAGE_OPTIONS: EditThisPageOptions =
   EDIT_LINK_MODE === "owner"
-    ? { mode: "owner", ownerOrigin: resolveOwnerOrigin(process.env.CYBERBASER_OWNER_ORIGIN), inPlace: SUGGEST_CORRECTION_OPTIONS.enabled }
+    ? { mode: "owner", ownerOrigin: resolveOwnerOrigin(process.env.CYBERBASER_OWNER_ORIGIN), inPlace: SUGGEST_CORRECTION_OPTIONS.enabled, editEntry: EDIT_ENTRY }
     : { mode: "public", repoUrl: VAULT_REPO_URL, branch: VAULT_REPO_BRANCH }
 
 const SUGGEST_CORRECTION_COMPONENTS = SUGGEST_CORRECTION_OPTIONS.enabled
-  ? [SuggestCorrection(SUGGEST_CORRECTION_OPTIONS)]
+  ? [SuggestCorrection({ ...SUGGEST_CORRECTION_OPTIONS, editEntry: EDIT_ENTRY })]
   : []
 
 // components shared across all pages

@@ -429,9 +429,9 @@ acceptanceTest('browser review is content-first, deliberate, recoverable, and re
     await page.locator('#apply-confirm').click();
     await page.waitForURL(`${fixture.ownerOrigin}/owner/jobs/OA-browser-1`);
     await expect(page.locator('h1').textContent()).resolves.toBe('Putting the suggestion on the page');
-    await page.waitForFunction(() => document.querySelector('#job-stage')?.textContent === 'Pushing to your repository');
+    await page.waitForFunction(() => document.querySelector('#job-stage')?.textContent === 'Saving');
     await expect(page.locator('.job-step[data-status="done"]').count()).resolves.toBe(2);
-    await expect(page.locator('.job-step[data-status="current"]').textContent()).resolves.toBe('Pushing to your repository');
+    await expect(page.locator('.job-step[data-status="current"]').textContent()).resolves.toBe('Saving');
     await expect(page.getByRole('link', { name: 'Back to the suggestion' }).count()).resolves.toBe(1);
     await capture(page, 'apply-job-dark-mobile');
     await page.goto(receiptUrl);

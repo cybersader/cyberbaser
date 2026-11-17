@@ -149,7 +149,7 @@ try {
   let enabled = false, reviews = 0
   const ui = createSuggestModeUI(entry as any, () => { enabled = !enabled; ui.setMode(enabled) }, () => { reviews++ })
   ui.setMode(false); ui.setCount(0)
-  assert.equal(entry.textContent, "Edit"); assert.equal(entry.hidden, false)
+  assert.equal(entry.textContent, ""); assert.equal(entry.hidden, false)
   assert.equal(ui.toolbar.hidden, true); assert.equal(ui.tray.hidden, true)
   ;(entry as any).click()
   assert.equal(entry.hidden, true); assert.equal(ui.toolbar.hidden, false)

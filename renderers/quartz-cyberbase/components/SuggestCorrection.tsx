@@ -2,6 +2,7 @@ import { QuartzComponentConstructor, QuartzComponentProps } from "./types"
 import { classNames } from "../util/lang"
 import { pathToRoot } from "../util/path"
 import { suggestionBindingForPage } from "./suggestCorrectionConfig"
+import { EditPencil, editEntryCss } from "./editEntry"
 import { sourceEditorAsset } from "./sourceEditorAsset"
 import type { SuggestCorrectionOptions } from "./suggestCorrectionConfig"
 // @ts-ignore Quartz's inline-script loader compiles this browser entry separately.
@@ -9,7 +10,6 @@ import script from "./scripts/suggest-correction.inline"
 
 /** Intake identity plus optional published provenance, never private repository/account data. */
 export default ((opts: SuggestCorrectionOptions) => {
-  const label = opts.enabled ? (opts.text ?? "Suggest an edit") : "Suggest an edit"
 
   function SuggestCorrection({ fileData, displayClass }: QuartzComponentProps) {
     const binding = suggestionBindingForPage(fileData.relativePath, fileData.slug, opts)
@@ -17,7 +17,7 @@ export default ((opts: SuggestCorrectionOptions) => {
 
     return (
       <section class={classNames(displayClass, "suggest-correction")} aria-label="Suggest an edit">
-        <button type="button" class="suggest-correction-entry">{label}</button>
+        <button type="button" class="suggest-correction-entry cb-edit-entry" data-placement={opts.enabled ? opts.editEntry ?? "auto" : "auto"} aria-label="Edit this page" title="Edit"><EditPencil /></button>
         <p class="suggest-correction-hint" role="status" aria-live="polite" hidden>
           Select words in the page and choose Suggest edit, or click a pencil beside a paragraph.
           Your edit goes to the owner for review; the page stays unchanged. No account needed.
@@ -70,7 +70,7 @@ export default ((opts: SuggestCorrectionOptions) => {
   }
 
   SuggestCorrection.afterDOMLoaded = script
-  SuggestCorrection.css = `
+  SuggestCorrection.css = editEntryCss + `
 .suggest-correction { margin: 0.6rem 0 1rem; font-size: 0.9rem; }
 .suggest-correction-hint { color: var(--gray); }
 .suggest-correction-form {
@@ -88,11 +88,9 @@ export default ((opts: SuggestCorrectionOptions) => {
 .cb-suggest-tray[hidden], .suggest-correction-form label[hidden], .suggest-correction-entry[hidden],
 .cb-suggest-finish[hidden], .cb-suggest-toolbar[hidden], .cb-suggest-help[hidden], .cb-suggest-backdrop[hidden] { display: none; }
 /* Enabled pages keep the forge route a quiet alternate link, never a second button. */
-body:has(.suggest-correction) .edit-this-page a { border: 0; padding: 0; background: transparent; font-weight: 400; text-decoration: underline; text-underline-offset: 3px; }
+body:has(.suggest-correction) .edit-this-page a:not(.cb-edit-entry) { border: 0; padding: 0; background: transparent; font-weight: 400; text-decoration: underline; text-underline-offset: 3px; }
 /* One Edit control: on private owner builds the owner link decides the mode (owner Save, or visitor Send when not signed in). */
 body:has(.edit-this-page a[href*='/owner/in-place?']) .suggest-correction-entry { display: none; }
-body:has(.suggest-correction) .edit-this-page a[href*='/owner/in-place?'] { display: inline-flex; align-items: center; min-height: 44px; padding: 6px 18px; border: 1px solid var(--secondary); border-radius: 6px; color: var(--secondary); font-weight: 600; text-decoration: none; }
-body:has(.suggest-correction) .edit-this-page a[href*='/owner/in-place?'] > span[aria-hidden] { display: none; }
 body:has(.cb-suggesting) .popover, body:has(.cb-suggesting) .edit-this-page, .suggest-correction:has(.suggest-correction-entry[hidden]) { display: none; }
 article.cb-suggesting, article.cb-suggesting:focus { outline: none; caret-color: var(--secondary); }
 .cb-suggesting .cb-source-active { box-shadow: inset 2px 0 0 color-mix(in srgb, var(--secondary) 28%, transparent); }
@@ -295,6 +293,7 @@ body.cb-suggest-keyboard-open .cb-suggest-tray { bottom: calc(var(--cb-suggest-k
 .cb-cancel-sheet::backdrop { background: #0006; }
 .cb-cancel-sheet h2 { margin: 0 0 20px; font-size: 1.25rem; }
 .cb-cancel-sheet button { display: block; min-height: 44px; width: 100%; margin: 8px 0 0; border: 1px solid var(--lightgray); border-radius: 6px; padding: 10px; background: var(--light); color: var(--secondary); font: 600 1rem var(--bodyFont); }
+.cb-cancel-sheet .cb-suggest-raw { display: block; max-width: none; margin-top: 20px; text-align: center; font-size: .85rem; color: var(--gray); }
 .cb-cancel-sheet button:first-of-type { color: #a32c32; }
 .suggest-correction-form.cb-suggest-review-sheet:not([hidden]) { display: flex; }
 .cb-suggest-review-sheet > * { flex-shrink: 0; }
@@ -309,8 +308,6 @@ body.cb-suggest-keyboard-open .cb-suggest-toolbar { top: calc(var(--cb-suggest-v
   .cb-suggest-toolbar .cb-suggest-review { display: none; }
   .cb-suggest-toolbar .cb-suggest-markdown { font-size: 0; }
   .cb-suggest-toolbar .cb-suggest-markdown::after { content: '</>'; font-size: 16px; }
-  .cb-suggest-raw { position: absolute; bottom: 100%; left: 0; width: 160px; background: var(--light); border: 1px solid var(--lightgray); border-radius: 6px; padding: 6px; }
-  body.cb-suggest-keyboard-open .cb-suggest-raw { display: none; }
   .cb-suggest-finish { bottom: max(8px, env(safe-area-inset-bottom, 0px)); right: 8px; }
   .cb-cancel-sheet { margin: auto 0 0; width: 100%; max-width: 100%; border-radius: 16px 16px 0 0; padding-bottom: max(24px, env(safe-area-inset-bottom, 0px)); }
 }

@@ -329,6 +329,7 @@ describe('local owner site rebuild', () => {
     expect(retainCalls[0].config.suggestions.form.enabled).toBe(true);
     expect(retainCalls[0].selectedTreeDigest).toBe(result.manifest.projection.bytePreserving.sourceDigest);
     expect(renderCalls[0].suggestions).toEqual({
+      editEntry: 'auto',
       intakeOrigin: 'http://127.0.0.1:4319',
       bindingDigest,
       sourceRepository: 'https://github.com/cybersader/cyberbase.git',
@@ -370,6 +371,24 @@ describe('local owner site rebuild', () => {
     expect(rebuilt.reused).toBeUndefined();
     expect(renderCalls).toHaveLength(2);
 
+    // A presentation-only change invalidates the rendered cache without
+    // changing source authority or the retained publication binding.
+    for (const editEntry of ['floating', 'inline', 'auto']) {
+      const placed = await ensureOwnerSite({
+        config: { ...config, suggestions: { ...config.suggestions, editEntry } },
+        projectRoot: setup.projectRoot,
+        renderer: fixtureRenderer((call) => renderCalls.push(call)),
+      }, {
+        assertCheckoutReady: async () => ready(setup.checkout),
+        verifyRetainedPublication: async () => true,
+        retainPublication: async () => ({ bindingDigest, pages: 1, trustPolicy: { status: 'missing', digest: null } }),
+        createBuildId: () => `build-form-${editEntry}`,
+      });
+      expect(placed.reused).toBeUndefined();
+      expect(placed.manifest.suggestions.editEntry).toBe(editEntry);
+      expect(renderCalls.at(-1).suggestions.editEntry).toBe(editEntry);
+    }
+
     // Turning the form off rebuilds without the form and records that.
     const off = await ensureOwnerSite({
       config: setup.config,
@@ -381,7 +400,7 @@ describe('local owner site rebuild', () => {
       createBuildId: () => 'build-form-off',
     });
     expect(off.manifest.suggestions).toEqual({ form: false });
-    expect(renderCalls[2].suggestions).toBeNull();
+    expect(renderCalls.at(-1).suggestions).toBeNull();
     const plainReuse = await ensureOwnerSite({
       config: setup.config,
       projectRoot: setup.projectRoot,

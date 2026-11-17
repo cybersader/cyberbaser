@@ -8,6 +8,7 @@ import { computePolicyRevision, validateOwnerAlphaConfig } from '../src/config.j
 import { detectYamlFrontmatterRange } from '../src/source.js';
 const [input, readerOrigin] = process.argv.slice(2);
 let handler;
+let progressReads = 0;
 const server = Bun.serve({ hostname: '127.0.0.1', port: Number(new URL(readerOrigin).port) - 1, fetch: request => handler ? handler(request) : new Response(null, { status: 503 }) });
 const raw = JSON.parse(await readFile(new URL('../owner-alpha.example.json', import.meta.url)));
 raw.listen = { host: '127.0.0.1', port: server.port, readerPort: Number(new URL(readerOrigin).port) };
@@ -21,7 +22,11 @@ handler = createOwnerAlphaHandler({ config,
       source: { text: base.toString('utf8'), bytesBase64: base.toString('base64'), byteLength: base.length,
         digest: `sha-256=:${createHash('sha256').update(base).digest('base64')}:`, frontmatter: detectYamlFrontmatterRange(base) } };
   },
-  saveEdit: async () => { throw Error('browser-fixture-no-effects'); }, lookupJob: async () => null,
+  saveEdit: async () => { throw Error('browser-fixture-no-effects'); }, lookupJob: async jobId => jobId === 'OA-pencil-preview' ? {
+    jobId, state: ++progressReads > 3 ? 'completed' : 'pushing', revision: progressReads,
+    origin: { type: 'owner-edit', relativePath: 'target.md' }, page: { title: 'Target', slug: 'target' },
+    failure: null, updatedAt: new Date().toISOString(),
+  } : null,
 });
 process.stdout.write(`${JSON.stringify({ origin: handler.ownerOrigin, bootstrap: handler.bootstrapToken })}\n`);
 process.on('SIGTERM', () => { server.stop(true); process.exit(0); });

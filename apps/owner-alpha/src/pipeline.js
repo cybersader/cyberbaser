@@ -821,7 +821,12 @@ export async function getOwnerAlphaJob({ config: configInput, projectRoot, conte
       ? { type: 'approved-proposal', queueId: session.origin.queueId, relativePath: session.relativePath }
       : { type: session.origin?.type === 'owner-publication' ? 'owner-publication' : 'owner-edit', relativePath: session.relativePath };
   }
-  return deepFreeze({ ...pipelineSummary(state, paths), origin });
+  const filename = session?.relativePath?.split('/').at(-1)?.replace(/\.md$/u, '');
+  const frontmatter = session?.source?.text?.match(/^---\r?\n([\s\S]*?)^---\r?$/mu)?.[1];
+  const titleLine = frontmatter?.match(/^title:[ \t]*([^\r\n]+)$/mu)?.[1];
+  const title = titleLine?.trim().replace(/^(["'])(.*)\1$/u, '$2') || filename;
+  const page = session && typeof session.slug === 'string' ? { title: title || 'Your page', slug: session.slug } : null;
+  return deepFreeze({ ...pipelineSummary(state, paths), origin, page });
 }
 
 /** Narrow server adapter: durable acceptance precedes the automatic effect pipeline. */

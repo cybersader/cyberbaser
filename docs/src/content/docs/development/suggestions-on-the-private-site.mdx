@@ -21,6 +21,7 @@ One section in the owner app's config, off by default:
 
 ```json
 "suggestions": {
+  "editEntry": "auto",
   "form": { "enabled": true },
   "forge": { "enabled": false }
 }
@@ -29,6 +30,18 @@ One section in the owner app's config, off by default:
 - **Form on** means the owner's private local site, the one the owner app serves and rebuilds after every save, shows **Suggest a correction** on every published page. Anyone who can reach that private site can suggest one exact text change. The public site is unchanged and keeps no form.
 - **Forge on** means the intake also watches the owner's own Forgejo copy of the vault for pull requests, as described in [Pull requests in the inbox](/cyberbaser/design/pull-requests-in-the-inbox/). It needs the forge repository URL (which must already be listed under `repository.aliases` or be the remote itself), an optional token file path, and a poll interval.
 - Either lane on requires `proposalReview.enabled`, because the review socket is how suggestions reach the inbox. Turning a lane on changes the durable policy revision; leaving both off leaves the pinned revision exactly as before.
+
+### Edit pencil placement
+
+`suggestions.editEntry` controls the shared owner and visitor pencil. It is optional:
+
+- **`"auto"` (default):** a 56 px circular pencil at the bottom-right on phones (width at most 600 px) or coarse-pointer devices; a quiet 36 px inline icon beside the page metadata on desktop.
+- **`"floating"`:** always use the bottom-right pencil.
+- **`"inline"`:** always keep the icon beside the metadata.
+
+Both controls are named **Edit this page** for assistive technology and have an **Edit** tooltip. The floating control uses the site's light/dark theme and safe-area spacing. It disappears during editing so the finish controls own that corner. Unknown values fail configuration and renderer validation. Standalone renderer builds use `CYBERBASER_EDIT_ENTRY` with the same values and default.
+
+This setting changes presentation and invalidates the rendered-site cache, not the authority policy revision. It does not enable suggestions or put owner routes into public builds. With the shared editor enabled, owner **Save · N** now opens the separate owner-origin confirmation directly; visitors still review comments and the challenge before Send. Confirmation **Back** restores the source-bound tab-local draft. Whole-file Markdown sits below the cancel sheet's main choices; when no changes exist, cancel still exits immediately and a quiet **Markdown** link beside the reading page's metadata keeps the fallback reachable.
 
 When the owner app starts, it prints what is on:
 

@@ -17,7 +17,7 @@ const componentCode = new Bun.Transpiler({
 }).transformSync(source("SuggestCorrection.tsx").replace(/^import [^\n]+\n/gmu, "").replace("export default", "globalThis.createComponent ="))
 interface VNode { tag: string; props: Record<string, unknown>; children: unknown[] }
 const h = (tag: string, props: Record<string, unknown>, ...children: unknown[]): VNode => ({ tag, props, children })
-const componentContext = { h, classNames: (...classes: string[]) => classes.filter(Boolean).join(" "), suggestionBindingForPage, script: "" } as Record<string, any>
+const componentContext = { editEntryCss: "", EditPencil: () => h("svg", {}), h, classNames: (...classes: string[]) => classes.filter(Boolean).join(" "), suggestionBindingForPage, script: "" } as Record<string, any>
 runInNewContext(componentCode, componentContext)
 const options = {
   enabled: true as const, intakeOrigin: "https://intake.example",
@@ -34,7 +34,7 @@ assert.equal(render({ enabled: false }), null)
 assert.equal(render({ enabled: false, challengeSiteKey: "unused", challengeProvider: "missing" }), null)
 // Byte-identical disabled page output: no markup, CSS or script resources enter layout.
 const layout = readFileSync(join(import.meta.dir, "../quartz.layout.ts"), "utf8")
-assert.match(layout, /SUGGEST_CORRECTION_OPTIONS.enabled\s*\?\s*\[SuggestCorrection\(SUGGEST_CORRECTION_OPTIONS\)\]\s*:\s*\[\]/u)
+assert.match(layout, /SUGGEST_CORRECTION_OPTIONS.enabled\s*\?\s*\[SuggestCorrection\(\{ \.\.\.SUGGEST_CORRECTION_OPTIONS, editEntry: EDIT_ENTRY \}\)\]\s*:\s*\[\]/u)
 function disabledLayoutBytes(layoutSource: string): Buffer {
   const code = new Bun.Transpiler({ loader: "ts" }).transformSync(layoutSource
     .replace(/^import [^\n]+\n/gmu, ""))
@@ -43,7 +43,7 @@ function disabledLayoutBytes(layoutSource: string): Buffer {
     process: { env: {} },
     Component: new Proxy({}, { get: (_target, name) => (...args: unknown[]) => ({ component: String(name), args }) }),
     EditThisPage: (opts: unknown) => ({ component: "EditThisPage", opts }),
-    resolveEditLinkMode: () => "public", resolveOwnerOrigin: () => { throw new Error("unexpected owner origin") },
+    resolveEditEntry: () => "auto", resolveEditLinkMode: () => "public", resolveOwnerOrigin: () => { throw new Error("unexpected owner origin") },
     resolveSuggestCorrectionOptions: () => ({ enabled: false }),
     SuggestCorrection: () => { throw new Error("a disabled layout must not collect suggestion CSS/scripts") },
   }
@@ -58,7 +58,7 @@ assert.equal(plainNodes.some((node) => node.props?.class === "suggest-correction
 assert.deepEqual(plainNodes.filter((node) => node.props?.name).map((node) => node.props.name), ["edited", "rationale", "evidence"])
 assert.equal(plainNodes.find((node) => node.tag === "form")!.props.hidden, true)
 assert.equal(plainNodes.find((node) => node.props?.name === "edited")!.props.required, undefined, "empty edited text is a valid deletion")
-assert.ok(plainNodes.some((node) => node.props?.class === "suggest-correction-entry" && node.tag === "button"))
+assert.ok(plainNodes.some((node) => node.props?.class === "suggest-correction-entry cb-edit-entry" && node.tag === "button"))
 const challengedNodes = nodes(render({ ...options, challengeSiteKey: "site-key" }))
 const widgetIndex = challengedNodes.findIndex((node) => node.props?.class === "suggest-correction-challenge")
 assert.equal(challengedNodes[widgetIndex].props["data-sitekey"], "site-key")
