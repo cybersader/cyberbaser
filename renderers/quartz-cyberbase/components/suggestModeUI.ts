@@ -20,7 +20,15 @@ export function createSuggestModeUI(entry: HTMLButtonElement, onToggle: () => vo
     button.type = "button"; button.setAttribute("aria-label", name); button.title = name; button.disabled = true
   }
   markdown.type = "button"; markdown.disabled = true; markdown.title = "Place the caret in a block to edit its Markdown"
-  toolbar.append(mode, undo, redo, markdown, count)
+  // Change navigator: jump between changes instead of scrolling to hunt for them.
+  const nav = el("div", "", "cb-suggest-nav"); nav.setAttribute("role", "group"); nav.setAttribute("aria-label", "Go to changes")
+  const prev = el("button", "‹", "cb-suggest-prev"), next = el("button", "›", "cb-suggest-next")
+  const position = el("span", "", "cb-suggest-position"); position.setAttribute("aria-live", "polite")
+  for (const [button, name] of [[prev, "Previous change"], [next, "Next change"]] as const) {
+    button.type = "button"; button.setAttribute("aria-label", name); button.title = name; button.disabled = true
+  }
+  nav.append(prev, position, next); nav.hidden = true
+  toolbar.append(mode, undo, redo, markdown, count, nav)
   const finish = el("div", "", "cb-suggest-finish")
   finish.setAttribute("role", "group"); finish.setAttribute("aria-label", "Finish editing")
   finish.append(toggle, review)
@@ -58,7 +66,12 @@ export function createSuggestModeUI(entry: HTMLButtonElement, onToggle: () => vo
   window.addEventListener("resize", syncTray)
   document.body.append(toolbar, finish, hint, tray)
   return {
-    toolbar, finish, toggle, count, review, tray, cards, hint, markdown, undo, redo,
+    toolbar, finish, toggle, count, review, tray, cards, hint, markdown, undo, redo, prev, next,
+    setPosition(index: number | undefined, total: number) {
+      nav.hidden = total === 0; prev.disabled = next.disabled = total === 0
+      position.textContent = total === 0 ? "" : index === undefined ? `${total} change${total === 1 ? "" : "s"}` : `${index + 1} of ${total}`
+    },
+    collapseOnNarrow() { if (window.innerWidth <= 800 && expanded) { expanded = false; syncTray() } },
     setMode(on: boolean) {
       if (on && !enabled) expanded = window.innerWidth >= 1400
       enabled = on; entry.hidden = on; toolbar.hidden = !on; finish.hidden = !on; hint.hidden = true

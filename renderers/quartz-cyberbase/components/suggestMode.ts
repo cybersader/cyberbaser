@@ -304,6 +304,11 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
         if (op.expected) line.append(element("del", op.expected))
         if (op.replacement) line.append(element("ins", op.replacement))
         line.append(document.createTextNode(around.after)); card.append(line)
+        if (!review) {
+          line.setAttribute("role", "button"); line.tabIndex = 0; line.title = "Show on page"
+          line.addEventListener("click", () => showChange(op.operationId))
+          line.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); showChange(op.operationId) } })
+        }
         const remove = element("button", "Remove"); remove.type = "button"
         remove.addEventListener("click", () => {
           if (busy || activeSource) return
@@ -326,6 +331,60 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     }
     updateSubmit()
   }
+  // Change navigator. Targets are read from the page in reading order, so the
+  // count and order always follow what is actually on screen.
+  let navIndex: number | undefined, navScrollY = 0, jumping = false, jumpTimer: ReturnType<typeof setTimeout> | undefined, flashTimer: ReturnType<typeof setTimeout> | undefined
+  const changeTargets = () => {
+    const seen = new Set<string>(), targets: HTMLElement[] = []
+    for (const node of root.querySelectorAll<HTMLElement>("[data-cb-op], .cb-source-pending")) {
+      const id = node.dataset.cbOp ?? `block:${blocks.find(item => item.host === node)?.block.id ?? targets.length}`
+      if (seen.has(id)) continue
+      seen.add(id); targets.push(node)
+    }
+    return targets
+  }
+  const syncNav = () => {
+    const total = changeTargets().length
+    if (navIndex !== undefined && (navIndex >= total || (!jumping && Math.abs(scrollY - navScrollY) > 48))) navIndex = undefined
+    ui.setPosition(navIndex, total)
+  }
+  const goToChange = (target: HTMLElement | undefined, index: number) => {
+    if (!target) return
+    navIndex = index
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches
+    target.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" })
+    for (const node of root.querySelectorAll(".cb-change-flash")) node.classList.remove("cb-change-flash")
+    const id = target.dataset.cbOp
+    const parts = id ? [...root.querySelectorAll<HTMLElement>(`[data-cb-op="${CSS.escape(id)}"]`)] : [target]
+    for (const node of parts) node.classList.add("cb-change-flash")
+    clearTimeout(flashTimer); flashTimer = setTimeout(() => { for (const node of parts) node.classList.remove("cb-change-flash") }, 1600)
+    // Record where the jump lands so manual scrolling afterwards resets "n of N".
+    jumping = true; ui.setPosition(index, changeTargets().length)
+    clearTimeout(jumpTimer); jumpTimer = setTimeout(() => { jumping = false; navScrollY = scrollY }, reduce ? 50 : 900)
+  }
+  const step = (direction: 1 | -1) => {
+    const targets = changeTargets(); if (!targets.length) return
+    let index: number
+    if (navIndex !== undefined) index = (navIndex + direction + targets.length) % targets.length
+    else {
+      // No current change: start from what is on screen. Next is the first change
+      // at or below the top edge, previous the last one above the bottom edge.
+      const tops = targets.map(t => t.getBoundingClientRect().top), bottom = innerHeight - 4
+      if (direction === 1) { index = tops.findIndex(top => top > 4); if (index < 0) index = 0 }
+      else { index = targets.length - 1; while (index > 0 && !(tops[index] < bottom)) index--; if (!(tops[index] < bottom)) index = targets.length - 1 }
+    }
+    goToChange(targets[index], index)
+  }
+  const showChange = (operationId: string) => {
+    const targets = changeTargets()
+    let index = targets.findIndex(t => t.dataset.cbOp === operationId)
+    if (index < 0) {
+      const blockId = [...sourceEdits.entries()].find(([, items]) => items.some(item => item.operationId === operationId))?.[0]
+      const host = blocks.find(item => item.block.id === blockId)?.host
+      index = host ? targets.indexOf(host) : -1
+    }
+    if (index >= 0) { ui.collapseOnNarrow(); goToChange(targets[index], index) }
+  }
   const restore = (point?: Point) => {
     if (!point || !enabled) return
     const parts = [...point.view.host.querySelectorAll<HTMLElement>("[data-cb-view]")]
@@ -338,8 +397,9 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     for (const view of views) {
       const { model, host } = view
       host.replaceChildren(); let byte = model.start, position = 0
-      const append = (text: string, tag: "span" | "ins" | "del") => {
+      const append = (text: string, tag: "span" | "ins" | "del", operationId?: string) => {
         const part = element(tag, text)
+        if (operationId) part.dataset.cbOp = operationId
         if (tag === "del") part.contentEditable = "false"
         else { part.dataset.cbView = String(position); position += text.length; if (!text) part.append(document.createTextNode("")) }
         host.append(part)
@@ -347,8 +407,8 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
       const slice = (a: number, b: number) => new TextDecoder("utf-8", { fatal: true }).decode(utf8(model.text).slice(a - model.start, b - model.start))
       for (const op of model.operations()) {
         append(slice(byte, op.start), "span")
-        if (op.expected) append(op.expected, "del")
-        if (op.replacement) append(op.replacement, "ins")
+        if (op.expected) append(op.expected, "del", op.operationId)
+        if (op.replacement) append(op.replacement, "ins", op.operationId)
         byte = op.end
       }
       append(slice(byte, model.end), "span"); view.html = renderedRunSnapshot(host)
@@ -358,7 +418,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
       host.classList.toggle("cb-source-pending", pending)
       button.textContent = "</>"
     }
-    renderCards(); restore(caret)
+    renderCards(); restore(caret); syncNav()
   }
   const validDom = () => {
     const locators = new Map<string, HTMLElement[]>()
@@ -695,6 +755,8 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     leave.hidden = false; stay.focus({ preventScroll: true })
   }
   ui.markdown.addEventListener("click", markdown); ui.undo.addEventListener("click", undo); ui.redo.addEventListener("click", redo)
+  ui.prev.addEventListener("click", () => step(-1)); ui.next.addEventListener("click", () => step(1))
+  window.addEventListener("scroll", syncNav, { passive: true })
   document.addEventListener("keydown", shortcuts, true)
   document.addEventListener("pointerdown", outsidePrompt, true)
   document.addEventListener("click", guardNavigation, true)
@@ -721,6 +783,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     window.removeEventListener("resize", positionChrome); window.removeEventListener("scroll", positionChrome, true)
     ui.markdown.removeEventListener("click", markdown); ui.undo.removeEventListener("click", undo); ui.redo.removeEventListener("click", redo)
     ownerEntry?.removeEventListener("click", resumeOwnerDraft)
+    window.removeEventListener("scroll", syncNav); clearTimeout(flashTimer); clearTimeout(jumpTimer); clearTimeout(sayTimer)
     prompt.remove(); leave.remove(); cancelSheet.remove()
     destroyed = true; viewportUI.destroy(); challenge?.destroy(); closeSource(false)
     for (const { host, button } of blocks) { button.remove(); host.classList.remove("cb-source-pending", "cb-source-active") }
