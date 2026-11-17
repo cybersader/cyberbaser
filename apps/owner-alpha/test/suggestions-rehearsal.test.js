@@ -256,7 +256,9 @@ describe('suggestions rehearsal fixture (hermetic)', () => {
     expect(selection.report.published.assets).toEqual(['_attachments/diagram.svg']);
     expect(selection.report.denied.some((entry) => entry.path === `${SOURCE_FOLDER}/Private note.md`)).toBe(true);
     const index = await readFile(path.join(f.checkout, 'index.md'), 'utf8');
-    expect(index).toContain(encodeURIComponent(SOURCE_FOLDER));
+    // Wikilinks by source path; percent-encoded commas would become "percent2C" slugs.
+    expect(index).toContain(`[[${SOURCE_FOLDER}/`);
+    expect(index).not.toContain('%2C');
     expect(index).not.toContain('Private note');
     expect(index).not.toContain('Other private');
     expect(instructions(f)).toContain('All edits go only to the throwaway copy, never the real vault.');

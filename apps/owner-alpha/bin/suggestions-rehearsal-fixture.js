@@ -249,8 +249,9 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
       } };
     },
     createHandler(input) {
+      // Edit this page is the owner's direct route; it binds the same disposable checkout.
       const handler = createOwnerAlphaHandler({ ...input,
-        createEditSession: async () => { throw new Error('Use Suggest a correction in this rehearsal.'); } });
+        createEditSession: (session) => createEditSession({ ...session, git: policyGit }) });
       const labelled = async (request) => {
         const result = await handler(request);
         if (request.method === 'HEAD' || !(result.headers.get('content-type') ?? '').startsWith('text/html')) return result;

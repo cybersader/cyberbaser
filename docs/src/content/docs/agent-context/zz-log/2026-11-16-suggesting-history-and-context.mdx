@@ -39,3 +39,10 @@ On the live private rehearsal of a real Cyberbase page (desktop Chromium), hover
 - Tapping toolbar Undo reopened the iOS keyboard because restoring the caret refocused the page. Toolbar Undo and Redo on touch devices now skip refocusing when the page was not already focused.
 
 Re-verified on the simulator: the typed insertion is visible in green, and toolbar Undo reverts it to 0 changes with the keyboard staying closed. Renderer suite and browser acceptance pass after the fixes. Still open: unmapped text spans are exposed to assistive technology as buttons with internal labels such as "transformed source atom", which needs plain wording.
+
+## Rehearsal fixes from the maintainer's walkthrough (2026-11-17)
+
+- Home page links returned "page not found": the generated home list used percent-encoded Markdown links, and Quartz slugs `%2C` as `percent2C`. The list now uses path wikilinks (Markdown links remain only for names containing wikilink syntax characters).
+- **Edit this page** returned `edit-session-failed`: the rehearsal deliberately replaced owner editing with a thrown error while still rendering the link. Owner editing is now enabled against the same disposable checkout with the rehearsal's remote-identity mapping; the save pipeline was already wired to the local bare remote.
+
+Verified in a browser on the live rehearsal: the home link lands on Awesome Peripherals, and Edit this page opens the Markdown editor with the full page source. Rehearsal tests 19 pass, 2 opt-in skips.

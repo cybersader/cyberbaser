@@ -109,7 +109,10 @@ export async function copyCommittedFolder({ from, folder, ref = 'origin/main', m
   const pageLink = (name) => sluggify(name, false).split('/').map(encodeURIComponent).join('/');
   const sourceLink = (name) => name.split('/').map(encodeURIComponent).join('/');
   const index = '# Rehearsal copy\n\nThese pages are disposable copies. Suggestions edit only this throwaway vault, never the source.\n\n'
-    + publishedPages.map((name) => `- [${name.replace(/[\[\]\\]/gu, '\\$&')}](${sourceLink(name)})`).join('\n') + '\n';
+    + publishedPages.map((name) => (/[[\]|#^]/u.test(name)
+      // Markdown links percent-encode commas, which Quartz slugs as "percent2C"; wikilinks resolve by path.
+      ? `- [${name.replace(/[\[\]\\]/gu, '\\$&')}](${sourceLink(name)})`
+      : `- [[${name.replace(/\.md$/u, '')}|${name.replace(/\.md$/u, '').split('/').at(-1)}]]`)).join('\n') + '\n';
   await writeFile(path.join(checkout, 'index.md'), index, { mode: 0o600, flag: 'wx' });
   return { ref, commit, folder, pages: pages.length, publishedPages, attachments: referenced.size, attachmentBytes, pageLinks: publishedPages.slice(0, 5).map(pageLink) };
 }
