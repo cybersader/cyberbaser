@@ -177,7 +177,13 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     for (const name of ["rationale", "evidence"]) (form.elements.namedItem(name) as HTMLElement)?.closest("label")?.setAttribute("hidden", "")
     form.querySelector<HTMLElement>(".suggest-correction-challenge")?.setAttribute("hidden", "")
   }
-  const say = (message: string) => { status.textContent = message; formStatus.textContent = message }
+  // The floating note is a short-lived toast: it clears itself (or on tap) so it never sits over the page.
+  let sayTimer: ReturnType<typeof setTimeout> | undefined
+  const say = (message: string, sticky = false) => {
+    clearTimeout(sayTimer); status.textContent = message; formStatus.textContent = message
+    if (message && !sticky) sayTimer = setTimeout(() => { status.textContent = "" }, 3500)
+  }
+  status.addEventListener("click", () => { clearTimeout(sayTimer); status.textContent = "" })
   const operations = () => {
     const ops = [...sortedOperations(views.map(v => v.model)), ...[...sourceEdits.values()].flat()].sort((a, b) => a.start - b.start)
     validateOperations(ops); return ops
@@ -618,7 +624,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
       const idempotencyKey = retryIdempotencyKey(fingerprint, parseRetryState(stored(retryKey)), crypto.getRandomValues(new Uint8Array(32)))
       const intent = buildSuggestionIntent({ ...input, idempotencyKey })
       store(retryKey, JSON.stringify({ fingerprint, idempotencyKey }))
-      busy = true; root.contentEditable = "false"; challenge?.submitting(); updateSubmit(); say("Sending for owner review…")
+      busy = true; root.contentEditable = "false"; challenge?.submitting(); updateSubmit(); say("Sending for owner review…", true)
       navigating = !finish.needsChallenge
       const result = await finish.submit(intent, token)
       if (!result.navigating) navigating = false

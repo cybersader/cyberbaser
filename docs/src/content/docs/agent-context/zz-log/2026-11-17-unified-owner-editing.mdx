@@ -78,3 +78,8 @@ The stray **Markdown** metadata link is removed. Owners retain **Edit whole file
 Verification: contained renderer suite and strict browser TypeScript passed; owner-alpha **589 passed, 8 skipped, 0 failed**, **43,169 assertions across 40 files**. One full contained offline three-page Quartz build succeeded. Browser acceptance passed against that unchanged build, including mode text, Cancel targets, scroll down/up/stop and reduced motion, desktop label/alignment, absence of the metadata Markdown link, owner raw-link navigation, green light/dark primaries and one Saved status. Stale icon-only size assertions and a transition-start timing assertion were corrected in the test harness, then rerun with `--browser-only`; no second full build was run. Native T3 preview also inspected desktop and phone reading views; the owned tab was closed. The six requested stages were captured and visually inspected under `.workspace/concrete-flow/sol-polish2/`.
 
 Physical iOS/Safari keyboards, device safe areas, deployment and final browser-driven source writes remain unverified. Job screenshots use synthetic read-only records. No commit, push, real-vault access, rehearsal restart or new dependency occurred.
+
+## Phone retest follow-up
+
+- The floating status note ("Undone." and similar) stayed on screen indefinitely. It now clears itself after about 3.5 seconds or on tap. Only "Sending for owner review…" stays until the result. The in-form status line is unchanged for assistive technology.
+- Open design question raised by the maintainer: whether the edit entry (pencil) should be a Cyberbaser default at all, or a documented hook that each site or theme renders its own way, with defaults set from a future owner-facing settings surface. Not decided.
