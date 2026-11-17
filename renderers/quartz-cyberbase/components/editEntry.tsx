@@ -11,6 +11,8 @@ body :is(a,button).cb-edit-entry {
   text-decoration: none; cursor: pointer; font: 500 .85rem var(--bodyFont); line-height: 1; vertical-align: middle;
 }
 body :is(a,button).cb-edit-entry:hover { color: var(--secondary); background: var(--lightgray); }
+body :is(a,button).cb-edit-entry:is([data-placement='floating']):hover { color: var(--light); background: var(--secondary); filter: brightness(1.08); }
+@media (max-width: 600px), (pointer: coarse) { body :is(a,button).cb-edit-entry[data-placement='auto']:hover { color: var(--light); background: var(--secondary); } }
 body :is(a,button).cb-edit-entry:focus-visible { outline: 2px solid var(--secondary); outline-offset: 3px; }
 body :is(a,button).cb-edit-entry svg { flex: none; }
 body :is(a,button).cb-edit-entry { transition: transform 180ms ease, opacity 180ms ease; transform-origin: bottom right; }
@@ -28,8 +30,8 @@ body :is(a,button).cb-edit-entry[data-placement='floating'] .cb-edit-label { dis
 body :is(a,button).cb-edit-entry[data-placement='floating'] {
   position: fixed; z-index: 90; width: 56px; height: 56px; padding: 16px;
   right: max(20px, env(safe-area-inset-right)); bottom: calc(20px + env(safe-area-inset-bottom));
-  border-radius: 50%; background: var(--light); color: var(--secondary); box-shadow: 0 3px 14px #0003;
-  border: 1px solid var(--lightgray);
+  border-radius: 50%; background: var(--secondary); color: var(--light); box-shadow: 0 3px 14px #0004;
+  border: 0;
 }
 @media (max-width: 600px), (pointer: coarse) {
   body :is(a,button).cb-edit-entry[data-placement='auto'] .cb-edit-label { display: none; }
@@ -39,8 +41,8 @@ body :is(a,button).cb-edit-entry[data-placement='floating'] {
   body :is(a,button).cb-edit-entry[data-placement='auto'] {
     position: fixed; z-index: 90; width: 56px; height: 56px; padding: 16px;
     right: max(20px, env(safe-area-inset-right)); bottom: calc(20px + env(safe-area-inset-bottom));
-    border-radius: 50%; background: var(--light); color: var(--secondary); box-shadow: 0 3px 14px #0003;
-    border: 1px solid var(--lightgray);
+    border-radius: 50%; background: var(--secondary); color: var(--light); box-shadow: 0 3px 14px #0004;
+    border: 0;
   }
 }
 body:has(.cb-suggesting) .cb-edit-entry, body :is(a,button).cb-edit-entry[hidden] { display: none; }
