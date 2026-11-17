@@ -10,6 +10,8 @@ import { resolveSuggestCorrectionOptions } from "./quartz/components/suggestCorr
 import NoteActions from "./quartz/components/NoteActions"
 import NoteDates from "./quartz/components/NoteDates"
 import { githubSourceHost } from "./quartz/components/sourceLinks"
+import Analytics from "./quartz/components/Analytics"
+import { posthogProvider } from "./quartz/components/analyticsProviders"
 
 // Source of truth for the vault repo. The footer always links to the source;
 // public edit mode also uses it for the existing GitHub web-editor URL.
@@ -51,11 +53,27 @@ const SUGGEST_CORRECTION_COMPONENTS = SUGGEST_CORRECTION_OPTIONS.enabled
   ? [SuggestCorrection({ ...SUGGEST_CORRECTION_OPTIONS, editEntry: EDIT_ENTRY })]
   : []
 
+// Cyberbase's PostHog project, carried over from publish.js at the owner's
+// request. Public client key. Only the published public site counts views:
+// on by default when the build runs in the vault repository, opt-in elsewhere
+// with CYBERBASER_ANALYTICS=posthog, never in owner/private builds, and
+// CYBERBASER_ANALYTICS=off always wins.
+const ANALYTICS_SETTING = process.env.CYBERBASER_ANALYTICS
+const ANALYTICS_ENABLED = EDIT_LINK_MODE === "public" && ANALYTICS_SETTING !== "off" &&
+  (ANALYTICS_SETTING === "posthog" || process.env.GITHUB_REPOSITORY === "cybersader/cyberbase")
+const ANALYTICS_COMPONENTS = ANALYTICS_ENABLED
+  ? [Analytics(posthogProvider({
+      apiKey: "phc_599knGAT15HiAYE5nHJjTqIlAY3O6e2F3QdlFzIRHKb",
+      apiHost: "https://us.i.posthog.com",
+      personProfiles: "identified_only",
+    }))]
+  : []
+
 // components shared across all pages
 export const sharedPageComponents: SharedLayout = {
   head: Component.Head(),
   header: [],
-  afterBody: [NoteActions({ host: SOURCE_HOST, placement: "footer" })],
+  afterBody: [NoteActions({ host: SOURCE_HOST, placement: "footer" }), ...ANALYTICS_COMPONENTS],
   footer: Component.Footer({
     links: {
       Vault: VAULT_REPO_URL,
