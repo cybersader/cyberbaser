@@ -15,11 +15,6 @@ const VAULT_REPO_BRANCH = "main"
 // Build-time only. Public is the fail-closed default; owner mode is an explicit
 // local opt-in and is rejected in CI by resolveEditLinkMode.
 const EDIT_LINK_MODE = resolveEditLinkMode(process.env.CYBERBASER_EDIT_LINK_MODE, process.env.CI)
-const EDIT_THIS_PAGE_OPTIONS: EditThisPageOptions =
-  EDIT_LINK_MODE === "owner"
-    ? { mode: "owner", ownerOrigin: resolveOwnerOrigin(process.env.CYBERBASER_OWNER_ORIGIN) }
-    : { mode: "public", repoUrl: VAULT_REPO_URL, branch: VAULT_REPO_BRANCH }
-
 // Account-free suggestions are a separate public proposal spoke. They remain
 // absent unless every retained-publication input is supplied with an explicit
 // build-time opt-in. None of these private binding inputs are rendered directly.
@@ -32,6 +27,11 @@ const SUGGEST_CORRECTION_OPTIONS = resolveSuggestCorrectionOptions({
   challengeSiteKey: process.env.CYBERBASER_SUGGESTION_CHALLENGE_SITE_KEY,
   challengeProvider: process.env.CYBERBASER_SUGGESTION_CHALLENGE_PROVIDER,
 })
+const EDIT_THIS_PAGE_OPTIONS: EditThisPageOptions =
+  EDIT_LINK_MODE === "owner"
+    ? { mode: "owner", ownerOrigin: resolveOwnerOrigin(process.env.CYBERBASER_OWNER_ORIGIN), inPlace: SUGGEST_CORRECTION_OPTIONS.enabled }
+    : { mode: "public", repoUrl: VAULT_REPO_URL, branch: VAULT_REPO_BRANCH }
+
 const SUGGEST_CORRECTION_COMPONENTS = SUGGEST_CORRECTION_OPTIONS.enabled
   ? [SuggestCorrection(SUGGEST_CORRECTION_OPTIONS)]
   : []
@@ -58,7 +58,8 @@ export const defaultContentPageLayout: PageLayout = {
     }),
     Component.ArticleTitle(),
     Component.ContentMeta(),
-    // Public builds open GitHub; explicit local owner builds open /owner/edit.
+    // Public builds open GitHub; private builds use the shared editor when
+    // present with page provenance, otherwise the existing raw owner editor.
     EditThisPage(EDIT_THIS_PAGE_OPTIONS),
     ...SUGGEST_CORRECTION_COMPONENTS,
     Component.TagList(),

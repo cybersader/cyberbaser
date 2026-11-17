@@ -4,6 +4,13 @@
 
 ## Log
 
+### Owner direct in-place Save is not a visitor approval (2026-11-17, no R-number)
+- **Direction:** the maintainer requested the rendered-page editing experience for owners as well as visitors. The coordinator selected a distinct durable owner-direct authorization and recovery guard, with existing visitor approval requirements unchanged.
+- **Boundary:** reader-origin editing uses the shared exact-change ledger. A native top-level POST stages an inert draft; a strict owner-origin escaped-text confirmation and authenticated CSRF Save authorize one ordinary job. No credentialed cross-origin fetch, reader script on the owner origin, intake-rate-limit bypass for visitors, or whole-file serializer is introduced.
+- **Record:** create-once owner-direct authority binds the job, base commit, policy revision, relative path, exact operations digest, full session and full operation. Recovery verifies the same record. It is explicitly not an approve decision.
+- **Experience and limits:** persistent Save/Send plus X, discard or tab-local draft, and fixed raw-editor Save are implemented. The secure owner flow adds one owner-origin confirmation tap. Separate private-owner and visitor entry choices remain. Suggestions-off or provenance-missing pages retain raw Edit; independently enabled owner-only rendered editing is not implemented. Real iOS keyboard behavior and human acceptance are not claimed. No public deployment or real-vault application was authorized here.
+- **Chronology:** `docs/src/content/docs/agent-context/zz-log/2026-11-17-unified-owner-editing.mdx`.
+
 ### Product-definition direction — intuitive community model across delivery horizons (2026-11-13, no R-number)
 - **Maintainer authorization:** “We absolutely need to define that in an intuitive manner and then crystallize it into the knowledge base.” This follows the explicit long-term-architecture requirement, Discourse-inspired trust framing and passkey requirement.
 - **Deliverable:** `design/contribution-trust-and-access.mdx` now owns the canonical working definition: people, four everyday journeys, local trust versus explicit responsibilities, scoped action permissions, separate sharing/publication and near/next/long-term configurations. Existing vision/workflow/architecture pages point there rather than inventing competing role models.

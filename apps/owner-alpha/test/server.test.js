@@ -1458,8 +1458,8 @@ describe('server-side edit sessions and one Save', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].renderer).toEqual({ relativePath: 'Notes/Page.md', slug: 'Notes/page' });
     expect(opened.body).toContain(`<textarea id="edited-text" name="editedText" spellcheck="false" autocomplete="off">\n\n&amp;&lt;textarea>\n&lt;/textarea>\n</textarea>`);
-    expect(opened.body.match(/<button\b/gu)).toHaveLength(1);
-    expect(opened.body).toContain('Save and publish');
+    expect(opened.body.match(/<button\b/gu)).toHaveLength(2);
+    expect(opened.body).toContain('id="save-button">Save</button>');
     expect(opened.body).not.toContain('Review proposals');
     expect(opened.body).not.toContain('Apply');
     expect(opened.body).not.toContain('Commit');
@@ -1675,7 +1675,7 @@ describe('configured Quartz static site', () => {
       const redirected = await fetch(readerRequest('/cyberbase', { method }));
       expect(redirected.status).toBe(308);
       expect(redirected.headers.get('location')).toBe('/cyberbase/');
-      expect(redirected.headers.get('content-security-policy')).toContain("form-action 'none'");
+      expect(redirected.headers.get('content-security-policy')).toContain("form-action http://127.0.0.1:4317");
       expect(await redirected.text()).toBe('');
     }
   });
@@ -1829,7 +1829,7 @@ describe('configured Quartz static site', () => {
     const on = await readerFixture({ siteRoot, config: raw });
     const onCsp = (await on.fetch(readerRequest('/cyberbase/'))).headers.get('content-security-policy');
     expect(onCsp).toContain("connect-src 'self' http://127.0.0.1:4319;");
-    expect(onCsp).toContain("form-action 'none'");
+    expect(onCsp).toContain("form-action http://127.0.0.1:4317");
   });
 
   test('serves Quartz scripts only on the unprivileged reader origin', async () => {
@@ -1852,7 +1852,7 @@ describe('configured Quartz static site', () => {
     expect(body).toContain('copy-tex.min.js');
     expect(body).toContain('<script src="./postscript.js"');
     expect(csp).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net");
-    expect(csp).toContain("form-action 'none'");
+    expect(csp).toContain("form-action http://127.0.0.1:4317");
     expect(csp).toContain("frame-ancestors 'none'");
   });
 

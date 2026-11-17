@@ -1,0 +1,55 @@
+---
+title: Shared page editing with a separate owner Save boundary
+description: "Visitors and owners share the exact-change page editor in the private rehearsal; owner Save uses a distinct durable authorization, while mobile finish controls remain visible."
+status: log
+tags: [contribution, testing, security]
+---
+
+The maintainer's phone walkthrough exposed two problems: editing hid the finish controls, and the owner's Edit link opened a separate whole-file Markdown surface whose Save was below a long textarea. This wave gives owners the existing tracked rendered-page editor without making their own changes pass through visitor intake and approval.
+
+## Experience
+
+On the suggestions-enabled private rehearsal, the visitor **Edit button** and the small private owner **Edit link** open the same rendered-page editing surface. Both retain exact source-bound changes, Undo/Redo, per-block Markdown, contextual review and per-change Remove. Rendered and Markdown changes still cannot mix within one block; hidden content remains excluded from source-editor blocks.
+
+Visitors finish with **Send · N**, then **Send suggestion**, retaining optional comments and the existing intake checks. Owners finish with **Save · N**, then **Continue to Save**, then **Save** on a separate owner-origin confirmation. That final confirmation is an intentional security tradeoff, not a visitor approval. The two role-entry controls remain separate; there is no cross-origin session probe.
+
+The **X** control leaves immediately when unchanged, otherwise offering **Discard**, **Save draft**, or **Keep editing**. Drafts are source-bound and tab-local, not server proposals. The review primary action sits bottom-right. Whole-file Markdown remains an advanced fallback in the enabled rehearsal, with fixed Save and X controls. A roughly 49 KB raw draft was restored in browser acceptance.
+
+Compatibility inspection found that owner-only builds without suggestions do not include the shared editor or provenance. Those builds, and pages missing provenance, retain the working raw Edit destination rather than redirecting into a nonexistent rendered editor. Independently enabled owner-only rendered editing is not implemented in this wave. Public build behavior remains the forge editor, without owner controls.
+
+## Authority boundary
+
+The coordinator directed a distinct durable owner-direct authorization with recovery checks, leaving visitor approvals unchanged. The implemented boundary is:
+
+1. The private owner entry authenticates and verifies source access before returning to the reader page.
+2. The reader uses the shared exact-operation ledger. Its native top-level form POST stages only a bounded, expiring in-memory handoff. It creates no authorization, executable job or source write.
+3. The owner origin obtains a fresh source session, rejects a stale revision or digest, and renders escaped change context under its existing strict CSP. Reader scripts and source HTML never run there.
+4. Save requires the existing owner session, exact owner Origin, CSRF token and a displayed edit token bound to the same session. It creates one immutable owner-direct authorization and starts the ordinary exact-change pipeline.
+5. The authorization binds job identity, base commit, policy revision, relative path, exact operations digest, complete source session and operation. Recovery verifies the record, including on a completed-job resume. Missing or changed authority fails closed.
+
+The operation envelope reuses canonical v2 derivation without inventing an approval decision. Owner-direct changes do not traverse intake or inherit visitor rate limits. The existing visitor approval guard remains in place. No whole-file serializer or second source writer was introduced.
+
+Cookies are host-scoped, not port-scoped: separate reader and owner ports do not mean the reader HTTP server never receives the session cookie. Reader scripts cannot read the HttpOnly cookie or obtain the owner CSRF token through the same-origin policy. Owner write routes still enforce Origin and CSRF. No credentialed cross-origin fetch was introduced.
+
+## Touch keyboard approach
+
+Finish controls sit bottom-right normally. When a touch editing surface has focus, they move to the visible viewport's top-right, including the safe-area inset, and reserve clearance above the caret. This does not depend on Safari reporting keyboard shrink. Visual-viewport resize/scroll and window resize/scroll update placement. This replaces the earlier approach that hid all finish controls while typing.
+
+## Verification
+
+- Full owner-alpha suite: **583 passed, 8 skipped, 0 failed**, with **43,129 assertions** across 40 files.
+- Focused suggestions-rehearsal suite: **19 passed, 2 skipped, 0 failed**. Opt-in live rehearsal tests were not enabled.
+- Focused renderer suite and strict browser TypeScript passed. Coverage includes the six combinations of shared-editor availability and page provenance, exact reconstruction, history, source-editor boundaries, viewport behavior, challenge-provider conformance and build guards.
+- The contained, offline three-page Quartz build and browser acceptance passed. It covered an eight-splice visitor submission, desktop/phone layouts, owner rendered and Markdown edits, cancel/draft restoration, owner-origin confirmation and the long raw-editor draft. The final private build emits the real owner link rather than replacing it in the test HTTP server.
+- A real HTTP/pipeline integration test applied two owner changes, including a Markdown block, as **one exact commit** in a throwaway repository. Untouched bytes were unchanged, no proposal approval/application event was fabricated, stale reuse failed, and deleting the authorization blocked recovery without changing Git state.
+- Negative HTTP tests reject missing session, wrong Origin, empty/missing CSRF, a different session's displayed edit token and stale source. Inert hostile-origin staging was tested separately from Save authority.
+- At 390 px width, a synthetic visual viewport of 420 px height with 40 px offset retained visible finish controls and caret clearance. Widths from 360 to 1280 px were exercised. Six owner screenshots were retained privately; review and raw fallback images were visually inspected.
+- Native T3 preview was used to enter editing, type a change, open the cancel sheet and discard on the synthetic app. No owned preview or test server was left running.
+
+The hermetic browser suite reported zero page errors and blocked pre-existing external theme requests. Its owner socket fixture intentionally cannot apply source writes: final browser confirmation and actual source effects are proven at separate layers, not claimed as one browser-driven final Save.
+
+## Delivery and limits
+
+The canonical [suggestions rehearsal guide](/cyberbaser/development/try-suggestions/) documents the visitor and owner flows. Its normal launch command is `bun run --cwd docs try:suggestions`; existing rehearsal instances must be stopped by their owner before launching a replacement. This wave did not start or restart the maintainer's running rehearsal.
+
+There was no commit, push, deployment, real-vault access or real source application. No new dependency was added. Real iOS Safari software-keyboard behavior, physical-device safe areas and maintainer acceptance remain unverified. The independently enabled owner-only rendered editor and a single consolidated role-entry control remain outside this implementation.

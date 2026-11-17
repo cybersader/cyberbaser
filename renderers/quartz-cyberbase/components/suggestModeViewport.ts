@@ -1,4 +1,4 @@
-/** Touch editing hides fixed chrome on focus, without trusting Safari's keyboard
+/** Touch editing top-anchors finish controls on focus, without trusting Safari's keyboard
  * measurements. Viewport geometry only improves sheet sizing and caret scrolling.
  * Presentation and scrolling only: this controller never changes the draft. */
 export function setupSuggestViewport(root: HTMLElement, form: HTMLFormElement, tray: HTMLElement) {
@@ -20,7 +20,7 @@ export function setupSuggestViewport(root: HTMLElement, form: HTMLFormElement, t
   const showDebug = () => {
     if (!debug) return
     const active = document.activeElement as HTMLElement | null
-    debug.textContent = `innerHeight: ${window.innerHeight}\nvisualViewport.height: ${viewport?.height ?? "n/a"}\nvisualViewport.offsetTop: ${viewport?.offsetTop ?? "n/a"}\nvisualViewport.scale: ${viewport?.scale ?? "n/a"}\nactiveElement: ${active?.tagName ?? "none"}.${active?.className ?? ""}\npointer coarse: ${coarse()}\nhover none: ${window.matchMedia?.("(hover: none)").matches ?? false}\nchrome hidden: ${document.body.classList.contains("cb-suggest-keyboard-open")}`
+    debug.textContent = `innerHeight: ${window.innerHeight}\nvisualViewport.height: ${viewport?.height ?? "n/a"}\nvisualViewport.offsetTop: ${viewport?.offsetTop ?? "n/a"}\nvisualViewport.scale: ${viewport?.scale ?? "n/a"}\nactiveElement: ${active?.tagName ?? "none"}.${active?.className ?? ""}\npointer coarse: ${coarse()}\nhover none: ${window.matchMedia?.("(hover: none)").matches ?? false}\nfinish top-anchored: ${document.body.classList.contains("cb-suggest-keyboard-open")}`
   }
   const clear = () => {
     document.body.classList.remove("cb-suggest-keyboard-open")
@@ -33,7 +33,7 @@ export function setupSuggestViewport(root: HTMLElement, form: HTMLFormElement, t
     const isEditing = editing(focused)
     const mode = root.classList.contains("cb-suggesting")
     // Focus is the primary rule, even if WebKit never reports a smaller viewport.
-    // Retain the hidden state briefly while focus moves between our controls.
+    // Retain the top-anchored state briefly while focus moves between our controls.
     const hidden = mode && touch() && (isEditing || (!!blurTimer && document.body.classList.contains("cb-suggest-keyboard-open")))
     if (hidden) {
       document.body.classList.add("cb-suggest-keyboard-open")
@@ -59,7 +59,7 @@ export function setupSuggestViewport(root: HTMLElement, form: HTMLFormElement, t
         if (caretRect.height) rect = caretRect
       }
     }
-    const top = viewport.offsetTop + 16, bottom = viewport.offsetTop + viewport.height - 24
+    const top = viewport.offsetTop + (hidden && !container ? 88 : 16), bottom = viewport.offsetTop + viewport.height - 24
     const delta = rect.height > bottom - top ? rect.top - top
       : rect.bottom > bottom ? rect.bottom - bottom : rect.top < top ? rect.top - top : 0
     if (Math.abs(delta) > 1) {
@@ -93,7 +93,7 @@ export function setupSuggestViewport(root: HTMLElement, form: HTMLFormElement, t
   }
   const onSelection = () => { refresh(); if (touch() && editing(document.activeElement as HTMLElement | null)) settle() }
   viewport?.addEventListener("resize", refresh); viewport?.addEventListener("scroll", refresh)
-  window.addEventListener("resize", refresh)
+  window.addEventListener("resize", refresh); window.addEventListener("scroll", refresh)
   document.addEventListener("focusin", onFocusIn); document.addEventListener("focusout", onFocusOut)
   document.addEventListener("selectionchange", onSelection)
   refresh()
@@ -103,7 +103,7 @@ export function setupSuggestViewport(root: HTMLElement, form: HTMLFormElement, t
       destroyed = true; cancelAnimationFrame(frame)
       window.clearTimeout(blurTimer); window.clearTimeout(settleTimer)
       viewport?.removeEventListener("resize", refresh); viewport?.removeEventListener("scroll", refresh)
-      window.removeEventListener("resize", refresh)
+      window.removeEventListener("resize", refresh); window.removeEventListener("scroll", refresh)
       document.removeEventListener("focusin", onFocusIn); document.removeEventListener("focusout", onFocusOut)
       document.removeEventListener("selectionchange", onSelection)
       clear(); debug?.remove()

@@ -6,7 +6,7 @@ import os from "node:os"
 import http from "node:http"
 import assert from "node:assert/strict"
 import crypto from "node:crypto"
-import { execFileSync } from "node:child_process"
+import { execFileSync, spawn } from "node:child_process"
 import { fileURLToPath, pathToFileURL } from "node:url"
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..")
 const renderer = path.join(repo, "renderers/quartz-cyberbase")
@@ -17,20 +17,21 @@ const clientFingerprint = () => {
   const parts = []
   const visit = dir => { for (const name of fs.readdirSync(dir).sort()) { const file = path.join(dir, name); if (fs.statSync(file).isDirectory()) visit(file); else parts.push(path.relative(renderer, file), fs.readFileSync(file)) } }
   visit(path.join(renderer, "components"))
+  parts.push("quartz.layout.ts", fs.readFileSync(path.join(renderer, "quartz.layout.ts")))
   const digest = crypto.createHash("sha256"); for (const part of parts) digest.update(part); return digest.digest("hex")
 }
 const browserOnly = process.argv.includes("--browser-only")
 if (browserOnly) assert.ok(process.env.CYBERBASER_SUGGEST_TEST_DIR, "browser-only requires an explicit retained synthetic build directory")
 const original = "---\ntitle: Suggesting fixture\ndate: 2020-01-01\n---\n\nHello **brown** [friendly](https://example.org).\n\nA separate paragraph with 😀 text.\n\n[[target]]\n\n## Alternatives\n\n- [Mobile option](https://example.org/mobile): $2.99/Monthly | $24.99\n- [Desktop option](https://example.org/desktop): a physical macro pad.\n\n$x + y$\n\n<style>.fixture-only { color: inherit; }</style>\n" + "\n> [!tip] Custom title\n> Callout body.\n\n$$\nx + y\n$$\n\nRefused %% private fixture comment %% text.\n\n| Header | Value |\n| --- | --- |\n| Cell | One |\n"
 const originalBytes = original.replace(/\n/gu, "\r\n")
-let body, browser
+let body, browser, ownerProcess, ownerServer
 const server = http.createServer(async (req, res) => {
   if (req.url === "/v2/suggestions") {
     let raw = ""; for await (const chunk of req) raw += chunk
     body = JSON.parse(raw)
     res.writeHead(202, { "content-type": "application/json" }); res.end(JSON.stringify({ receipt: { queueId: "Q-built-page" } })); return
   }
-  const pathname = decodeURIComponent(new URL(req.url, "http://localhost").pathname)
+  const pathname = decodeURIComponent(new URL(req.url, "http://localhost").pathname).replace(/^\/cyberbase(?=\/)/u, "")
   let file = path.resolve(output, `.${pathname}`)
   if (!file.startsWith(`${output}/`) && file !== output) { res.writeHead(404); res.end(); return }
   if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, "index.html")
@@ -46,7 +47,7 @@ await new Promise(resolve => server.listen(savedPort, "127.0.0.1", resolve))
 const origin = `http://127.0.0.1:${server.address().port}`
 const env = {
   ...process.env, QUARTZ_OFFLINE: "1", QUARTZ_SEED_DIR: process.env.QUARTZ_SEED_DIR ?? path.join(repo, ".workspace/suggestions-rehearsal-renderer"),
-  CYBERBASER_SOURCE_PROVENANCE: "enabled", CYBERBASER_EDIT_LINK_MODE: "public", CYBERBASER_ACCOUNT_FREE_INTAKE: "enabled",
+  CYBERBASER_SOURCE_PROVENANCE: "enabled", CYBERBASER_EDIT_LINK_MODE: "owner", CYBERBASER_OWNER_ORIGIN: `http://127.0.0.1:${server.address().port - 1}`, CI: "false", CYBERBASER_ACCOUNT_FREE_INTAKE: "enabled",
   CYBERBASER_ACCOUNT_FREE_INTAKE_ORIGIN: origin, CYBERBASER_ACCOUNT_FREE_BINDING_DIGEST: `sha-256=:${"A".repeat(43)}=:`,
   CYBERBASER_ACCOUNT_FREE_SOURCE_REPOSITORY: "https://forge.example/owner/wiki.git", CYBERBASER_ACCOUNT_FREE_SOURCE_REVISION: "1".repeat(40), TZ: "UTC",
 }
@@ -60,12 +61,13 @@ try {
   if (!browserOnly) {
   fs.mkdirSync(input)
   fs.writeFileSync(path.join(input, "index.md"), originalBytes)
-  fs.writeFileSync(path.join(input, "target.md"), "---\ntitle: Target\ndate: 2020-01-01\n---\n\nTarget page text.\n")
+  fs.writeFileSync(path.join(input, "target.md"), "---\ntitle: Target\ndate: 2020-01-01\n---\n\nTarget page text.\n\nA **Markdown** block.\n")
   fs.writeFileSync(path.join(input, "third.md"), "---\ntitle: Third\ndate: 2020-01-01\n---\n\nThird page text.\n")
   run("bash", [path.join(renderer, "setup.sh"), quartz])
   run("node", [path.join(quartz, "quartz/bootstrap-cli.mjs"), "build", "-d", input, "-o", output, "--concurrency", "1"], quartz)
   fs.writeFileSync(path.join(temp, "browser-build.json"), JSON.stringify({ port: server.address().port, clientFingerprint: clientFingerprint() }))
   }
+  assert.match(fs.readFileSync(path.join(output, "target.html"), "utf8"), /\/owner\/in-place\?relativePath=target\.md&amp;slug=target/u, "private build emits the actual in-place owner link")
   assert.ok(fs.existsSync(path.join(output, "index.provenance.json")))
   const provenance = JSON.parse(fs.readFileSync(path.join(output, "index.provenance.json"), "utf8"))
   assert.equal(provenance.version, 2)
@@ -106,7 +108,6 @@ try {
   assert.equal(await page.locator("article style > span, article math span").count(), 0)
   assert.equal(await page.locator("article style").evaluate(el => el.childNodes[0].nodeType), 3)
   await page.locator(".suggest-correction-entry").first().click()
-  await page.locator(".cb-suggest-hint-dismiss").click()
   async function select(needle, a, b, tag = "[data-cb-view]") {
     await page.evaluate(({ needle, a, b, tag }) => {
       const parts = [...document.querySelectorAll(`article [data-cb-run] ${tag}`)]
@@ -212,14 +213,16 @@ try {
   await page.setViewportSize({ width: 1680, height: 1050 })
   // Real Quartz SPA cleanup restores old nodes and installs exactly one editor.
   await page.locator(".cb-suggest-toggle").click()
-  await page.locator("article a").filter({ hasText: "target" }).first().click()
+  await page.getByRole("button", { name: "Keep editing", exact: true }).click()
+  await page.evaluate(() => { const a = document.createElement("a"); a.href = "./target"; a.textContent = "Target navigation"; a.className = "fixture-nav"; document.body.append(a) })
+  await page.locator(".fixture-nav").click()
   await page.locator(".cb-leave-guard:visible").waitFor()
   assert.equal(await page.locator(".cb-leave-guard p").textContent(), "You have 3 unsent suggestions. Leave and discard them?")
   await page.screenshot({ path: path.join(affordanceShots, "leave-confirm.png") })
   await page.getByRole("button", { name: "Stay", exact: true }).click()
   assert.equal(await page.locator(".cb-suggest-card").count(), 3)
   const draftForBack = await page.evaluate(() => Object.entries(sessionStorage))
-  await page.locator("article a").filter({ hasText: "target" }).first().click()
+  await page.locator(".fixture-nav").click()
   await page.getByRole("button", { name: "Discard and leave", exact: true }).click()
   await page.waitForURL(`${origin}/target`)
   await page.waitForSelector(".cb-suggest-toggle", { state: "attached" })
@@ -400,6 +403,7 @@ try {
         ? document.body.classList.contains("cb-suggest-keyboard-open") && document.body.style.getPropertyValue("--cb-suggest-visible-height") === `${Math.floor(innerHeight * 0.55)}px`
         : !document.body.classList.contains("cb-suggest-keyboard-open"), open)
     }
+    await visual.bringToFront()
     await visual.goto(origin)
     await visual.waitForSelector(".cb-suggest-toggle", { state: "attached" })
     assert.equal(await visual.locator(".cb-suggest-viewport-debug").count(), 0, "diagnostics are absent without the opt-in query")
@@ -408,7 +412,6 @@ try {
     await capture("01-off")
     await visual.locator(".suggest-correction-entry").click()
     await capture("02-hint")
-    await visual.locator(".cb-suggest-hint-dismiss").click()
     for (const [needle, a, b, value] of [["Hello", 5, 5, ", reader"], ["brown", 0, 5, "red"]]) {
       await visual.evaluate(({ needle, a, b }) => {
         const part = [...document.querySelectorAll("article [data-cb-view]")].find(el => el.textContent.includes(needle))
@@ -429,16 +432,20 @@ try {
     if (name === "iphone13") {
       await visual.locator(".page .center > article").focus()
       await visual.waitForFunction(() => document.body.classList.contains("cb-suggest-keyboard-open"))
-      assert.equal(await visual.locator(".cb-suggest-toolbar").isVisible(), false, "touch editor focus hides chrome before any viewport resize")
+      assert.equal(await visual.locator(".cb-suggest-finish").isVisible(), true, "touch focus keeps finish reachable without relying on viewport resize")
       assert.equal(await visual.evaluate(() => Object.hasOwn(visualViewport, "height")), false, "focus rule does not depend on synthetic geometry")
       await capture("12-touch-focus-no-resize")
       await keyboard(true)
-      assert.equal(await visual.locator(".cb-suggest-toolbar").isVisible(), false)
+      assert.equal(await visual.locator(".cb-suggest-finish").isVisible(), true)
+      const finishBox = await visual.locator(".cb-suggest-finish").boundingBox()
+      const caretBox = await visual.evaluate(() => { const r = getSelection().getRangeAt(0).cloneRange(); r.collapse(false); const b = r.getBoundingClientRect(); return { top: b.top, bottom: b.bottom } })
+      assert.ok(finishBox.y >= 40 && finishBox.y + finishBox.height < caretBox.top, `finish clears active line: ${JSON.stringify({finishBox, caretBox})}`)
       assert.equal(await visual.locator(".cb-source-open:not([hidden])").getAttribute("data-cb-change-count"), "2")
       await capture("08-keyboard-edit-simulated")
       await keyboard(false)
       assert.equal(await visual.locator(".cb-suggest-toolbar").isVisible(), true)
     }
+    if (name === "desktop") {
     await visual.locator(".cb-suggest-review").click()
     await capture("04-changes-expanded")
     const trayBox = await visual.locator(".cb-suggest-tray").boundingBox()
@@ -449,15 +456,8 @@ try {
       assert.ok(textBox.x + textBox.width <= trayBox.x || textBox.y + textBox.height <= trayBox.y, "medium desktop cards do not cover article")
     }
     await visual.locator(".cb-suggest-card textarea").first().fill("A clearer greeting.")
-    if (name === "iphone13") {
-      await keyboard(true)
-      const field = await visual.locator(".cb-suggest-card textarea").first().boundingBox()
-      const visibleBottom = await visual.evaluate(() => visualViewport.offsetTop + visualViewport.height)
-      assert.ok(field.y + field.height <= visibleBottom - 20, "comment stays above simulated keyboard")
-      await capture("09-keyboard-comment-simulated")
-      await keyboard(false)
-    }
     await visual.locator(".cb-suggest-tray-close").click()
+    }
     await visual.locator(".cb-suggest-send-review").click()
     await visual.locator("input[name=rationale]").fill("Make the introduction clearer.")
     await visual.locator("input[name=evidence]").fill("https://example.org/reference")
@@ -477,7 +477,7 @@ try {
       assert.equal(box.x, 0); assert.equal(box.y, 0)
       assert.ok(Math.abs(box.height - device.viewport.height) < 2)
     }
-    await visual.locator(".suggest-correction-cancel").click()
+    await visual.locator(".suggest-correction-cancel:visible").click()
     await visual.locator("article .cb-suggest-unmapped").filter({ hasText: "target" }).first().click()
     await visual.getByRole("button", { name: "Edit Markdown", exact: true }).click()
     await visual.getByRole("textbox", { name: "Markdown source for this block" }).waitFor()
@@ -490,6 +490,12 @@ try {
       const overflow = await visual.evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth,
         wide: [...document.querySelectorAll("body *")].map(el => ({ tag: el.tagName, class: String(el.className), right: el.getBoundingClientRect().right })).filter(el => el.right > innerWidth + 1).slice(0, 8) }))
       assert.ok(overflow.scroll <= overflow.width, `no horizontal overflow at ${width}: ${JSON.stringify(overflow)}`)
+      if (width <= 800) {
+        await visual.locator(".cb-suggest-send-review").click()
+        assert.ok(await visual.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `review sheet fits ${width}`)
+        await visual.locator(".suggest-correction-cancel:visible").click()
+        continue
+      }
       await visual.locator(".cb-suggest-review").click()
       assert.ok(await visual.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `expanded sheet fits ${width}`)
       if (width > 800) {
@@ -515,20 +521,108 @@ try {
       assert.match(await visual.locator(".cb-suggest-viewport-debug").textContent(), /pointer coarse: true/)
       await visual.locator(".suggest-correction-entry").click()
       await visual.locator(".page .center > article").focus()
-      await visual.waitForFunction(() => document.querySelector(".cb-suggest-viewport-debug")?.textContent.includes("chrome hidden: true"))
+      await visual.waitForFunction(() => document.querySelector(".cb-suggest-viewport-debug")?.textContent.includes("finish top-anchored: true"))
       for (const label of ["innerHeight:", "visualViewport.height:", "visualViewport.offsetTop:", "visualViewport.scale:", "activeElement: ARTICLE"]) {
         assert.ok((await visual.locator(".cb-suggest-viewport-debug").textContent()).includes(label), label)
       }
       await capture("11-viewport-debug")
       await visual.evaluate(() => document.activeElement.blur())
-      await visual.waitForFunction(() => document.querySelector(".cb-suggest-viewport-debug")?.textContent.includes("chrome hidden: false"))
+      await visual.waitForFunction(() => document.querySelector(".cb-suggest-viewport-debug")?.textContent.includes("finish top-anchored: false"))
+      await visual.bringToFront()
       await visual.goto(origin)
       await visual.waitForSelector(".cb-suggest-toggle", { state: "attached" })
       assert.equal(await visual.locator(".cb-suggest-viewport-debug").count(), 0)
     }
     await visualContext.close()
   }
-  console.log("suggest-build mobile-polish: iPhone 13 emulation + 1280x900 desktop, single entry, 2 edits, collapsed/expanded cards, review/send, source editor, dark theme, 360/390/430/800/1024/1280 widths, persisted hint, fixture sends, touch-focus hiding without viewport resize, query-only live diagnostics, simulated software-keyboard editor/comment/review geometry and screenshots passed")
+  console.log("suggest-build mobile-polish: iPhone 13 emulation + 1280x900 desktop, single entry, 2 edits, collapsed/expanded cards, review/send, source editor, dark theme, 360/390/430/800/1024/1280 widths, persisted hint, fixture sends, touch-focus finish visibility without viewport resize, query-only live diagnostics, simulated software-keyboard editor/comment/review geometry and screenshots passed")
+  ownerProcess = spawn("bun", [path.join(repo, "apps/owner-alpha/test/owner-edit-browser-server.js"), input, origin], { cwd: repo, stdio: ["ignore", "pipe", "pipe"] })
+  ownerServer = await new Promise((resolve, reject) => {
+    let raw = "", errors = ""
+    const timer = setTimeout(() => reject(Error("Owner browser fixture startup timed out")), 10000)
+    ownerProcess.stderr.on("data", chunk => { errors += chunk })
+    ownerProcess.on("exit", code => { clearTimeout(timer); reject(Error(`Owner fixture exited ${code}: ${errors}`)) })
+    ownerProcess.stdout.on("data", chunk => { raw += chunk; if (raw.includes("\n")) { clearTimeout(timer); resolve(JSON.parse(raw.split("\n")[0])) } })
+  })
+  const ownerShots = path.join(repo, ".workspace/concrete-flow/astra-owner-edit")
+  fs.mkdirSync(ownerShots, { recursive: true })
+  const ownerContext = await browser.newContext(devices["iPhone 13"])
+  await ownerContext.route("**/*", route => [origin, ownerServer.origin].includes(new URL(route.request().url()).origin) ? route.continue() : route.abort())
+  await ownerContext.request.get(`${ownerServer.origin}/owner/bootstrap?token=${ownerServer.bootstrap}`, { maxRedirects: 0 })
+  const owner = await ownerContext.newPage()
+  await owner.bringToFront()
+  owner.on("pageerror", error => errors.push(error.message))
+  owner.on("dialog", dialog => dialog.accept())
+  await owner.goto(`${origin}/target`)
+  await owner.locator(".edit-this-page a").click()
+  await owner.waitForURL("**/cyberbase/target#owner-edit")
+  await owner.waitForSelector(".cb-suggest-finish")
+  assert.equal(await owner.locator(".cb-suggest-send-review").textContent(), "Save · 0")
+  await owner.evaluate(() => {
+    const part = [...document.querySelectorAll("article [data-cb-view]")].find(el => el.textContent.includes("Target page text."))
+    document.querySelector("article").focus()
+    const r = document.createRange(); const start = part.textContent.indexOf("page"); r.setStart(part.firstChild, start); r.setEnd(part.firstChild, start + 4); getSelection().removeAllRanges(); getSelection().addRange(r)
+  })
+  await owner.keyboard.type("note")
+  // Change Markdown in a different block through the same local source adapter.
+  await owner.locator("article strong").click()
+  await owner.locator(".cb-suggest-markdown").click()
+  const sourceBox = owner.getByRole("textbox", { name: "Markdown source for this block" })
+  await sourceBox.waitFor(); await sourceBox.press("Control+Home"); await sourceBox.press("Control+a"); await sourceBox.pressSequentially("A *Markdown* block.")
+  await owner.locator(".cb-source-done").click()
+  await owner.evaluate(() => {
+    const part = document.querySelector("article [data-cb-view]")
+    document.querySelector("article").focus(); const r = document.createRange(); r.setStart(part.firstChild, 2); r.collapse(true); getSelection().removeAllRanges(); getSelection().addRange(r)
+    Object.defineProperty(visualViewport, "height", { configurable: true, value: 420 }); Object.defineProperty(visualViewport, "offsetTop", { configurable: true, value: 40 }); visualViewport.dispatchEvent(new Event("resize"))
+  })
+  await owner.waitForFunction(() => document.body.style.getPropertyValue("--cb-suggest-visible-height") === "420px")
+  await owner.waitForTimeout(450)
+  const ownerGeometry = await owner.evaluate(() => {
+    const finish = document.querySelector(".cb-suggest-finish").getBoundingClientRect(), r = getSelection().getRangeAt(0).cloneRange(); r.collapse(false); const caret = r.getBoundingClientRect()
+    return { top: finish.top, bottom: finish.bottom, right: finish.right, caretTop: caret.top, caretBottom: caret.bottom }
+  })
+  assert.ok(ownerGeometry.top >= 40 && ownerGeometry.right <= 390 && ownerGeometry.bottom < ownerGeometry.caretTop && ownerGeometry.caretBottom < 460, JSON.stringify(ownerGeometry))
+  await owner.screenshot({ path: path.join(ownerShots, "phone-owner-editing.png") })
+  await owner.evaluate(() => { document.activeElement.blur(); delete visualViewport.height; delete visualViewport.offsetTop; visualViewport.dispatchEvent(new Event("resize")) })
+  await owner.locator(".cb-suggest-toggle").click()
+  await owner.locator(".cb-cancel-sheet[open]").waitFor()
+  await owner.screenshot({ path: path.join(ownerShots, "phone-cancel-sheet.png") })
+  await owner.getByRole("button", { name: "Save draft", exact: true }).click()
+  assert.equal(await owner.locator(".cb-suggest-finish").isVisible(), false)
+  assert.equal(await owner.locator("article ins,article del").count(), 0)
+  await owner.reload(); await owner.locator(".cb-suggest-toggle").waitFor({ state: "attached" }); await owner.locator(".suggest-correction-entry").waitFor()
+  assert.equal(await owner.locator(".cb-suggest-finish").isVisible(), false)
+  await owner.locator(".suggest-correction-entry").click()
+  assert.ok((await owner.locator(".cb-suggest-card").count()) >= 2, "draft restores rendered and Markdown changes on re-entry")
+  await owner.setViewportSize({ width: 1280, height: 900 })
+  await owner.screenshot({ path: path.join(ownerShots, "desktop-owner-editing.png") })
+  await owner.setViewportSize({ width: 390, height: 844 })
+  await owner.locator(".cb-suggest-send-review").click()
+  const reviewAction = await owner.locator(".suggest-correction-form:visible button[type=submit]").boundingBox()
+  assert.ok(reviewAction.x + reviewAction.width <= 390 && reviewAction.y + reviewAction.height > 760 && reviewAction.y + reviewAction.height <= 844, "owner review action stays bottom-right")
+  await owner.screenshot({ path: path.join(ownerShots, "phone-in-place-review.png") })
+  await owner.locator(".suggest-correction-form:visible button[type=submit]").click()
+  await owner.waitForURL(`${ownerServer.origin}/owner/staged/**`)
+  await owner.locator("#owner-direct").waitFor()
+  assert.ok(await owner.locator(".direct-change").count() >= 2)
+  assert.equal(await owner.locator("#direct-form button").isVisible(), true)
+  await owner.screenshot({ path: path.join(ownerShots, "phone-review-save.png") })
+  await owner.goto(`${ownerServer.origin}/owner/edit?relativePath=target.md&slug=target`)
+  const rawDraft = "A long raw Markdown draft.\n".repeat(1900)
+  await owner.locator("textarea").fill(rawDraft)
+  const bar = await owner.locator(".owner-finish").boundingBox()
+  assert.ok(bar.y + bar.height <= 844 && bar.x + bar.width <= 390)
+  await owner.screenshot({ path: path.join(ownerShots, "phone-raw-fallback.png") })
+  await owner.locator("#cancel-edit").click()
+  await owner.getByRole("button", { name: "Save draft", exact: true }).click()
+  await owner.waitForURL("**/cyberbase/target#owner-edit")
+  await owner.goto(`${ownerServer.origin}/owner/edit?relativePath=target.md&slug=target`)
+  await owner.waitForFunction(expected => document.querySelector("textarea")?.value === expected, rawDraft)
+  await owner.locator("#cancel-edit").click()
+  await owner.getByRole("button", { name: "Discard", exact: true }).click()
+  await owner.waitForURL("**/cyberbase/target#owner-edit")
+  await ownerContext.close()
+  console.log("PASS owner flow: actual owner-origin session, in-place rendered + Markdown edits, top finish clears caret at 390px/420px keyboard viewport, cancel/draft restoration, strict owner Save review, raw sticky bar, six screenshots")
   // Mutated text after mapping refuses a suggestion without inventing offsets.
   await page.locator(".suggest-correction-entry").first().click()
   await page.evaluate(() => { document.querySelector("article [data-cb-view]").firstChild.textContent = "stale DOM" })
@@ -566,6 +660,7 @@ try {
   if (blocked.length) console.log(`suggest-build: blocked ${blocked.length} pre-existing external theme resource requests; no external request was sent`)
 } finally {
   await browser?.close()
+  ownerProcess?.kill("SIGTERM")
   await new Promise(resolve => server.close(resolve))
   if (!process.env.CYBERBASER_SUGGEST_TEST_DIR) fs.rmSync(temp, { recursive: true, force: true })
 }

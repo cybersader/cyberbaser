@@ -14,6 +14,8 @@ export interface OwnerEditThisPageOptions {
   mode: "owner"
   /** Exact privileged private-network origin, e.g. `http://127.0.0.1:4317`. */
   ownerOrigin: string
+  /** The shared rendered editor is included in this build. Off by default. */
+  inPlace?: boolean
   /** Link text. */
   text?: string
 }
@@ -95,6 +97,7 @@ export function editLinkForPage(
   relativePath: string | undefined,
   slug: string | undefined,
   opts: EditThisPageOptions,
+  hasProvenance = false,
 ): EditLink | null {
   // Synthetic pages (folder indexes with no folder note, 404, tag rollups)
   // carry no source file, so there is nothing to edit.
@@ -106,8 +109,11 @@ export function editLinkForPage(
     // Owner review needs both exact source identity values. Fail closed if a
     // future synthetic page somehow has a relativePath but no slug.
     if (!slug) return null
+    // Do not strand owners on a reader page without the shared editor or its
+    // source map. Suggestions-off builds retain the existing raw edit route.
+    const route = opts.inPlace && hasProvenance ? "in-place" : "edit"
     return {
-      href: `${opts.ownerOrigin}/owner/edit?relativePath=${encodeURIComponent(relativePath)}&slug=${encodeURIComponent(slug)}`,
+      href: `${opts.ownerOrigin}/owner/${route}?relativePath=${encodeURIComponent(relativePath)}&slug=${encodeURIComponent(slug)}`,
       external: false,
     }
   }

@@ -1,3 +1,4 @@
+import { authorizeOwnerDirect, createOwnerHandoffStore, deriveOwnerDirect, validateOwnerHandoff } from './owner-direct.js';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { constants } from 'node:fs';
 import { lstat, open, realpath, rename, rm, stat } from 'node:fs/promises';
@@ -69,8 +70,9 @@ const READER_CSP = [
 // beside it, and only when the owner turned the form on.
 function readerCsp(config) {
   const formOrigin = suggestionFormOrigin(config);
-  if (formOrigin === null) return READER_CSP;
-  const csp = READER_CSP.replace("connect-src 'self'", `connect-src 'self' ${formOrigin}`);
+  const reader = READER_CSP.replace("form-action 'none'", `form-action http://${config.listen.host}:${config.listen.port}`);
+  if (formOrigin === null) return reader;
+  const csp = reader.replace("connect-src 'self'", `connect-src 'self' ${formOrigin}`);
   const challengeOrigin = suggestionChallengeOrigin(config);
   if (challengeOrigin === null) return csp;
   return `${csp.replace("script-src 'self'", `script-src 'self' ${challengeOrigin}`)}; frame-src ${challengeOrigin}`;
@@ -224,18 +226,18 @@ function editPage({ editSessionId, csrfToken, session, reviewEnabled, publicatio
   return pageShell({
     title: 'Owner edit',
     script: '/owner/assets/editor.js',
-    body: `<main class="owner-shell" id="owner-editor" data-edit-session-id="${escapeHtml(editSessionId)}" data-csrf="${escapeHtml(csrfToken)}">
+    body: `<main class="owner-shell" id="owner-editor" data-source-digest="${escapeHtml(session.source.digest)}" data-edit-session-id="${escapeHtml(editSessionId)}" data-csrf="${escapeHtml(csrfToken)}">
 <header class="owner-header review-detail-header">
 <div><p class="eyebrow">Owner alpha</p>
 <h1>Edit Markdown</h1>
-<p class="lede">One bounded Save publishes through the configured owner-controlled pipeline.</p></div>
+<a href="/owner/in-place?relativePath=${encodeURIComponent(session.relativePath)}&amp;slug=${encodeURIComponent(session.slug)}">Back to page editor</a></div>
 ${reviewEnabled ? '<a href="/owner/review">Review proposals</a>' : ''}
 ${publicationEnabled ? '<a href="/owner/publication">Publish workspace page</a>' : ''}
 </header>
 <form id="edit-form">
 <label for="edited-text">Markdown</label>
 <textarea id="edited-text" name="editedText" spellcheck="false" autocomplete="off">${textareaText(session.source.text)}</textarea>
-<div class="actions"><button type="submit" id="save-button">Save and publish</button></div>
+<div class="actions owner-finish"><button type="button" id="cancel-edit" aria-label="Cancel editing">×</button><button type="submit" id="save-button">Save</button></div>
 <p id="form-status" class="status" role="status" aria-live="polite"></p>
 </form>
 </main>`,
@@ -1262,9 +1264,9 @@ function parseBootstrapBody(text) {
   return value;
 }
 
-async function readBoundedJson(request, maximum, parse = JSON.parse) {
+async function readBoundedJson(request, maximum, parse = JSON.parse, mediaType = 'application/json') {
   const contentType = request.headers.get('content-type');
-  if (contentType !== 'application/json') throw Object.assign(new Error('content-type'), { status: 415 });
+  if ((mediaType === 'application/json' ? contentType : contentType?.split(';')[0]) !== mediaType) throw Object.assign(new Error('content-type'), { status: 415 });
   const declared = request.headers.get('content-length');
   if (declared !== null) {
     if (!/^(?:0|[1-9][0-9]*)$/u.test(declared)) throw Object.assign(new Error('length'), { status: 400 });
@@ -1773,6 +1775,8 @@ export function createOwnerAlphaHandler({
   publicRoot = PUBLIC_ROOT,
   createEditSession = createSourceEditSession,
   editSessions = createMemoryEditSessionStore(),
+  handoffs = createOwnerHandoffStore({ createId: token }),
+  directEdits = createMemoryEditSessionStore(),
   saveEdit,
   lookupJob,
   proposalReview = null,
@@ -1920,6 +1924,23 @@ export function createOwnerAlphaHandler({
       });
     }
 
+    // Inert cross-origin handoff only. No cookie, CSRF, edit session, durable
+    // authorization, job or source write is created here. Even a hostile reader
+    // can do no more than ask the owner to inspect an expiring bounded draft.
+    if (url.pathname === '/owner/stage') {
+      if (request.method !== 'POST') return response(null, 405, { Allow: 'POST' });
+      if (url.search) return errorResponse(400, 'unexpected-query');
+      try {
+        const handoff = await readBoundedJson(request, 800 * 1024, text => {
+          const fields = new URLSearchParams(text);
+          if ([...fields.keys()].join(',') !== 'changeSet') throw Error('invalid fields');
+          return validateOwnerHandoff(JSON.parse(fields.get('changeSet')));
+        }, 'application/x-www-form-urlencoded');
+        const id = handoffs.create(handoff);
+        return response(null, 303, { Location: `/owner/staged/${id}` });
+      } catch (error) { return errorResponse(error?.status ?? (error?.code === 'owner-handoff-capacity' ? 503 : 400), error?.code ?? 'invalid-owner-handoff'); }
+    }
+
     const deviceSession = resolveSession(requestCookie(request));
     if (deviceSession === null) {
       return errorResponse(403, 'invalid-session');
@@ -1936,6 +1957,7 @@ export function createOwnerAlphaHandler({
 
     const asset = {
       '/owner/assets/editor.js': 'editor.js',
+      '/owner/assets/direct.js': 'direct.js',
       '/owner/assets/job.js': 'job.js',
       '/owner/assets/review.js': 'review.js',
       '/owner/assets/apply.js': 'apply.js',
@@ -2199,6 +2221,65 @@ export function createOwnerAlphaHandler({
       }
       if (request.method === 'HEAD') return html(null);
       return html(decisionDetailPage({ ...history, application, csrfToken }));
+    }
+
+    if (url.pathname === '/owner/in-place') {
+      if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
+      const query = queryObject(url, ['relativePath', 'slug']);
+      if (!query) return errorResponse(400, 'invalid-edit-query');
+      try {
+        const session = await createEditSession({ config, renderer: query });
+        const target = liveUrlForSlug(`${readerOrigin}/cyberbase/`, session.slug);
+        return response(null, 303, { Location: `${target}#owner-edit` });
+      } catch (error) { return errorResponse(400, error?.code ?? 'edit-session-failed'); }
+    }
+
+    const staged = /^\/owner\/staged\/([A-Za-z0-9_-]{43})$/u.exec(url.pathname);
+    if (staged) {
+      if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
+      if (url.search) return errorResponse(400, 'unexpected-query');
+      const handoff = handoffs.get(staged[1]);
+      if (!handoff) return errorResponse(410, 'owner-handoff-expired');
+      try {
+        const session = await createEditSession({ config, renderer: { relativePath: handoff.source.path, slug: handoff.slug } });
+        const derived = deriveOwnerDirect({ config, session, handoff });
+        const stored = directEdits.create({ ...derived, stageId: staged[1], csrfToken });
+        const back = `${liveUrlForSlug(`${readerOrigin}/cyberbase/`, session.slug)}#owner-edit`;
+        const cards = derived.operation.proposal.changeSet.files[0].operations.map((op, index) => {
+          const base = Buffer.from(session.source.bytesBase64, 'base64');
+          // Escaped text only. No source HTML or reader scripts enter this origin.
+          // Show the change within its own line only, trimmed at word boundaries.
+          const lineBefore = base.subarray(0, op.start).toString('utf8').split('\n').at(-1);
+          const lineAfter = base.subarray(op.end).toString('utf8').split('\n')[0];
+          const before = lineBefore.length > 80 ? `…${lineBefore.slice(-80).replace(/^\S*\s/u, '')}` : lineBefore;
+          const after = lineAfter.length > 80 ? `${lineAfter.slice(0, 80).replace(/\s\S*$/u, '')}…` : lineAfter;
+          return `<section class="direct-change"><p>${escapeHtml(before)}<del>${escapeHtml(op.expected)}</del><ins>${escapeHtml(op.replacement)}</ins>${escapeHtml(after)}</p></section>`;
+        }).join('');
+        return html(request.method === 'HEAD' ? null : pageShell({ title: 'Save your changes', script: '/owner/assets/direct.js', body: `<main class="owner-shell direct-review" id="owner-direct" data-edit-id="${escapeHtml(stored.id)}" data-csrf="${escapeHtml(csrfToken)}"><header class="owner-header"><p class="eyebrow">Save changes to</p><h1>${escapeHtml(session.relativePath.split('/').at(-1).replace(/\.md$/u, ''))}</h1></header>${cards}<form id="direct-form"><div class="owner-finish"><a href="${escapeHtml(back)}" aria-label="Back to editing">Back</a><button type="submit">Save · ${handoff.operations.length}</button></div><p id="form-status" role="status"></p></form></main>` }));
+      } catch (error) { return errorResponse(409, error?.code ?? 'owner-handoff-unavailable'); }
+    }
+
+    if (url.pathname === '/api/owner-direct') {
+      if (request.method !== 'POST') return response(null, 405, { Allow: 'POST' });
+      if (url.search) return errorResponse(400, 'unexpected-query');
+      let body;
+      try { body = await readBoundedJson(request, 4096); }
+      catch (error) { return errorResponse(error?.status ?? 400, 'invalid-request-body'); }
+      if (!body || typeof body !== 'object' || Object.keys(body).sort().join(',') !== 'csrf,editId' || !exactToken(body.editId)) return errorResponse(400, 'invalid-owner-save');
+      if (!sameSecret(body.csrf, csrfToken)) return errorResponse(403, 'invalid-csrf');
+      const edit = directEdits.get(body.editId);
+      if (!edit || !sameSecret(edit.csrfToken, csrfToken) || !handoffs.get(edit.stageId)) return errorResponse(410, 'owner-handoff-expired');
+      if (inFlight.has(edit.stageId)) return errorResponse(409, 'save-in-progress');
+      inFlight.add(edit.stageId);
+      try {
+        const jobId = validateJobId(createJobId());
+        const session = await authorizeOwnerDirect({ context: storeContextFromConfig(config, projectRoot), jobId, session: edit.session, operation: edit.operation });
+        const accepted = await saveEdit({ jobId, session, operation: edit.operation });
+        if (accepted?.jobId !== jobId || accepted.state !== 'accepted') throw Error('invalid acceptance');
+        directEdits.delete(body.editId); handoffs.delete(edit.stageId);
+        return json({ jobId, state: 'accepted', statusUrl: `/owner/jobs/${encodeURIComponent(jobId)}` }, 202);
+      } catch (error) { return errorResponse(409, error?.code ?? 'owner-save-failed'); }
+      finally { inFlight.delete(edit.stageId); }
     }
 
     if (url.pathname === '/owner/edit') {

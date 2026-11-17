@@ -150,7 +150,7 @@ describe('provider-owned private reader CSP', () => {
     expect(onCsp).toBe(`${offCsp.replace("script-src 'self'", `script-src 'self' ${origin}`)}; frame-src ${origin}`);
     expect(onCsp).toContain("connect-src 'self' http://127.0.0.1:4319;");
     expect(onCsp).toContain("frame-ancestors 'none'");
-    expect(onCsp).toContain("form-action 'none'");
+    expect(onCsp).toContain("form-action http://127.0.0.1:4317");
     plain.suggestions.form.enabled = false;
     const formOff = await csp(plain);
     expect(formOff).not.toContain('4319');

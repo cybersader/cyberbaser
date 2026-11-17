@@ -243,7 +243,7 @@ export function applyEditorOperation(session, operation) {
   const { base, frontmatter } = validateEditSession(session);
   assertOperationBinding(session, operation);
   if (operation.schemaVersion === 2) {
-    if (session.origin?.type !== 'approved-proposal') fail('invalid-source-operation', 'multi-change operations require approved-proposal provenance');
+    if (!['approved-proposal', 'owner-direct'].includes(session.origin?.type)) fail('invalid-source-operation', 'multi-change operations require explicit owner provenance');
     const candidate = applyOwnerChangeSet(base, operation);
     assertLfOnlyCandidate(candidate);
     for (const span of operation.proposal.changeSet.files[0].operations) assertFrontmatterUnchanged(base, candidate, span, frontmatter);

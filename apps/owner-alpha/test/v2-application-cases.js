@@ -1,6 +1,8 @@
 // Imported by proposal-application.test.js through its local fixture registration.
 // This file is a factory, not a second test runner.
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { unlink } from 'node:fs/promises';
+import { createEditSession, defaultGitRunner } from '../src/source.js';
 import { changeSetCorrection } from '../src/change-set-operation.js';
 import { deriveProposalApplication } from '../src/proposal-application.js';
 import { prepareApprovedProposalInput } from '../src/approved-proposal.js';
@@ -73,6 +75,53 @@ export function registerV2ApplicationCases(api) {
       createJobId: () => 'OA-v2-atomic', ...extra });
     return { item, runtime, policy, proposal, queueId, client, review, decide, apply };
   }
+
+  test('owner-direct rendered and Markdown-block edits use one exact commit with no proposal approval, then resume safely', async () => {
+    const { item, runtime, review } = await fixture();
+    const service = createOwnerProposalReviewService({ config: runtime.config, context: runtime.context, source: review });
+    const handler = createOwnerAlphaHandler({ config: runtime.config, projectRoot: runtime.ownerProject, proposalReview: service,
+      createEditSession: input => createEditSession({ ...input, git: async (cwd, args, options) => {
+        if (args.join(' ') === 'remote get-url origin' || args.join(' ') === 'remote get-url --push origin') return runtime.config.repository.remote.url;
+        return defaultGitRunner(cwd, args, options);
+      } }),
+      saveEdit: runtime.saveEdit, lookupJob: async () => null, createJobId: () => 'OA-owner-direct-atomic' });
+    const origin = `http://${runtime.config.listen.host}:${runtime.config.listen.port}`;
+    const request = (url, options = {}) => handler(new Request(`${origin}${url}`, { ...options, headers: { Host: new URL(origin).host, ...options.headers } }));
+    const login = await request(`/owner/bootstrap?token=${handler.bootstrapToken}`);
+    const cookie = login.headers.get('set-cookie').split(';')[0];
+    const operations = [
+      { operationId: 'source-block-1', start: base.indexOf('**format**'), end: base.indexOf('**format**') + 10, expected: '**format**', replacement: '*format*' },
+      { operationId: 'edit-run-2', start: base.indexOf('teh'), end: base.indexOf('teh') + 3, expected: 'teh', replacement: 'the' },
+    ];
+    const handoff = { source: { path: sourcePath, byteLength: base.length, sha256: createHash('sha256').update(base).digest('hex') }, revision: item.revision, slug: 'docs/multi', operations };
+    const stage = await request('/owner/stage', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: 'http://127.0.0.1:4318' }, body: new URLSearchParams({ changeSet: JSON.stringify(handoff) }).toString() });
+    expect(stage.status).toBe(303);
+    const response = await request(stage.headers.get('location'), { headers: { Cookie: cookie } });
+    const html = await response.text(); expect(response.status, html).toBe(200);
+    const editId = /data-edit-id="([^"]+)"/.exec(html)[1], csrf = /data-csrf="([^"]+)"/.exec(html)[1];
+    const before = await gitState(item.checkout);
+    const saved = await request('/api/owner-direct', { method: 'POST', headers: { Cookie: cookie, Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ editId, csrf }) });
+    expect(saved.status).toBe(202);
+    const completed = await runtime.completions.get('OA-owner-direct-atomic');
+    expect(completed.failure).toBeNull(); expect(completed.state).toBe('completed');
+    const expected = Buffer.from(text.replace('**format**', '*format*').replace('teh', 'the'));
+    expect(await readFile(path.join(item.checkout, sourcePath))).toEqual(expected);
+    expect(await git(item.checkout, ['rev-parse', 'HEAD^'])).toBe(before.head);
+    expect(await git(item.checkout, ['diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD'])).toBe(sourcePath);
+    expect(await listApprovedProposalInputs(runtime.context)).toEqual([]);
+    expect(await listProposalApplicationEvents(runtime.context)).toEqual([]);
+    const paths = pipelineArtifactPaths('OA-owner-direct-atomic');
+    const checks = await readJsonArtifact(runtime.context, paths.preApplyChecks);
+    expect(checks.result.immediate.operation).toEqual({ reproducesCandidate: true, operationCount: 2, outsideBytesIdentical: true });
+    const after = await gitState(item.checkout);
+    const resumed = await runtime.handler.resumeJob({ jobId: 'OA-owner-direct-atomic' });
+    expect(resumed.state).toBe('completed'); expect(await gitState(item.checkout)).toEqual(after);
+    const stale = await request('/owner/stage', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ changeSet: JSON.stringify(handoff) }).toString() });
+    expect((await request(stale.headers.get('location'), { headers: { Cookie: cookie } })).status).toBe(409);
+    await unlink(path.join(runtime.context.storeRoot, 'owner-direct/OA-owner-direct-atomic.json'));
+    await expect(runtime.handler.resumeJob({ jobId: 'OA-owner-direct-atomic' })).rejects.toHaveProperty('code', 'artifact-not-found');
+    expect(await gitState(item.checkout)).toEqual(after);
+  });
 
   test('v2 mixed inbox, per-change inspection, one approval and exact atomic commit; durable effect resumes without replay', async () => {
     const { item, runtime, proposal, queueId, client, review, decide, apply } = await fixture({ replacements: ['that', 'fresh'] });

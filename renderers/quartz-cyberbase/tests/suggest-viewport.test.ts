@@ -121,9 +121,9 @@ try {
   win.visualViewport = viewport; win.location.search = "?cbdebug=viewport"
   const diagnostic = setupSuggestViewport(root as any, form as any, tray as any); flush()
   const debug = body.children[0]
-  for (const text of ["innerHeight: 844", "visualViewport.height: 420", "visualViewport.offsetTop: 60", "visualViewport.scale: 1", "activeElement: DIV.editor", "pointer coarse: true", "chrome hidden: true"]) assert.ok(debug.textContent.includes(text), text)
+  for (const text of ["innerHeight: 844", "visualViewport.height: 420", "visualViewport.offsetTop: 60", "visualViewport.scale: 1", "activeElement: DIV.editor", "pointer coarse: true", "finish top-anchored: true"]) assert.ok(debug.textContent.includes(text), text)
   doc.activeElement = null; doc.emit("focusout"); tick(180)
-  assert.ok(debug.textContent.includes("chrome hidden: false"), "diagnostics follow focus restoration")
+  assert.ok(debug.textContent.includes("finish top-anchored: false"), "diagnostics follow focus restoration")
   viewport.height = 500; viewport.emit("resize"); flush()
   assert.ok(debug.textContent.includes("visualViewport.height: 500"), "diagnostics follow live viewport changes")
   diagnostic.destroy(); assert.equal(debug.removed, true)

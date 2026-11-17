@@ -27,11 +27,11 @@ export { encodeRepoPath } from "./editLink"
  */
 
 export default ((opts: EditThisPageOptions) => {
-  const label = opts.text ?? "Edit this page"
+  const label = opts.text ?? "Edit"
 
   function EditThisPage({ fileData, displayClass }: QuartzComponentProps) {
     const relativePath = fileData.relativePath
-    const link = editLinkForPage(relativePath, fileData.slug, opts)
+    const link = editLinkForPage(relativePath, fileData.slug, opts, Boolean((fileData as any).sourceProvenance?.source))
     if (!link) return null
 
     const externalProps = link.external

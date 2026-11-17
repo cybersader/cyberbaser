@@ -1,9 +1,10 @@
+import { createFinishAction } from "./suggestModeFinish"
 import { SuggestHistory, changeContext } from "./suggestModeHistory"
 import { setupSuggestViewport } from "./suggestModeViewport"
 import { createSuggestModeUI, activeSourceBlock } from "./suggestModeUI"
 import { SparseRun, sortedOperations, verifiedLeafNode, verifiedBlockNode, verifyManifest, utf8, validateOperations } from "./suggestModeModel"
 import type { Operation, SourceIdentity, ProvenanceBlock } from "./suggestModeModel"
-import { buildSuggestionIntent, submitSuggestionIntent } from "./suggestModeClient"
+import { buildSuggestionIntent } from "./suggestModeClient"
 import { readBoundedJsonResponse, retryIdempotencyKey, parseRetryState } from "./suggestCorrectionClient"
 import { setupSuggestionChallenge } from "./suggestCorrectionChallenge"
 import type { SuggestionChallenge } from "./suggestCorrectionChallenge"
@@ -73,7 +74,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
   }))
   const viewContext = new Map<string, { blockId: string; offset: number }>()
   let activeBlock: (typeof blocks)[number] | undefined
-  let activeSource: { shell: HTMLElement; host: HTMLElement; hidden: HTMLElement["hidden"]; returnTo: HTMLElement; session?: SourceEditorSession } | undefined
+  let activeSource: { shell: HTMLElement; host: HTMLElement; hidden: HTMLElement["hidden"]; returnTo: HTMLElement; session?: SourceEditorSession; commit?: () => boolean } | undefined
   // Capture all nodes first: replacing an earlier sibling changes childNodes indices.
   const nodes = manifest.leaves.map(leaf => verifiedLeafNode(root, leaf))
   for (let i = 0; i < manifest.leaves.length; i++) {
@@ -117,7 +118,8 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
   }
   const status = element("p", "", "cb-suggest-status"); status.setAttribute("role", "status"); status.setAttribute("aria-live", "polite")
   const formStatus = form.querySelector<HTMLElement>(".suggest-correction-status")!
-  const ui = createSuggestModeUI(entry, () => onToggle(), () => onReview())
+  const finish = createFinishAction(form, manifest.source)
+  const ui = createSuggestModeUI(entry, () => onToggle(), () => onReview(), finish.label)
   const markBlock = activeSourceBlock(blocks)
   const positionSourceButton = () => {
     if (!activeBlock) return
@@ -152,7 +154,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
   const backdrop = element("div", undefined, "cb-suggest-backdrop"); backdrop.hidden = true
   const formMarker = document.createComment("suggestion review")
   form.before(formMarker); form.classList.add("cb-suggest-review-sheet")
-  form.setAttribute("role", "dialog"); form.setAttribute("aria-modal", "true"); form.setAttribute("aria-label", "Review & send suggestions")
+  form.setAttribute("role", "dialog"); form.setAttribute("aria-modal", "true"); form.setAttribute("aria-label", "Review changes")
   document.body.append(backdrop, form, status)
   const heading = element("h2", "Your changes")
   const summary = element("div", undefined, "cb-suggest-summary")
@@ -167,6 +169,13 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
   const comments: Record<string, string> = {}
   const key = `cyberbaser:suggesting:v2:${form.dataset.pageId}:${manifest.source.sha256}`
   const retryKey = `${key}:retry`
+  let navigating = false
+  if (!finish.needsChallenge) {
+    for (const name of ["rationale", "evidence"]) (form.elements.namedItem(name) as HTMLElement)?.closest("label")?.setAttribute("hidden", "")
+    form.querySelector<HTMLElement>(".suggest-correction-challenge")?.setAttribute("hidden", "")
+    const raw = element("a", "Edit whole file as Markdown", "cb-suggest-raw"); raw.href = finish.rawHref!
+    ui.toolbar.append(raw)
+  }
   const say = (message: string) => { status.textContent = message; formStatus.textContent = message }
   const operations = () => {
     const ops = [...sortedOperations(views.map(v => v.model)), ...[...sourceEdits.values()].flat()].sort((a, b) => a.start - b.start)
@@ -216,7 +225,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
   const updateSubmit = () => {
     const ops = operations(), count = ops.length
     if (activeBlock) activeBlock.button.hidden = !!activeSource || !activeBlock.block.editable
-    submit.textContent = `Send ${count} suggestion${count === 1 ? "" : "s"}`
+    submit.textContent = finish.reviewLabel
     submit.disabled = busy || !!activeSource || !count || (!!challenge && !challenge.response())
     ui.setCount(count)
     for (const { block, button } of blocks) button.dataset.cbChangeCount = String(ops.filter(op => touchesBlock(op, block)).length)
@@ -224,7 +233,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     ui.markdown.title = !activeBlock ? "Place the caret in a block to edit its Markdown" : !activeBlock.block.editable ? "This block can't be edited here" : "Edit Markdown for this block (Ctrl/Cmd+Shift+M)"
     ui.undo.disabled = busy || !!activeSource || !history.canUndo
     ui.redo.disabled = busy || !!activeSource || !history.canRedo
-    ui.review.disabled = busy || !!activeSource || !count
+    ui.review.disabled = busy || (activeSource ? !activeSource.session : !count)
   }
   const setMode = (on: boolean) => {
     enabled = on; root.contentEditable = String(on && !busy && !activeSource && form.hidden)
@@ -232,7 +241,11 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     if (on) { root.setAttribute("role", "textbox"); root.setAttribute("aria-multiline", "true") }
     else { root.removeAttribute("role"); root.removeAttribute("aria-multiline") }
     ui.setMode(on)
-    if (!on) { activateBlock(); hidePrompt() }
+    if (!on) {
+      activateBlock(); hidePrompt()
+      for (const view of views) { view.host.textContent = view.model.text; view.html = renderedRunSnapshot(view.host) }
+      for (const { host } of blocks) host.classList.remove("cb-source-pending")
+    }
     viewportUI.refresh()
   }
   const showReview = (show: boolean) => {
@@ -240,7 +253,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     document.body.classList.toggle("cb-suggest-review-open", show)
     ui.review.setAttribute("aria-expanded", String(show))
     root.contentEditable = String(enabled && !busy && !activeSource && !show)
-    if (show && !challenge) challenge = setupSuggestionChallenge(form, submit, say, () => !busy && operations().length > 0)
+    if (show && finish.needsChallenge && !challenge) challenge = setupSuggestionChallenge(form, submit, say, () => !busy && operations().length > 0)
     updateSubmit(); viewportUI.refresh()
     if (show) cancel.focus({ preventScroll: true })
     else if (enabled) ui.review.focus({ preventScroll: true })
@@ -276,10 +289,10 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
         }
       }
       const around = changeContext(text, start, start + op.expected.length)
-      const makeCard = (withComment: boolean) => {
-        const card = element("section", undefined, withComment ? "cb-suggest-card" : "cb-suggest-review-card"); card.dataset.operationId = op.operationId
+      const makeCard = (withComment: boolean, review = false) => {
+        const card = element("section", undefined, review ? "cb-suggest-review-card" : "cb-suggest-card"); card.dataset.operationId = op.operationId
         card.append(element("small", context?.heading ?? "Page introduction", "cb-suggest-section"))
-        if (source) card.append(element("small", "Markdown edit", withComment ? "cb-source-badge" : "cb-suggest-review-badge"))
+        if (source) card.append(element("small", "Markdown edit", review ? "cb-suggest-review-badge" : "cb-source-badge"))
         const line = element("div", undefined, "cb-suggest-context"); line.append(document.createTextNode(around.before))
         if (op.expected) line.append(element("del", op.expected))
         if (op.replacement) line.append(element("ins", op.replacement))
@@ -302,7 +315,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
         }
         card.append(remove); return card
       }
-      ui.cards.append(makeCard(true)); summary.append(makeCard(false))
+      ui.cards.append(makeCard(finish.needsChallenge)); summary.append(makeCard(false, true))
     }
     updateSubmit()
   }
@@ -387,18 +400,17 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     const shell = element("section", undefined, "cb-source-editor")
     shell.contentEditable = "false"; shell.setAttribute("aria-label", "Editing Markdown")
     const title = element("strong", "Editing Markdown")
-    const help = element("p", "Edit this block’s exact Markdown. Green additions and red deletions join the same suggestion for owner review.")
     const mount = element("div", undefined, "cb-source-mount")
     const error = element("p", "Loading Markdown editor…", "cb-source-status"); error.setAttribute("role", "status"); error.setAttribute("aria-live", "polite")
     const done = element("button", "Done", "cb-source-done"), cancelSource = element("button", "Cancel", "cb-source-cancel")
     done.type = cancelSource.type = "button"; done.disabled = true
-    shell.append(title, help, mount, error, done, cancelSource)
-    const current = { shell, host, hidden: host.hidden, returnTo: target.closest<HTMLElement>("[tabindex],button") ?? button, session: undefined as SourceEditorSession | undefined }
+    shell.append(title, mount, error, done, cancelSource)
+    const current = { shell, host, hidden: host.hidden, returnTo: target.closest<HTMLElement>("[tabindex],button") ?? button, session: undefined as SourceEditorSession | undefined, commit: undefined as (() => boolean) | undefined }
     activeSource = current; host.hidden = true; host.after(shell); root.contentEditable = "false"; updateSubmit()
     cancelSource.addEventListener("click", () => { closeSource(); say("Markdown edits cancelled. The pending suggestion is unchanged.") })
     shell.addEventListener("keydown", event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeSource() } })
-    done.addEventListener("click", () => {
-      if (!current.session || activeSource !== current) return
+    current.commit = () => {
+      if (!current.session || activeSource !== current) return false
       try {
         if (!validDom()) throw Error("The page structure changed. Cancel and reload before editing.")
         const next = sourceOperations(block, current.session.operations())
@@ -407,15 +419,17 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
         const before = snapshot()
         sourceEdits.set(block.id, next)
         if (JSON.stringify(before.operations) !== JSON.stringify(operations())) history.record(before, snapshot())
-        closeSource(); render(); persist(); say(next.length ? "Markdown edit added to your pending suggestion." : "This block has no Markdown changes.")
-      } catch (failure) { error.textContent = failure instanceof Error ? failure.message : "Could not record source changes." }
-    })
+        closeSource(); render(); persist(); say(next.length ? "Markdown edit added." : "No Markdown changes.")
+        return true
+      } catch (failure) { error.textContent = failure instanceof Error ? failure.message : "Could not record source changes."; return false }
+    }
+    done.addEventListener("click", () => current.commit?.())
     cancelSource.focus({ preventScroll: true })
     try {
       const editor = await loadSourceEditor(form.dataset.sourceEditorAsset)
       if (destroyed || activeSource !== current) return
       current.session = editor.mount(mount, { text: block.text!, operations: localOperations(block, sourceEdits.get(block.id) ?? []), label: "Markdown source for this block", onError: message => { error.textContent = message } })
-      error.textContent = ""; done.disabled = false; current.session.focus()
+      error.textContent = ""; done.disabled = false; updateSubmit(); current.session.focus()
     } catch (failure) { if (activeSource === current) error.textContent = failure instanceof Error ? failure.message : "Could not open the source editor." }
   }
   for (const { block, host, button } of blocks) {
@@ -511,9 +525,39 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
   const drop = (event: DragEvent) => { if (enabled && !activeSource) { event.preventDefault(); say("Paste plain text at the cursor instead of dropping content.") } }
   const compositionStart = () => { if (enabled && !busy && !activeSource) { composing = true; composition = selection() } }
   const compositionEnd = (event: CompositionEvent) => { if (!composing) return; composing = false; render(); edit(event.data, "insertFromComposition", composition); composition = null }
+  const cancelSheet = element("dialog", undefined, "cb-cancel-sheet")
+  const cancelTitle = element("h2"), discard = element("button", "Discard"), draft = element("button", "Save draft"), keep = element("button", "Keep editing")
+  for (const button of [discard, draft, keep]) button.type = "button"
+  cancelSheet.setAttribute("aria-label", "Discard changes?")
+  cancelSheet.append(cancelTitle, discard, draft, keep); document.body.append(cancelSheet)
+  const exit = () => {
+    cancelSheet.close(); setMode(false); say("")
+    // Keep the immutable ledger locally, but return the reading surface to base.
+    for (const view of views) { view.host.textContent = view.model.text; view.html = renderedRunSnapshot(view.host) }
+    entry.focus({ preventScroll: true })
+  }
+  discard.addEventListener("click", () => {
+    for (const view of views) view.model.reset()
+    sourceEdits.clear(); history.clear()
+    for (const id of Object.keys(comments)) delete comments[id]
+    store(key, null); store(retryKey, null); store(`${key}:paused`, null); render(); exit()
+  })
+  draft.addEventListener("click", () => {
+    persist()
+    if (stored(key) !== JSON.stringify({ operations: operations(), comments })) { say("Draft storage unavailable. Keep editing or discard."); return }
+    store(`${key}:paused`, "1"); exit()
+  })
+  keep.addEventListener("click", () => { cancelSheet.close(); ui.toggle.focus({ preventScroll: true }) })
   const onToggle = () => {
-    if (activeSource) { say("Choose Done or Cancel in the Markdown editor first."); return }
+    if (busy) return
+    if (activeSource && !activeSource.commit?.()) return
     if (!form.hidden) showReview(false)
+    if (enabled && operations().length) {
+      (document.activeElement as HTMLElement)?.blur()
+      cancelTitle.textContent = `Discard ${operations().length} changes?`
+      cancelSheet.showModal(); return
+    }
+    if (!enabled) { store(`${key}:paused`, null); render() }
     setMode(!enabled); say("")
   }
   const selectionStamp = () => {
@@ -543,7 +587,10 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
       else if (promptTarget && !prompt.contains(document.activeElement)) hidePrompt()
     }
   }
-  const onReview = () => { if (!activeSource) showReview(form.hidden === true) }
+  const onReview = () => {
+    if (activeSource && !activeSource.commit?.()) return
+    if (operations().length) showReview(form.hidden === true)
+  }
   const onCancel = () => showReview(false)
   const onSubmit = async (event: SubmitEvent) => {
     event.preventDefault(); if (busy || destroyed || activeSource) return
@@ -563,8 +610,9 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
       const intent = buildSuggestionIntent({ ...input, idempotencyKey })
       store(retryKey, JSON.stringify({ fingerprint, idempotencyKey }))
       busy = true; root.contentEditable = "false"; challenge?.submitting(); updateSubmit(); say("Sending for owner review…")
-      const action = new URL(form.dataset.action!); action.pathname = "/v2/suggestions"
-      const result = await submitSuggestionIntent(action.href, intent, fetch, token)
+      navigating = !finish.needsChallenge
+      const result = await finish.submit(intent, token)
+      if (!result.navigating) navigating = false
       if (destroyed) return
       if (result.accepted) {
         for (const view of views) view.model.reset()
@@ -574,7 +622,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
         entry.focus({ preventScroll: true })
       }
       say(result.message)
-    } catch (error) { if (!destroyed) say(error instanceof Error ? error.message : "Could not send. Retry safely.") }
+    } catch (error) { if (!destroyed) { navigating = false; say(error instanceof Error ? error.message : "Could not send. Retry safely.") } }
     finally { busy = false; if (!destroyed) { root.contentEditable = String(enabled && form.hidden); challenge?.reset(); updateSubmit() } }
   }
   try {
@@ -598,7 +646,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
   }
   const positionChrome = () => { positionSourceButton(); if (promptTarget && !prompt.hidden) showPrompt(promptTarget) }
   const outsidePrompt = (event: PointerEvent) => { if (!prompt.contains(event.target as Node)) hidePrompt() }
-  const unload = (event: BeforeUnloadEvent) => { if (operations().length) { event.preventDefault(); event.returnValue = "" } }
+  const unload = (event: BeforeUnloadEvent) => { if (!navigating && enabled && operations().length) { event.preventDefault(); event.returnValue = "" } }
   const leave = element("div", undefined, "cb-leave-guard"); leave.hidden = true
   const leavePanel = element("section"), leaveText = element("p"), stay = element("button", "Stay"), discardLeave = element("button", "Discard and leave")
   stay.type = discardLeave.type = "button"; leavePanel.append(leaveText, stay, discardLeave); leave.append(leavePanel)
@@ -620,7 +668,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     if (event.key === "Tab") { event.preventDefault(); (document.activeElement === stay ? discardLeave : stay).focus() }
   })
   const guardNavigation = (event: MouseEvent) => {
-    if (!operations().length || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    if (!enabled || !operations().length || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
     const anchor = (event.target as Element).closest<HTMLAnchorElement>("a[href]")
     if (!anchor || (enabled && root.contains(anchor)) || anchor.target === "_blank" || anchor.hasAttribute("download")) return
     const url = new URL(anchor.href, location.href)
@@ -651,13 +699,13 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
   cancel.addEventListener("click", onCancel); backdrop.addEventListener("click", onCancel)
   form.addEventListener("keydown", reviewKeys)
   form.addEventListener("submit", onSubmit)
-  render(); setMode(operations().length > 0)
+  render(); setMode((operations().length > 0 && stored(`${key}:paused`) !== "1") || (finish.label === "Save" && stored(`${key}:paused`) !== "1"))
   window.addCleanup(() => {
     document.removeEventListener("keydown", shortcuts, true); document.removeEventListener("pointerdown", outsidePrompt, true)
     document.removeEventListener("click", guardNavigation, true); window.removeEventListener("beforeunload", unload)
     window.removeEventListener("resize", positionChrome); window.removeEventListener("scroll", positionChrome, true)
     ui.markdown.removeEventListener("click", markdown); ui.undo.removeEventListener("click", undo); ui.redo.removeEventListener("click", redo)
-    prompt.remove(); leave.remove()
+    prompt.remove(); leave.remove(); cancelSheet.remove()
     destroyed = true; viewportUI.destroy(); challenge?.destroy(); closeSource(false)
     for (const { host, button } of blocks) { button.remove(); host.classList.remove("cb-source-pending", "cb-source-active") }
     root.removeEventListener("beforeinput", beforeInput); root.removeEventListener("keydown", keydown)

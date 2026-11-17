@@ -428,6 +428,14 @@ async function executeLocked(input, config, context, dependencies) {
   );
   let state = ensured.state;
   bindings = ensured.bindings;
+  // Owner-direct authority must survive every restart, including after the
+  // source effect but before commit/push. Never infer it from job state alone.
+  const durableSession = bindings?.session ?? await optionalArtifact(context, paths.session, options);
+  if (durableSession?.origin?.type === 'owner-direct') {
+    bindings ??= await boundInputs(input, config, context, paths, dependencies, options);
+    const { guardOwnerDirect } = await import('./owner-direct.js');
+    await guardOwnerDirect({ context, config, jobId, ...bindings });
+  }
   if (TERMINAL_NO_RESUME.has(state.state)) return pipelineSummary(state, paths);
   if (state.state === 'accepted') {
     bindings ??= await boundInputs(input, config, context, paths, dependencies, options);
@@ -501,8 +509,10 @@ async function executeLocked(input, config, context, dependencies) {
             );
           }
           if (bindings.operation.schemaVersion === 2) {
-            const { guardChangeSetApplication } = await import('./proposal-application.js');
-            await guardChangeSetApplication({ context, config, jobId, ...bindings });
+            const guard = bindings.session.origin?.type === 'owner-direct'
+              ? (await import('./owner-direct.js')).guardOwnerDirect
+              : (await import('./proposal-application.js')).guardChangeSetApplication;
+            await guard({ context, config, jobId, ...bindings });
           }
           // A publication source is an injected candidate, not a second source
           // authority. Recheck it at the final pre-effect gate, also on recovery.

@@ -4,14 +4,14 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, text: string, classNa
   const node = document.createElement(tag); node.textContent = text; node.className = className
   return node
 }
-export function createSuggestModeUI(entry: HTMLButtonElement, onToggle: () => void, onReview: () => void) {
+export function createSuggestModeUI(entry: HTMLButtonElement, onToggle: () => void, onReview: () => void, finishLabel = "Send") {
   const toolbar = el("div", "", "cb-suggest-toolbar")
   toolbar.setAttribute("role", "toolbar"); toolbar.setAttribute("aria-label", "Suggestion controls")
-  const toggle = el("button", "Suggesting", "cb-suggest-toggle")
-  toggle.type = "button"; toggle.setAttribute("aria-pressed", "false"); toggle.setAttribute("aria-label", "Turn suggesting off")
+  const toggle = el("button", "×", "cb-suggest-toggle")
+  toggle.type = "button"; toggle.setAttribute("aria-pressed", "false"); toggle.setAttribute("aria-label", "Cancel editing")
   const count = el("button", "0 changes", "cb-suggest-review")
   count.type = "button"; count.setAttribute("aria-expanded", "false")
-  const review = el("button", "Review & send", "cb-suggest-send-review")
+  const review = el("button", `${finishLabel} · 0`, "cb-suggest-send-review")
   review.type = "button"
   const markdown = el("button", "Markdown", "cb-suggest-markdown")
   const undo = el("button", "↶", "cb-suggest-undo"), redo = el("button", "↷", "cb-suggest-redo")
@@ -19,9 +19,12 @@ export function createSuggestModeUI(entry: HTMLButtonElement, onToggle: () => vo
     button.type = "button"; button.setAttribute("aria-label", name); button.title = name; button.disabled = true
   }
   markdown.type = "button"; markdown.disabled = true; markdown.title = "Place the caret in a block to edit its Markdown"
-  toolbar.append(toggle, undo, redo, markdown, count, review)
+  toolbar.append(undo, redo, markdown, count)
+  const finish = el("div", "", "cb-suggest-finish")
+  finish.setAttribute("role", "group"); finish.setAttribute("aria-label", "Finish editing")
+  finish.append(toggle, review)
   const hint = el("aside", "", "cb-suggest-help")
-  hint.append(el("p", "Tap text to edit. Changes are suggestions until the owner applies them.", ""))
+  hint.append(el("p", "Tap text to edit.", ""))
   const dismiss = el("button", "Got it", "cb-suggest-hint-dismiss")
   dismiss.type = "button"; hint.append(dismiss)
   let dismissed = false
@@ -48,29 +51,29 @@ export function createSuggestModeUI(entry: HTMLButtonElement, onToggle: () => vo
     try { localStorage.setItem(suggestingHintKey, "1") } catch { /* optional storage */ }
   }
   const enter = () => onToggle()
-  entry.textContent = "Suggest edits"
+  entry.textContent = "Edit"
   entry.addEventListener("click", enter); toggle.addEventListener("click", onToggle)
   count.addEventListener("click", showCards); review.addEventListener("click", onReview)
   collapse.addEventListener("click", closeCards); dismiss.addEventListener("click", dismissHint)
   window.addEventListener("resize", syncTray)
-  document.body.append(toolbar, hint, tray)
+  document.body.append(toolbar, finish, hint, tray)
   return {
-    toolbar, toggle, count, review, tray, cards, hint, markdown, undo, redo,
+    toolbar, finish, toggle, count, review, tray, cards, hint, markdown, undo, redo,
     setMode(on: boolean) {
       if (on && !enabled) expanded = window.innerWidth >= 1400
-      enabled = on; entry.hidden = on; toolbar.hidden = !on; hint.hidden = !on || dismissed
+      enabled = on; entry.hidden = on; toolbar.hidden = !on; finish.hidden = !on; hint.hidden = true
       toggle.setAttribute("aria-pressed", String(on))
       if (!on) expanded = false
       syncTray()
     },
-    setCount(n: number) { count.textContent = `${n} change${n === 1 ? "" : "s"}`; review.disabled = !n; title.textContent = `Your changes (${n})`; tray.classList.toggle("cb-suggest-tray-empty", n === 0) },
+    setCount(n: number) { review.textContent = `${finishLabel} · ${n}`; count.textContent = `${n} change${n === 1 ? "" : "s"}`; review.disabled = !n; title.textContent = `Your changes (${n})`; tray.classList.toggle("cb-suggest-tray-empty", n === 0) },
     destroy() {
       entry.hidden = false
       entry.removeEventListener("click", enter); toggle.removeEventListener("click", onToggle)
       count.removeEventListener("click", showCards); review.removeEventListener("click", onReview)
       collapse.removeEventListener("click", closeCards); dismiss.removeEventListener("click", dismissHint)
       window.removeEventListener("resize", syncTray)
-      toolbar.remove(); hint.remove(); tray.remove()
+      toolbar.remove(); finish.remove(); hint.remove(); tray.remove()
     },
   }
 }

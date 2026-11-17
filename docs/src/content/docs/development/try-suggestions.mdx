@@ -7,7 +7,7 @@ status: research
 tags: [setup, testing, contribution, governance]
 ---
 
-Try the complete suggestion loop in your own browser without changing your real vault or opening your owner configuration. By default, the launcher creates three short security notes, a fresh Git vault, a local bare remote, and a private owner workspace. You can instead rehearse on a read-only committed folder copy, described below. All three HTTP listeners bind **127.0.0.1 only**. Nothing is deployed.
+Try the complete suggestion loop in your own browser without changing your real vault or opening your owner configuration. By default, the launcher creates three short security notes, a fresh Git vault, a local bare remote, and a private owner workspace. You can instead rehearse on a read-only committed folder copy, described below. All three HTTP listeners bind **127.0.0.1 by default**; `--host PRIVATE_IPV4` selects one private address for a separate-device rehearsal. Nothing is deployed.
 
 This is a hands-on companion to [Suggestions on the private site](/cyberbaser/development/suggestions-on-the-private-site/), not the [first real application run](/cyberbaser/development/first-real-application/).
 
@@ -47,18 +47,34 @@ Only that folder's Markdown is copied, preserving exact paths and bytes, plus re
 
 The throwaway publication allowlist selects the chosen folder and generated front page. The real owner publication selector and projection still enforce **`publish: false` and `cb-publish: false`**; denied notes are copied into the disposable vault but are absent from the site and front-page listing. The normal projection independently determines which copied attachments reach the site. Markdown and referenced attachments each have a **50 MiB total cap**. The folder may contain at most **400 Markdown pages**, including denied notes; raise only that page-count cap with `--max-pages 800`, or choose a smaller folder. Symlinks and unsafe paths are refused.
 
-Start from the printed **site home** and choose a published page from its list. Follow the six steps below, but choose a short ordinary sentence and your own small correction instead of the synthetic MFA sentence. **Every edit, commit and push goes only to the throwaway copy and its local bare remote, never your source vault.** Loopback-only listeners, Ctrl-C cleanup, `--keep`, `--port` and optional `--challenge` modes work as before.
+Start from the printed **site home** and choose a published page from its list. Follow the six steps below, but choose a short ordinary sentence and your own small correction instead of the synthetic MFA sentence. **Every edit, commit and push goes only to the throwaway copy and its local bare remote, never your source vault.** Private-address listeners, Ctrl-C cleanup, `--keep`, `--port` and optional `--challenge` modes work as before.
 
 This is a partial copy: links and embeds into other folders will not resolve, and source pages are never rewritten to repair them. Existing content errors can still block projection or application. The current application route requires LF-only source and the normal 64 KiB source-edit limit; CRLF or larger notes retain their exact bytes in the copy but cannot be applied through this rehearsal. No Excalidraw exports, Canvas rendering or Dataview execution is added.
 
 ## Try the six steps
 
 1. **Sign in and start from the site home.** Open the bootstrap URL, which lands on the private site home, then choose **MFA methods**. You should see a short page containing the deliberately wrong sentence **SMS codes are phishing-resistant.**
-2. **Suggest the correction.** Select a sentence on the page and choose **Suggest edit** (or click the pencil next to a paragraph), edit the text in place, and send. For the sample MFA page, change **SMS codes are phishing-resistant.** to **SMS codes are not phishing-resistant.** Add a short explanation when asked. You should get a receipt. This creates a proposal, not a source edit.
+2. **Suggest the correction.** Choose the **Edit button**, tap into the rendered text and type, then choose **Send · N** and **Send suggestion**. For the sample MFA page, change **SMS codes are phishing-resistant.** to **SMS codes are not phishing-resistant.** Add a short explanation when asked. You should get a receipt. This creates a proposal, not a source edit.
 3. **Deliberately hit the page limit before applying.** Send two more distinct suggestions about that same page, with different explanations or replacements. The second attempt should get a receipt; the third should show the rate-limit message and create no additional proposal. The page budget is two attempts, including replays or later source-validation failures, not two successful edits. Do this before applying: the rebuild creates a new publication-bound page ID. The sender also has a three-attempt budget, so do not spend attempts on other pages first.
 4. **Review and Approve.** Open the printed **Proposals** URL. Open your first correction, inspect the before/after change, and choose **Approve**. The page is still unchanged; approval records the owner's decision only.
 5. **Apply to page.** On the approved receipt choose **Apply to page**, confirm, and follow the job. You should reach **Local rehearsal complete**. The exact splice, commit, push to the local bare remote, and private-site rebuild are real. Deployment and live confirmation are explicitly simulated.
 6. **Reload the private page.** Reload MFA methods. It should now say **SMS codes are not phishing-resistant.** Recovery codes and the other unchanged source bytes should stay unchanged. The second proposal may now be stale because it was bound to the old revision; it is not silently rebased.
+
+## Edit as the owner
+
+After signing in, use the small **Edit link** above the visitor **Edit button**. Both paths use the same rendered-page editor, with tracked changes, Undo/Redo, per-block Markdown and per-change Remove. The owner variant finishes with **Save · N**; the visitor variant finishes with **Send · N**. The private link checks the owner session before returning to the page editor. Public builds have no owner link.
+
+1. Make a rendered-text correction. For a different block, place the caret and choose the **Markdown** control to edit that block's exact source. Rendered and Markdown edits cannot mix within one block.
+2. Choose **Save · N**, inspect the contextual changes, then **Continue to Save**. This navigates to a separate owner-origin confirmation; it does not send a suggestion.
+3. Choose **Save** on that confirmation. One owner-direct authorization starts the ordinary exact-change job, commit, local push and rebuild. Visitor intake limits and bot checks do not apply to owner Save. Deployment and live verification remain simulated in this rehearsal.
+
+The **X** control exits immediately when there are no changes. Otherwise it offers **Discard**, **Save draft**, and **Keep editing**. Drafts stay in this tab's browser session, bound to the original source, not in the vault or a server inbox. Reopen Edit in that same tab to restore a draft. Closing the tab or changing the source can make it unavailable. A short expired or stale owner handoff must be reopened from the page editor.
+
+The finish controls sit at the bottom-right normally. While a touch editing surface has focus, they move to the visible viewport's top-right and the active line gets clearance below them. This does not depend on Safari reporting a smaller keyboard viewport. Chromium phone emulation and deterministic viewport shrink are tested; real iOS Safari keyboard acceptance is still required.
+
+**Edit whole file as Markdown** remains an advanced owner fallback in this suggestions-enabled rehearsal, not the default Edit destination. Private sites built without suggestions or without page provenance retain the working raw Edit destination; an independently enabled owner-only rendered editor is not implemented in this wave. Its Save and X controls stay fixed at the bottom-right rather than below the textarea. It retains the existing single-change validation limits.
+
+Reader scripts cannot read the HttpOnly owner session cookie, obtain its CSRF token or authorize a source write. Its top-level form POST stages only a bounded, expiring draft. The separate owner origin renders escaped text, requires its own session and CSRF for Save, and records the exact base, policy and operation digests. Recovery checks that immutable owner-direct record; visitor approval rules are unchanged.
 
 ## Optional bot-check rehearsal
 
@@ -99,7 +115,7 @@ The printed directory contains the disposable vault, local remote, owner config 
 ## Troubleshooting
 
 - **Missing dependencies or Quartz seed:** run the printed `--prepare` command. Preparation uses the existing pinned renderer setup and may need npm/Git network access. The launcher does not silently install anything.
-- **A port is occupied:** stop the other rehearsal, or choose another three consecutive ports, for example `bun run --cwd docs try:suggestions --port 46537`. Only loopback addresses are accepted; there is no host option.
+- **A port is occupied:** stop the other rehearsal, or choose another three consecutive ports, for example `bun run --cwd docs try:suggestions --port 46537`. Use `--host PRIVATE_IPV4` when another device needs access; public and wildcard addresses are refused.
 - **Proposals asks you to sign in:** use the bootstrap link in the same browser. The private reader page being accessible does not authenticate the separate owner origin. Enter **b** for a fresh one-time link, or run this launcher's printed `kill -USR1 <launcher-pid>` command and read its original output.
 - **A copied page link does not open from chat:** open the printed site home and use its page list. The reader repairs one extra encoding layer only, not repeated encoding or links outside this partial copy.
 - **The third suggestion is not accepted:** that is the intended page-limit check. Restart for a clean queue and limit state. Replays and malformed source-bound requests can use the budget too.

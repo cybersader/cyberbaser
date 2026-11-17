@@ -296,8 +296,10 @@ export async function resolveRenderedPageSlug({ siteRoot, ownerOrigin, relativeP
   if (typeof siteRoot !== 'string' || typeof ownerOrigin !== 'string' || typeof relativePath !== 'string') {
     fail('invalid-application-dependency', 'rendered slug resolution requires siteRoot, ownerOrigin, and relativePath');
   }
-  const prefix = `${ownerOrigin}/owner/edit?relativePath=${encodeURIComponent(relativePath)}`;
-  const needles = [`${prefix}&amp;slug=`, `${prefix}&slug=`];
+  const needles = ['edit', 'in-place'].flatMap(route => {
+    const prefix = `${ownerOrigin}/owner/${route}?relativePath=${encodeURIComponent(relativePath)}`;
+    return [`${prefix}&amp;slug=`, `${prefix}&slug=`];
+  });
   let found = null;
   const pending = [siteRoot];
   while (pending.length > 0) {

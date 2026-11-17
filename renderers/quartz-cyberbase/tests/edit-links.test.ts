@@ -34,13 +34,13 @@ assert.deepEqual(
 )
 
 const ownerOptions = { mode: "owner" as const, ownerOrigin: "http://127.0.0.1:4317" }
-const ownerLink = editLinkForPage(relativePath, slug, ownerOptions)
+const ownerLink = editLinkForPage(relativePath, slug, { ...ownerOptions, inPlace: true }, true)
 assert.deepEqual(ownerLink, {
-  href: "http://127.0.0.1:4317/owner/edit?relativePath=Research%20%26%20Notes%2F%F0%9F%9B%A1%EF%B8%8F%20comma%2C%20100%25.md&slug=Research-and-Notes%2Fshield-comma-100-percent",
+  href: "http://127.0.0.1:4317/owner/in-place?relativePath=Research%20%26%20Notes%2F%F0%9F%9B%A1%EF%B8%8F%20comma%2C%20100%25.md&slug=Research-and-Notes%2Fshield-comma-100-percent",
   external: false,
 })
 assert.ok(ownerLink)
-assert.ok(ownerLink.href.startsWith("http://127.0.0.1:4317/owner/edit?"))
+assert.ok(ownerLink.href.startsWith("http://127.0.0.1:4317/owner/in-place?"))
 assert.ok(!ownerLink.href.includes("localhost"))
 const ownerParams = new URL(ownerLink.href).searchParams
 assert.equal(ownerParams.get("relativePath"), relativePath)
@@ -113,3 +113,12 @@ for (const ciValue of ["1", "true", "TRUE", "yes"]) {
 }
 
 console.log("edit-link unit checks passed")
+
+// Both build capability and page provenance are required; neither is authority.
+for (const inPlace of [undefined, false, true]) {
+  for (const hasProvenance of [false, true]) {
+    const result = editLinkForPage(relativePath, slug, { ...ownerOptions, inPlace }, hasProvenance)
+    assert.equal(new URL(result!.href).pathname, inPlace && hasProvenance ? "/owner/in-place" : "/owner/edit")
+  }
+}
+assert.equal(new URL(editLinkForPage(relativePath, slug, publicOptions, true)!.href).host, "github.com")

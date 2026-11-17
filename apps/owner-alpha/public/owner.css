@@ -1111,3 +1111,25 @@ body.publication-document-review { height: 100dvh; min-height: 0; margin: 0; pad
 .publication-document-review [data-marks-visible="false"] .publication-added-block { border-right-color: transparent; }
 .publication-document-review [data-marks-visible="false"] .publication-change-label { display: none; }
 .publication-document-review [data-marks-visible="false"] .publication-block:has(> .publication-removal) { display: none; }
+
+/* Shared owner finish controls: never below a long source document. */
+.owner-finish { position: fixed; z-index: 50; bottom: 16px; right: 16px; display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 10px; background: #fff; color: #18202a; border: 1px solid #cbd2da; border-radius: 12px; box-shadow: 0 4px 24px #0002; }
+.owner-finish :is(button, a), .owner-cancel-sheet button { min-height: 44px; min-width: 44px; display: inline-flex; align-items: center; justify-content: center; }
+.direct-review { max-width: 760px; padding-bottom: 110px; }
+.direct-change { padding: 20px 0; border-bottom: 1px solid #cbd2da; }
+.direct-change h2 { font-size: 0.85rem; color: #4b5664; }
+.direct-change p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; }
+.direct-change del { color: #a32c32; background: #ffe4e5; }
+.direct-change ins { color: #087940; background: #d8f4df; }
+.owner-finish button[type=submit] { background: #0b6e50; border-color: #0b6e50; color: #fff; font-weight: 600; padding: 0 20px; border-radius: 8px; }
+.direct-change p { margin: 0; }
+#direct-form { border: 0; padding: 0; background: transparent; box-shadow: none; }
+.owner-cancel-sheet { border: 1px solid #cbd2da; border-radius: 14px; padding: 24px; max-width: calc(100vw - 24px); }
+.owner-cancel-sheet::backdrop { background: #0006; }
+.owner-cancel-sheet button { margin: 4px; }
+@media (max-width: 600px) {
+  .owner-finish { bottom: max(8px, env(safe-area-inset-bottom)); right: 8px; }
+  .owner-shell { padding-bottom: 110px; }
+  .owner-cancel-sheet { margin: auto 0 0; width: 100%; max-width: 100%; border-radius: 16px 16px 0 0; padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+  .owner-cancel-sheet button { display: block; width: 100%; margin: 8px 0 0; }
+}

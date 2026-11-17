@@ -30,6 +30,8 @@ export default ((opts: SuggestCorrectionOptions) => {
           data-action={binding.action}
           data-binding-digest={binding.bindingDigest}
           data-page-id={binding.pageId}
+          data-source-revision={opts.enabled ? opts.sourceRevision : undefined}
+          data-page-slug={fileData.slug}
           {...((fileData as any).sourceProvenance?.source ? {
             "data-source-editor-asset": `${pathToRoot(fileData.slug!)}/static/${sourceEditorAsset}`,
             "data-source-identity": JSON.stringify((fileData as any).sourceProvenance.source),
@@ -84,7 +86,7 @@ export default ((opts: SuggestCorrectionOptions) => {
 }
 .suggest-correction-form[hidden], .suggest-edit-floating[hidden], .suggest-edit-block[hidden],
 .cb-suggest-tray[hidden], .suggest-correction-form label[hidden], .suggest-correction-entry[hidden],
-.cb-suggest-toolbar[hidden], .cb-suggest-help[hidden], .cb-suggest-backdrop[hidden] { display: none; }
+.cb-suggest-finish[hidden], .cb-suggest-toolbar[hidden], .cb-suggest-help[hidden], .cb-suggest-backdrop[hidden] { display: none; }
 /* Enabled pages keep the forge route a quiet alternate link, never a second button. */
 body:has(.suggest-correction) .edit-this-page a { border: 0; padding: 0; background: transparent; font-weight: 400; text-decoration: underline; text-underline-offset: 3px; }
 body:has(.cb-suggesting) .popover, body:has(.cb-suggesting) .edit-this-page, .suggest-correction:has(.suggest-correction-entry[hidden]) { display: none; }
@@ -157,7 +159,7 @@ article.cb-suggesting, article.cb-suggesting:focus { outline: none; caret-color:
 .cb-suggest-backdrop { position: fixed; inset: 0; z-index: 89; background: #0005; }
 body.cb-suggest-review-open { overflow: hidden; }
 body.cb-suggest-review-open :is(.cb-suggest-help, .cb-suggest-status) { visibility: hidden; }
-.suggest-correction-form.cb-suggest-review-sheet { position: fixed; z-index: 90; inset: 0 0 0 auto; width: min(460px, 100%); height: 100dvh; overflow: auto; overscroll-behavior: contain; align-content: start; gap: 20px; padding: 28px 24px; border: 0; border-left: 1px solid var(--lightgray); border-radius: 0; box-shadow: -4px 0 32px #0002; }
+.suggest-correction-form.cb-suggest-review-sheet { position: fixed; z-index: 90; inset: 0 0 0 auto; width: min(460px, 100%); height: 100dvh; overflow: auto; overscroll-behavior: contain; flex-direction: column; gap: 20px; padding: 28px 24px; border: 0; border-left: 1px solid var(--lightgray); border-radius: 0; box-shadow: -4px 0 32px #0002; }
 .cb-suggest-review-sheet > h2 { font-size: 1.5rem; margin: 0; }
 .cb-suggest-summary { overflow-wrap: anywhere; }
 .cb-suggest-summary p { margin: 0; padding: 12px 0; border-bottom: 1px solid var(--lightgray); }
@@ -205,8 +207,8 @@ body.cb-suggest-review-open :is(.cb-suggest-help, .cb-suggest-status) { visibili
   .cb-source-editor { padding: 12px; }
 }
 /* A software keyboard pans Safari's visual viewport independently of fixed
-   layout chrome. Hide the toolbar; keep sheets within the visible viewport. */
-body.cb-suggest-keyboard-open :is(.cb-suggest-toolbar, .cb-suggest-help, .cb-suggest-status) { display: none; }
+   layout chrome. Keep finish controls and sheets within the visible viewport. */
+body.cb-suggest-keyboard-open :is(.cb-suggest-help, .cb-suggest-status) { display: none; }
 
 body.cb-suggest-keyboard-open .suggest-correction-form.cb-suggest-review-sheet { top: var(--cb-suggest-visible-top); bottom: auto; height: var(--cb-suggest-visible-height); padding-block: 16px; scroll-padding-block: 24px; }
 body.cb-suggest-keyboard-open .cb-suggest-tray { bottom: calc(var(--cb-suggest-keyboard-bottom) + 8px); max-height: calc(var(--cb-suggest-visible-height) - 16px); scroll-padding-block: 24px; }
@@ -273,6 +275,40 @@ body.cb-suggest-keyboard-open .cb-suggest-tray { bottom: calc(var(--cb-suggest-k
   .suggest-edit-block { padding-inline-end: 0; }
   .suggest-edit-mobile-visible { opacity: 1; position: static; float: right; margin-inline-start: 0.4rem; min-width: 40px; min-height: 40px; }
   .suggest-correction-form { width: 100%; }
+}
+
+/* Finish stays separate from utilities. Touch focus uses the visible top edge,
+   never Safari's unstable keyboard-relative bottom edge. */
+.cb-suggest-finish { position: fixed; z-index: 80; bottom: 16px; right: 16px; display: flex; align-items: center; gap: 8px; padding: 8px; background: var(--light); border: 1px solid var(--lightgray); border-radius: 12px; box-shadow: 0 4px 24px #0002; }
+.cb-suggest-finish button { min-width: 44px; min-height: 44px; padding: 8px 14px; border: 1px solid var(--lightgray); border-radius: 6px; background: var(--light); color: var(--secondary); font: 600 0.9rem var(--bodyFont); cursor: pointer; }
+.cb-suggest-finish .cb-suggest-toggle { font-size: 24px; padding-inline: 10px; }
+.cb-suggest-finish .cb-suggest-toggle::before { display: none; }
+.cb-suggest-finish .cb-suggest-send-review { background: var(--secondary); color: var(--light); white-space: nowrap; }
+.cb-suggest-finish button:disabled { opacity: .55; cursor: not-allowed; }
+.cb-suggest-toolbar { right: auto; left: 16px; }
+.cb-suggest-raw { font-size: .75rem; max-width: 160px; padding: 4px; }
+.cb-cancel-sheet { box-sizing: border-box; width: min(400px, calc(100vw - 24px)); padding: 24px; border: 1px solid var(--lightgray); border-radius: 14px; background: var(--light); color: var(--darkgray); }
+.cb-cancel-sheet::backdrop { background: #0006; }
+.cb-cancel-sheet h2 { margin: 0 0 20px; font-size: 1.25rem; }
+.cb-cancel-sheet button { display: block; min-height: 44px; width: 100%; margin: 8px 0 0; border: 1px solid var(--lightgray); border-radius: 6px; padding: 10px; background: var(--light); color: var(--secondary); font: 600 1rem var(--bodyFont); }
+.cb-cancel-sheet button:first-of-type { color: #a32c32; }
+.suggest-correction-form.cb-suggest-review-sheet:not([hidden]) { display: flex; }
+.cb-suggest-review-sheet > * { flex-shrink: 0; }
+.cb-suggest-review-sheet .suggest-correction-actions { margin-top: auto; position: sticky; bottom: 0; padding-block: 12px; background: var(--light); display: flex; flex-direction: row; flex-wrap: nowrap; justify-content: flex-end; align-items: center; }
+.cb-suggest-review-sheet .suggest-correction-actions button[type='submit'] { order: 2; }
+body.cb-suggest-review-open :is(.cb-suggest-finish, .cb-suggest-toolbar) { visibility: hidden; }
+body.cb-suggest-keyboard-open .cb-suggest-finish { top: calc(var(--cb-suggest-visible-top, 0px) + max(8px, env(safe-area-inset-top, 0px))); bottom: auto; right: 8px; }
+body.cb-suggest-keyboard-open .cb-suggest-toolbar { top: calc(var(--cb-suggest-visible-top, 0px) + max(8px, env(safe-area-inset-top, 0px))); bottom: auto; }
+@media (max-width: 800px) {
+  .cb-suggest-toolbar { inset: auto auto 8px 8px; display: flex; width: auto; padding: 8px 4px; gap: 0; border: 1px solid var(--lightgray); border-radius: 12px; }
+  .cb-suggest-toolbar button { min-width: 44px; min-height: 44px; padding-inline: 4px; }
+  .cb-suggest-toolbar .cb-suggest-review { display: none; }
+  .cb-suggest-toolbar .cb-suggest-markdown { font-size: 0; }
+  .cb-suggest-toolbar .cb-suggest-markdown::after { content: '</>'; font-size: 16px; }
+  .cb-suggest-raw { position: absolute; bottom: 100%; left: 0; width: 160px; background: var(--light); border: 1px solid var(--lightgray); border-radius: 6px; padding: 6px; }
+  body.cb-suggest-keyboard-open .cb-suggest-raw { display: none; }
+  .cb-suggest-finish { bottom: max(8px, env(safe-area-inset-bottom, 0px)); right: 8px; }
+  .cb-cancel-sheet { margin: auto 0 0; width: 100%; max-width: 100%; border-radius: 16px 16px 0 0; padding-bottom: max(24px, env(safe-area-inset-bottom, 0px)); }
 }
 `
 
