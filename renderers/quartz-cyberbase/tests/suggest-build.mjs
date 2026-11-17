@@ -241,8 +241,32 @@ try {
     const capture = async state => {
       await visual.screenshot({ path: path.join(screenshots, `${name}-${state}.png`), animations: "disabled" })
     }
+    // Native keyboards are not available in headless Chromium. Exercise the real
+    // DOM/CSS controller against the same visual-viewport geometry deterministically.
+    const keyboard = async open => {
+      await visual.evaluate(open => {
+        const viewport = window.visualViewport
+        if (open) {
+          window.__cbViewportDescriptors = ["height", "offsetTop"].map(key => [key, Object.getOwnPropertyDescriptor(viewport, key)])
+          Object.defineProperty(viewport, "height", { configurable: true, value: Math.floor(innerHeight * 0.55) })
+          Object.defineProperty(viewport, "offsetTop", { configurable: true, value: 40 })
+        } else {
+          // Focus, not viewport geometry, owns touch chrome visibility.
+          document.activeElement?.blur()
+          for (const [key, descriptor] of window.__cbViewportDescriptors) {
+            if (descriptor) Object.defineProperty(viewport, key, descriptor)
+            else delete viewport[key]
+          }
+        }
+        viewport.dispatchEvent(new Event("resize"))
+      }, open)
+      await visual.waitForFunction(open => open
+        ? document.body.classList.contains("cb-suggest-keyboard-open") && document.body.style.getPropertyValue("--cb-suggest-visible-height") === `${Math.floor(innerHeight * 0.55)}px`
+        : !document.body.classList.contains("cb-suggest-keyboard-open"), open)
+    }
     await visual.goto(origin)
     await visual.waitForSelector(".cb-suggest-toggle", { state: "attached" })
+    assert.equal(await visual.locator(".cb-suggest-viewport-debug").count(), 0, "diagnostics are absent without the opt-in query")
     assert.equal(await visual.locator(".suggest-correction-entry:visible").count(), 1)
     assert.equal(await visual.locator(".cb-suggest-toolbar").isVisible(), false)
     await capture("01-off")
@@ -266,6 +290,19 @@ try {
     assert.ok(await visual.locator(".cb-source-open:visible").count() <= 1)
     assert.equal(await visual.locator(".cb-suggest-tray").isVisible(), false, "cards start collapsed on phone and medium desktop")
     await capture("03-two-edits")
+    if (name === "iphone13") {
+      await visual.locator(".page .center > article").focus()
+      await visual.waitForFunction(() => document.body.classList.contains("cb-suggest-keyboard-open"))
+      assert.equal(await visual.locator(".cb-suggest-toolbar").isVisible(), false, "touch editor focus hides chrome before any viewport resize")
+      assert.equal(await visual.evaluate(() => Object.hasOwn(visualViewport, "height")), false, "focus rule does not depend on synthetic geometry")
+      await capture("12-touch-focus-no-resize")
+      await keyboard(true)
+      assert.equal(await visual.locator(".cb-suggest-toolbar").isVisible(), false)
+      assert.ok(await visual.locator(".cb-source-active > .cb-source-open").evaluate(el => getComputedStyle(el, "::after").content.includes("2 changes")))
+      await capture("08-keyboard-edit-simulated")
+      await keyboard(false)
+      assert.equal(await visual.locator(".cb-suggest-toolbar").isVisible(), true)
+    }
     await visual.locator(".cb-suggest-review").click()
     await capture("04-changes-expanded")
     const trayBox = await visual.locator(".cb-suggest-tray").boundingBox()
@@ -276,11 +313,29 @@ try {
       assert.ok(textBox.x + textBox.width <= trayBox.x || textBox.y + textBox.height <= trayBox.y, "medium desktop cards do not cover article")
     }
     await visual.locator(".cb-suggest-card textarea").first().fill("A clearer greeting.")
+    if (name === "iphone13") {
+      await keyboard(true)
+      const field = await visual.locator(".cb-suggest-card textarea").first().boundingBox()
+      const visibleBottom = await visual.evaluate(() => visualViewport.offsetTop + visualViewport.height)
+      assert.ok(field.y + field.height <= visibleBottom - 20, "comment stays above simulated keyboard")
+      await capture("09-keyboard-comment-simulated")
+      await keyboard(false)
+    }
     await visual.locator(".cb-suggest-tray-close").click()
     await visual.locator(".cb-suggest-send-review").click()
     await visual.locator("input[name=rationale]").fill("Make the introduction clearer.")
     await visual.locator("input[name=evidence]").fill("https://example.org/reference")
     await capture("05-review-send")
+    if (name === "iphone13") {
+      await keyboard(true)
+      const sheet = await visual.locator(".cb-suggest-review-sheet").boundingBox()
+      const field = await visual.locator("input[name=evidence]").boundingBox()
+      const visible = await visual.evaluate(() => ({ top: visualViewport.offsetTop, bottom: visualViewport.offsetTop + visualViewport.height, height: visualViewport.height }))
+      assert.equal(sheet.y, visible.top); assert.equal(sheet.height, visible.height)
+      assert.ok(field.y >= visible.top && field.y + field.height <= visible.bottom - 20, "review input stays in visible viewport")
+      await capture("10-keyboard-review-simulated")
+      await keyboard(false)
+    }
     if (name === "iphone13") {
       const box = await visual.locator(".cb-suggest-review-sheet").boundingBox()
       assert.equal(box.x, 0); assert.equal(box.y, 0)
@@ -317,9 +372,26 @@ try {
     await visual.waitForFunction(() => document.querySelector(".cb-suggest-status")?.textContent.includes("Q-built-page"))
     assert.equal(body.operations.length, 2)
     assert.equal(await visual.locator("article ins, article del").count(), 0)
+    if (name === "iphone13") {
+      await visual.goto(`${origin}?cbdebug=viewport`)
+      await visual.waitForSelector(".cb-suggest-viewport-debug")
+      assert.match(await visual.locator(".cb-suggest-viewport-debug").textContent(), /pointer coarse: true/)
+      await visual.locator(".suggest-correction-entry").click()
+      await visual.locator(".page .center > article").focus()
+      await visual.waitForFunction(() => document.querySelector(".cb-suggest-viewport-debug")?.textContent.includes("chrome hidden: true"))
+      for (const label of ["innerHeight:", "visualViewport.height:", "visualViewport.offsetTop:", "visualViewport.scale:", "activeElement: ARTICLE"]) {
+        assert.ok((await visual.locator(".cb-suggest-viewport-debug").textContent()).includes(label), label)
+      }
+      await capture("11-viewport-debug")
+      await visual.evaluate(() => document.activeElement.blur())
+      await visual.waitForFunction(() => document.querySelector(".cb-suggest-viewport-debug")?.textContent.includes("chrome hidden: false"))
+      await visual.goto(origin)
+      await visual.waitForSelector(".cb-suggest-toggle", { state: "attached" })
+      assert.equal(await visual.locator(".cb-suggest-viewport-debug").count(), 0)
+    }
     await visualContext.close()
   }
-  console.log("suggest-build mobile-polish: iPhone 13 emulation + 1280x900 desktop, single entry, 2 edits, collapsed/expanded cards, review/send, source editor, dark theme, 360/390/430/800/1024/1280 widths, persisted hint, fixture sends and screenshots passed")
+  console.log("suggest-build mobile-polish: iPhone 13 emulation + 1280x900 desktop, single entry, 2 edits, collapsed/expanded cards, review/send, source editor, dark theme, 360/390/430/800/1024/1280 widths, persisted hint, fixture sends, touch-focus hiding without viewport resize, query-only live diagnostics, simulated software-keyboard editor/comment/review geometry and screenshots passed")
   // Mutated text after mapping refuses a suggestion without inventing offsets.
   await page.locator(".suggest-correction-entry").first().click()
   await page.evaluate(() => { document.querySelector("article [data-cb-view]").firstChild.textContent = "stale DOM" })

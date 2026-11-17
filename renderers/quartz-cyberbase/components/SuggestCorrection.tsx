@@ -177,6 +177,12 @@ body.cb-suggest-review-open :is(.cb-suggest-help, .cb-suggest-status) { visibili
   .cb-suggest-review-sheet .suggest-correction-actions { flex-direction: column; }
   .cb-source-editor { padding: 12px; }
 }
+/* A software keyboard pans Safari's visual viewport independently of fixed
+   layout chrome. Hide the toolbar; keep sheets within the visible viewport. */
+body.cb-suggest-keyboard-open :is(.cb-suggest-toolbar, .cb-suggest-help, .cb-suggest-status) { display: none; }
+body.cb-suggest-keyboard-open .cb-source-open::after { content: " · " attr(data-cb-change-count); font-weight: 400; }
+body.cb-suggest-keyboard-open .suggest-correction-form.cb-suggest-review-sheet { top: var(--cb-suggest-visible-top); bottom: auto; height: var(--cb-suggest-visible-height); padding-block: 16px; scroll-padding-block: 24px; }
+body.cb-suggest-keyboard-open .cb-suggest-tray { bottom: calc(var(--cb-suggest-keyboard-bottom) + 8px); max-height: calc(var(--cb-suggest-visible-height) - 16px); scroll-padding-block: 24px; }
 .suggest-correction-form > * { margin: 0; min-width: 0; }
 .suggest-correction-status:empty { display: none; }
 .suggest-correction-form label { display: grid; gap: 0.25rem; font: 600 0.9rem var(--headerFont); }

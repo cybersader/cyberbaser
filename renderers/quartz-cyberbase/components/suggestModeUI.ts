@@ -69,7 +69,7 @@ export function createSuggestModeUI(entry: HTMLButtonElement, onToggle: () => vo
   }
 }
 /** Reveal a single chip, without adding flow-layout controls below every block. */
-export function activeSourceBlock(blocks: { host: HTMLElement; button: HTMLButtonElement }[]) {
+export function activeSourceBlock(blocks: { host: HTMLElement; button: HTMLButtonElement }[], onActive?: (button: HTMLButtonElement) => void) {
   let active: (typeof blocks)[number] | undefined
   return (target?: Node | null) => {
     const next = target ? blocks.find(({ host, button }) => host === target || button === target || host.contains(target)) : undefined
@@ -79,6 +79,6 @@ export function activeSourceBlock(blocks: { host: HTMLElement; button: HTMLButto
     if (next === active) return
     if (active) { active.button.hidden = true; active.host.classList.remove("cb-source-active") }
     active = next
-    if (active) { active.button.hidden = false; active.host.classList.add("cb-source-active") }
+    if (active) { active.button.hidden = false; active.host.classList.add("cb-source-active"); onActive?.(active.button) }
   }
 }

@@ -1,3 +1,4 @@
+import { setupSuggestViewport } from "./suggestModeViewport"
 import { createSuggestModeUI, activeSourceBlock } from "./suggestModeUI"
 import { SparseRun, sortedOperations, verifiedLeafNode, verifiedBlockNode, verifyManifest, utf8, validateOperations } from "./suggestModeModel"
 import type { Operation, SourceIdentity, ProvenanceBlock } from "./suggestModeModel"
@@ -102,7 +103,8 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
   const status = element("p", "", "cb-suggest-status"); status.setAttribute("role", "status"); status.setAttribute("aria-live", "polite")
   const formStatus = form.querySelector<HTMLElement>(".suggest-correction-status")!
   const ui = createSuggestModeUI(entry, () => onToggle(), () => onReview())
-  const activateBlock = activeSourceBlock(blocks)
+  const activateBlock = activeSourceBlock(blocks, button => { button.dataset.cbChangeCount = ui.count.textContent ?? "" })
+  const viewportUI = setupSuggestViewport(root, form, ui.tray)
   const backdrop = element("div", undefined, "cb-suggest-backdrop"); backdrop.hidden = true
   const formMarker = document.createComment("suggestion review")
   form.before(formMarker); form.classList.add("cb-suggest-review-sheet")
@@ -132,6 +134,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     submit.textContent = `Send ${count} suggestion${count === 1 ? "" : "s"}`
     submit.disabled = busy || !!activeSource || !count || (!!challenge && !challenge.response())
     ui.setCount(count)
+    for (const button of root.querySelectorAll<HTMLElement>(".cb-source-active > .cb-source-open")) button.dataset.cbChangeCount = ui.count.textContent ?? ""
     ui.review.disabled = busy || !!activeSource || !count
   }
   const setMode = (on: boolean) => {
@@ -141,6 +144,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     else { root.removeAttribute("role"); root.removeAttribute("aria-multiline") }
     ui.setMode(on)
     if (!on) activateBlock()
+    viewportUI.refresh()
   }
   const showReview = (show: boolean) => {
     form.hidden = !show; backdrop.hidden = !show
@@ -148,7 +152,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     ui.review.setAttribute("aria-expanded", String(show))
     root.contentEditable = String(enabled && !busy && !activeSource && !show)
     if (show && !challenge) challenge = setupSuggestionChallenge(form, submit, say, () => !busy && operations().length > 0)
-    updateSubmit()
+    updateSubmit(); viewportUI.refresh()
     if (show) cancel.focus({ preventScroll: true })
     else if (enabled) ui.review.focus({ preventScroll: true })
   }
@@ -474,7 +478,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
   form.addEventListener("submit", onSubmit)
   render(); setMode(operations().length > 0)
   window.addCleanup(() => {
-    destroyed = true; challenge?.destroy(); closeSource(false)
+    destroyed = true; viewportUI.destroy(); challenge?.destroy(); closeSource(false)
     for (const { host, button } of blocks) { button.remove(); host.classList.remove("cb-source-pending", "cb-source-active") }
     root.removeEventListener("beforeinput", beforeInput); root.removeEventListener("keydown", keydown)
     root.removeEventListener("click", click); root.removeEventListener("paste", paste); root.removeEventListener("drop", drop)
