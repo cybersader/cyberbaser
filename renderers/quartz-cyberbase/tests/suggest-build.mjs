@@ -5,12 +5,22 @@ import path from "node:path"
 import os from "node:os"
 import http from "node:http"
 import assert from "node:assert/strict"
+import crypto from "node:crypto"
 import { execFileSync } from "node:child_process"
 import { fileURLToPath, pathToFileURL } from "node:url"
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..")
 const renderer = path.join(repo, "renderers/quartz-cyberbase")
-const temp = fs.mkdtempSync(path.join(os.tmpdir(), "cyberbaser-suggesting-"))
+const temp = process.env.CYBERBASER_SUGGEST_TEST_DIR ?? fs.mkdtempSync(path.join(os.tmpdir(), "cyberbaser-suggesting-"))
+fs.mkdirSync(temp, { recursive: true })
 const quartz = path.join(temp, "quartz"), input = path.join(temp, "input"), output = path.join(temp, "output")
+const clientFingerprint = () => {
+  const parts = []
+  const visit = dir => { for (const name of fs.readdirSync(dir).sort()) { const file = path.join(dir, name); if (fs.statSync(file).isDirectory()) visit(file); else parts.push(path.relative(renderer, file), fs.readFileSync(file)) } }
+  visit(path.join(renderer, "components"))
+  const digest = crypto.createHash("sha256"); for (const part of parts) digest.update(part); return digest.digest("hex")
+}
+const browserOnly = process.argv.includes("--browser-only")
+if (browserOnly) assert.ok(process.env.CYBERBASER_SUGGEST_TEST_DIR, "browser-only requires an explicit retained synthetic build directory")
 const original = "---\ntitle: Suggesting fixture\ndate: 2020-01-01\n---\n\nHello **brown** [friendly](https://example.org).\n\nA separate paragraph with 😀 text.\n\n[[target]]\n\n## Alternatives\n\n- [Mobile option](https://example.org/mobile): $2.99/Monthly | $24.99\n- [Desktop option](https://example.org/desktop): a physical macro pad.\n\n$x + y$\n\n<style>.fixture-only { color: inherit; }</style>\n" + "\n> [!tip] Custom title\n> Callout body.\n\n$$\nx + y\n$$\n\nRefused %% private fixture comment %% text.\n\n| Header | Value |\n| --- | --- |\n| Cell | One |\n"
 const originalBytes = original.replace(/\n/gu, "\r\n")
 let body, browser
@@ -29,7 +39,10 @@ const server = http.createServer(async (req, res) => {
   const types = { ".json": "application/json", ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml" }
   res.writeHead(200, { "content-type": types[path.extname(file)] ?? "application/octet-stream" }); fs.createReadStream(file).pipe(res)
 })
-await new Promise(resolve => server.listen(0, "127.0.0.1", resolve))
+const savedBuild = browserOnly ? JSON.parse(fs.readFileSync(path.join(temp, "browser-build.json"), "utf8")) : undefined
+if (savedBuild) assert.equal(savedBuild.clientFingerprint, clientFingerprint(), "retained browser build is stale; changed components require a fresh build")
+const savedPort = savedBuild?.port ?? 0
+await new Promise(resolve => server.listen(savedPort, "127.0.0.1", resolve))
 const origin = `http://127.0.0.1:${server.address().port}`
 const env = {
   ...process.env, QUARTZ_OFFLINE: "1", QUARTZ_SEED_DIR: process.env.QUARTZ_SEED_DIR ?? path.join(repo, ".workspace/suggestions-rehearsal-renderer"),
@@ -44,12 +57,15 @@ function run(command, args, cwd = repo) {
   catch (error) { console.error(error.stdout?.toString(), error.stderr?.toString()); throw error }
 }
 try {
+  if (!browserOnly) {
   fs.mkdirSync(input)
   fs.writeFileSync(path.join(input, "index.md"), originalBytes)
   fs.writeFileSync(path.join(input, "target.md"), "---\ntitle: Target\ndate: 2020-01-01\n---\n\nTarget page text.\n")
   fs.writeFileSync(path.join(input, "third.md"), "---\ntitle: Third\ndate: 2020-01-01\n---\n\nThird page text.\n")
   run("bash", [path.join(renderer, "setup.sh"), quartz])
   run("node", [path.join(quartz, "quartz/bootstrap-cli.mjs"), "build", "-d", input, "-o", output, "--concurrency", "1"], quartz)
+  fs.writeFileSync(path.join(temp, "browser-build.json"), JSON.stringify({ port: server.address().port, clientFingerprint: clientFingerprint() }))
+  }
   assert.ok(fs.existsSync(path.join(output, "index.provenance.json")))
   const provenance = JSON.parse(fs.readFileSync(path.join(output, "index.provenance.json"), "utf8"))
   assert.equal(provenance.version, 2)
@@ -60,14 +76,24 @@ try {
     assert.ok(block, `Missing editable source block ${needle}`)
     return { block, button: { click: async () => {
       const host = page.locator(".page .center > article.popover-hint").locator(`[data-cb-node="${block.parent}"]`)
-      await host.hover({ position: { x: 5, y: 5 } })
-      await host.locator(":scope > .cb-source-open").click()
+      await host.evaluate(el => {
+        document.querySelector("article").focus()
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), text = walker.nextNode()
+        const range = document.createRange(); range.setStart(text ?? el, 0); range.collapse(true)
+        getSelection().removeAllRanges(); getSelection().addRange(range)
+        el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }))
+      })
+      await page.locator(".cb-source-open:visible").click()
     } } }
   }
   const { chromium, devices } = await import(pathToFileURL(path.join(repo, "docs/node_modules/@playwright/test/index.mjs")).href)
   browser = await chromium.launch({ headless: true })
   const context = await browser.newContext({ viewport: { width: 1680, height: 1050 } })
   const page = await context.newPage()
+  let unloadPrompts = 0
+  page.on("dialog", dialog => { if (dialog.type() === "beforeunload") unloadPrompts++; return dialog.accept() })
+  const affordanceShots = path.join(repo, ".workspace/concrete-flow/sol-affordance")
+  fs.mkdirSync(affordanceShots, { recursive: true })
   const errors = [], blocked = [], editorRequests = []
   page.on("request", request => { if (/\/static\/source-editor\./u.test(request.url())) editorRequests.push(request.url()) })
   page.on("pageerror", error => errors.push(error.message))
@@ -92,11 +118,56 @@ try {
       getSelection().removeAllRanges(); getSelection().addRange(range)
     }, { needle, a, b, tag })
   }
+  // Hover is inert and must not move later content or reveal a button.
+  const later = page.locator("article p").filter({ hasText: "A separate" }).first()
+  const beforeHover = await later.evaluate(el => el.getBoundingClientRect().y)
+  await page.locator("article p").filter({ hasText: "Hello" }).first().hover()
+  assert.equal(await later.evaluate(el => el.getBoundingClientRect().y), beforeHover)
+  assert.equal(await page.locator(".cb-source-open:visible").count(), 0)
+  await select("Hello", 5, 5)
+  await page.waitForSelector(".cb-source-open:visible")
+  for (const width of [1280, 1024]) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.waitForFunction(() => {
+      const button = document.querySelector(".cb-source-open:not([hidden])"), host = document.querySelector(".cb-source-active")
+      return button && host && Math.abs(button.getBoundingClientRect().left - (host.getBoundingClientRect().left - 38)) < 1
+    })
+    const box = await page.locator(".cb-source-open:not([hidden])").boundingBox()
+    const block = await page.locator(".cb-source-active").boundingBox()
+    assert.ok(box.x >= 0 && box.x + box.width <= block.x - 4, `gutter at ${width}: ${JSON.stringify({ box, block })}`)
+    const collision = await page.evaluate(() => {
+      const button = document.querySelector(".cb-source-open:not([hidden])").getBoundingClientRect()
+      return [...document.querySelectorAll(".sidebar.left a, .sidebar.left button, .sidebar.left input")].some(el => {
+        const r = el.getBoundingClientRect(); return r.width && r.height && r.right > button.left && r.left < button.right && r.bottom > button.top && r.top < button.bottom
+      })
+    })
+    assert.equal(collision, false, `no sidebar collision at ${width}`)
+    if (width === 1280) await page.screenshot({ path: path.join(affordanceShots, "desktop-caret-1280.png") })
+  }
+  await page.locator(".cb-suggest-markdown").click()
+  await page.getByRole("textbox", { name: "Markdown source for this block" }).waitFor()
+  await page.locator(".cb-source-cancel").click()
+  await select("Hello", 5, 5); await page.keyboard.press("Control+Shift+M")
+  await page.getByRole("textbox", { name: "Markdown source for this block" }).waitFor()
+  await page.locator(".cb-source-cancel").click()
+  await page.setViewportSize({ width: 1680, height: 1050 })
   await select("Hello", 5, 5); await page.keyboard.type(", reader")
+  await page.keyboard.press("Control+z")
+  assert.equal(await page.locator(".cb-suggest-card").count(), 0, "consecutive typing is one undo step")
+  await page.locator(".cb-suggest-redo").click()
+  assert.equal(await page.locator("article ins").textContent(), ", reader")
+  await page.evaluate(() => document.querySelector("article").dispatchEvent(new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "historyUndo" })))
+  assert.equal(await page.locator(".cb-suggest-card").count(), 0)
+  await page.evaluate(() => document.querySelector("article").dispatchEvent(new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "historyRedo" })))
+  assert.equal(await page.locator(".cb-suggest-card").count(), 1)
   await select("brown", 0, 5); await page.keyboard.type("red")
   await select("friendly", 0, 6); await page.keyboard.press("Backspace")
   assert.equal(await page.locator(".cb-suggest-card").count(), 3)
   assert.equal(await page.locator("article strong ins").textContent(), "red")
+  assert.equal(await page.locator("article a del").textContent(), "friend")
+  await page.keyboard.press("Control+z")
+  assert.equal(await page.locator("article a del").count(), 0)
+  await page.keyboard.press("Control+y")
   assert.equal(await page.locator("article a del").textContent(), "friend")
   // Reproduce the real-page refusal: screenshot caret cleanup adds style=""
   // to contenteditable=false deletion marks. This must not stale the source.
@@ -109,11 +180,11 @@ try {
   // Newlines, cut and IME follow the same proposal route, never native DOM writes.
   await select("separate", 0, 0); await page.keyboard.press("Enter")
   assert.equal(await page.locator(".cb-suggest-card").count(), 4)
-  await page.locator(".cb-suggest-card").last().getByText("Discard", { exact: true }).click()
+  await page.locator(".cb-suggest-card").last().getByText("Remove", { exact: true }).click()
   await select("separate", 0, 8)
   await page.evaluate(() => document.querySelector("article").dispatchEvent(new ClipboardEvent("cut", { bubbles: true, cancelable: true, clipboardData: new DataTransfer() })))
   assert.equal(await page.locator(".cb-suggest-card").count(), 4)
-  await page.locator(".cb-suggest-card").last().getByText("Discard", { exact: true }).click()
+  await page.locator(".cb-suggest-card").last().getByText("Remove", { exact: true }).click()
   await select("separate", 0, 0)
   await page.evaluate(() => {
     const root = document.querySelector("article")
@@ -122,7 +193,7 @@ try {
     root.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true, data: "中" }))
   })
   assert.equal(await page.locator(".cb-suggest-card").count(), 4)
-  await page.locator(".cb-suggest-card").last().getByText("Discard", { exact: true }).click()
+  await page.locator(".cb-suggest-card").last().getByText("Remove", { exact: true }).click()
   const storage = await page.evaluate(() => Object.keys(sessionStorage).filter(key => key.startsWith("cyberbaser:suggesting:v2:")).map(key => [key, sessionStorage.getItem(key)]))
   assert.equal(storage.length, 1)
   const saved = JSON.parse(storage[0][1])
@@ -134,6 +205,7 @@ try {
   }, Buffer.from(originalBytes)).toString()
   assert.equal(candidate, originalBytes.replace("Hello", "Hello, reader").replace("**brown**", "**red**").replace("[friendly]", "[ly]"))
   await page.reload(); await page.waitForSelector(".cb-suggest-card")
+  assert.ok(unloadPrompts > 0, "unsent changes guard full reload")
   assert.equal(await page.locator(".cb-suggest-card").count(), 3)
   await page.setViewportSize({ width: 390, height: 844 })
   await page.waitForFunction(() => document.querySelector(".cb-suggest-tray").classList.contains("cb-suggest-bottom-tray"))
@@ -141,25 +213,53 @@ try {
   // Real Quartz SPA cleanup restores old nodes and installs exactly one editor.
   await page.locator(".cb-suggest-toggle").click()
   await page.locator("article a").filter({ hasText: "target" }).first().click()
+  await page.locator(".cb-leave-guard:visible").waitFor()
+  assert.equal(await page.locator(".cb-leave-guard p").textContent(), "You have 3 unsent suggestions. Leave and discard them?")
+  await page.screenshot({ path: path.join(affordanceShots, "leave-confirm.png") })
+  await page.getByRole("button", { name: "Stay", exact: true }).click()
+  assert.equal(await page.locator(".cb-suggest-card").count(), 3)
+  const draftForBack = await page.evaluate(() => Object.entries(sessionStorage))
+  await page.locator("article a").filter({ hasText: "target" }).first().click()
+  await page.getByRole("button", { name: "Discard and leave", exact: true }).click()
   await page.waitForURL(`${origin}/target`)
   await page.waitForSelector(".cb-suggest-toggle", { state: "attached" })
   assert.equal(await page.locator(".cb-suggest-tray").count(), 1)
-  await page.goBack(); await page.waitForSelector(".cb-suggest-card")
+  // With no changes, suggesting does not guard an internal navigation.
+  await page.locator(".suggest-correction-entry").click()
+  await page.evaluate(() => { const a = document.createElement("a"); a.href = "/third"; a.id = "fixture-navigation"; a.textContent = "Third"; document.body.append(a) })
+  await page.locator("#fixture-navigation").click(); await page.waitForURL(`${origin}/third`)
+  assert.equal(await page.locator(".cb-leave-guard:visible").count(), 0)
+  await page.evaluate(entries => { for (const [key, value] of entries) sessionStorage.setItem(key, value) }, draftForBack)
+  await page.goto(origin); await page.waitForSelector(".cb-suggest-card")
   assert.equal(await page.locator(".cb-suggest-card").count(), 3)
   assert.equal(await page.locator(".cb-suggest-toggle").count(), 1)
-  // The untouched page and rendered-only suggestion flow never fetch CM6.
-  assert.equal(editorRequests.length, 0)
+  // Only the earlier explicit Markdown opening fetched CM6 so far.
+  assert.equal(editorRequests.length, 1)
   await sourceBlock("Hello").button.click()
   assert.equal(await page.locator(".cb-source-editor").count(), 0)
   assert.match(await page.locator(".cb-suggest-status").textContent(), /Discard the rendered-text edits/)
-  assert.equal(editorRequests.length, 0)
+  assert.equal(editorRequests.length, 1)
   // A target-derived wikilink opens the exact source, not an invented rendered mapping.
   const unmapped = page.locator("article .cb-suggest-unmapped").filter({ hasText: "target" }).first()
+  await page.setViewportSize({ width: 1280, height: 900 })
   await unmapped.click()
+  await page.locator(".cb-markdown-prompt:visible").waitFor()
+  assert.equal(await page.locator(".cb-markdown-prompt p").textContent(), "This part comes from Markdown.")
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.screenshot({ path: path.join(affordanceShots, "contextual-popover.png") })
+  await page.keyboard.press("Escape")
+  assert.equal(await page.locator(".cb-markdown-prompt").isVisible(), false)
+  await unmapped.click(); await select("Hello", 0, 0)
+  await page.waitForFunction(() => document.querySelector(".cb-markdown-prompt").hidden)
+  await unmapped.click()
+  await page.locator("h1.article-title").first().click()
+  assert.equal(await page.locator(".cb-markdown-prompt").isVisible(), false)
+  await unmapped.click()
+  await page.getByRole("button", { name: "Edit Markdown", exact: true }).click()
   const editor = page.getByRole("textbox", { name: "Markdown source for this block" })
   await editor.waitFor()
-  assert.equal(editorRequests.length, 1)
-  assert.equal(await page.locator(".cb-source-editor > strong").textContent(), "Editing Markdown source")
+  assert.equal(editorRequests.length, 2)
+  assert.equal(await page.locator(".cb-source-editor > strong").textContent(), "Editing Markdown")
   async function editSource(text, old, replacement) {
     await editor.press("Control+Home")
     const at = text.indexOf(old); assert.ok(at >= 0)
@@ -174,13 +274,17 @@ try {
   await page.locator(".cb-source-cancel").click()
   assert.equal(await page.locator(".cb-suggest-card").count(), 3)
   assert.equal(await unmapped.evaluate(el => el === document.activeElement), true)
-  await unmapped.press("Enter"); await editor.waitFor()
+  await unmapped.press("Enter"); await page.getByRole("button", { name: "Edit Markdown", exact: true }).click(); await editor.waitFor()
   await editor.press("Escape")
   assert.equal(await page.locator(".cb-source-editor").count(), 0)
-  await unmapped.click(); await editor.waitFor()
+  await unmapped.click(); await page.getByRole("button", { name: "Edit Markdown", exact: true }).click(); await editor.waitFor()
   await editSource("[[target]]", "target", "third")
   await page.locator(".cb-source-done").click()
   assert.equal(await page.locator(".cb-suggest-card").count(), 4)
+  assert.equal(await page.locator(".cb-source-badge").count(), 1)
+  await page.keyboard.press("Control+z")
+  assert.equal(await page.locator(".cb-source-badge").count(), 0, "Markdown Done is one undo step")
+  await page.keyboard.press("Control+Shift+z")
   assert.equal(await page.locator(".cb-source-badge").count(), 1)
   // Callouts and display math use the actual v2 block boundaries, including CRLF.
   for (const [needle, old, replacement] of [["Custom title", "Custom title", "New title"], ["$$", "x", "z"], ["A separate", "😀", "🌍"], ["| Header", "Header", "Heading"]]) {
@@ -191,19 +295,21 @@ try {
     } else await editSource(block.text, old, replacement)
     await page.locator(".cb-source-done").click()
   }
-  assert.equal(editorRequests.length, 1, "the same-origin bundle loads once across all sessions")
+  assert.equal(editorRequests.length, 2, "the same-origin bundle loads once per document across editor sessions")
   assert.equal(await page.locator(".cb-source-badge").count(), 5)
   assert.equal(await page.locator(".cb-suggest-card").count(), 8)
   // A pending source edit locks rendered editing in that block, even outside its splice.
   await select("separate", 0, 8); await page.keyboard.type("bad")
-  assert.match(await page.locator(".cb-suggest-status").textContent(), /Use Edit source/)
+  assert.match(await page.locator(".cb-suggest-status").textContent(), /Use Edit Markdown/)
   assert.equal(await page.locator(".cb-suggest-card").count(), 8)
   const rejected = provenance.blocks.find(block => !block.editable && block.reason === "obsidian-comment")
   assert.ok(rejected)
-  await page.locator(".page .center > article.popover-hint").locator(`[data-cb-node="${rejected.parent}"]`).hover({ position: { x: 5, y: 5 } })
-  await page.locator(`[data-cb-node="${rejected.parent}"] > .cb-source-open`).click()
+  await page.locator(".page .center > article.popover-hint").locator(`[data-cb-node="${rejected.parent}"]`).click()
   assert.equal(await page.locator(".cb-source-editor").count(), 0)
-  assert.match(await page.locator(".cb-suggest-status").textContent(), /obsidian-comment/)
+  assert.equal(await page.locator(".cb-markdown-prompt p").textContent(), "This block can't be edited here")
+  assert.equal(await page.locator(".cb-markdown-prompt button").isVisible(), false)
+  assert.equal(await page.locator(".cb-suggest-markdown").isDisabled(), true)
+  await page.keyboard.press("Escape")
   const sourceSaved = await page.evaluate(() => JSON.parse(sessionStorage.getItem(Object.keys(sessionStorage).find(key => key.startsWith("cyberbaser:suggesting:v2:") && !key.endsWith(":retry")))))
   const sourceCandidate = [...sourceSaved.operations].reverse().reduce((bytes, op) => {
     assert.equal(bytes.subarray(op.start, op.end).toString(), op.expected)
@@ -211,25 +317,54 @@ try {
     return Buffer.concat([bytes.subarray(0, op.start), Buffer.from(op.replacement), bytes.subarray(op.end)])
   }, Buffer.from(originalBytes)).toString()
   assert.equal(sourceCandidate, originalBytes.replace("Hello", "Hello, reader").replace("**brown**", "**red**").replace("[friendly]", "[ly]").replace("[[target]]", "[[third]]").replace("Custom title", "New title").replace("$$\r\nx", () => "$$\r\nz").replace("😀 text", "🌍 text").replace("| Header", "| Heading"))
-  await page.reload(); await page.waitForSelector(".cb-source-badge")
+  await page.reload(); await page.waitForSelector(".cb-source-badge", { state: "attached" })
   assert.equal(await page.locator(".cb-suggest-card").count(), 8)
   assert.equal(await page.locator(".cb-source-badge").count(), 5)
   await sourceBlock("[[target]]").button.click(); await editor.waitFor()
   assert.ok((await editor.textContent()).includes("third"))
   await editor.press("Escape")
+  if (!await page.locator(".cb-suggest-card textarea").first().isVisible()) await page.locator(".cb-suggest-review").click()
   await page.locator(".cb-suggest-card textarea").first().fill("Please use this wording.")
   await page.locator(".cb-suggest-send-review").click()
+  await page.setViewportSize({ width: 360, height: 800 })
+  await page.evaluate(() => document.documentElement.setAttribute("saved-theme", "dark"))
+  assert.match(await page.locator(".cb-suggest-review-card").first().textContent(), /Hello.*reader.*brown.*friendly/u)
+  assert.ok((await page.locator(".cb-suggest-review-card .cb-suggest-section").allTextContents()).includes("Alternatives"))
+  await page.screenshot({ path: path.join(affordanceShots, "review-360-dark.png") })
+  const reviewBeforeRemoval = await page.locator(".cb-suggest-review-card").count()
+  await page.locator(".cb-suggest-review-card").first().getByRole("button", { name: "Remove", exact: true }).click()
+  assert.equal(await page.locator(".cb-suggest-review-card").count(), reviewBeforeRemoval - 1)
+  assert.equal(await page.locator("article ins").filter({ hasText: ", reader" }).count(), 0)
+  await page.keyboard.press("Control+z")
+  assert.equal(await page.locator(".cb-suggest-review-card").count(), reviewBeforeRemoval)
+  await page.keyboard.press("Control+Shift+z")
+  assert.equal(await page.locator(".cb-suggest-review-card").count(), reviewBeforeRemoval - 1)
+  await page.keyboard.press("Control+z")
   await page.locator(".suggest-correction-form:visible input[name=rationale]").fill("Batch rationale.")
   await page.screenshot()
   await page.locator(".suggest-correction-form:visible button[type=submit]").click()
   await page.waitForFunction(() => document.querySelector(".cb-suggest-status")?.textContent.includes("Q-built-page"))
   assert.equal(body.schemaVersion, 2); assert.equal(body.artifactType, "cyberbaser-account-free-correction-intent")
-  assert.equal(body.operations.length, 8); assert.match(body.rationale, /Please use this wording/)
+  assert.equal(body.operations.length, 8); assert.deepEqual(body.operations, sourceSaved.operations); assert.match(body.rationale, /Please use this wording/)
   assert.equal(await page.locator("article ins, article del").count(), 0)
   assert.equal(await page.locator("article strong").textContent(), "brown")
   assert.equal(await page.locator(".cb-suggest-card").count(), 0)
   assert.equal(await page.locator("input[name=rationale]").first().inputValue(), "")
   assert.equal(await page.evaluate(() => Object.keys(sessionStorage).filter(key => key.startsWith("cyberbaser:suggesting:v2:")).length), 0)
+  console.log("PASS affordance/history/leave/context: exact eight-splice submission after undo/redo and review removal")
+  // Removing the last review change closes the sheet and is still undoable.
+  await page.setViewportSize({ width: 1680, height: 1050 })
+  await page.locator(".suggest-correction-entry").click()
+  await select("Hello", 5, 5); await page.keyboard.type("!")
+  await page.locator(".cb-suggest-send-review").click()
+  await page.locator(".cb-suggest-review-card button").click()
+  assert.equal(await page.locator(".cb-suggest-review-sheet").isVisible(), false)
+  assert.equal(await page.locator(".cb-suggest-card").count(), 0)
+  await page.keyboard.press("Control+z")
+  assert.equal(await page.locator(".cb-suggest-card").count(), 1)
+  await page.keyboard.press("Control+Shift+z")
+  assert.equal(await page.locator(".cb-suggest-card").count(), 0)
+  await page.locator(".cb-suggest-toggle").click()
   // Independent synthetic drafts for phone/desktop visual acceptance. Never use the live rehearsal.
   const screenshots = path.join(repo, ".workspace/concrete-flow/mobile-polish")
   fs.mkdirSync(screenshots, { recursive: true })
@@ -237,6 +372,7 @@ try {
     const visualContext = await browser.newContext(device)
     await visualContext.route("**/*", route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort())
     const visual = await visualContext.newPage()
+    visual.on("dialog", dialog => dialog.accept())
     visual.on("pageerror", error => errors.push(error.message))
     const capture = async state => {
       await visual.screenshot({ path: path.join(screenshots, `${name}-${state}.png`), animations: "disabled" })
@@ -298,7 +434,7 @@ try {
       await capture("12-touch-focus-no-resize")
       await keyboard(true)
       assert.equal(await visual.locator(".cb-suggest-toolbar").isVisible(), false)
-      assert.ok(await visual.locator(".cb-source-active > .cb-source-open").evaluate(el => getComputedStyle(el, "::after").content.includes("2 changes")))
+      assert.equal(await visual.locator(".cb-source-open:not([hidden])").getAttribute("data-cb-change-count"), "2")
       await capture("08-keyboard-edit-simulated")
       await keyboard(false)
       assert.equal(await visual.locator(".cb-suggest-toolbar").isVisible(), true)
@@ -343,6 +479,7 @@ try {
     }
     await visual.locator(".suggest-correction-cancel").click()
     await visual.locator("article .cb-suggest-unmapped").filter({ hasText: "target" }).first().click()
+    await visual.getByRole("button", { name: "Edit Markdown", exact: true }).click()
     await visual.getByRole("textbox", { name: "Markdown source for this block" }).waitFor()
     await visual.locator(".cb-source-editor").scrollIntoViewIfNeeded()
     await capture("06-source-editor")
@@ -408,7 +545,7 @@ try {
   await page.locator("article .cb-suggest-unmapped").filter({ hasText: "target" }).first().click()
   assert.equal(await page.locator(".cb-source-open").count(), 0)
   assert.equal(await page.locator(".cb-source-editor").count(), 0)
-  assert.match(await page.locator(".cb-suggest-status").textContent(), /cannot be safely edited/)
+  assert.equal(await page.locator(".cb-markdown-prompt p").textContent(), "This block can't be edited here")
   await context.unroute("**/index.provenance.json")
   // Stale sidecar and missing sidecar both keep the legacy editor working.
   await context.route("**/index.provenance.json", async route => {
@@ -430,5 +567,5 @@ try {
 } finally {
   await browser?.close()
   await new Promise(resolve => server.close(resolve))
-  fs.rmSync(temp, { recursive: true, force: true })
+  if (!process.env.CYBERBASER_SUGGEST_TEST_DIR) fs.rmSync(temp, { recursive: true, force: true })
 }

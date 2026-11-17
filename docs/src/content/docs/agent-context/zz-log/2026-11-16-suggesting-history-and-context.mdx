@@ -1,0 +1,41 @@
+---
+title: Caret-based Markdown controls, suggestion history and contextual review
+description: "Replaced hover-following source chips with a caret-only overlay, added draft Undo and Redo, guarded unsent link navigation, and gave review cards context and undoable removal."
+status: log
+tags: [contribution, testing, setup]
+---
+
+The maintainer found the hover-following source affordance awkward, could not undo edits on iOS, and asked for protection against losing unsent suggestions plus readable, removable review changes. This wave changes the reader interface, not the owner-controlled source boundary or the offered-lane policy.
+
+## Reader behavior
+
+- Hover does nothing. The caret’s block gets a faint 2 px left rule and a small `</>` control named **Edit Markdown for this block**. The control takes no flow space, uses a document-overlay layer so callouts and table overflow cannot clip it, has a 44 px coarse-pointer target, and moves to the top-right on narrow phones. The badge counts changes in that block.
+- Derived or unmapped text opens an anchored **This part comes from Markdown.** prompt with **Edit Markdown**. Escape, an outside pointer action or moving the caret away dismisses it. Safety-refused blocks say **This block can't be edited here** and offer no editor. There are no disabled **Source unavailable** chips.
+- The toolbar adds **Markdown**, **Undo** and **Redo**. Shortcuts are Ctrl/Cmd+Shift+M, Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z and Ctrl+Y. Browser history-input events route into the same draft history. The existing touch-focus rule still hides the toolbar while a suggesting surface has focus.
+- History snapshots contain the existing exact-operation ledger, comments and caret coordinates, not a second text model. Typing coalesces at the same caret until a pause over one second, a caret jump or another editing action. Deletions, Markdown **Done** and **Remove** create individual steps. The in-memory history is capped at 100 steps; draft persistence is unchanged and history itself does not survive reload.
+- Full unloads with changes request the native browser warning. Internal links are intercepted in capture phase before pinned Quartz’s window-level handler, which ignores `defaultPrevented`. **Stay** keeps the draft; **Discard and leave** clears this page’s draft and replays the approved link through Quartz. No changes means no prompt. This covers link-driven SPA navigation, not programmatic navigation or browser-history traversal.
+- Review cards show the nearest preceding section heading and about 60 characters of surrounding text on each side, with the exact change inline. **Remove** reverts that operation in the page and ledger and is undoable. Removing the last change closes review.
+- The rehearsal launcher now says to tap **Suggest edits**, tap into text and type, then choose **Review & send**. That wording lives in `suggestions-rehearsal.js`, not the fixture module named in the initial brief.
+
+## Integrity boundary
+
+No serializer, source writer, dependency, publication setting or authority changed. Hidden source remains omitted by provenance. Stale or ambiguous mapping still refuses edits. Rendered and Markdown changes still cannot mix within one block. The five-field source-bound operations and owner application path are unchanged.
+
+## Verification
+
+The deterministic renderer suite and strict browser type check pass. The launcher suite passes with 19 tests, two existing opt-in skips and zero failures. The vendored Markdown editor rebuild remains byte-identical.
+
+The expanded offline three-page Quartz browser acceptance passes with zero page errors. It measures inert hover and zero movement of a later block, checks gutter/sidebar separation at 1280 and 1024 px, exercises toolbar and keyboard Markdown entry, contextual-prompt dismissal, typing/deletion/Markdown/review-removal Undo and Redo, native history-input events, native reload warning, SPA Stay/Discard and no-change navigation, heading/context review cards, and last-change removal. The submitted eight-operation array exactly matches the expected mixed rendered/Markdown draft, including CRLF and emoji preservation. Existing iPhone 13 emulation, dark-theme, 360–1280 px layout, touch-focus hiding and simulated keyboard-geometry checks also pass. Screenshot artifacts are private workspace evidence, not public content.
+
+The first full fixture build exposed a real clipping bug in callouts. Controls moved outside clipping containers and a second contained full build verified the corrected layout. Browser-only retries reuse retained synthetic artifacts, guarded by a component-source fingerprint. A later caret-dismissal event-order fix was compiled as the single browser resource using the pinned Quartz inline-loader options rather than rerunning the whole site build.
+
+The existing live rehearsal services and real vault were not touched. The normal review entry remains the [private suggestions rehearsal](/cyberbaser/development/try-suggestions/), launched from the project with `bun run --cwd docs try:suggestions` only when no existing rehearsal owns its ports. This session did not launch or refresh that experience. Real iOS Safari keyboard, native Undo availability, unload behavior and safe-area appearance still require the coordinator’s simulator check. No public deployment or unfamiliar-reader acceptance is claimed.
+
+## Coordinator check on the real page and iOS Safari
+
+On the live private rehearsal of a real Cyberbase page (desktop Chromium), hovering blocks moved nothing and showed no button, the caret marker appeared, and Undo and Redo worked. On an iPhone 18 Pro iOS 27 simulator (real WebKit) the new toolbar fit, but two defects appeared and were fixed directly:
+
+- The phone placement of the `</>` marker (top-right overlay) covered the words being typed. Phones have no gutter, so the marker is now hidden at 600 px and below; the toolbar **Markdown** button and the contextual prompt cover that case. The first attempt scoped the rule under `.cb-suggesting`, which missed because the controls now live in the document overlay layer.
+- Tapping toolbar Undo reopened the iOS keyboard because restoring the caret refocused the page. Toolbar Undo and Redo on touch devices now skip refocusing when the page was not already focused.
+
+Re-verified on the simulator: the typed insertion is visible in green, and toolbar Undo reverts it to 0 changes with the keyboard staying closed. Renderer suite and browser acceptance pass after the fixes. Still open: unmapped text spans are exposed to assistive technology as buttons with internal labels such as "transformed source atom", which needs plain wording.

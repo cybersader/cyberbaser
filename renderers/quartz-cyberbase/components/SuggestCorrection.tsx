@@ -89,11 +89,27 @@ export default ((opts: SuggestCorrectionOptions) => {
 body:has(.suggest-correction) .edit-this-page a { border: 0; padding: 0; background: transparent; font-weight: 400; text-decoration: underline; text-underline-offset: 3px; }
 body:has(.cb-suggesting) .popover, body:has(.cb-suggesting) .edit-this-page, .suggest-correction:has(.suggest-correction-entry[hidden]) { display: none; }
 article.cb-suggesting, article.cb-suggesting:focus { outline: none; caret-color: var(--secondary); }
-.cb-suggesting .cb-source-active { position: relative; background: color-mix(in srgb, var(--secondary) 7%, transparent); }
-:is([data-cb-run], .cb-suggest-card, .cb-suggest-summary) ins { color: #087940; background: #d8f4df; text-decoration: underline; text-decoration-thickness: 2px; white-space: pre-wrap; }
-:is([data-cb-run], .cb-suggest-card, .cb-suggest-summary) del { color: #a32c32; background: #ffe4e5; text-decoration: line-through; }
+.cb-suggesting .cb-source-active { box-shadow: inset 2px 0 0 color-mix(in srgb, var(--secondary) 28%, transparent); }
+:is([data-cb-run], .cb-suggest-card, .cb-suggest-review-card, .cb-suggest-summary) ins { color: #087940; background: #d8f4df; text-decoration: underline; text-decoration-thickness: 2px; white-space: pre-wrap; }
+:is([data-cb-run], .cb-suggest-card, .cb-suggest-review-card, .cb-suggest-summary) del { color: #a32c32; background: #ffe4e5; text-decoration: line-through; }
 .cb-suggest-unmapped { border-bottom: 1px dashed var(--gray); cursor: pointer; }
-.cb-source-open { position: relative; z-index: 30; display: block; width: max-content; max-width: 100%; min-height: 44px; padding: 6px 12px; margin: 6px 0 0 auto; font: 600 0.8rem var(--bodyFont); color: var(--secondary); background: var(--light); border: 1px solid var(--lightgray); border-radius: 6px; box-shadow: 0 3px 12px #0002; cursor: pointer; }
+.cb-source-open { position: absolute; z-index: 30; display: grid; place-items: center; box-sizing: border-box; top: 0; left: -38px; width: 24px; height: 24px; padding: 0; margin: 0; font: 600 13px var(--codeFont); color: var(--secondary); background: var(--light); border: 1px solid var(--lightgray); border-radius: 5px; cursor: pointer; }
+.cb-source-open:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
+.cb-source-open::after { position: absolute; top: -7px; right: -8px; font: 600 10px var(--bodyFont); border-radius: 8px; background: var(--secondary); color: var(--light); padding: 0 3px; }
+.cb-source-open:not([data-cb-change-count='0'])::after { content: attr(data-cb-change-count); }
+@media (pointer: coarse) { .cb-source-open { width: 44px; height: 44px; top: -10px; left: -48px; border: 10px solid transparent; background-clip: padding-box; } }
+/* Phones have no gutter; an overlay would cover the text being typed. The toolbar Markdown button and the contextual prompt cover this case. */
+@media (max-width: 600px) { .cb-source-open { display: none !important; } }
+
+.cb-markdown-prompt { position: fixed; z-index: 85; width: max-content; max-width: calc(100vw - 24px); box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--lightgray); border-radius: 8px; box-shadow: 0 4px 18px #0002; background: var(--light); color: var(--darkgray); font: 400 0.85rem/1.5 var(--bodyFont); }
+.cb-markdown-prompt[hidden], .cb-leave-guard[hidden] { display: none; }
+.cb-markdown-prompt p { margin: 0 0 6px; }
+:is(.cb-markdown-prompt, .cb-leave-guard) button { min-height: 44px; padding: 8px 12px; background: var(--light); color: var(--secondary); border: 1px solid var(--lightgray); border-radius: 6px; font: 600 0.85rem var(--bodyFont); cursor: pointer; }
+.cb-leave-guard { position: fixed; inset: 0; z-index: 110; display: grid; place-items: center; padding: 16px; background: #0006; }
+.cb-leave-guard > section { box-sizing: border-box; width: min(400px, 100%); padding: 20px; border: 1px solid var(--lightgray); border-radius: 10px; background: var(--light); color: var(--darkgray); }
+.cb-leave-guard p { margin: 0 0 16px; }
+.cb-leave-guard button { margin: 0 8px 0 0; }
+
 .cb-source-open[hidden], .cb-source-pending[hidden] { display: none; }
 .cb-source-pending { text-decoration: underline dashed var(--secondary); text-underline-offset: 5px; }
 .cb-source-editor { position: relative; z-index: 35; padding: 16px; margin-block: 16px; border: 1px solid var(--lightgray); border-radius: 8px; background: var(--light); color: var(--dark); min-width: 0; max-width: 100%; box-sizing: border-box; }
@@ -145,9 +161,16 @@ body.cb-suggest-review-open :is(.cb-suggest-help, .cb-suggest-status) { visibili
 .cb-suggest-review-sheet > h2 { font-size: 1.5rem; margin: 0; }
 .cb-suggest-summary { overflow-wrap: anywhere; }
 .cb-suggest-summary p { margin: 0; padding: 12px 0; border-bottom: 1px solid var(--lightgray); }
-.cb-suggest-summary :is(ins, del) { display: block; white-space: pre-wrap; }
-:root[saved-theme='dark'] :is([data-cb-run], .cb-suggest-card, .cb-suggest-summary) ins { color: #a1e8b6; background: #123b28; }
-:root[saved-theme='dark'] :is([data-cb-run], .cb-suggest-card, .cb-suggest-summary) del { color: #ffb1b1; background: #4d2329; }
+.cb-suggest-summary :is(ins, del) { display: inline; white-space: pre-wrap; }
+.cb-suggest-section { color: var(--gray); font-size: 0.8rem; }
+.cb-suggest-context { line-height: 1.6; white-space: pre-wrap; }
+.cb-suggest-card .cb-suggest-context { display: block; }
+.cb-suggest-review-card { padding-block: 12px; border-bottom: 1px solid var(--lightgray); }
+.cb-suggest-review-card > * { margin-block: 0 8px; }
+.cb-suggest-review-card small { display: block; }
+.cb-suggest-summary button { min-height: 44px; padding: 8px 12px; color: var(--secondary); background: var(--light); border: 1px solid var(--lightgray); border-radius: 6px; cursor: pointer; }
+:root[saved-theme='dark'] :is([data-cb-run], .cb-suggest-card, .cb-suggest-review-card, .cb-suggest-summary) ins { color: #a1e8b6; background: #123b28; }
+:root[saved-theme='dark'] :is([data-cb-run], .cb-suggest-card, .cb-suggest-review-card, .cb-suggest-summary) del { color: #ffb1b1; background: #4d2329; }
 /* Below a roomy desktop margin, cards are explicitly opened in a sheet, never laid over text. */
 .cb-suggest-tray:not(.cb-suggest-tray-expanded) { display: none; }
 @media (min-width: 801px) and (max-width: 1399px) {
@@ -167,7 +190,11 @@ body.cb-suggest-review-open :is(.cb-suggest-help, .cb-suggest-status) { visibili
   body:has(.suggest-correction) .explorer .explorer-content { width: calc(100dvw - 32px); max-width: 100%; }
   body:has(.cb-suggesting) { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
   .cb-suggest-toolbar { inset: auto 0 0; gap: 2px; justify-content: space-between; padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)); border-radius: 0; border-width: 1px 0 0; box-shadow: 0 -3px 20px #0001; }
-  .cb-suggest-toolbar button { padding-inline: 10px; font-size: 0.8rem; white-space: nowrap; }
+  .cb-suggest-toolbar { display: grid; grid-template-columns: 28px 44px 44px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.35fr); gap: 2px; padding-inline: 6px; }
+  .cb-suggest-toolbar button { min-width: 0; padding-inline: 3px; font-size: 0.7rem; white-space: nowrap; }
+  .cb-suggest-toolbar .cb-suggest-toggle { font-size: 0; gap: 0; min-width: 28px; padding-inline: 6px; }
+  .cb-suggest-toolbar :is(.cb-suggest-undo, .cb-suggest-redo) { font-size: 20px; padding-inline: 0; }
+  .cb-suggest-toolbar .cb-suggest-review { padding-inline: 3px; }
   .cb-suggest-help { inset: auto 12px calc(76px + env(safe-area-inset-bottom, 0px)); width: auto; }
   .cb-suggest-status { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); left: 12px; max-width: calc(100vw - 24px); }
   .cb-suggest-tray { inset: auto 0 calc(62px + env(safe-area-inset-bottom, 0px)); width: 100%; max-height: 52dvh; overscroll-behavior: contain; border-radius: 14px 14px 0 0; box-shadow: 0 -5px 24px #0002; }
@@ -180,7 +207,7 @@ body.cb-suggest-review-open :is(.cb-suggest-help, .cb-suggest-status) { visibili
 /* A software keyboard pans Safari's visual viewport independently of fixed
    layout chrome. Hide the toolbar; keep sheets within the visible viewport. */
 body.cb-suggest-keyboard-open :is(.cb-suggest-toolbar, .cb-suggest-help, .cb-suggest-status) { display: none; }
-body.cb-suggest-keyboard-open .cb-source-open::after { content: " · " attr(data-cb-change-count); font-weight: 400; }
+
 body.cb-suggest-keyboard-open .suggest-correction-form.cb-suggest-review-sheet { top: var(--cb-suggest-visible-top); bottom: auto; height: var(--cb-suggest-visible-height); padding-block: 16px; scroll-padding-block: 24px; }
 body.cb-suggest-keyboard-open .cb-suggest-tray { bottom: calc(var(--cb-suggest-keyboard-bottom) + 8px); max-height: calc(var(--cb-suggest-visible-height) - 16px); scroll-padding-block: 24px; }
 .suggest-correction-form > * { margin: 0; min-width: 0; }

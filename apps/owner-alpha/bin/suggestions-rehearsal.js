@@ -27,7 +27,7 @@ export function instructions(fixture) {
     '',
     'Try this:',
     fixture.copied ? '1. Open the bootstrap link to sign in, then start from the site home and choose a published page.' : '1. Open the bootstrap link to sign in, then start from the site home and choose MFA methods.',
-    '2. Select a sentence on the page and choose Suggest edit (or click the pencil next to a paragraph), edit the text in place, and send.',
+    '2. Tap Suggest edits, tap into text and type, then choose Review & send.',
     '3. Before approving, send two more distinct suggestions about that same page. The second attempt gets a receipt; the third is rate-limited. Two attempts per page are allowed. Do this now, before the page rebuild changes its ID.',
     '4. Open Proposals, open the first suggestion, and read the before/after change. Choose Approve. The page has not changed yet.',
     '5. On the approved receipt choose Apply to page. Follow the job to Local rehearsal complete. Rendering, exact application, commit, local push and private-site rebuild are real; deployment and live confirmation are simulated.',

@@ -1,3 +1,4 @@
+import { SuggestHistory, changeContext } from "./suggestModeHistory"
 import { setupSuggestViewport } from "./suggestModeViewport"
 import { createSuggestModeUI, activeSourceBlock } from "./suggestModeUI"
 import { SparseRun, sortedOperations, verifiedLeafNode, verifiedBlockNode, verifyManifest, utf8, validateOperations } from "./suggestModeModel"
@@ -63,8 +64,15 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
   const untouched: { node: Text; text: string; parent: Node; locator: string }[] = []
   const refusedParents = new Map<Element, Map<string, string | null>>()
   const views: RunView[] = []
-  const blocks = (manifest.blocks ?? []).map(block => ({ block, host: verifiedBlockNode(root, block), button: element("button", block.editable ? "Edit source" : "Source unavailable", "cb-source-open") }))
+  const blocks = (manifest.blocks ?? []).map(block => ({ block, host: verifiedBlockNode(root, block), button: element("button", "</>", "cb-source-open") }))
   const sourceEdits = new Map<string, Operation[]>()
+  const blockContext = new Map(blocks.map(({ block, host }) => {
+    const headings = [...root.querySelectorAll<HTMLElement>("h1,h2,h3,h4,h5,h6")]
+    const heading = headings.filter(h => h === host || !!(h.compareDocumentPosition(host) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1)?.textContent ?? document.querySelector("h1.article-title")?.textContent ?? "Page introduction"
+    return [block.id, { text: host.textContent ?? "", heading }]
+  }))
+  const viewContext = new Map<string, { blockId: string; offset: number }>()
+  let activeBlock: (typeof blocks)[number] | undefined
   let activeSource: { shell: HTMLElement; host: HTMLElement; hidden: HTMLElement["hidden"]; returnTo: HTMLElement; session?: SourceEditorSession } | undefined
   // Capture all nodes first: replacing an earlier sibling changes childNodes indices.
   const nodes = manifest.leaves.map(leaf => verifiedLeafNode(root, leaf))
@@ -100,10 +108,46 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     const parent = node.parentNode!
     node.remove(); originals.push({ marker, node, hosts, parent, locator: leaf.parent })
   }
+  for (const view of views) {
+    const found = blocks.find(({ host }) => host.contains(view.host))
+    if (found) {
+      const range = document.createRange(); range.selectNodeContents(found.host); range.setEndBefore(view.host)
+      viewContext.set(view.model.id, { blockId: found.block.id, offset: range.toString().length })
+    }
+  }
   const status = element("p", "", "cb-suggest-status"); status.setAttribute("role", "status"); status.setAttribute("aria-live", "polite")
   const formStatus = form.querySelector<HTMLElement>(".suggest-correction-status")!
   const ui = createSuggestModeUI(entry, () => onToggle(), () => onReview())
-  const activateBlock = activeSourceBlock(blocks, button => { button.dataset.cbChangeCount = ui.count.textContent ?? "" })
+  const markBlock = activeSourceBlock(blocks)
+  const positionSourceButton = () => {
+    if (!activeBlock) return
+    const rect = activeBlock.host.getBoundingClientRect(), coarse = matchMedia("(pointer: coarse)").matches
+    const size = coarse ? 44 : 24
+    activeBlock.button.style.top = `${rect.top + scrollY - (innerWidth <= 600 ? 8 : coarse ? 10 : 0)}px`
+    activeBlock.button.style.left = `${Math.max(4, rect.left + scrollX + (innerWidth <= 600 ? rect.width - size : coarse ? -48 : -38))}px`
+  }
+  const activateBlock = (target?: Node | null) => {
+    const next = target ? blocks.find(({ host }) => host === target || host.contains(target)) : undefined
+    if (target && !next) return
+    activeBlock = next; markBlock(target); positionSourceButton(); updateSubmit()
+  }
+  const prompt = element("aside", undefined, "cb-markdown-prompt"); prompt.hidden = true; prompt.contentEditable = "false"
+  prompt.setAttribute("role", "dialog"); prompt.setAttribute("aria-label", "Markdown editing")
+  const promptText = element("p"), promptEdit = element("button", "Edit Markdown")
+  promptEdit.type = "button"; prompt.append(promptText, promptEdit); document.body.append(prompt)
+  let promptTarget: HTMLElement | undefined
+  const hidePrompt = () => { prompt.hidden = true; promptTarget = undefined }
+  const showPrompt = (target: HTMLElement) => {
+    const found = blocks.find(({ host }) => host === target || host.contains(target))
+    activateBlock(target); promptTarget = target
+    const available = !!found?.block.editable
+    promptText.textContent = available ? "This part comes from Markdown." : "This block can't be edited here"
+    promptEdit.hidden = !available; prompt.hidden = false
+    const rect = target.getBoundingClientRect()
+    prompt.style.left = `${Math.max(12, Math.min(rect.left, innerWidth - prompt.offsetWidth - 12))}px`
+    prompt.style.top = `${Math.max(12, Math.min(rect.bottom + 6, innerHeight - prompt.offsetHeight - 12))}px`
+  }
+  promptEdit.addEventListener("click", () => { const target = promptTarget; hidePrompt(); if (target) void openSource(target) })
   const viewportUI = setupSuggestViewport(root, form, ui.tray)
   const backdrop = element("div", undefined, "cb-suggest-backdrop"); backdrop.hidden = true
   const formMarker = document.createComment("suggestion review")
@@ -128,13 +172,58 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     const ops = [...sortedOperations(views.map(v => v.model)), ...[...sourceEdits.values()].flat()].sort((a, b) => a.start - b.start)
     validateOperations(ops); return ops
   }
+  interface Snapshot { operations: Operation[]; comments: Record<string, string>; caret?: { id: string; offset: number } }
+  const history = new SuggestHistory<Snapshot>()
+  let historyCaret: string | undefined
+  const snapshot = (caret = selection()?.a): Snapshot => ({
+    operations: operations().map(op => ({ ...op })), comments: { ...comments },
+    caret: caret ? { id: caret.view.model.id, offset: caret.offset } : undefined,
+  })
+  const restoreDraft = (saved: { operations: Operation[]; comments?: Record<string, unknown> }) => {
+    const pending = saved.operations.map(op => ({ ...op }))
+    sourceEdits.clear()
+    for (const view of views) {
+      const matching = pending.filter(op => op.operationId.startsWith(`edit-${view.model.id}-`) && op.start >= view.model.start && op.end <= view.model.end)
+      view.model.restore(matching)
+      for (const op of matching) pending.splice(pending.indexOf(op), 1)
+    }
+    for (const { block } of blocks) {
+      const matching = pending.filter(op => op.operationId.startsWith(`source-${block.id}-`))
+      if (matching.length) {
+        sourceOperations(block, localOperations(block, matching))
+        if (sortedOperations(views.map(v => v.model)).some(op => touchesBlock(op, block))) throw Error("Stored edits mix Markdown and rendered changes")
+        sourceEdits.set(block.id, matching)
+        for (const op of matching) pending.splice(pending.indexOf(op), 1)
+      }
+    }
+    if (pending.length) throw Error("Stored range is no longer available")
+    for (const id of Object.keys(comments)) delete comments[id]
+    for (const [id, value] of Object.entries(saved.comments ?? {})) if (typeof value === "string" && value.length <= 2048) comments[id] = value
+    operations()
+  }
+  const travel = (direction: "undo" | "redo", fromToolbar = false) => {
+    if (!enabled || busy || activeSource) return
+    const saved = history[direction](); if (!saved) return
+    restoreDraft(saved)
+    const view = views.find(v => v.model.id === saved.caret?.id)
+    // A toolbar tap on a touch device must not refocus the page, or iOS reopens the keyboard.
+    const keepKeyboardClosed = fromToolbar && document.activeElement !== root && (matchMedia("(pointer: coarse)").matches || matchMedia("(hover: none)").matches)
+    render(view && !keepKeyboardClosed ? { view, offset: Math.min(saved.caret!.offset, view.model.currentText.length) } : undefined)
+    persist(); say(direction === "undo" ? "Undone." : "Redone.")
+    if (!operations().length && !form.hidden) showReview(false)
+  }
   const persist = () => store(key, JSON.stringify({ operations: operations(), comments }))
   const updateSubmit = () => {
-    const count = operations().length
+    const ops = operations(), count = ops.length
+    if (activeBlock) activeBlock.button.hidden = !!activeSource || !activeBlock.block.editable
     submit.textContent = `Send ${count} suggestion${count === 1 ? "" : "s"}`
     submit.disabled = busy || !!activeSource || !count || (!!challenge && !challenge.response())
     ui.setCount(count)
-    for (const button of root.querySelectorAll<HTMLElement>(".cb-source-active > .cb-source-open")) button.dataset.cbChangeCount = ui.count.textContent ?? ""
+    for (const { block, button } of blocks) button.dataset.cbChangeCount = String(ops.filter(op => touchesBlock(op, block)).length)
+    ui.markdown.disabled = busy || !!activeSource || !activeBlock?.block.editable
+    ui.markdown.title = !activeBlock ? "Place the caret in a block to edit its Markdown" : !activeBlock.block.editable ? "This block can't be edited here" : "Edit Markdown for this block (Ctrl/Cmd+Shift+M)"
+    ui.undo.disabled = busy || !!activeSource || !history.canUndo
+    ui.redo.disabled = busy || !!activeSource || !history.canRedo
     ui.review.disabled = busy || !!activeSource || !count
   }
   const setMode = (on: boolean) => {
@@ -143,7 +232,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     if (on) { root.setAttribute("role", "textbox"); root.setAttribute("aria-multiline", "true") }
     else { root.removeAttribute("role"); root.removeAttribute("aria-multiline") }
     ui.setMode(on)
-    if (!on) activateBlock()
+    if (!on) { activateBlock(); hidePrompt() }
     viewportUI.refresh()
   }
   const showReview = (show: boolean) => {
@@ -167,29 +256,53 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
   }
   const renderCards = () => {
     ui.cards.replaceChildren(); summary.replaceChildren()
-    for (const op of operations()) {
-      const card = element("section", undefined, "cb-suggest-card")
-      card.dataset.operationId = op.operationId
-      card.append(element("strong", "You · suggestion"))
-      if (op.operationId.startsWith("source-")) card.append(element("small", "Source edit", "cb-source-badge"))
-      if (op.expected) card.append(element("del", op.expected))
-      if (op.replacement) card.append(element("ins", op.replacement))
-      const discard = element("button", "Discard"); discard.type = "button"
-      discard.addEventListener("click", () => {
-        if (busy || activeSource) return
-        const source = [...sourceEdits.entries()].find(([, items]) => items.some(item => item.operationId === op.operationId))
-        if (source) sourceEdits.set(source[0], source[1].filter(item => item.operationId !== op.operationId))
-        else views.find(v => v.model.operations().some(item => item.operationId === op.operationId))!.model.discard(op)
-        delete comments[op.operationId]; render(); persist()
-      })
-      const comment = element("textarea"); comment.value = comments[op.operationId] ?? ""; comment.placeholder = "Add a comment (optional)"
-      comment.maxLength = 2048; comment.setAttribute("aria-label", `Comment on ${op.operationId}`)
-      comment.addEventListener("input", () => { comments[op.operationId] = comment.value; persist() })
-      card.append(comment, discard); ui.cards.append(card)
-      const line = element("p")
-      if (op.expected) line.append(element("del", op.expected))
-      if (op.replacement) line.append(element("ins", op.replacement))
-      summary.append(line)
+    const ops = operations()
+    if (!ops.length) summary.append(element("p", "No pending suggestions. Return to the page to make a change."))
+    for (const op of ops) {
+      const view = views.find(v => v.model.operations().some(item => item.operationId === op.operationId))
+      const mapped = view && viewContext.get(view.model.id)
+      const source = [...sourceEdits.entries()].find(([, items]) => items.some(item => item.operationId === op.operationId))
+      const blockId = mapped?.blockId ?? source?.[0]
+      const context = blockId ? blockContext.get(blockId) : undefined
+      let text = context?.text ?? view?.model.text ?? "", start = 0
+      if (view) start = (mapped?.offset ?? 0) + new TextDecoder().decode(utf8(view.model.text).slice(0, op.start - view.model.start)).length
+      else {
+        start = op.expected ? text.indexOf(op.expected) : -1
+        // A syntax-only operation has no rendered quote. Use only the already
+        // safety-approved published Markdown, never fetch omitted source.
+        if (start < 0 || (!op.expected && source)) {
+          const block = blocks.find(item => item.block.id === blockId)?.block
+          text = block?.text ?? ""; start = block ? new TextDecoder().decode(utf8(text).slice(0, op.start - block.source[0])).length : 0
+        }
+      }
+      const around = changeContext(text, start, start + op.expected.length)
+      const makeCard = (withComment: boolean) => {
+        const card = element("section", undefined, withComment ? "cb-suggest-card" : "cb-suggest-review-card"); card.dataset.operationId = op.operationId
+        card.append(element("small", context?.heading ?? "Page introduction", "cb-suggest-section"))
+        if (source) card.append(element("small", "Markdown edit", withComment ? "cb-source-badge" : "cb-suggest-review-badge"))
+        const line = element("div", undefined, "cb-suggest-context"); line.append(document.createTextNode(around.before))
+        if (op.expected) line.append(element("del", op.expected))
+        if (op.replacement) line.append(element("ins", op.replacement))
+        line.append(document.createTextNode(around.after)); card.append(line)
+        const remove = element("button", "Remove"); remove.type = "button"
+        remove.addEventListener("click", () => {
+          if (busy || activeSource) return
+          const before = snapshot()
+          if (source) sourceEdits.set(source[0], source[1].filter(item => item.operationId !== op.operationId))
+          else view!.model.discard(op)
+          delete comments[op.operationId]
+          history.record(before, snapshot()); render(); persist()
+          if (!operations().length && !form.hidden) showReview(false)
+        })
+        if (withComment) {
+          const comment = element("textarea"); comment.value = comments[op.operationId] ?? ""; comment.placeholder = "Add a comment (optional)"
+          comment.maxLength = 2048; comment.setAttribute("aria-label", `Comment on ${op.operationId}`)
+          comment.addEventListener("input", () => { comments[op.operationId] = comment.value; persist() })
+          card.append(comment)
+        }
+        card.append(remove); return card
+      }
+      ui.cards.append(makeCard(true)); summary.append(makeCard(false))
     }
     updateSubmit()
   }
@@ -223,7 +336,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     for (const { block, host, button } of blocks) {
       const pending = !!sourceEdits.get(block.id)?.length
       host.classList.toggle("cb-source-pending", pending)
-      button.textContent = pending ? "Edit source · pending changes" : block.editable ? "Edit source" : "Source unavailable"
+      button.textContent = "</>"
     }
     renderCards(); restore(caret)
   }
@@ -261,6 +374,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
   }
   const openSource = async (target: HTMLElement) => {
     if (!enabled || busy || activeSource) return
+    hidePrompt(); history.breakGroup()
     const found = blocks.find(({ host, button }) => button === target || host === target || host.contains(target))
     if (!found) { say(cannotEdit); return }
     const { block, host, button } = found
@@ -271,17 +385,17 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     }
     if (!form.dataset.sourceEditorAsset) { say("Source editing is unavailable in this build."); return }
     const shell = element("section", undefined, "cb-source-editor")
-    shell.contentEditable = "false"; shell.setAttribute("aria-label", "Editing Markdown source")
-    const title = element("strong", "Editing Markdown source")
+    shell.contentEditable = "false"; shell.setAttribute("aria-label", "Editing Markdown")
+    const title = element("strong", "Editing Markdown")
     const help = element("p", "Edit this block’s exact Markdown. Green additions and red deletions join the same suggestion for owner review.")
     const mount = element("div", undefined, "cb-source-mount")
-    const error = element("p", "Loading source editor…", "cb-source-status"); error.setAttribute("role", "status"); error.setAttribute("aria-live", "polite")
+    const error = element("p", "Loading Markdown editor…", "cb-source-status"); error.setAttribute("role", "status"); error.setAttribute("aria-live", "polite")
     const done = element("button", "Done", "cb-source-done"), cancelSource = element("button", "Cancel", "cb-source-cancel")
     done.type = cancelSource.type = "button"; done.disabled = true
     shell.append(title, help, mount, error, done, cancelSource)
     const current = { shell, host, hidden: host.hidden, returnTo: target.closest<HTMLElement>("[tabindex],button") ?? button, session: undefined as SourceEditorSession | undefined }
     activeSource = current; host.hidden = true; host.after(shell); root.contentEditable = "false"; updateSubmit()
-    cancelSource.addEventListener("click", () => { closeSource(); say("Source edits cancelled. The pending suggestion is unchanged.") })
+    cancelSource.addEventListener("click", () => { closeSource(); say("Markdown edits cancelled. The pending suggestion is unchanged.") })
     shell.addEventListener("keydown", event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeSource() } })
     done.addEventListener("click", () => {
       if (!current.session || activeSource !== current) return
@@ -290,8 +404,10 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
         const next = sourceOperations(block, current.session.operations())
         const merged = [...operations().filter(op => !sourceEdits.get(block.id)?.includes(op)), ...next].sort((a, b) => a.start - b.start)
         validateOperations(merged)
+        const before = snapshot()
         sourceEdits.set(block.id, next)
-        closeSource(); render(); persist(); say(next.length ? "Source edit added to your pending suggestion." : "This block has no source changes.")
+        if (JSON.stringify(before.operations) !== JSON.stringify(operations())) history.record(before, snapshot())
+        closeSource(); render(); persist(); say(next.length ? "Markdown edit added to your pending suggestion." : "This block has no Markdown changes.")
       } catch (failure) { error.textContent = failure instanceof Error ? failure.message : "Could not record source changes." }
     })
     cancelSource.focus({ preventScroll: true })
@@ -302,10 +418,12 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
       error.textContent = ""; done.disabled = false; current.session.focus()
     } catch (failure) { if (activeSource === current) error.textContent = failure instanceof Error ? failure.message : "Could not open the source editor." }
   }
-  for (const { host, button } of blocks) {
+  for (const { block, host, button } of blocks) {
+    button.disabled = !block.editable
+    button.title = "Edit Markdown for this block"; button.setAttribute("aria-label", button.title)
     button.type = "button"; button.contentEditable = "false"; button.hidden = true
     button.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); void openSource(button) })
-    host.append(button)
+    document.body.append(button)
   }
   const point = (node: Node, offset: number): Point | null => {
     if (!root.contains(node)) return null
@@ -332,7 +450,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     if (!selected || !validDom()) { say(cannotEdit); return }
     const { a, b } = selected, model = a.view.model
     if (blocks.some(({ block }) => sourceEdits.get(block.id)?.length && touchesBlock({ start: model.start, end: model.end } as Operation, block))) {
-      say("This block has source edits. Use Edit source to continue, or discard its source edits before editing rendered text."); return
+      say("This block has source edits. Use Edit Markdown to continue, or discard its source edits before editing rendered text."); return
     }
     let start = a.offset, end = b.offset
     const units = (text: string) => [...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text)].map(p => p.segment)
@@ -340,24 +458,31 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     if (start === end && type.includes("Forward")) end += units(model.currentText.slice(end))[0]?.length ?? 0
     const previous = model.tokens
     try {
+      const before = snapshot(a), old = JSON.stringify(before.operations)
       model.replace(start, end, value); operations()
-      render({ view: a.view, offset: start + value.length }); persist(); say("")
+      const caret = { view: a.view, offset: start + value.length }
+      if (old !== JSON.stringify(operations())) history.record(before, snapshot(caret), value && start === end && type === "insertText" ? {
+        group: viewContext.get(model.id)?.blockId ?? model.id, start: `${model.id}:${start}`, end: `${model.id}:${caret.offset}`,
+      } : undefined)
+      historyCaret = `${model.id}:${caret.offset}`
+      hidePrompt(); render(caret); persist(); say("")
     } catch (error) { model.tokens = previous; say(error instanceof Error ? error.message : cannotEdit) }
   }
   const beforeInput = (event: InputEvent) => {
     if (!enabled || activeSource || (event.target as Element).closest(".cb-source-open")) return
     event.preventDefault()
+    if (event.inputType === "historyUndo" || event.inputType === "historyRedo") { travel(event.inputType === "historyUndo" ? "undo" : "redo"); return }
     if (composing) return
     if (["insertText", "insertReplacementText", "insertFromComposition"].includes(event.inputType)) edit(event.data ?? "", event.inputType)
     else if (["insertParagraph", "insertLineBreak"].includes(event.inputType)) edit("\n", event.inputType)
     else if (event.inputType.startsWith("delete")) edit("", event.inputType)
-    else say("Only text suggestions are supported here. Use Edit source, when available, to change Markdown syntax.")
+    else say("Only text suggestions are supported here. Use Edit Markdown, when available, to change Markdown syntax.")
   }
   const keydown = (event: KeyboardEvent) => {
     if (!enabled || composing || activeSource || (event.target as Element).closest(".cb-source-open")) return
     if (event.key === "Backspace" || event.key === "Delete") { event.preventDefault(); edit("", event.key === "Backspace" ? "deleteContentBackward" : "deleteContentForward") }
-    if ((event.ctrlKey || event.metaKey) && ["z", "y", "b", "i", "u"].includes(event.key.toLowerCase())) { event.preventDefault(); say("Use Discard on a suggestion to restore its original text.") }
-    if ((event.key === "Enter" || event.key === " ") && (event.target as HTMLElement).classList.contains("cb-suggest-unmapped")) { event.preventDefault(); void openSource(event.target as HTMLElement) }
+    if ((event.ctrlKey || event.metaKey) && ["b", "i", "u"].includes(event.key.toLowerCase())) { event.preventDefault(); say("Use Edit Markdown to change formatting.") }
+    if ((event.key === "Enter" || event.key === " ") && (event.target as HTMLElement).classList.contains("cb-suggest-unmapped")) { event.preventDefault(); showPrompt(event.target as HTMLElement) }
   }
   const click = (event: MouseEvent) => {
     if (!enabled || activeSource) return
@@ -365,7 +490,9 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     activateBlock(target)
     // Quartz's window SPA handler does not honor defaultPrevented.
     if (target.closest("a")) { event.preventDefault(); event.stopPropagation() }
-    if (target.closest(".cb-suggest-unmapped")) { event.preventDefault(); void openSource(target) }
+    const refused = target.closest<HTMLElement>(".cb-suggest-unmapped")
+    if (refused || (activeBlock && !activeBlock.block.editable)) { event.preventDefault(); showPrompt(refused ?? target) }
+    else hidePrompt()
   }
   const paste = (event: ClipboardEvent) => { if (enabled && !activeSource) { event.preventDefault(); edit(event.clipboardData?.getData("text/plain") ?? "", "insertFromPaste") } }
   const cut = (event: ClipboardEvent) => {
@@ -385,7 +512,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
   const compositionStart = () => { if (enabled && !busy && !activeSource) { composing = true; composition = selection() } }
   const compositionEnd = (event: CompositionEvent) => { if (!composing) return; composing = false; render(); edit(event.data, "insertFromComposition", composition); composition = null }
   const onToggle = () => {
-    if (activeSource) { say("Choose Done or Cancel in the source editor first."); return }
+    if (activeSource) { say("Choose Done or Cancel in the Markdown editor first."); return }
     if (!form.hidden) showReview(false)
     setMode(!enabled); say("")
   }
@@ -393,16 +520,28 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     const s = getSelection()
     return [s?.anchorNode, s?.anchorOffset, s?.focusNode, s?.focusOffset] as const
   }
-  let lastSelection = selectionStamp()
   const onActiveBlock = (event: Event) => {
-    if (enabled && !activeSource) { lastSelection = selectionStamp(); activateBlock(event.target as Node) }
+    if (enabled && !activeSource) {
+      activateBlock(event.target as Node)
+      const target = event.target as HTMLElement
+      if (target.closest(".cb-suggest-unmapped")) showPrompt(target)
+    }
   }
   const onSelection = () => {
     const stamp = selectionStamp()
-    if (stamp.every((value, i) => value === lastSelection[i])) return
-    lastSelection = stamp
     const node = stamp[0]
-    if (enabled && !activeSource && node && root.contains(node)) activateBlock(node)
+    if (enabled && !activeSource) {
+      const selected = selection(), next = selected ? `${selected.a.view.model.id}:${selected.a.offset}` : undefined
+      if (next !== historyCaret || (selected && selected.a.offset !== selected.b.offset)) history.breakGroup()
+      historyCaret = next
+    }
+    if (enabled && !activeSource && node && root.contains(node)) {
+      activateBlock(node)
+      const target = node.nodeType === 1 ? node as HTMLElement : node.parentElement
+      const refused = target?.closest<HTMLElement>(".cb-suggest-unmapped")
+      if (refused) showPrompt(refused)
+      else if (promptTarget && !prompt.contains(document.activeElement)) hidePrompt()
+    }
   }
   const onReview = () => { if (!activeSource) showReview(form.hidden === true) }
   const onCancel = () => showReview(false)
@@ -429,7 +568,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
       if (destroyed) return
       if (result.accepted) {
         for (const view of views) view.model.reset()
-        sourceEdits.clear()
+        sourceEdits.clear(); history.clear()
         for (const id of Object.keys(comments)) delete comments[id]
         store(key, null); store(retryKey, null); form.reset(); render(); showReview(false); setMode(false)
         entry.focus({ preventScroll: true })
@@ -442,26 +581,62 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
     const saved = JSON.parse(stored(key) ?? "null")
     if (saved) {
       if (!Array.isArray(saved.operations) || saved.operations.length > 50) throw Error("Invalid stored suggestions")
-      const pending = [...saved.operations] as Operation[]
-      for (const view of views) {
-        const matching = pending.filter(op => op.start >= view.model.start && op.end <= view.model.end && op.operationId.startsWith(`edit-${view.model.id}-`))
-        view.model.restore(matching)
-        for (const op of matching) pending.splice(pending.indexOf(op), 1)
-      }
-      for (const { block } of blocks) {
-        const matching = pending.filter(op => op.operationId.startsWith(`source-${block.id}-`))
-        if (matching.length) {
-          sourceOperations(block, localOperations(block, matching))
-          if (sortedOperations(views.map(v => v.model)).some(op => touchesBlock(op, block))) throw Error("Stored edits mix source and rendered changes")
-          sourceEdits.set(block.id, matching)
-          for (const op of matching) pending.splice(pending.indexOf(op), 1)
-        }
-      }
-      if (pending.length) throw Error("Stored range is no longer available")
-      if (saved.comments && typeof saved.comments === "object") for (const [id, value] of Object.entries(saved.comments)) if (typeof value === "string" && value.length <= 2048) comments[id] = value
+      restoreDraft(saved)
       operations()
     }
   } catch { for (const view of views) view.model.reset(); sourceEdits.clear(); store(key, null); say("Stored suggestions could not be restored safely.") }
+  const markdown = () => { if (activeBlock) void openSource(activeBlock.host) }
+  const undo = () => travel("undo", true), redo = () => travel("redo", true)
+  const shortcuts = (event: KeyboardEvent) => {
+    if (event.key === "Escape" && !prompt.hidden) { event.preventDefault(); event.stopPropagation(); hidePrompt(); return }
+    const target = event.target as HTMLElement
+    if (!enabled || busy || activeSource || composing || target.closest("input,textarea,[role='textbox']:not(article),.cm-editor")) return
+    if (!(event.ctrlKey || event.metaKey)) return
+    const key = event.key.toLowerCase()
+    if (key === "m" && event.shiftKey) { event.preventDefault(); markdown() }
+    else if (key === "z" || (key === "y" && event.ctrlKey)) { event.preventDefault(); travel(key === "y" || event.shiftKey ? "redo" : "undo") }
+  }
+  const positionChrome = () => { positionSourceButton(); if (promptTarget && !prompt.hidden) showPrompt(promptTarget) }
+  const outsidePrompt = (event: PointerEvent) => { if (!prompt.contains(event.target as Node)) hidePrompt() }
+  const unload = (event: BeforeUnloadEvent) => { if (operations().length) { event.preventDefault(); event.returnValue = "" } }
+  const leave = element("div", undefined, "cb-leave-guard"); leave.hidden = true
+  const leavePanel = element("section"), leaveText = element("p"), stay = element("button", "Stay"), discardLeave = element("button", "Discard and leave")
+  stay.type = discardLeave.type = "button"; leavePanel.append(leaveText, stay, discardLeave); leave.append(leavePanel)
+  leavePanel.setAttribute("role", "alertdialog"); leavePanel.setAttribute("aria-modal", "true"); leavePanel.setAttribute("aria-label", "Unsent suggestions")
+  document.body.append(leave)
+  let destination: HTMLAnchorElement | undefined, leaveReturn: HTMLElement | undefined
+  const stayHere = () => { leave.hidden = true; destination = undefined; leaveReturn?.focus({ preventScroll: true }) }
+  stay.addEventListener("click", stayHere)
+  discardLeave.addEventListener("click", () => {
+    const target = destination; if (!target) return
+    for (const view of views) view.model.reset()
+    sourceEdits.clear(); history.clear(); store(key, null); store(retryKey, null)
+    leave.hidden = true; destination = undefined; render(); setMode(false)
+    // Replay this one approved click. Quartz's existing router retains navigation authority.
+    target.click()
+  })
+  leave.addEventListener("keydown", event => {
+    if (event.key === "Escape") { event.preventDefault(); stayHere() }
+    if (event.key === "Tab") { event.preventDefault(); (document.activeElement === stay ? discardLeave : stay).focus() }
+  })
+  const guardNavigation = (event: MouseEvent) => {
+    if (!operations().length || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    const anchor = (event.target as Element).closest<HTMLAnchorElement>("a[href]")
+    if (!anchor || (enabled && root.contains(anchor)) || anchor.target === "_blank" || anchor.hasAttribute("download")) return
+    const url = new URL(anchor.href, location.href)
+    if (url.origin !== location.origin || (url.pathname === location.pathname && url.search === location.search && url.hash)) return
+    // Capture before Quartz's window listener, which does not honor defaultPrevented.
+    event.preventDefault(); event.stopPropagation(); hidePrompt()
+    destination = anchor; leaveReturn = document.activeElement as HTMLElement
+    const n = operations().length; leaveText.textContent = `You have ${n} unsent suggestions. Leave and discard them?`
+    leave.hidden = false; stay.focus({ preventScroll: true })
+  }
+  ui.markdown.addEventListener("click", markdown); ui.undo.addEventListener("click", undo); ui.redo.addEventListener("click", redo)
+  document.addEventListener("keydown", shortcuts, true)
+  document.addEventListener("pointerdown", outsidePrompt, true)
+  document.addEventListener("click", guardNavigation, true)
+  window.addEventListener("beforeunload", unload)
+  window.addEventListener("resize", positionChrome); window.addEventListener("scroll", positionChrome, true)
   root.addEventListener("beforeinput", beforeInput)
   root.addEventListener("keydown", keydown)
   root.addEventListener("click", click)
@@ -471,20 +646,25 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
   root.addEventListener("drop", drop)
   root.addEventListener("compositionstart", compositionStart)
   root.addEventListener("compositionend", compositionEnd)
-  root.addEventListener("pointerover", onActiveBlock); root.addEventListener("focusin", onActiveBlock)
+  root.addEventListener("focusin", onActiveBlock)
   document.addEventListener("selectionchange", onSelection)
   cancel.addEventListener("click", onCancel); backdrop.addEventListener("click", onCancel)
   form.addEventListener("keydown", reviewKeys)
   form.addEventListener("submit", onSubmit)
   render(); setMode(operations().length > 0)
   window.addCleanup(() => {
+    document.removeEventListener("keydown", shortcuts, true); document.removeEventListener("pointerdown", outsidePrompt, true)
+    document.removeEventListener("click", guardNavigation, true); window.removeEventListener("beforeunload", unload)
+    window.removeEventListener("resize", positionChrome); window.removeEventListener("scroll", positionChrome, true)
+    ui.markdown.removeEventListener("click", markdown); ui.undo.removeEventListener("click", undo); ui.redo.removeEventListener("click", redo)
+    prompt.remove(); leave.remove()
     destroyed = true; viewportUI.destroy(); challenge?.destroy(); closeSource(false)
     for (const { host, button } of blocks) { button.remove(); host.classList.remove("cb-source-pending", "cb-source-active") }
     root.removeEventListener("beforeinput", beforeInput); root.removeEventListener("keydown", keydown)
     root.removeEventListener("click", click); root.removeEventListener("paste", paste); root.removeEventListener("drop", drop)
     root.removeEventListener("cut", cut); root.removeEventListener("input", input)
     root.removeEventListener("compositionstart", compositionStart); root.removeEventListener("compositionend", compositionEnd)
-    root.removeEventListener("pointerover", onActiveBlock); root.removeEventListener("focusin", onActiveBlock)
+    root.removeEventListener("focusin", onActiveBlock)
     document.removeEventListener("selectionchange", onSelection)
     cancel.removeEventListener("click", onCancel); backdrop.removeEventListener("click", onCancel)
     form.removeEventListener("keydown", reviewKeys); form.removeEventListener("submit", onSubmit)

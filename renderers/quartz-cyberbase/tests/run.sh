@@ -8,6 +8,7 @@ bun "$HERE/edit-links.test.ts"
 bun "$HERE/suggest-correction.test.ts"
 bun "$HERE/suggest-diff.test.ts"
 bun "$HERE/suggest-challenge.test.ts" # imports suggest-mode.test.ts
+bun "$HERE/suggest-history.test.ts"
 bun "$HERE/suggest-source-editor.test.ts"
 bun "$HERE/suggest-viewport.test.ts"
 bun "$HERE/provenance-contract.test.ts"

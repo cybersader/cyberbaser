@@ -13,7 +13,13 @@ export function createSuggestModeUI(entry: HTMLButtonElement, onToggle: () => vo
   count.type = "button"; count.setAttribute("aria-expanded", "false")
   const review = el("button", "Review & send", "cb-suggest-send-review")
   review.type = "button"
-  toolbar.append(toggle, count, review)
+  const markdown = el("button", "Markdown", "cb-suggest-markdown")
+  const undo = el("button", "↶", "cb-suggest-undo"), redo = el("button", "↷", "cb-suggest-redo")
+  for (const [button, name] of [[undo, "Undo"], [redo, "Redo"]] as const) {
+    button.type = "button"; button.setAttribute("aria-label", name); button.title = name; button.disabled = true
+  }
+  markdown.type = "button"; markdown.disabled = true; markdown.title = "Place the caret in a block to edit its Markdown"
+  toolbar.append(toggle, undo, redo, markdown, count, review)
   const hint = el("aside", "", "cb-suggest-help")
   hint.append(el("p", "Tap text to edit. Changes are suggestions until the owner applies them.", ""))
   const dismiss = el("button", "Got it", "cb-suggest-hint-dismiss")
@@ -49,7 +55,7 @@ export function createSuggestModeUI(entry: HTMLButtonElement, onToggle: () => vo
   window.addEventListener("resize", syncTray)
   document.body.append(toolbar, hint, tray)
   return {
-    toolbar, toggle, count, review, tray, cards, hint,
+    toolbar, toggle, count, review, tray, cards, hint, markdown, undo, redo,
     setMode(on: boolean) {
       if (on && !enabled) expanded = window.innerWidth >= 1400
       enabled = on; entry.hidden = on; toolbar.hidden = !on; hint.hidden = !on || dismissed
@@ -74,11 +80,11 @@ export function activeSourceBlock(blocks: { host: HTMLElement; button: HTMLButto
   return (target?: Node | null) => {
     const next = target ? blocks.find(({ host, button }) => host === target || button === target || host.contains(target)) : undefined
     // Browser selectionchange may report the article itself after focus or layout.
-    // It must not erase the block just activated by a deliberate tap/hover.
+    // It must not erase the block just activated by a deliberate tap.
     if (target && !next) return
     if (next === active) return
     if (active) { active.button.hidden = true; active.host.classList.remove("cb-source-active") }
     active = next
-    if (active) { active.button.hidden = false; active.host.classList.add("cb-source-active"); onActive?.(active.button) }
+    if (active) { active.button.hidden = active.button.disabled; active.host.classList.add("cb-source-active"); onActive?.(active.button) }
   }
 }

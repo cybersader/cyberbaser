@@ -420,15 +420,16 @@ own reviewed script/frame CSP permissions; no provider adds host policy itself.
 ## Suggesting an edit on the page
 
 The UI uses 44px touch targets, 16px input/source-editor text, theme-aware colors,
-and a subtle active-block background rather than outlining the article. Only the
-block containing the caret, selection, tap or desktop hover exposes its **Edit
-source** chip. There are no permanent buttons below every paragraph or heading.
+and a faint 2 px caret-block rule without a background tint. Only the block
+containing the caret or deliberate tap exposes its **Edit Markdown** gutter
+button. Hover does nothing; controls take no flow space. The document overlay
+layer keeps controls reachable even for clipping callouts and scrollable tables.
 
 With the account-free form enabled and `CYBERBASER_SOURCE_PROVENANCE=enabled`
 passed to **both setup and build**, readers can suggest changes directly on the
 rendered page. One **Suggest edits** entry turns on **Suggesting** and disappears
 while editing. The forge’s **Edit this page** remains a quiet alternate link only
-while reading. A compact toolbar holds the suggesting toggle, change count and
+while reading. A compact toolbar holds the suggesting toggle, Undo, Redo, Markdown, change count and
 **Review & send**. It stays above the phone’s safe area at the bottom and in the
 bottom-right corner on desktop. Turning suggesting off keeps the draft.
 
@@ -443,11 +444,11 @@ not prevent editing. The hint never inserts instructions above the article.
 2. Tap the count chip to open the changes sheet on phones and medium desktops.
    It starts collapsed and stays above, not over, the toolbar. Roomy desktops show
    margin cards; medium-width layouts reserve space when cards are opened so they
-   do not cover the article. Cards have an optional comment and **Discard**.
+   do not cover the article. Cards show the nearest section heading and surrounding text, with the change marked inline, an optional comment, and **Remove**. Removal is undoable.
    **Review & send** opens the complete batch in a full-height phone sheet or
    desktop side panel. Escape or **Back to editing** closes review.
    Draft operations and local comments survive reload in sessionStorage, keyed
-   by opaque page ID and the pinned base digest. Discard restores original text.
+   by opaque page ID and the pinned base digest. Remove restores that change’s original text.
 3. Add an optional **Why?**, HTTPS **Source link**, and configured bot check, then
    choose **Send N suggestions**. Comments join the submission rationale, not the
    five-field operation records. Successful submission shows the queue receipt,
@@ -455,36 +456,49 @@ not prevent editing. The hint never inserts instructions above the article.
    owner can apply a proposal to the source.
 
 Generated text, transformed atoms and discontinuous selections are not edited
-by guesswork. On v2 provenance pages, clicking a dashed transformed region opens
-its exact Markdown block in the source editor described below. Discontinuous
+by guesswork. On v2 provenance pages, clicking a dashed transformed region shows an anchored explanation with **Edit Markdown**. Refused blocks explain that they cannot be edited here and offer no editor. Discontinuous
 rendered selections still refuse editing. Plain-text paste uses the same
-exact-range route; HTML paste, drops, formatting commands and native document
-undo cannot mutate the source model.
-Use **Discard** to restore a suggestion. Selections must stay within one verified
+exact-range route; HTML paste, drops, formatting commands cannot mutate the source model.
+Use **Remove** to restore one suggestion, or **Undo** and **Redo** on the toolbar
+to travel through the draft. Consecutive typing at the same caret coalesces until
+a pause over one second, a caret jump or a different editing action. Deletions,
+Markdown **Done** and review removal each make a separate history step.
+Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl+Y and browser history-input events use the same
+bounded, 100-step ledger history; an open Markdown editor keeps its own isolated session. Selections must stay within one verified
 exact run, not cross Markdown syntax boundaries. IME input is captured separately
 from the browser's transient composition DOM.
+
+Unsent changes install a native full-unload warning. Internal link navigation is
+captured before pinned Quartz’s window-level SPA handler (which ignores
+`defaultPrevented`), with **Stay** and **Discard and leave**. Stay preserves the
+ledger; discard clears only this page’s draft and replays the approved link through
+Quartz. Links within an actively edited article remain text-editing targets.
+No changes means no warning. This guard covers link-triggered SPA navigation,
+not programmatic `spaNavigate` calls or browser-history traversal.
 
 ### Editing a block’s Markdown source
 
 In Suggesting mode, click a target-derived wikilink label, callout title, math
-region or other transformed text, or choose **Edit source** on the active editable
-block. The rendered block temporarily gives way to a compact, labelled editor
-headed **Editing Markdown source**. Markdown highlighting and faded syntax away
+region or other transformed text, or choose the **Markdown** toolbar button, Ctrl/Cmd+Shift+M, or the small `</>`
+button beside the caret’s block. Hover never activates a block. A faint left
+rule and absolutely positioned gutter control take no flow space; narrow phones
+use a top-right overlay with a coarse-pointer 44 px target. The rendered block temporarily gives way to a compact, labelled editor
+headed **Editing Markdown**. Markdown highlighting and faded syntax away
 from the cursor’s line provide a source-first live-preview feel. The editor
 shows green inserted text and red struck-through deletion widgets; it does not
 render arbitrary Markdown or execute raw HTML.
 
 **Done** translates the block’s local original-byte operations to page-base
-coordinates and adds **Source edit** cards to the same pending suggestion.
+coordinates and adds **Markdown edit** cards to the same pending suggestion.
 Reopening the block resumes its tracked draft. **Cancel** or **Escape** discards
 only the current editor session and returns focus to its opener. Source edits
-persist through reload, support per-operation Discard, and use the unchanged
+persist through reload, support per-operation Remove, and use the unchanged
 five-field `/v2/suggestions` payload alongside rendered edits in other blocks.
 
 **Mixing policy:** rendered and source edits cannot coexist in the same block,
 even when their individual splices would be disjoint. Discard that block’s
 rendered-text edits before opening its source. Once it has source edits, use
-**Edit source** to continue, or discard its source edits to resume rendered
+**Edit Markdown** to continue, or discard its source edits to resume rendered
 editing. The guard includes boundary insertions and checks the merged sorted,
 non-overlapping operations again before Done and submission.
 
@@ -502,7 +516,7 @@ Explicit LF splitting retains literal CR characters, so existing CRLF and mixed
 line endings survive without normalization. Enter uses CRLF when the block has
 it, and Backspace/Delete handle a CRLF pair together. Partial CRLF or surrogate
 edits fail closed. The source editor supports plain-text changes, not formatting
-commands or native undo; use Cancel to abandon a session or Discard on a card.
+commands or native undo; use Cancel to abandon a session, then Undo/Redo after Done or Remove on a card.
 
 ### Vendored, replaceable source editor
 

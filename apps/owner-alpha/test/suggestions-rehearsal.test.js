@@ -179,7 +179,7 @@ describe('suggestions rehearsal fixture (hermetic)', () => {
     expect(text).toContain(f.readerOrigin);
     expect(text).toContain(`${f.ownerOrigin}/owner/review`);
     expect(text).toContain('simulated');
-    expect(text).toContain('2. Select a sentence on the page and choose Suggest edit (or click the pencil next to a paragraph), edit the text in place, and send.');
+    expect(text).toContain('2. Tap Suggest edits, tap into text and type, then choose Review & send.');
     expect(text).not.toContain('Text to replace');
     expect(text.indexOf(`${f.readerOrigin}/cyberbase/`)).toBeLessThan(text.indexOf(`${f.readerOrigin}/cyberbase/mfa-methods`));
     expect(text).toContain('start from the site home');
@@ -261,7 +261,7 @@ describe('suggestions rehearsal fixture (hermetic)', () => {
     expect(index).not.toContain('Other private');
     expect(instructions(f)).toContain('All edits go only to the throwaway copy, never the real vault.');
     expect(instructions(f)).toContain(`/cyberbase/${encodeURIComponent('📁-03---Curations,-Stacks')}/MFA-methods`);
-    expect(instructions(f)).toContain('Select a sentence on the page and choose Suggest edit');
+    expect(instructions(f)).toContain('Tap Suggest edits, tap into text and type');
     expect(instructions(f)).not.toContain('/cyberbase/📁');
     expect(instructions(f)).toContain('needs internet access');
     expect(instructions(f)).not.toContain('open MFA methods');
