@@ -699,7 +699,7 @@ export async function setupSuggestMode(form: HTMLFormElement): Promise<boolean> 
   cancel.addEventListener("click", onCancel); backdrop.addEventListener("click", onCancel)
   form.addEventListener("keydown", reviewKeys)
   form.addEventListener("submit", onSubmit)
-  render(); setMode((operations().length > 0 && stored(`${key}:paused`) !== "1") || (finish.label === "Save" && stored(`${key}:paused`) !== "1"))
+  render(); setMode((operations().length > 0 && stored(`${key}:paused`) !== "1") || ((finish.label === "Save" || location.hash === "#edit") && stored(`${key}:paused`) !== "1"))
   window.addCleanup(() => {
     document.removeEventListener("keydown", shortcuts, true); document.removeEventListener("pointerdown", outsidePrompt, true)
     document.removeEventListener("click", guardNavigation, true); window.removeEventListener("beforeunload", unload)

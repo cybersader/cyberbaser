@@ -340,7 +340,15 @@ describe('owner-alpha loopback server boundary', () => {
     expect(denied.status).toBe(403);
     expect(await denied.json()).toEqual({ error: { code: 'invalid-session' } });
 
-    const invalid = await fetch(request(`/owner/bootstrap?token=${'z'.repeat(43)}`));
+    // The shared Edit control sends anyone not signed in back to visitor mode on the fixed reader origin.
+    const visitor = await fetch(request('/owner/in-place?relativePath=Notes%2FPage.md&slug=Notes%2Fpage'));
+    expect(visitor.status).toBe(303);
+    expect(new URL(visitor.headers.get('location')).hash).toBe('#edit');
+    expect(visitor.headers.get('set-cookie')).toBeNull();
+    const traversal = await fetch(request('/owner/in-place?relativePath=a.md&slug=..%2Fevil'));
+    expect(traversal.status).toBe(403);
+
+    const invalid =await fetch(request(`/owner/bootstrap?token=${'z'.repeat(43)}`));
     expect(invalid.status).toBe(403);
     const opened = await openEdit(fetch);
     expect(opened.response.status).toBe(200);

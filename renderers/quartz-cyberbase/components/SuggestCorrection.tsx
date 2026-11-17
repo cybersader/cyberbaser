@@ -89,6 +89,10 @@ export default ((opts: SuggestCorrectionOptions) => {
 .cb-suggest-finish[hidden], .cb-suggest-toolbar[hidden], .cb-suggest-help[hidden], .cb-suggest-backdrop[hidden] { display: none; }
 /* Enabled pages keep the forge route a quiet alternate link, never a second button. */
 body:has(.suggest-correction) .edit-this-page a { border: 0; padding: 0; background: transparent; font-weight: 400; text-decoration: underline; text-underline-offset: 3px; }
+/* One Edit control: on private owner builds the owner link decides the mode (owner Save, or visitor Send when not signed in). */
+body:has(.edit-this-page a[href*='/owner/in-place?']) .suggest-correction-entry { display: none; }
+body:has(.suggest-correction) .edit-this-page a[href*='/owner/in-place?'] { display: inline-flex; align-items: center; min-height: 44px; padding: 6px 18px; border: 1px solid var(--secondary); border-radius: 6px; color: var(--secondary); font-weight: 600; text-decoration: none; }
+body:has(.suggest-correction) .edit-this-page a[href*='/owner/in-place?'] > span[aria-hidden] { display: none; }
 body:has(.cb-suggesting) .popover, body:has(.cb-suggesting) .edit-this-page, .suggest-correction:has(.suggest-correction-entry[hidden]) { display: none; }
 article.cb-suggesting, article.cb-suggesting:focus { outline: none; caret-color: var(--secondary); }
 .cb-suggesting .cb-source-active { box-shadow: inset 2px 0 0 color-mix(in srgb, var(--secondary) 28%, transparent); }

@@ -1942,6 +1942,14 @@ export function createOwnerAlphaHandler({
     }
 
     const deviceSession = resolveSession(requestCookie(request));
+    if (deviceSession === null && url.pathname === '/owner/in-place' && ['GET', 'HEAD'].includes(request.method)) {
+      // The shared Edit control: anyone not signed in as owner returns to the
+      // same reader page in visitor mode. Fixed reader origin, so no open redirect.
+      const query = queryObject(url, ['relativePath', 'slug']);
+      if (query && typeof query.slug === 'string' && query.slug.length > 0 && query.slug.length <= 1024 && !query.slug.split('/').some((part) => part === '' || part === '.' || part === '..')) {
+        return response(null, 303, { Location: `${liveUrlForSlug(`${readerOrigin}/cyberbase/`, query.slug)}#edit` });
+      }
+    }
     if (deviceSession === null) {
       return errorResponse(403, 'invalid-session');
     }
