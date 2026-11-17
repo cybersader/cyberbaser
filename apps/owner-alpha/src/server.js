@@ -237,7 +237,7 @@ ${publicationEnabled ? '<a href="/owner/publication">Publish workspace page</a>'
 <form id="edit-form">
 <label for="edited-text">Markdown</label>
 <textarea id="edited-text" name="editedText" spellcheck="false" autocomplete="off">${textareaText(session.source.text)}</textarea>
-<div class="actions owner-finish"><button type="button" id="cancel-edit" aria-label="Cancel editing">×</button><button type="submit" id="save-button">Save</button></div>
+<div class="actions owner-finish"><button type="button" id="cancel-edit" aria-label="Cancel editing">Cancel</button><button type="submit" id="save-button">Save</button></div>
 <p id="form-status" class="status" role="status" aria-live="polite"></p>
 </form>
 </main>`,
@@ -340,9 +340,9 @@ function jobPage(job, readerOrigin) {
   }).join('');
   const stages = escapeHtml(JSON.stringify({ steps: SAVE_STEPS, stops: SAVE_STOPS, technical: { steps: JOB_STEPS, stops: JOB_STOPS } }));
   return pageShell({
-    title: done ? 'Saved' : 'Saving…', script: '/owner/assets/job.js',
+    title, script: '/owner/assets/job.js',
     body: `<main class="owner-shell save-progress" id="owner-job" data-job-id="${escapeHtml(safe.jobId)}" data-stages="${stages}">
-<header class="owner-header"><h1 id="save-heading">${done ? 'Saved' : stopped ? 'Save needs attention' : 'Saving…'}</h1><p class="lede">${escapeHtml(title)}</p></header>
+<header class="owner-header"><h1 id="save-heading">${escapeHtml(title)}</h1></header>
 <section class="job-card" aria-live="polite"><p class="job-stage"><strong id="job-stage">${escapeHtml(copy)}</strong></p>
 <ol class="job-steps" id="job-steps"${done || stopped ? ' hidden' : ''}>${steps}</ol>
 <div class="save-result-links" id="save-result-links"${done ? '' : ' hidden'}><a class="save-view-page" href="${escapeHtml(view)}">View page</a><a href="${escapeHtml(edit)}">Edit again</a></div>
@@ -2265,7 +2265,7 @@ export function createOwnerAlphaHandler({
           const after = lineAfter.length > 80 ? `${lineAfter.slice(0, 80).replace(/\s\S*$/u, '')}…` : lineAfter;
           return `<section class="direct-change"><p>${escapeHtml(before)}<del>${escapeHtml(op.expected)}</del><ins>${escapeHtml(op.replacement)}</ins>${escapeHtml(after)}</p></section>`;
         }).join('');
-        return html(request.method === 'HEAD' ? null : pageShell({ title: 'Save your changes', script: '/owner/assets/direct.js', body: `<main class="owner-shell direct-review" id="owner-direct" data-edit-id="${escapeHtml(stored.id)}" data-csrf="${escapeHtml(csrfToken)}"><header class="owner-header"><p class="eyebrow">Save changes to</p><h1>${escapeHtml(session.relativePath.split('/').at(-1).replace(/\.md$/u, ''))}</h1></header>${cards}<form id="direct-form"><div class="owner-finish"><a href="${escapeHtml(back)}" aria-label="Back to editing">Back</a><button type="submit">Save · ${handoff.operations.length}</button></div><p id="form-status" role="status"></p></form></main>` }));
+        return html(request.method === 'HEAD' ? null : pageShell({ title: 'Save your changes', script: '/owner/assets/direct.js', body: `<main class="owner-shell direct-review" id="owner-direct" data-edit-id="${escapeHtml(stored.id)}" data-csrf="${escapeHtml(csrfToken)}"><header class="owner-header"><p class="eyebrow">Save changes to</p><h1>${escapeHtml(session.relativePath.split('/').at(-1).replace(/\.md$/u, ''))}</h1></header>${cards}<p class="direct-raw"><a href="/owner/edit?relativePath=${encodeURIComponent(session.relativePath)}&amp;slug=${encodeURIComponent(session.slug)}">Edit whole file as Markdown</a></p><form id="direct-form"><div class="owner-finish"><a href="${escapeHtml(back)}" aria-label="Back to editing">Back</a><button type="submit">Save · ${handoff.operations.length}</button></div><p id="form-status" role="status"></p></form></main>` }));
       } catch (error) { return errorResponse(409, error?.code ?? 'owner-handoff-unavailable'); }
     }
 

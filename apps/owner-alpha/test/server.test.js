@@ -1924,7 +1924,7 @@ describe('job status routes', () => {
     const page = await fetch(request('/owner/jobs/OA-from-suggestion', { headers: { Cookie: opened.cookie } }));
     const pageBody = await page.text();
     expect(page.status).toBe(200);
-    expect(pageBody).toContain('<h1 id="save-heading">Saving…</h1>');
+    expect(pageBody).toContain('<h1 id="save-heading">example</h1>');
     expect(pageBody).toContain('<strong id="job-stage">Saving</strong>');
     expect(pageBody).toContain('data-step="check" data-status="done"');
     expect(pageBody).toContain('data-step="save" data-status="current"');
@@ -1968,7 +1968,7 @@ describe('job status routes', () => {
     const page = await fetch(request('/owner/jobs/job-1', { headers: { Cookie: opened.cookie } }));
     const pageBody = await page.text();
     expect(page.status).toBe(200);
-    expect(pageBody).toContain('<h1 id="save-heading">Saving…</h1>');
+    expect(pageBody).toContain('<h1 id="save-heading">Your page</h1>');
     expect(pageBody).toContain('<strong id="job-stage">Checking</strong>');
     expect(pageBody).toContain('data-step="check" data-status="current"');
     expect(pageBody).toContain('data-step="save" data-status="pending"');

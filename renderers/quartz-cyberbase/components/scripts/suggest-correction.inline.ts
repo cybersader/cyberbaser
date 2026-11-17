@@ -5,6 +5,7 @@ import {
   retryIdempotencyKey,
   submitCorrectionIntent,
 } from "../suggestCorrectionClient"
+import { setupEditEntryScroll } from "../editEntryClient"
 import { setupSuggestMode } from "../suggestMode"
 import { setupSuggestionSelection } from "../suggestCorrectionSelection"
 import { setupSuggestionChallenge } from "../suggestCorrectionChallenge"
@@ -38,6 +39,7 @@ function clearRetryState(key: string) {
 }
 
 document.addEventListener("nav", async () => {
+  window.addCleanup(setupEditEntryScroll())
   for (const form of document.querySelectorAll<HTMLFormElement>("form.suggest-correction-form")) {
     if (form.dataset.sourceIdentity && await setupSuggestMode(form)) continue
     const submit = form.querySelector<HTMLButtonElement>("button[type='submit']")

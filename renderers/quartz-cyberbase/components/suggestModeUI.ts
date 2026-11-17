@@ -6,9 +6,10 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, text: string, classNa
 }
 export function createSuggestModeUI(entry: HTMLButtonElement, onToggle: () => void, onReview: () => void, finishLabel = "Send") {
   const toolbar = el("div", "", "cb-suggest-toolbar")
-  toolbar.setAttribute("role", "toolbar"); toolbar.setAttribute("aria-label", "Suggestion controls")
-  const toggle = el("button", "×", "cb-suggest-toggle")
-  toggle.type = "button"; toggle.setAttribute("aria-pressed", "false"); toggle.setAttribute("aria-label", "Cancel editing")
+  toolbar.setAttribute("role", "toolbar"); toolbar.setAttribute("aria-label", finishLabel === "Save" ? "Editing controls" : "Suggestion controls")
+  const mode = el("span", finishLabel === "Save" ? "Editing" : "Suggesting", "cb-suggest-mode")
+  const toggle = el("button", "Cancel", "cb-suggest-toggle")
+  toggle.type = "button"; toggle.setAttribute("aria-pressed", "false"); toggle.setAttribute("aria-label", finishLabel === "Save" ? "Cancel editing" : "Cancel suggesting")
   const count = el("button", "0 changes", "cb-suggest-review")
   count.type = "button"; count.setAttribute("aria-expanded", "false")
   const review = el("button", `${finishLabel} · 0`, "cb-suggest-send-review")
@@ -19,7 +20,7 @@ export function createSuggestModeUI(entry: HTMLButtonElement, onToggle: () => vo
     button.type = "button"; button.setAttribute("aria-label", name); button.title = name; button.disabled = true
   }
   markdown.type = "button"; markdown.disabled = true; markdown.title = "Place the caret in a block to edit its Markdown"
-  toolbar.append(undo, redo, markdown, count)
+  toolbar.append(mode, undo, redo, markdown, count)
   const finish = el("div", "", "cb-suggest-finish")
   finish.setAttribute("role", "group"); finish.setAttribute("aria-label", "Finish editing")
   finish.append(toggle, review)

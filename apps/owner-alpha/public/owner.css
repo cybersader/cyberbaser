@@ -1,4 +1,5 @@
 :root {
+  --owner-primary: #0b6e50;
   color-scheme: light dark;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: #f4f5f7;
@@ -458,7 +459,7 @@ body.proposal-review-page {
 }
 
 @media (prefers-color-scheme: dark) {
-  :root { background: #10151c; color: #e9edf2; }
+  :root { --owner-primary: #5ecfa4; background: #10151c; color: #e9edf2; }
   .eyebrow, .lede, .status, dt { color: #aeb9c6; }
   form, .job-card { border-color: #394654; background: #18212b; box-shadow: none; }
   textarea { border-color: #526172; background: #101820; color: #edf2f7; }
@@ -1121,7 +1122,7 @@ body.publication-document-review { height: 100dvh; min-height: 0; margin: 0; pad
 .direct-change p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; }
 .direct-change del { color: #a32c32; background: #ffe4e5; }
 .direct-change ins { color: #087940; background: #d8f4df; }
-.owner-finish button[type=submit] { background: #0b6e50; border-color: #0b6e50; color: #fff; font-weight: 600; padding: 0 20px; border-radius: 8px; }
+.owner-finish button[type=submit] { background: var(--owner-primary); border-color: var(--owner-primary); color: #fff; font-weight: 600; padding: 0 20px; border-radius: 8px; }
 .direct-change p { margin: 0; }
 #direct-form { border: 0; padding: 0; background: transparent; box-shadow: none; }
 .owner-cancel-sheet { border: 1px solid #cbd2da; border-radius: 14px; padding: 24px; max-width: calc(100vw - 24px); }
@@ -1141,8 +1142,16 @@ body.publication-document-review { height: 100dvh; min-height: 0; margin: 0; pad
 .save-progress .job-step { font-size: .85rem; padding-left: 1.4rem; }
 .save-progress .job-step::before { width: .7rem; height: .7rem; top: .3rem; }
 .save-result-links { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
-.save-view-page { display: inline-block; border-radius: 8px; padding: 12px 20px; background: #245fc7; color: #fff; text-decoration: none; font-weight: 600; }
-.save-view-page:hover { background: #1b4da4; color: #fff; }
+.save-view-page { display: inline-block; border-radius: 8px; padding: 12px 20px; background: var(--owner-primary); color: #fff; text-decoration: none; font-weight: 600; }
+.save-view-page:hover { filter: brightness(.92); color: #fff; }
 .job-details { margin-top: 24px; font-size: .9rem; overflow-wrap: anywhere; }
 .job-details summary { cursor: pointer; color: inherit; }
 .job-details .rehearsal-notice { margin: 16px 0; padding: 12px; width: auto; }
+
+.direct-raw { font-size: .85rem; margin-block: 24px; }
+.direct-raw a { color: inherit; text-underline-offset: 3px; }
+.owner-finish #cancel-edit { background: transparent; color: inherit; font-size: .85rem; }
+@media (prefers-color-scheme: dark) {
+  .owner-finish { background: #18212b; color: #e9edf2; border-color: #394654; }
+  .owner-finish button[type=submit], .save-view-page, .save-view-page:hover { color: #10151c; }
+}

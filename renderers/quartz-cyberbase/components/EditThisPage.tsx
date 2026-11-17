@@ -42,9 +42,8 @@ export default ((opts: EditThisPageOptions) => {
     return (
       <p class={classNames(displayClass, "edit-this-page")}>
         <a href={link.href} {...externalProps} class={pencil ? "cb-edit-entry" : undefined} data-placement={pencil ? opts.editEntry ?? "auto" : undefined} title={pencil ? "Edit" : relativePath} aria-label="Edit this page">
-          {pencil ? <EditPencil /> : <><span aria-hidden="true">&#9998;</span> {label}</>}
+          {pencil ? <><EditPencil /><span class="cb-edit-label">Edit</span></> : <><span aria-hidden="true">&#9998;</span> {label}</>}
         </a>
-        {pencil && <a class="cb-edit-markdown" href={link.href.replace("/owner/in-place?", "/owner/edit?")}>Markdown</a>}
       </p>
     )
   }

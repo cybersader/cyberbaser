@@ -59,7 +59,7 @@ export function setupSuggestViewport(root: HTMLElement, form: HTMLFormElement, t
         if (caretRect.height) rect = caretRect
       }
     }
-    const top = viewport.offsetTop + (hidden && !container ? 88 : 16), bottom = viewport.offsetTop + viewport.height - 24
+    const top = viewport.offsetTop + (hidden && !container ? 112 : 16), bottom = viewport.offsetTop + viewport.height - 24
     const delta = rect.height > bottom - top ? rect.top - top
       : rect.bottom > bottom ? rect.bottom - bottom : rect.top < top ? rect.top - top : 0
     if (Math.abs(delta) > 1) {

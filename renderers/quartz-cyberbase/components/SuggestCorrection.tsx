@@ -17,7 +17,7 @@ export default ((opts: SuggestCorrectionOptions) => {
 
     return (
       <section class={classNames(displayClass, "suggest-correction")} aria-label="Suggest an edit">
-        <button type="button" class="suggest-correction-entry cb-edit-entry" data-placement={opts.enabled ? opts.editEntry ?? "auto" : "auto"} aria-label="Edit this page" title="Edit"><EditPencil /></button>
+        <button type="button" class="suggest-correction-entry cb-edit-entry" data-placement={opts.enabled ? opts.editEntry ?? "auto" : "auto"} aria-label="Edit this page" title="Edit"><EditPencil /><span class="cb-edit-label">Edit</span></button>
         <p class="suggest-correction-hint" role="status" aria-live="polite" hidden>
           Select words in the page and choose Suggest edit, or click a pencil beside a paragraph.
           Your edit goes to the owner for review; the page stays unchanged. No account needed.
@@ -136,7 +136,8 @@ article.cb-suggesting, article.cb-suggesting:focus { outline: none; caret-color:
 :is(.cb-suggest-toolbar, .cb-suggest-help, .cb-suggest-tray, .cb-source-editor) button:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
 .cb-suggest-toolbar { position: fixed; z-index: 70; bottom: 16px; right: 16px; display: flex; align-items: center; gap: 6px; padding: 8px; border: 1px solid var(--lightgray); border-radius: 10px; background: var(--light); color: var(--dark); box-shadow: 0 5px 24px #0002; }
 .cb-suggest-toolbar .cb-suggest-toggle { display: inline-flex; align-items: center; gap: 7px; border-color: transparent; }
-.cb-suggest-toggle::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--secondary); }
+.cb-suggest-mode { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font: 500 .75rem var(--bodyFont); color: var(--darkgray); }
+.cb-suggest-mode::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--secondary); opacity: .8; }
 .cb-suggest-toolbar .cb-suggest-review { border-color: transparent; font-variant-numeric: tabular-nums; }
 .cb-suggest-toolbar .cb-suggest-review[aria-expanded='true'] { background: var(--highlight); }
 .cb-suggest-toolbar .cb-suggest-send-review, .cb-source-editor .cb-source-done { color: var(--light); background: var(--secondary); border-color: var(--secondary); }
@@ -283,7 +284,7 @@ body.cb-suggest-keyboard-open .cb-suggest-tray { bottom: calc(var(--cb-suggest-k
    never Safari's unstable keyboard-relative bottom edge. */
 .cb-suggest-finish { position: fixed; z-index: 80; bottom: 16px; right: 16px; display: flex; align-items: center; gap: 8px; padding: 8px; background: var(--light); border: 1px solid var(--lightgray); border-radius: 12px; box-shadow: 0 4px 24px #0002; }
 .cb-suggest-finish button { min-width: 44px; min-height: 44px; padding: 8px 14px; border: 1px solid var(--lightgray); border-radius: 6px; background: var(--light); color: var(--secondary); font: 600 0.9rem var(--bodyFont); cursor: pointer; }
-.cb-suggest-finish .cb-suggest-toggle { font-size: 24px; padding-inline: 10px; }
+.cb-suggest-finish .cb-suggest-toggle { font-size: .85rem; padding-inline: 10px; }
 .cb-suggest-finish .cb-suggest-toggle::before { display: none; }
 .cb-suggest-finish .cb-suggest-send-review { background: var(--secondary); color: var(--light); white-space: nowrap; }
 .cb-suggest-finish button:disabled { opacity: .55; cursor: not-allowed; }
@@ -303,8 +304,11 @@ body.cb-suggest-review-open :is(.cb-suggest-finish, .cb-suggest-toolbar) { visib
 body.cb-suggest-keyboard-open .cb-suggest-finish { top: calc(var(--cb-suggest-visible-top, 0px) + max(8px, env(safe-area-inset-top, 0px))); bottom: auto; right: 8px; }
 body.cb-suggest-keyboard-open .cb-suggest-toolbar { top: calc(var(--cb-suggest-visible-top, 0px) + max(8px, env(safe-area-inset-top, 0px))); bottom: auto; }
 @media (max-width: 800px) {
-  .cb-suggest-toolbar { inset: auto auto 8px 8px; display: flex; width: auto; padding: 8px 4px; gap: 0; border: 1px solid var(--lightgray); border-radius: 12px; }
+  .cb-suggest-toolbar { inset: auto auto 8px 8px; display: grid; grid-template-columns: repeat(3, 44px); width: auto; padding: 6px 4px; gap: 0; border: 1px solid var(--lightgray); border-radius: 12px; }
   .cb-suggest-toolbar button { min-width: 44px; min-height: 44px; padding-inline: 4px; }
+  .cb-suggest-tray { bottom: calc(104px + env(safe-area-inset-bottom, 0px)); }
+  .cb-suggest-mode { grid-column: 1 / -1; padding: 0 4px 4px; }
+  body:has(.cb-suggesting) { padding-bottom: calc(120px + env(safe-area-inset-bottom, 0px)); }
   .cb-suggest-toolbar .cb-suggest-review { display: none; }
   .cb-suggest-toolbar .cb-suggest-markdown { font-size: 0; }
   .cb-suggest-toolbar .cb-suggest-markdown::after { content: '</>'; font-size: 16px; }

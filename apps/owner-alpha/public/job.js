@@ -43,8 +43,6 @@ function paint(jobState) {
     element.dataset.status = status;
   });
   if (stage) stage.textContent = stageCopy(jobState);
-  const heading = document.querySelector('#save-heading');
-  if (heading) heading.textContent = done ? 'Saved' : stopped && jobState !== 'live-verification-failed' ? 'Save needs attention' : 'Saving…';
   const indicator = document.querySelector('#job-steps');
   if (indicator) indicator.hidden = done || (stopped && jobState !== 'live-verification-failed');
   const links = document.querySelector('#save-result-links');
