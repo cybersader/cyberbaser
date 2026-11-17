@@ -7,11 +7,24 @@ import type { EditThisPageOptions } from "./quartz/components/editLink"
 import { resolveEditEntry } from "./quartz/components/editEntryConfig"
 import SuggestCorrection from "./quartz/components/SuggestCorrection"
 import { resolveSuggestCorrectionOptions } from "./quartz/components/suggestCorrectionConfig"
+import NoteActions from "./quartz/components/NoteActions"
+import NoteDates from "./quartz/components/NoteDates"
+import { githubSourceHost } from "./quartz/components/sourceLinks"
 
 // Source of truth for the vault repo. The footer always links to the source;
 // public edit mode also uses it for the existing GitHub web-editor URL.
 const VAULT_REPO_URL = "https://github.com/cybersader/cyberbase"
 const VAULT_REPO_BRANCH = "main"
+// Source-host links (view, raw, copy, download, web editor) for every note,
+// built from the vault path. View/raw pin to the vault commit being published
+// so Copy Markdown matches the page; only trusted when the build runs in the
+// vault repo itself or the revision is passed explicitly.
+const SOURCE_HOST = githubSourceHost({
+  repoUrl: VAULT_REPO_URL,
+  branch: VAULT_REPO_BRANCH,
+  revision: process.env.CYBERBASER_SOURCE_REVISION ||
+    (process.env.GITHUB_REPOSITORY === "cybersader/cyberbase" ? process.env.GITHUB_SHA : undefined),
+})
 
 // Build-time only. Public is the fail-closed default; owner mode is an explicit
 // local opt-in and is rejected in CI by resolveEditLinkMode.
@@ -42,7 +55,7 @@ const SUGGEST_CORRECTION_COMPONENTS = SUGGEST_CORRECTION_OPTIONS.enabled
 export const sharedPageComponents: SharedLayout = {
   head: Component.Head(),
   header: [],
-  afterBody: [],
+  afterBody: [NoteActions({ host: SOURCE_HOST, placement: "footer" })],
   footer: Component.Footer({
     links: {
       Vault: VAULT_REPO_URL,
@@ -59,10 +72,11 @@ export const defaultContentPageLayout: PageLayout = {
       condition: (page) => page.fileData.slug !== "index",
     }),
     Component.ArticleTitle(),
-    Component.ContentMeta(),
+    NoteDates(),
     // Public builds open GitHub; private builds use the shared editor when
     // present with page provenance, otherwise the existing raw owner editor.
     EditThisPage(EDIT_THIS_PAGE_OPTIONS),
+    NoteActions({ host: SOURCE_HOST, placement: "header" }),
     ...SUGGEST_CORRECTION_COMPONENTS,
     Component.TagList(),
   ],
@@ -96,8 +110,9 @@ export const defaultListPageLayout: PageLayout = {
   beforeBody: [
     Component.Breadcrumbs(),
     Component.ArticleTitle(),
-    Component.ContentMeta(),
+    NoteDates(),
     EditThisPage(EDIT_THIS_PAGE_OPTIONS),
+    NoteActions({ host: SOURCE_HOST, placement: "header" }),
     ...SUGGEST_CORRECTION_COMPONENTS,
   ],
   left: [

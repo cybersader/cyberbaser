@@ -43,6 +43,8 @@ function disabledLayoutBytes(layoutSource: string): Buffer {
     process: { env: {} },
     Component: new Proxy({}, { get: (_target, name) => (...args: unknown[]) => ({ component: String(name), args }) }),
     EditThisPage: (opts: unknown) => ({ component: "EditThisPage", opts }),
+    NoteActions: (opts: { placement: string }) => ({ component: "NoteActions", placement: opts.placement }),
+    NoteDates: () => ({ component: "NoteDates" }), githubSourceHost: () => ({ id: "github" }),
     resolveEditEntry: () => "auto", resolveEditLinkMode: () => "public", resolveOwnerOrigin: () => { throw new Error("unexpected owner origin") },
     resolveSuggestCorrectionOptions: () => ({ enabled: false }),
     SuggestCorrection: () => { throw new Error("a disabled layout must not collect suggestion CSS/scripts") },

@@ -72,6 +72,20 @@ Use the manifest to choose the least work needed: README handling, links and ass
 
 Preserve untouched source bytes; no whole-file serializer, mass renames, blanket selection expansion, or unrelated inherited-link cleanup. This session changes documentation only. The existing [R23 emitted-site continuity gate](/cyberbaser/research/proposal-renderer-urls/) protects the reviewed Quartz baseline; it does not cover unknown Publish routes or establish a custom-domain migration by itself.
 
+## Must-have: note source controls (owner requirement, 2026-11-17)
+
+The owner requires feature parity with the Publish site's `publish.js` controls: "the various copy buttons, the show raw, all of that needs to be a part of cyberbase still." Cutover is blocked until every note page has them. The renderer now provides them (`NoteActions`, `NoteDates`, `sourceLinks.ts`):
+
+- [x] A link row under the title: **View source**, **Copy Markdown** (puts the note's raw Markdown on the clipboard, not just a link), **Show raw** and **Download vault**. At 750 px and below only View source and Copy Markdown show. The pencil or Edit control stays separate.
+- [x] An **Interact with this note** block after the body: Edit note, Raw note, Download vault and Open in web editor (github.dev).
+- [x] A metadata line showing only "📅 created" and "📅 updated" from the vault's `date created` / `date modified` frontmatter (Obsidian's "Wednesday, May 15th 2024, 9:13 pm" form is parsed), plus reading time. No other frontmatter is shown.
+- [x] Links point at `cybersader/cyberbase` (not the old `awesome-cybersader`) and are built from the note's vault path at build time, never the URL slug, so permalinks and emoji folders cannot break them. View, raw and Copy pin to the vault commit being published when the build runs in the vault repository (`GITHUB_SHA`) or `CYBERBASER_SOURCE_REVISION` is set. Edit, web editor and download use `main`.
+- [x] Source hosts sit behind a `SourceHost` interface. GitHub is the only provider today; a Forgejo provider would implement the same five links.
+- [ ] Reaches cybersader.com only when the vault workflow's renderer pin is bumped past this change, which is its own reviewed step.
+- [ ] Decide whether to carry over the PostHog analytics that `publish.js` initializes (owner's call; not carried over by default).
+
+Raw and Copy expose the whole source file, as `publish.js` already did; the vault repository is public. On the private owner site, the content security policy blocks fetching from GitHub, so Copy Markdown there opens the raw file instead.
+
 ## C. Accept a contained preview
 
 - [ ] Separately authorize a disposable renderer preview against pinned source, publication selection, renderer/configuration, and manifest inputs. **Do not start owner-alpha as a passive preview:** normal startup can start intake and recover jobs.
