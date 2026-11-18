@@ -129,7 +129,11 @@ export function suggestionEnvironment(suggestions) {
   };
 }
 
-export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, ownerOrigin, suggestions = null }) {
+export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, ownerOrigin, suggestions = null, siteConfigPath = null }) {
+  // The vault's own site settings (.cyberbaser/site.yml), when it has one.
+  if (siteConfigPath !== null && (typeof siteConfigPath !== 'string' || !path.isAbsolute(siteConfigPath) || path.normalize(siteConfigPath) !== siteConfigPath)) {
+    fail('invalid-render-path', 'siteConfigPath must be null or one normalized absolute path');
+  }
   const content = absoluteDirectory(contentDir, 'contentDir');
   const output = absoluteDirectory(outputDir, 'outputDir');
   const workspace = absoluteDirectory(workspaceDir, 'workspaceDir');
@@ -166,6 +170,7 @@ export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, 
         OUTPUT_DIR: output,
         CYBERBASER_EDIT_LINK_MODE: 'owner',
         CYBERBASER_OWNER_ORIGIN: ownerOrigin,
+        ...(siteConfigPath ? { CYBERBASER_SITE_CONFIG: siteConfigPath } : {}),
         ...formEnvironment,
       }),
     },
