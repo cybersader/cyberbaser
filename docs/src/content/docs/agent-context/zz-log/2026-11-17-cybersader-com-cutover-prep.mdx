@@ -1,0 +1,14 @@
+---
+title: cybersader.com cutover prep
+description: "Read-only mapping of all 1,417 Obsidian Publish URLs to the Quartz site (920 redirect, 497 retired by the publish boundary, 0 unresolved), a static-host redirect prototype with machine checks, and the switch sheet with DNS, HTTPS and rollback values."
+status: log
+tags: [planning, setup]
+---
+
+The vault agent relayed the owner's approval to prepare the cybersader.com move, planning only.
+
+Read once from the live Publish site: `sitemap.xml`, the site's file index (`/cache/<site uid>`) and options. Publish answers every path with its app shell and matches notes case-insensitively. The vault clone at `0cc579a` and a full local Quartz build with the current renderer supplied the new side.
+
+Result: 920 of 1,417 notes map to a page on the new site, 497 are excluded by the July `publish.yml` boundary, none are unresolved. Three of six permalinks point at excluded notes. A three-part redirect layer (static stubs in `+` and space form, a normalized map, a `404.html` fallback) was prototyped on a copy of the build and checked with a case-sensitive static server: 1,840/1,840 stubs reach real pages, 3,680/3,680 variants covered, 497/497 retired URLs return 404 with a notice, 98% of heading links hit the exact heading id. A browser run confirmed the fragment and fallback behavior. A first run had a script bug that truncated `404.html` before patching it; caught by the browser check and fixed.
+
+Canonical plan and values: [cybersader.com cutover sheet](/cyberbaser/development/cybersader-com-cutover/). Mapping artifacts stay in the private workspace; this public log records counts only. Nothing live changed.
