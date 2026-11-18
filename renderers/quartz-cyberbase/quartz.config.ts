@@ -2,6 +2,8 @@ import { QuartzConfig } from "./quartz/cfg"
 import * as Plugin from "./quartz/plugins"
 import { RelativeFolderLinks } from "./quartz/cyberbase/RelativeFolderLinks"
 import { provenanceMode, withSourceProvenance } from "./quartz/cyberbase/SourceProvenance"
+import { LegacyRedirects } from "./quartz/cyberbase/LegacyRedirects"
+import { resolveSiteBaseUrl } from "./quartz/cyberbase/siteBase"
 
 /**
  * Quartz renderer config for the cyberbase site.
@@ -25,8 +27,9 @@ const config: QuartzConfig = {
     analytics: null,
     locale: "en-US",
     // Host + base path. Quartz takes baseUrl without a protocol; the trailing
-    // path segment is the GitHub Pages project base (/cyberbase).
-    baseUrl: "cybersader.github.io/cyberbase",
+    // path segment is the GitHub Pages project base (/cyberbase). A custom
+    // domain build sets CYBERBASER_BASE_URL or CB_BASE_URL (e.g. cybersader.com).
+    baseUrl: resolveSiteBaseUrl(process.env),
     // Backstop only. Globs are case-sensitive in Quartz, and the projection
     // lowercases paths, so both cases are listed where it matters.
     ignorePatterns: [".obsidian", ".git", "templates", "Templates"],
@@ -122,6 +125,9 @@ const config: QuartzConfig = {
       Plugin.Favicon(),
       Plugin.NotFoundPage(),
       Plugin.CustomOgImages(),
+      // Old-host URLs (Obsidian Publish) from the vault's snapshot. Off unless
+      // CYBERBASER_LEGACY_URLS names the snapshot file.
+      LegacyRedirects({ snapshotPath: process.env.CYBERBASER_LEGACY_URLS || undefined }),
     ],
   },
 }

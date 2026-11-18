@@ -1,23 +1,29 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { checkUrlContinuity, UrlContinuityError } from '../src/url-continuity.js';
+import { checkUrlContinuity, rebaseSitemap, UrlContinuityError } from '../src/url-continuity.js';
 
 const argv = process.argv.slice(2);
 
 function usage(message = null) {
   if (message !== null) console.error(`cb-urlcheck: ${message}`);
-  console.error('usage: cb-urlcheck <previous-sitemap.xml> <candidate-site-dir> [--base-path prefix] [--json out]');
+  console.error('usage: cb-urlcheck <previous-sitemap.xml> <candidate-site-dir> [--base-path prefix] [--rebase-previous FROM=TO] [--json out]');
   process.exit(2);
 }
 
 const positional = [];
 let basePath = '';
 let jsonOut = null;
+let rebase = null;
 for (let index = 0; index < argv.length; index += 1) {
   const argument = argv[index];
   if (argument === '--base-path') basePath = argv[++index] ?? usage('--base-path needs a prefix');
-  else if (argument === '--json') jsonOut = argv[++index] ?? usage('--json needs a path');
+  else if (argument === '--rebase-previous') {
+    const value = argv[++index] ?? usage('--rebase-previous needs FROM=TO');
+    const split = value.indexOf('=');
+    if (split <= 0) usage('--rebase-previous needs FROM=TO');
+    rebase = [value.slice(0, split), value.slice(split + 1)];
+  } else if (argument === '--json') jsonOut = argv[++index] ?? usage('--json needs a path');
   else if (argument === '-h' || argument === '--help') usage();
   else if (argument.startsWith('-')) usage(`unknown flag: ${argument}`);
   else positional.push(argument);
@@ -27,11 +33,12 @@ if (positional.length !== 2) usage('expected one previous sitemap and one candid
 const [previousPath, siteDir] = positional;
 try {
   const report = checkUrlContinuity({
-    previousSitemap: readFileSync(previousPath),
+    previousSitemap: rebase ? rebaseSitemap(readFileSync(previousPath), ...rebase) : readFileSync(previousPath),
     candidateSitemap: readFileSync(join(siteDir, 'sitemap.xml')),
     siteDir,
     basePath,
   });
+  if (rebase) console.log(`previous rebased: ${rebase[0]} -> ${rebase[1]}`);
   console.log(`origin: ${report.origin}`);
   console.log(`base path: ${report.basePath === '' ? '/' : `/${report.basePath}/`}`);
   console.log(`previous: ${report.counts.previous}  candidate: ${report.counts.candidate}`);

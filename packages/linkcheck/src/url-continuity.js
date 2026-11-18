@@ -24,6 +24,29 @@ function fail(code, message) {
   throw new UrlContinuityError(code, message);
 }
 
+/**
+ * Move a previous sitemap to a new site address, for a deliberate domain or
+ * base-path move (for example a project site gaining a custom domain). Every
+ * <loc> must start with `from`; each is rewritten to start with `to`, so the
+ * continuity check still demands every old path at the new address.
+ */
+export function rebaseSitemap(value, from, to) {
+  const text = exactText(value, 'previous sitemap');
+  for (const [label, prefix] of [['from', from], ['to', to]]) {
+    let parsed;
+    try { parsed = new URL(prefix); } catch { fail('invalid-rebase', `rebase ${label} must be an absolute https URL`); }
+    if (parsed.protocol !== 'https:' || parsed.search || parsed.hash || prefix.endsWith('/')) {
+      fail('invalid-rebase', `rebase ${label} must be an https origin with an optional path and no trailing slash`);
+    }
+  }
+  const locs = text.match(/<loc>[^<]*<\/loc>/gu) ?? [];
+  for (const loc of locs) {
+    const url = loc.slice(5, -6);
+    if (url !== from && !url.startsWith(`${from}/`)) fail('rebase-mismatch', `previous sitemap URL ${url} is outside ${from}`);
+  }
+  return text.replace(/<loc>([^<]*)<\/loc>/gu, (_match, url) => `<loc>${to}${url.slice(from.length)}</loc>`);
+}
+
 function exactText(value, label) {
   if (typeof value === 'string') return value;
   if (value instanceof Uint8Array) {
