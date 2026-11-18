@@ -53,6 +53,10 @@ function lineAt(starts, index) {
 }
 
 const WIKI = /(!?)\[\[([^\[\]\n]+?)\]\]/g;
+// Raw HTML media in a note (`<img src="_attachments/x.png">`), which Obsidian
+// resolves like a markdown image. Only the src attribute; external URLs are
+// filtered by the resolver like any other href.
+const HTML_SRC = /<(?:img|source|video|audio)\b[^>]*?\ssrc\s*=\s*(?:"([^"\n]*)"|'([^'\n]*)')/gi;
 const MD = /(!?)\[([^\]]*)\]\((<[^>\n]*>|[^)\s]*)(?:\s+(?:"[^"\n]*"|'[^'\n]*'|\([^)\n]*\)))?\)/g;
 
 /** `target#heading|alias`, `target#^block`, `#heading` (same file), `![[img|200x100]]`. */
@@ -73,16 +77,17 @@ function parseWikiInner(inner) {
 
 /**
  * @param {string} markdown
- * @returns {{wikilinks: object[], embeds: object[], mdLinks: object[], mdImages: object[]}}
+ * @returns {{wikilinks: object[], embeds: object[], mdLinks: object[], mdImages: object[], htmlSrcs: object[]}}
  *   Every ref carries `raw`, `target`, `line` (1-based) and `index` (offset in
  *   the original text). Wikilinks and embeds also carry `heading`, `block`,
  *   `alias` and `params`; markdown links carry `text`, images carry `alt`.
+ *   `htmlSrcs` are src attributes of raw HTML img/source/video/audio tags.
  */
 export function extractRefs(markdown) {
   const src = typeof markdown === 'string' ? markdown : '';
   const masked = maskCode(src);
   const starts = lineStarts(src);
-  const refs = { wikilinks: [], embeds: [], mdLinks: [], mdImages: [] };
+  const refs = { wikilinks: [], embeds: [], mdLinks: [], mdImages: [], htmlSrcs: [] };
 
   for (const m of masked.matchAll(WIKI)) {
     const parsed = parseWikiInner(m[2]);
@@ -111,11 +116,21 @@ export function extractRefs(markdown) {
     else { ref.text = m[2]; refs.mdLinks.push(ref); }
   }
 
+  for (const m of masked.matchAll(HTML_SRC)) {
+    refs.htmlSrcs.push({
+      kind: 'html-src',
+      raw: src.slice(m.index, m.index + m[0].length),
+      target: m[1] ?? m[2] ?? '',
+      line: lineAt(starts, m.index),
+      index: m.index,
+    });
+  }
+
   return refs;
 }
 
-/** All four buckets in one array, source order. Convenience for callers that walk everything. */
+/** All buckets in one array, source order. Convenience for callers that walk everything. */
 export function allRefs(markdown) {
   const r = extractRefs(markdown);
-  return [...r.wikilinks, ...r.embeds, ...r.mdLinks, ...r.mdImages].sort((a, b) => a.index - b.index);
+  return [...r.wikilinks, ...r.embeds, ...r.mdLinks, ...r.mdImages, ...r.htmlSrcs].sort((a, b) => a.index - b.index);
 }

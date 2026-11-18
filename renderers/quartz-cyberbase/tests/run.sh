@@ -9,6 +9,8 @@ bun "$HERE/edit-entry.test.ts"
 bun "$HERE/note-actions.test.ts"
 bun "$HERE/analytics.test.ts"
 bun "$HERE/legacy-urls.test.ts"
+bun "$HERE/appearance.test.ts"
+bun "$HERE/toc-plain-text.test.ts"
 bun "$HERE/suggest-correction.test.ts"
 bun "$HERE/suggest-diff.test.ts"
 bun "$HERE/suggest-challenge.test.ts" # imports suggest-mode.test.ts

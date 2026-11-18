@@ -344,7 +344,7 @@ export function selectFiles(fileMap, config, opts = {}) {
       noteRef(target, ref, p);
     }
 
-    for (const ref of [...refs.mdImages, ...refs.mdLinks]) {
+    for (const ref of [...refs.mdImages, ...refs.mdLinks, ...refs.htmlSrcs]) {
       const target = resolveHref(ref.target, p, index);
       if (!target) continue;
       if (isMarkdown(target)) {

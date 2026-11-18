@@ -8,5 +8,7 @@ export {
   injectAlias,
   projectedPath,
   naturalCaseAlias,
+  slugTarget,
+  pageTargets,
   REPORT_FILENAME,
 } from './project.js';
