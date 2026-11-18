@@ -35,7 +35,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import yaml from 'js-yaml';
-import { select, lintVault } from '@cyberbaser/publish';
+import { select, lintVault, extractRefs } from '@cyberbaser/publish';
 import { parseFrontmatter } from '@cyberbaser/publish/src/select.js';
 
 // Mirrors select.js. Kept local rather than imported so the two can never disagree
@@ -71,6 +71,31 @@ export function projectedPath(vaultPath, lowercase = true) {
     .split('/')
     .map((segment) => segment.toLowerCase())
     .join('/');
+}
+
+/**
+ * Where a page with an explicit `slug:` is projected: `<slug>.md`, so the renderer
+ * gives it that URL (`slug: index` makes a note the home page). Returns null for a
+ * slug that is not a plain relative path. Publish rule 2 requires a slug for pages
+ * granted outside the allowlist; before this, nothing applied it.
+ */
+export function slugTarget(slug) {
+  if (typeof slug !== 'string') return null;
+  const s = slug.trim().replace(/^\/+|\/+$/g, '').replace(/\.(md|html)$/i, '');
+  if (s === '' || s.includes('\\') || CONTROL.test(s)) return null;
+  const parts = s.split('/');
+  if (parts.some((x) => x === '' || x === '.' || x === '..' || x.trim() !== x)) return null;
+  return `${s}.md`;
+}
+
+/** Projected path for every published page: its slug target, else its (case-)projected path. */
+export function pageTargets(pages, slugs = {}, lowercase = false) {
+  const targets = new Map();
+  for (const p of pages) {
+    const fromSlug = Object.prototype.hasOwnProperty.call(slugs, p) ? slugTarget(slugs[p]) : null;
+    targets.set(p, fromSlug ?? projectedPath(p, lowercase));
+  }
+  return targets;
 }
 
 /** The alias to inject for a page whose path changed case: the natural-case path, no extension. */
@@ -425,7 +450,8 @@ export function verifyProjection(vaultDir, outDir, selectResult, opts = {}) {
   const lowercase = opts.lowercase ?? false;
   const pages = selectResult.report.published.pages;
   const assets = selectResult.report.published.assets;
-  const expected = new Set([...pages, ...assets].map((p) => projectedPath(p, lowercase)));
+  const targets = pageTargets(pages, selectResult.report.slugs ?? {}, lowercase);
+  const expected = new Set([...pages.map((p) => targets.get(p)), ...assets.map((p) => projectedPath(p, lowercase))]);
   const actual = new Set(walkFiles(outDir));
 
   const unexpected = [...actual].filter((p) => !expected.has(p)).sort();
@@ -515,7 +541,7 @@ export function project(vaultDir, outDir, opts = {}) {
   const aliases = [];
   let leakTest = null;
   let pathLint = null;
-  let counts = { pages: 0, assets: 0, aliasesInjected: 0, aliasesSkipped: 0, caseChangedPages: 0, caseChangedAssets: 0, warnings: 0 };
+  let counts = { pages: 0, assets: 0, aliasesInjected: 0, aliasesSkipped: 0, caseChangedPages: 0, caseChangedAssets: 0, relocatedPages: 0, warnings: 0 };
 
   const finish = () => {
     counts.warnings = warnings.length;
@@ -590,6 +616,41 @@ export function project(vaultDir, outDir, opts = {}) {
   warnings.push(...safety.warnings);
   failures.push(...safety.failures);
 
+  // 6b. Explicit slugs move a page to `<slug>.md`. Fail on a malformed slug, on a
+  //     target another published file already projects to, and on a move to another
+  //     folder when the note uses relative references that would stop resolving.
+  const slugs = selectResult.report.slugs ?? {};
+  const targets = pageTargets(pages, slugs, lowercase);
+  const occupied = new Map();
+  for (const p of [...pages, ...assets]) {
+    const natural = projectedPath(p, lowercase);
+    if (!occupied.has(natural)) occupied.set(natural, p);
+  }
+  for (const p of pages) {
+    if (!Object.prototype.hasOwnProperty.call(slugs, p)) continue;
+    const target = targets.get(p);
+    if (slugTarget(slugs[p]) === null) {
+      failures.push({ kind: 'slug', path: p, message: `slug ${JSON.stringify(slugs[p])} is not a plain relative path` });
+      continue;
+    }
+    if (target === projectedPath(p, lowercase)) continue;
+    const holder = occupied.get(target);
+    const otherTarget = pages.find((q) => q !== p && targets.get(q) === target);
+    if ((holder && holder !== p) || otherTarget) {
+      failures.push({ kind: 'slug', path: p, message: `slug ${JSON.stringify(slugs[p])} projects to "${target}", which ${otherTarget ?? holder} already uses` });
+      continue;
+    }
+    const dirOf = (x) => (x.includes('/') ? x.slice(0, x.lastIndexOf('/')) : '');
+    if (dirOf(target) !== dirOf(normalize(p))) {
+      const refs = extractRefs(fs.readFileSync(path.join(vaultDir, p), 'utf8'));
+      const relative = [...refs.mdLinks, ...refs.mdImages, ...refs.htmlSrcs]
+        .filter((r) => r.target && !/^([a-z][a-z0-9+.-]*:|#|\/)/i.test(r.target));
+      if (relative.length) {
+        failures.push({ kind: 'slug', path: p, message: `slug moves this note to another folder, but line ${relative[0].line} uses the relative reference ${JSON.stringify(relative[0].target)}` });
+      }
+    }
+  }
+
   if (failures.length) return finish();
 
   // 3. Copy.
@@ -598,14 +659,17 @@ export function project(vaultDir, outDir, opts = {}) {
   ensureDir(outDir);
 
   for (const p of pages) {
-    const target = projectedPath(p, lowercase);
+    const target = targets.get(p);
     const dst = path.join(outDir, target);
     ensureDir(path.dirname(dst));
     if (target === p) {
       fs.copyFileSync(path.join(vaultDir, p), dst);
       continue;
     }
-    counts.caseChangedPages += 1;
+    // A moved or case-changed page keeps its natural path as an alias, so old links
+    // and URLs still reach it.
+    if (target === projectedPath(p, lowercase)) counts.caseChangedPages += 1;
+    else counts.relocatedPages += 1;
     const alias = naturalCaseAlias(p);
     const result = injectAlias(fs.readFileSync(path.join(vaultDir, p)), alias);
     fs.writeFileSync(dst, result.buffer);

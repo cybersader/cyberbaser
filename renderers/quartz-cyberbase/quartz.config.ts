@@ -3,6 +3,9 @@ import * as Plugin from "./quartz/plugins"
 import { RelativeFolderLinks } from "./quartz/cyberbase/RelativeFolderLinks"
 import { provenanceMode, withSourceProvenance } from "./quartz/cyberbase/SourceProvenance"
 import { LegacyRedirects } from "./quartz/cyberbase/LegacyRedirects"
+import { VaultAppearance } from "./quartz/cyberbase/VaultAppearance"
+import { TocPlainText } from "./quartz/cyberbase/TocPlainText"
+import { siteBasePath } from "./quartz/cyberbase/siteBase"
 import { loadSiteConfig } from "./quartz/cyberbase/siteConfigFile"
 
 // Instance settings from the vault (.cyberbaser/site.yml); neutral without one.
@@ -101,6 +104,8 @@ const config: QuartzConfig = {
       Plugin.ObsidianFlavoredMarkdown({ enableInHtmlEmbed: false }),
       Plugin.GitHubFlavoredMarkdown(),
       Plugin.TableOfContents(),
+      // Headings with inline icons: TOC shows visible text and links to the real ids.
+      TocPlainText(),
       // Must run BEFORE CrawlLinks: rewrites folder-qualified relative targets
       // to root-absolute so Obsidian's page-relative semantics survive. See
       // plugins/RelativeFolderLinks.ts.
@@ -130,6 +135,8 @@ const config: QuartzConfig = {
       // Old-host URLs (for example Obsidian Publish) from the snapshot named
       // by legacyUrls in the site settings. Off without one.
       LegacyRedirects({ snapshotPath: SITE.legacyUrls }),
+      // The vault's own stylesheet and default color scheme (appearance in site.yml).
+      ...(SITE.appearance ? [VaultAppearance({ ...SITE.appearance, basePath: siteBasePath(SITE.baseUrl) })] : []),
     ],
   },
 }

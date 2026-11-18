@@ -18,10 +18,12 @@ export interface SiteConfig {
   /** Absolute path of an old-host URL snapshot (see LegacyRedirects). */
   legacyUrls?: string
   editEntry?: "auto" | "floating" | "inline"
+  /** The vault's own look: a stylesheet loaded after the renderer's, and the default color scheme. */
+  appearance?: { stylesheet?: string; colorScheme: "system" | "dark" | "light" }
 }
 
 export const NEUTRAL_BASE_URL = "example.com"
-const KNOWN = { site: ["title", "baseUrl"], source: ["provider", "repository", "branch"], analytics: ["provider", "apiKey", "apiHost", "personProfiles"], editing: ["entry"] }
+const KNOWN = { site: ["title", "baseUrl"], source: ["provider", "repository", "branch"], analytics: ["provider", "apiKey", "apiHost", "personProfiles"], editing: ["entry"], appearance: ["stylesheet", "colorScheme"] }
 
 function fail(message: string): never {
   throw new Error(`site settings: ${message}`)
@@ -53,9 +55,10 @@ export function validateBaseUrl(raw: string, name = "site.baseUrl"): string {
 /** Validate parsed settings. `dir` resolves relative file references. */
 export function parseSiteConfig(parsed: unknown, dir: string, env: Record<string, string | undefined> = {}): SiteConfig {
   const data = object(parsed, "settings")
-  for (const key of Object.keys(data)) if (!["site", "source", "analytics", "legacyUrls", "editing"].includes(key)) fail(`unknown key ${key}`)
+  for (const key of Object.keys(data)) if (!["site", "source", "analytics", "legacyUrls", "editing", "appearance"].includes(key)) fail(`unknown key ${key}`)
   const site = object(data.site, "site"), source = object(data.source, "source")
   const analytics = object(data.analytics, "analytics"), editing = object(data.editing, "editing")
+  const appearance = object(data.appearance, "appearance")
 
   // Older vault workflows pass the address as CB_BASE_URL. Accept it only if
   // it agrees with the settings file, so there is one source of truth.
@@ -89,16 +92,27 @@ export function parseSiteConfig(parsed: unknown, dir: string, env: Record<string
     }
   }
   const legacy = text(data.legacyUrls, "legacyUrls")
-  if (legacy) {
-    if (path.isAbsolute(legacy) || legacy.split(/[\\/]/).includes("..")) fail("legacyUrls must be a path inside the settings folder")
-    config.legacyUrls = path.join(dir, legacy)
-  }
+  if (legacy) config.legacyUrls = insideSettings(legacy, dir, "legacyUrls")
   const entry = text(editing.entry, "editing.entry")
   if (entry) {
     if (!["auto", "floating", "inline"].includes(entry)) fail("editing.entry must be auto, floating or inline")
     config.editEntry = entry as SiteConfig["editEntry"]
   }
+  if (Object.keys(appearance).length) {
+    const scheme = text(appearance.colorScheme, "appearance.colorScheme") ?? "system"
+    if (!["system", "dark", "light"].includes(scheme)) fail("appearance.colorScheme must be system, dark or light")
+    const sheet = text(appearance.stylesheet, "appearance.stylesheet")
+    if (sheet && !sheet.toLowerCase().endsWith(".css")) fail("appearance.stylesheet must be a .css file")
+    config.appearance = { colorScheme: scheme as "system" | "dark" | "light" }
+    if (sheet) config.appearance.stylesheet = insideSettings(sheet, dir, "appearance.stylesheet")
+  }
   return config
+}
+
+/** A file named relative to the settings folder, refusing anything that leaves it. */
+function insideSettings(relative: string, dir: string, name: string): string {
+  if (path.isAbsolute(relative) || relative.split(/[\\/]/).includes("..")) fail(`${name} must be a path inside the settings folder`)
+  return path.join(dir, relative)
 }
 
 /** True when this build runs in the site's own source repository's CI. */

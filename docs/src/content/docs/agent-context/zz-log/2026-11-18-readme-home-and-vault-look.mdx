@@ -1,0 +1,17 @@
+---
+title: README home page and the vault's own look
+description: "Before the cybersader.com switch: the new site's home was a placeholder note, not the vault README. Added vault stylesheets and default color scheme (appearance in site.yml), applied publish rule 2's explicit slug in the projection (slug: index makes README the home page), published assets referenced by raw HTML img/source/video/audio tags, and fixed table-of-contents entries for headings with inline icon images."
+status: log
+tags: [setup, architecture]
+---
+
+The owner asked that the README home page keep looking good after the move. Comparing screenshots of the live Obsidian Publish home and the Quartz site showed the Quartz home was an agent-written placeholder `index.md`; the README was not published at all, and its look came from `publish.css` (Minimal with Nord colors, `list-cards`).
+
+Four gaps, each fixed generally in Cyberbaser with the instance values left in the vault:
+
+- **Vault look.** `appearance.stylesheet` and `appearance.colorScheme` in `.cyberbaser/site.yml` ([site settings](/cyberbaser/development/site-settings/)). The stylesheet is emitted as a content-addressed file linked after the renderer's CSS; an inline `<style>` was rejected because Preact escapes `>` in child selectors. The default scheme is a head script that applies only when the reader has no saved choice.
+- **Explicit slugs.** Publish rule 2 required `slug:` for pages granted outside the allowlist, but nothing applied it: Quartz ignores frontmatter `slug`. The projection now publishes such a page at `<slug>.md` and keeps its natural path as an alias. Malformed slugs, taken targets, and folder moves for notes with relative references fail the build.
+- **HTML media.** The publish selector now counts `src` attributes of raw HTML `img`, `source`, `video` and `audio` tags as asset references, so the README hero image (placed with an HTML figure) is published.
+- **Table of contents.** Quartz takes TOC text from markdown source, so headings with inline icons showed raw `<img>` tags and linked to anchors that did not exist. A transformer after TableOfContents rebuilds those entries from visible text with real anchors.
+
+A trial build of the switch (vault main plus PR #14 plus PR #17 plus the home edits) kept URL continuity at 932/932 with 0 failures and the same legacy counts (920 redirected, 497 retired). Desktop and phone screenshots of the trial home matched the old look: dark Nord, centered hero, link cards. Nothing live changed.

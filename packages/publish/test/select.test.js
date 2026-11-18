@@ -325,3 +325,21 @@ test('extractRefs handles aliases, headings, embed sizes and markdown forms', ()
   expect(r.mdImages.map((i) => i.target)).toEqual(['img/two.png']);
   expect(r.embeds[0].line).toBe(2);
 });
+
+test('raw HTML media in a published note makes its asset reachable; code and external URLs do not', () => {
+  const { report } = run(vault({
+    'cyber/hero.md': fm({ title: 'Hero' }, [
+      '<figure><img alt="art" src="../shared/bank-statement.png" style="width: 400px"></figure>',
+      "<video controls src='/shared/clip.mp4'></video>",
+      '<img src="https://example.com/x.png">',
+      '`<img src="shared/secret.png">`',
+    ].join('\n')),
+    'shared/clip.mp4': null,
+    'shared/secret.png': null,
+  }));
+  expect(report.granted['shared/bank-statement.png']).toBe(RULES.ASSET_REACHABLE);
+  expect(report.granted['shared/clip.mp4']).toBe(RULES.ASSET_REACHABLE);
+  expect(deniedRule(report, 'shared/secret.png')).toBe(RULES.ASSET_UNREACHABLE);
+  const refs = extractRefs('<IMG SRC="a b.png"> <img data-src="no.png"> <source src=\'c.webp\'>');
+  expect(refs.htmlSrcs.map((x) => x.target)).toEqual(['a b.png', 'c.webp']);
+});

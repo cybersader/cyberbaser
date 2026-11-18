@@ -1,6 +1,6 @@
 ---
 title: Site settings (.cyberbaser/site.yml)
-description: "The per-vault settings file the Quartz renderer reads at build time: site title and address, source repository links, analytics, old-host URL redirects and edit-button placement. Cyberbaser itself holds no instance values."
+description: "The per-vault settings file the Quartz renderer reads at build time: site title and address, source repository links, analytics, old-host URL redirects, edit-button placement, the vault's own stylesheet and default color scheme. Also how a note becomes the home page. Cyberbaser itself holds no instance values."
 status: active
 tags: [setup, architecture]
 ---
@@ -28,6 +28,10 @@ legacyUrls: publish-legacy-urls.json  # old-host URL snapshot, next to this file
 
 editing:
   entry: auto                       # auto | floating | inline edit button
+
+appearance:
+  stylesheet: site.css              # the vault's own CSS, next to this file
+  colorScheme: dark                 # system (default) | dark | light
 ```
 
 Every key is optional. Unknown keys, unsupported providers, a protocol in `baseUrl` and paths that leave the settings folder fail the build instead of being guessed at.
@@ -47,6 +51,14 @@ Older workflows pass the address as `CB_BASE_URL`; it is still accepted, but if 
 - **Source links** pin View source, Show raw and Copy Markdown to the commit being published when the build runs in the site's own repository, so copied Markdown matches the page.
 - **Providers** sit behind small interfaces (`SourceHost`, `AnalyticsProvider`). GitHub and PostHog are the only ones today; another forge or analytics service is a new provider, not a change to existing ones.
 
-The renderer's theme, fonts and colours are still Cyberbaser defaults and are not yet settings.
+## The site's look
+
+`appearance.stylesheet` works like `publish.css` on Obsidian Publish: the file is published under a content-addressed name and loads after the renderer's own styles, so it wins ties. It can set the renderer's color variables (`--light`, `--dark`, `--secondary` and the rest, under `:root[saved-theme="dark"]` and `"light"`), fonts (`--bodyFont`, `--headerFont`), and style `cssclasses` from a note's frontmatter, which land on the page's `article` element. The home page is `body[data-slug="index"]`.
+
+`appearance.colorScheme` is what a first-time visitor sees. A reader who uses the theme toggle keeps their choice. `system` follows the device.
+
+## The home page
+
+A note becomes the home page with `slug: index` in its frontmatter (with `cb-publish: true` if it sits outside the publish allowlist, as a vault-root `README.md` does). The projection publishes it as `index.md` and keeps its old name as an alias, so links and URLs to `/README` still reach it. A `slug:` that would move a note to another folder fails the build if the note uses relative links or images, since those would stop resolving. Any other note with an explicit `slug:` is published at that address too.
 
 Related: [moving a site off Obsidian Publish](/cyberbaser/development/moving-off-obsidian-publish/) uses `legacyUrls`.
