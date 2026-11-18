@@ -411,6 +411,17 @@ function summarizeLinks(check, htmlPages) {
   return summary;
 }
 
+/** The vault's `.cyberbaser/site.yml` when it is a regular file (not a link), else null. */
+async function vaultSiteSettings(checkoutRoot) {
+  const file = path.join(checkoutRoot, '.cyberbaser', 'site.yml');
+  try {
+    return (await lstat(file)).isFile() ? file : null;
+  } catch (error) {
+    if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') return null;
+    throw error;
+  }
+}
+
 function checkoutSnapshot(value, config) {
   if (!isPlainObject(value)) fail('invalid-checkout-snapshot', 'checkout readiness check returned no snapshot');
   const root = exactAbsolutePath(value.root, 'checkout root');
@@ -857,6 +868,7 @@ export async function rebuildOwnerSite({
     let rendererResult;
     try {
       rendererResult = await render({
+        siteConfigPath: await vaultSiteSettings(before.root),
         contentDir: projectionRoot,
         outputDir: candidateSite,
         workspaceDir: rendererWorkspace,

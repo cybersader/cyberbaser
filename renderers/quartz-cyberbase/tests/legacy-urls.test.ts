@@ -1,6 +1,7 @@
 import { createHash } from "crypto"
 import { fallbackScript, headingFragment, normalizeLegacyPath, parseSnapshot, stubHtml } from "../plugins/legacyUrlsCore"
-import { resolveSiteBaseUrl, siteBasePath } from "../plugins/siteBase"
+import { siteBasePath } from "../plugins/siteBase"
+import { isOwnRepositoryBuild, parseSiteConfig } from "../plugins/siteConfig"
 const assert = (ok: unknown, message: string) => { if (!ok) throw new Error(message) }
 
 // One key for every spelling the old host accepted.
@@ -27,15 +28,37 @@ for (const bad of [{}, { urls: [{ old: "", source: "a.md" }] }, { urls: [{ old: 
   assert(threw, `accepted ${JSON.stringify(bad)}`)
 }
 
-// Base URL.
-assert(resolveSiteBaseUrl({}) === "cybersader.github.io/cyberbase", "default")
-assert(resolveSiteBaseUrl({ CB_BASE_URL: "cybersader.com" }) === "cybersader.com", "CB_BASE_URL")
-assert(resolveSiteBaseUrl({ CYBERBASER_BASE_URL: "cybersader.com/", CB_BASE_URL: "x.org" }) === "cybersader.com", "precedence and trailing slash")
-for (const bad of ["https://cybersader.com", "cybersader.com/a b", "localhost", "cybersader.com/../x"]) {
-  let threw = false; try { resolveSiteBaseUrl({ CYBERBASER_BASE_URL: bad }) } catch { threw = true }
-  assert(threw, `accepted base ${bad}`)
+// Site settings (.cyberbaser/site.yml).
+const neutral = parseSiteConfig({}, "/vault/.cyberbaser")
+assert(neutral.title === "Notes" && neutral.baseUrl === "example.com" && !neutral.source && !neutral.analytics && !neutral.legacyUrls, "neutral defaults carry no instance values")
+const full = parseSiteConfig(Bun.YAML.parse(`
+site: { title: My Notes, baseUrl: notes.example.org/ }
+source: { provider: github, repository: someone/vault, branch: main }
+analytics: { provider: posthog, apiKey: phc_ExampleProjectKey0123456789abcdefABCDEF, apiHost: "https://us.i.posthog.com" }
+legacyUrls: publish-legacy-urls.json
+editing: { entry: inline }
+`), "/vault/.cyberbaser", { GITHUB_REPOSITORY: "someone/vault" })
+assert(full.title === "My Notes" && full.baseUrl === "notes.example.org" && full.source?.repository === "someone/vault", "site and source")
+assert(full.analytics?.personProfiles === "identified_only" && full.legacyUrls === "/vault/.cyberbaser/publish-legacy-urls.json" && full.editEntry === "inline", "analytics, legacy path, editing")
+assert(isOwnRepositoryBuild(full, { GITHUB_REPOSITORY: "someone/vault" }) && !isOwnRepositoryBuild(full, { GITHUB_REPOSITORY: "fork/vault" }), "own-repository check")
+assert(parseSiteConfig({}, ".", { CB_BASE_URL: "old.example.org/site" }).baseUrl === "old.example.org/site", "older workflows' CB_BASE_URL still works alone")
+for (const [label, yamlText, env] of [
+  ["disagreeing addresses", "site: { baseUrl: a.example.org }", { CB_BASE_URL: "b.example.org" }],
+  ["protocol in address", "site: { baseUrl: https://a.example.org }", {}],
+  ["dot-dot in address", "site: { baseUrl: a.example.org/../x }", {}],
+  ["unknown top-level key", "theme: dark", {}],
+  ["unknown nested key", "source: { provider: github, repository: a/b, token: x }", {}],
+  ["unsupported source host", "source: { provider: gitlab, repository: a/b }", {}],
+  ["bad repository", "source: { provider: github, repository: https://github.com/a/b }", {}],
+  ["unsupported analytics", "analytics: { provider: ga, apiKey: x, apiHost: https://x.example }", {}],
+  ["legacy path escaping", "legacyUrls: ../../etc/passwd", {}],
+  ["legacy absolute path", "legacyUrls: /etc/passwd", {}],
+  ["bad edit placement", "editing: { entry: sideways }", {}],
+] as const) {
+  let threw = false; try { parseSiteConfig(Bun.YAML.parse(yamlText), "/vault/.cyberbaser", env as Record<string, string>) } catch { threw = true }
+  assert(threw, `accepted ${label}`)
 }
-assert(siteBasePath("cybersader.com") === "" && siteBasePath("cybersader.github.io/cyberbase") === "/cyberbase", "base path")
+assert(siteBasePath("cybersader.com") === "" && siteBasePath("example.org/docs") === "/docs", "base path")
 
 // Redirect page: escaped target, fragment carried.
 const stub = stubHtml("../📁-03/A&B")
@@ -69,4 +92,4 @@ result = await runFallback("/base/never-existed")
 assert(result.target === "" && result.prepended.length === 0, "unknown path untouched")
 result = await runFallback("/base/README", "", "some-page")
 assert(result.target === "", "only runs on the 404 page")
-console.log("legacy-urls: normalization, heading ids, snapshot validation, base URL, redirect page and hashed 404 fallback passed")
+console.log("legacy-urls: normalization, heading ids, snapshot validation, site settings, redirect page and hashed 404 fallback passed")

@@ -1,0 +1,52 @@
+---
+title: Site settings (.cyberbaser/site.yml)
+description: "The per-vault settings file the Quartz renderer reads at build time: site title and address, source repository links, analytics, old-host URL redirects and edit-button placement. Cyberbaser itself holds no instance values."
+status: active
+tags: [setup, architecture]
+---
+
+Every Cyberbaser site is one instance: a vault plus its own settings. The renderer keeps no instance values of its own. A vault describes itself in `.cyberbaser/site.yml`, the way an Obsidian vault keeps its settings in `.obsidian/`. Without the file a build still works, with a neutral title, no source links, no analytics and no redirects.
+
+```yaml
+# .cyberbaser/site.yml
+site:
+  title: My Notes
+  baseUrl: notes.example.org        # host and optional path, no https://
+
+source:                             # adds View source, Copy Markdown, Show raw,
+  provider: github                  # Download vault, "Interact with this note"
+  repository: someone/vault         # and the public Edit link
+  branch: main
+
+analytics:                          # public builds only, see below
+  provider: posthog
+  apiKey: phc_...                   # a public client key
+  apiHost: https://us.i.posthog.com
+  personProfiles: identified_only
+
+legacyUrls: publish-legacy-urls.json  # old-host URL snapshot, next to this file
+
+editing:
+  entry: auto                       # auto | floating | inline edit button
+```
+
+Every key is optional. Unknown keys, unsupported providers, a protocol in `baseUrl` and paths that leave the settings folder fail the build instead of being guessed at.
+
+## How a build finds it
+
+The build reads the file named by `CYBERBASER_SITE_CONFIG`.
+
+- **Publishing workflow:** set `CYBERBASER_SITE_CONFIG: ${{ github.workspace }}/vault/.cyberbaser/site.yml`.
+- **Owner app (private site):** reads `.cyberbaser/site.yml` from the vault checkout automatically when it is a regular file.
+
+Older workflows pass the address as `CB_BASE_URL`; it is still accepted, but if both are set they must agree.
+
+## Rules that are not settings
+
+- **Analytics** load only on public builds that run in the site's own `source.repository` (or with `CYBERBASER_ANALYTICS=on`), never on the private owner site, and `CYBERBASER_ANALYTICS=off` always wins. Forks and test builds therefore do not count page views.
+- **Source links** pin View source, Show raw and Copy Markdown to the commit being published when the build runs in the site's own repository, so copied Markdown matches the page.
+- **Providers** sit behind small interfaces (`SourceHost`, `AnalyticsProvider`). GitHub and PostHog are the only ones today; another forge or analytics service is a new provider, not a change to existing ones.
+
+The renderer's theme, fonts and colours are still Cyberbaser defaults and are not yet settings.
+
+Related: [moving a site off Obsidian Publish](/cyberbaser/development/moving-off-obsidian-publish/) uses `legacyUrls`.

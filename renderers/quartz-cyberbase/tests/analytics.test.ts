@@ -1,6 +1,6 @@
 import { posthogProvider } from "../components/analyticsProviders"
 const assert = (ok: unknown, message: string) => { if (!ok) throw new Error(message) }
-const key = "phc_599knGAT15HiAYE5nHJjTqIlAY3O6e2F3QdlFzIRHKb"
+const key = "phc_ExampleProjectKey0123456789abcdefABCDEF"
 const script = posthogProvider({ apiKey: key, apiHost: "https://us.i.posthog.com", personProfiles: "identified_only" }).script()
 assert(script.includes('"person_profiles":"identified_only"') && script.includes('"api_host":"https://us.i.posthog.com"') && script.includes('"capture_pageview":false'), "posthog settings")
 

@@ -3,10 +3,14 @@ import * as Plugin from "./quartz/plugins"
 import { RelativeFolderLinks } from "./quartz/cyberbase/RelativeFolderLinks"
 import { provenanceMode, withSourceProvenance } from "./quartz/cyberbase/SourceProvenance"
 import { LegacyRedirects } from "./quartz/cyberbase/LegacyRedirects"
-import { resolveSiteBaseUrl } from "./quartz/cyberbase/siteBase"
+import { loadSiteConfig } from "./quartz/cyberbase/siteConfigFile"
+
+// Instance settings from the vault (.cyberbaser/site.yml); neutral without one.
+const SITE = loadSiteConfig(process.env)
 
 /**
- * Quartz renderer config for the cyberbase site.
+ * Quartz renderer config for a Cyberbaser site. Instance values (title,
+ * address, source, analytics, legacy URLs) come from the vault settings file.
  *
  * Pinned to Quartz v4.5.2 (see README.md). Adapted from the R14 spike config
  * that rendered the vault 20/20 on the OFM conformance suite.
@@ -20,16 +24,14 @@ import { resolveSiteBaseUrl } from "./quartz/cyberbase/siteBase"
  */
 const config: QuartzConfig = {
   configuration: {
-    pageTitle: "Cyberbase",
+    pageTitle: SITE.title,
     pageTitleSuffix: "",
     enableSPA: true,
     enablePopovers: true,
     analytics: null,
     locale: "en-US",
-    // Host + base path. Quartz takes baseUrl without a protocol; the trailing
-    // path segment is the GitHub Pages project base (/cyberbase). A custom
-    // domain build sets CYBERBASER_BASE_URL or CB_BASE_URL (e.g. cybersader.com).
-    baseUrl: resolveSiteBaseUrl(process.env),
+    // Host + optional base path, no protocol (site.baseUrl in the settings).
+    baseUrl: SITE.baseUrl,
     // Backstop only. Globs are case-sensitive in Quartz, and the projection
     // lowercases paths, so both cases are listed where it matters.
     ignorePatterns: [".obsidian", ".git", "templates", "Templates"],
@@ -125,9 +127,9 @@ const config: QuartzConfig = {
       Plugin.Favicon(),
       Plugin.NotFoundPage(),
       Plugin.CustomOgImages(),
-      // Old-host URLs (Obsidian Publish) from the vault's snapshot. Off unless
-      // CYBERBASER_LEGACY_URLS names the snapshot file.
-      LegacyRedirects({ snapshotPath: process.env.CYBERBASER_LEGACY_URLS || undefined }),
+      // Old-host URLs (for example Obsidian Publish) from the snapshot named
+      // by legacyUrls in the site settings. Off without one.
+      LegacyRedirects({ snapshotPath: SITE.legacyUrls }),
     ],
   },
 }

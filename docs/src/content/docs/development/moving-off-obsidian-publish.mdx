@@ -1,0 +1,47 @@
+---
+title: Moving a site off Obsidian Publish
+description: "General method for replacing an Obsidian Publish site with a Cyberbaser site on the same domain without breaking old links: capture the Publish URL list, map it to the new build, redirect old URLs with a static-host-safe layer, check, then switch DNS and cancel Publish last."
+status: research
+tags: [setup, planning]
+---
+
+This is the general method, first used for the Cyberbaser maintainer's own site. Instance values (domain, DNS records, decisions about what stays public) belong in that vault's own notes, not here.
+
+## 1. Capture the old URL list while Publish is live
+
+Publish serves every path through one app shell and matches notes case-insensitively, so any capitalization or `+`/`%20` spelling of a note path works. Its complete list is available only while the subscription is active:
+
+- `https://<domain>/sitemap.xml`: canonical URLs (note path without `.md`, spaces as `+`; permalinks replace the path).
+- `https://<host>/cache/<site uid>`: every published file. The site uid and host are in the page's `siteInfo`.
+- Each file's frontmatter in that index gives `permalink:` values.
+
+Save the result in the vault as a snapshot of old URL, source path and optional permalink (for example `.cyberbaser/publish-legacy-urls.json`). After cancellation this list cannot be recovered.
+
+## 2. Map it to the new build
+
+Resolve each source path against the new build's content index:
+
+- **On the new site:** the old URL redirects to the note.
+- **Not public any more:** the vault's publish boundary excludes it. The old URL shows a "no longer public" notice with HTTP 404.
+- **Unresolved:** the file moved or was deleted. Fix it in the vault, or accept it explicitly.
+
+Quartz turns `permalink:` into a redirect page, so permalinks of published notes need nothing extra.
+
+## 3. Redirect without a server
+
+Set `legacyUrls` in the [site settings](/cyberbaser/development/site-settings/). The renderer then emits:
+
+1. A static redirect page at each old URL whose note is still published, in both `+` and space form. It uses a meta refresh plus canonical link, and a script that carries `#Heading` fragments over as Quartz heading ids.
+2. `static/legacy-urls.json`, keyed by SHA-256 of the normalized old path (case, `+`/`%20`, trailing slash, `.md`). Retired notes' paths are therefore not published in clear text.
+3. A fallback on the 404 page that uses the map for spellings a case-sensitive static host cannot match.
+
+The fallback uses the browser's Web Crypto, which needs HTTPS, so it starts working once the new site's certificate is issued.
+
+## 4. Check before switching
+
+- The publishing workflow's URL-continuity check with `--rebase-previous OLD=NEW`: every URL of the site's previous address must exist at the new one.
+- Every snapshot entry, its spelling variants and both redirect forms checked against the built output on a case-sensitive static server, plus a browser pass.
+
+## 5. Switch, then cancel last
+
+Point DNS at the new host, set the host's custom domain, and wait for HTTPS. Keep a DNS export as the rollback. Keep Publish subscribed until the owner accepts the new site and search-console 404s stay flat. Cancelling removes the old asset URLs permanently, so it is a separate decision.

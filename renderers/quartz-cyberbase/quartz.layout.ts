@@ -13,26 +13,35 @@ import { githubSourceHost } from "./quartz/components/sourceLinks"
 import Analytics from "./quartz/components/Analytics"
 import { posthogProvider } from "./quartz/components/analyticsProviders"
 import LegacyUrlFallback from "./quartz/components/LegacyUrlFallback"
-import { resolveSiteBaseUrl, siteBasePath } from "./quartz/cyberbase/siteBase"
+import { siteBasePath } from "./quartz/cyberbase/siteBase"
+import { isOwnRepositoryBuild } from "./quartz/cyberbase/siteConfig"
+import { loadSiteConfig } from "./quartz/cyberbase/siteConfigFile"
 
-// Source of truth for the vault repo. The footer always links to the source;
-// public edit mode also uses it for the existing GitHub web-editor URL.
-const VAULT_REPO_URL = "https://github.com/cybersader/cyberbase"
-const VAULT_REPO_BRANCH = "main"
+// Everything instance-specific comes from the vault's settings file
+// (.cyberbaser/site.yml, see siteConfig.ts). Without it: no source links,
+// no analytics, no legacy redirects.
+const SITE = loadSiteConfig(process.env)
+const OWN_REPOSITORY_BUILD = isOwnRepositoryBuild(SITE, process.env)
+
 // Source-host links (view, raw, copy, download, web editor) for every note,
-// built from the vault path. View/raw pin to the vault commit being published
-// so Copy Markdown matches the page; only trusted when the build runs in the
-// vault repo itself or the revision is passed explicitly.
-const SOURCE_HOST = githubSourceHost({
-  repoUrl: VAULT_REPO_URL,
-  branch: VAULT_REPO_BRANCH,
-  revision: process.env.CYBERBASER_SOURCE_REVISION ||
-    (process.env.GITHUB_REPOSITORY === "cybersader/cyberbase" ? process.env.GITHUB_SHA : undefined),
-})
+// built from the vault path. View/raw pin to the commit being published so
+// Copy Markdown matches the page; trusted only when the build runs in the
+// source repository itself or the revision is passed explicitly.
+const SOURCE_REPO_URL = SITE.source ? `https://github.com/${SITE.source.repository}` : undefined
+const SOURCE_HOST = SITE.source
+  ? githubSourceHost({
+      repoUrl: SOURCE_REPO_URL!,
+      branch: SITE.source.branch,
+      revision: process.env.CYBERBASER_SOURCE_REVISION || (OWN_REPOSITORY_BUILD ? process.env.GITHUB_SHA : undefined),
+    })
+  : undefined
+const NOTE_ACTIONS_HEADER = SOURCE_HOST ? [NoteActions({ host: SOURCE_HOST, placement: "header" })] : []
+const NOTE_ACTIONS_FOOTER = SOURCE_HOST ? [NoteActions({ host: SOURCE_HOST, placement: "footer" })] : []
 
 // Build-time only. Public is the fail-closed default; owner mode is an explicit
-// local opt-in and is rejected in CI by resolveEditLinkMode.
-const EDIT_ENTRY = resolveEditEntry(process.env.CYBERBASER_EDIT_ENTRY)
+// local opt-in and is rejected in CI by resolveEditLinkMode. The owner app's
+// own setting wins over the site file for edit-button placement.
+const EDIT_ENTRY = resolveEditEntry(process.env.CYBERBASER_EDIT_ENTRY || SITE.editEntry)
 const EDIT_LINK_MODE = resolveEditLinkMode(process.env.CYBERBASER_EDIT_LINK_MODE, process.env.CI)
 // Account-free suggestions are a separate public proposal spoke. They remain
 // absent unless every retained-publication input is supplied with an explicit
@@ -46,45 +55,38 @@ const SUGGEST_CORRECTION_OPTIONS = resolveSuggestCorrectionOptions({
   challengeSiteKey: process.env.CYBERBASER_SUGGESTION_CHALLENGE_SITE_KEY,
   challengeProvider: process.env.CYBERBASER_SUGGESTION_CHALLENGE_PROVIDER,
 })
-const EDIT_THIS_PAGE_OPTIONS: EditThisPageOptions =
+// Public builds without a source repository have no edit link at all.
+const EDIT_THIS_PAGE_OPTIONS: EditThisPageOptions | undefined =
   EDIT_LINK_MODE === "owner"
     ? { mode: "owner", ownerOrigin: resolveOwnerOrigin(process.env.CYBERBASER_OWNER_ORIGIN), inPlace: SUGGEST_CORRECTION_OPTIONS.enabled, editEntry: EDIT_ENTRY }
-    : { mode: "public", repoUrl: VAULT_REPO_URL, branch: VAULT_REPO_BRANCH }
+    : SITE.source ? { mode: "public", repoUrl: SOURCE_REPO_URL!, branch: SITE.source.branch } : undefined
+const EDIT_THIS_PAGE = EDIT_THIS_PAGE_OPTIONS ? [EditThisPage(EDIT_THIS_PAGE_OPTIONS)] : []
 
 const SUGGEST_CORRECTION_COMPONENTS = SUGGEST_CORRECTION_OPTIONS.enabled
   ? [SuggestCorrection({ ...SUGGEST_CORRECTION_OPTIONS, editEntry: EDIT_ENTRY })]
   : []
 
-// Cyberbase's PostHog project, carried over from publish.js at the owner's
-// request. Public client key. Only the published public site counts views:
-// on by default when the build runs in the vault repository, opt-in elsewhere
-// with CYBERBASER_ANALYTICS=posthog, never in owner/private builds, and
+// Analytics from the site settings count only the published public site: on
+// when the build runs in the site's own source repository, opt-in elsewhere
+// with CYBERBASER_ANALYTICS=on, never in owner/private builds, and
 // CYBERBASER_ANALYTICS=off always wins.
 const ANALYTICS_SETTING = process.env.CYBERBASER_ANALYTICS
-const ANALYTICS_ENABLED = EDIT_LINK_MODE === "public" && ANALYTICS_SETTING !== "off" &&
-  (ANALYTICS_SETTING === "posthog" || process.env.GITHUB_REPOSITORY === "cybersader/cyberbase")
-const ANALYTICS_COMPONENTS = ANALYTICS_ENABLED
-  ? [Analytics(posthogProvider({
-      apiKey: "phc_599knGAT15HiAYE5nHJjTqIlAY3O6e2F3QdlFzIRHKb",
-      apiHost: "https://us.i.posthog.com",
-      personProfiles: "identified_only",
-    }))]
-  : []
+const ANALYTICS_ENABLED = !!SITE.analytics && EDIT_LINK_MODE === "public" && ANALYTICS_SETTING !== "off" &&
+  (ANALYTICS_SETTING === "on" || OWN_REPOSITORY_BUILD)
+const ANALYTICS_COMPONENTS = ANALYTICS_ENABLED ? [Analytics(posthogProvider(SITE.analytics!))] : []
 
 // 404-page forwarding for old-host URLs; only with a legacy URL snapshot.
-const LEGACY_URL_COMPONENTS = process.env.CYBERBASER_LEGACY_URLS
-  ? [LegacyUrlFallback({ basePath: siteBasePath(resolveSiteBaseUrl(process.env)) })]
-  : []
+const LEGACY_URL_COMPONENTS = SITE.legacyUrls ? [LegacyUrlFallback({ basePath: siteBasePath(SITE.baseUrl) })] : []
 
 // components shared across all pages
 export const sharedPageComponents: SharedLayout = {
   head: Component.Head(),
   header: [],
-  afterBody: [NoteActions({ host: SOURCE_HOST, placement: "footer" }), ...ANALYTICS_COMPONENTS, ...LEGACY_URL_COMPONENTS],
+  afterBody: [...NOTE_ACTIONS_FOOTER, ...ANALYTICS_COMPONENTS, ...LEGACY_URL_COMPONENTS],
   footer: Component.Footer({
     links: {
-      Vault: VAULT_REPO_URL,
-      Cyberbaser: "https://github.com/cybersader/cyberbaser",
+      ...(SOURCE_REPO_URL ? { Source: SOURCE_REPO_URL } : {}),
+      "Built with Cyberbaser": "https://github.com/cybersader/cyberbaser",
     },
   }),
 }
@@ -100,8 +102,8 @@ export const defaultContentPageLayout: PageLayout = {
     NoteDates(),
     // Public builds open GitHub; private builds use the shared editor when
     // present with page provenance, otherwise the existing raw owner editor.
-    EditThisPage(EDIT_THIS_PAGE_OPTIONS),
-    NoteActions({ host: SOURCE_HOST, placement: "header" }),
+    ...EDIT_THIS_PAGE,
+    ...NOTE_ACTIONS_HEADER,
     ...SUGGEST_CORRECTION_COMPONENTS,
     Component.TagList(),
   ],
@@ -136,8 +138,8 @@ export const defaultListPageLayout: PageLayout = {
     Component.Breadcrumbs(),
     Component.ArticleTitle(),
     NoteDates(),
-    EditThisPage(EDIT_THIS_PAGE_OPTIONS),
-    NoteActions({ host: SOURCE_HOST, placement: "header" }),
+    ...EDIT_THIS_PAGE,
+    ...NOTE_ACTIONS_HEADER,
     ...SUGGEST_CORRECTION_COMPONENTS,
   ],
   left: [
