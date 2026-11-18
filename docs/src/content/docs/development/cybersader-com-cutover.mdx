@@ -45,22 +45,24 @@ GitHub Pages is static and case-sensitive, so the layer has three parts, all gen
 
 The input is a snapshot of the Publish URL list stored in the vault (old URL to source path). Each build resolves source paths to current URLs, so a later rename shows up as an unresolved row instead of a silent break. The snapshot must be captured before Publish is cancelled, because its index disappears with it.
 
-## Work before the switch (no live effect)
+## Work before the switch
 
-- [ ] **Vault:** commit the Publish URL snapshot (1,417 note paths plus 6 permalinks) under `.cyberbaser/`.
-- [ ] **Vault:** apply the owner's decisions on the excluded folders and the three broken permalinks (`cb-publish: true` with a `slug:` for single notes, or `publish.yml` folders).
-- [ ] **Renderer:** read the site base URL from the build environment instead of the fixed `cybersader.github.io/cyberbase`, and add the redirect layer above.
-- [ ] **Vault workflow:** `CB_BASE_URL: cybersader.com`, `CB_BASE_PATH: ""`, URL-continuity check at the root path, pin to the renderer commit containing the two changes.
-- [ ] Re-run this mapping and the static-host checks on that exact build.
+- [x] **Owner decisions (2026-11-17):** `publish.yml` unchanged for the cutover (the 497 stay off; personal material moves to a private vault and topical folders get reviewed afterwards); the three broken short links are accepted; Cloudflare records DNS only.
+- [ ] **Vault PR #14:** the Publish URL snapshot `.cyberbaser/publish-legacy-urls.json` (byte-identical to the mapping input). Must merge before PR #17.
+- [x] **Renderer (Cyberbaser PR #8, `0d0b8fa`):** site base URL from `CYBERBASER_BASE_URL`/`CB_BASE_URL`; `LegacyRedirects` emitter and 404 fallback built from the snapshot. The map is keyed by SHA-256 of normalized old paths, so retired note paths are not published in clear text. `cb-urlcheck --rebase-previous` checks the github.io baseline at the new address. Current builds are unchanged.
+- [x] **Switch configuration, vault draft PR #17 (merge only at the switch):** root-domain env, snapshot path, renderer and ofm-check pins `0d0b8fa`, rebased continuity check.
+- [x] **Exact rehearsal** from public sources (vault `main` `2b9bcb9` + PR #14 + PR #17's workflow, env read from the workflow file): 920 redirected (1,840 pages, 0 collisions), 497 retired; continuity 932/932 at `https://cybersader.com`, 0 failures; 0 colon paths; 256.7 MB, 6,950 files. Exhaustive output check: every snapshot entry and 5,688 case/slash/encoding variants resolve as intended. Browser pass on a case-sensitive static server: redirects, heading links, variants, permalink, `/README` and retired notices, no page errors.
+
+The 404 fallback hashes paths with the browser's Web Crypto, which needs HTTPS: while the certificate is being issued, plain-HTTP visitors still get the static redirect pages but not the variant fallback.
 
 ## The switch
 
-**Exact build:** the first green `publish-site.yml` run on `cybersader/cyberbase` `main` after the work above. Record its run ID, vault commit and renderer pin here before starting. Currently deployed, for reference: renderer `efb6b72d4a0fcc503dd97b0339c972021b21a995`, vault PRs #12 and #13 merged on 2026-11-17.
+**Exact build:** the `publish-site.yml` run triggered by merging vault PR #17 (after PR #14), renderer `0d0b8fa4a6cdee9f76db3e17d7d8b6362ad05730`. Record its run ID and vault commit here. Before it, deployed: renderer `efb6b72d4a0fcc503dd97b0339c972021b21a995`.
 
 **Current DNS (Cloudflare zone, nameservers `ingrid`/`howard.ns.cloudflare.com`):** `cybersader.com` and `www` both proxied; public answers are Cloudflare anycast `104.21.19.146`, `172.67.186.127`, `2606:4700:3033::6815:1392`, `2606:4700:3030::ac43:ba7f`. The underlying records are hidden by the proxy (Obsidian's documented setup is a proxied CNAME to `publish-main.obsidian.md`). `www` currently returns 404 from Publish. Mail and verification records (Proton Mail and addy.io MX, SPF, Google, Proton, SimpleLogin and addy.io TXT) must not be touched.
 
 1. **Days before:** in Cloudflare, export the zone (DNS → Records → Export) and keep the file; it is the DNS rollback. Lower the TTL of the `@` and `www` records to Auto/300. In GitHub (account Settings → Pages → Verified domains) verify `cybersader.com`: add the `_github-pages-challenge-cybersader` TXT record it shows. This stops anyone else claiming the domain on Pages.
-2. **Deploy** the exact build above. It still serves at `cybersader.github.io/cyberbase/`.
+2. **Deploy:** merge vault PR #17. The build is addressed to `cybersader.com`; until step 4 it is still served at `cybersader.github.io/cyberbase/`, where pages work but the variant fallback does not, so do steps 2 to 4 in one sitting.
 3. **DNS:** replace the `@` record(s) with, all **DNS only** (grey cloud):
    - `A @` → `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153`
    - `AAAA @` → `2606:50c0:8000::153`, `2606:50c0:8001::153`, `2606:50c0:8002::153`, `2606:50c0:8003::153`
