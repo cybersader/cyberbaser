@@ -1,0 +1,16 @@
+---
+title: Fix ofm-check false positives from the first vault cleanup PR
+description: "Wikilink retargets and deliberate link-label escapes no longer flag; the reported round-trip line loss was inserted spacing, now explained; bullet markers preserved; real content loss now errors."
+status: log
+tags: [testing, translation-layer]
+---
+
+The Cyberbase vault thread reported three ofm-check findings on honest edits in cybersader/cyberbase PR #11 (run 43928114617) and asked for fixes before the check leaves report-only mode. One Sol worker fixed `packages/ofm` using exact PR content fetched read-only; nothing in the vault repository was written.
+
+1. **Wikilink retarget reported as damage.** The checker compared link inventories without positions, so a repointed link looked removed. Removed and added wikilinks or embeds on corresponding changed lines now pair as an informational `retargeted` finding. Genuine removals, degradation to Markdown links or plain text, and ambiguous hunks still count as damage.
+2. **Deliberate label escapes reported as suspect.** Escaping `[` and `]` inside a Markdown link label (so Quartz does not read `[[...` as a wikilink) is exempt only when the parsed link's label and destination otherwise match. Escape injection elsewhere is still detected.
+3. **Round-trip "dropped line".** Not content loss: the serializer inserted a blank line, shifting the sentence to the next line. The CLI now explains spacing differences. The genuine dash-to-star bullet rewrite is fixed by using the source's own marker. Real missing content now raises `RoundtripContentLossError` as a checker error rather than passing silently.
+
+Results: the PR's 13 changed existing files now check clean and its four new files report only informational formatting differences (currency escaping, table padding, spacing). Coordinator rerun: `packages/ofm` 40 pass, 0 fail. Worker: dependent packages proposal 26, account-free-intake 24, proposal-review 11, trust 18 pass; three ledger CLI tests could not resolve dependencies in this worktree. No lockfile or dependency changes.
+
+The vault workflow shallow-clones Cyberbaser's default branch without a commit pin, so the fix reaches vault CI only once merged to Cyberbaser `main`. Pinning that clone to a reviewed commit should precede enforcement, so a Cyberbaser change cannot silently alter the vault's gate.

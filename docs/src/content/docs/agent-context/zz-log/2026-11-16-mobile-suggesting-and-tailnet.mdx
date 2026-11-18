@@ -1,0 +1,24 @@
+---
+title: Phone-first suggesting mode and a tailnet-reachable rehearsal
+description: "The maintainer could not open loopback rehearsal links from his phone and asked for a good mobile experience; the launcher gained a private --host option and suggesting mode was redesigned phone-first."
+status: log
+tags: [contribution, testing, setup]
+---
+
+The maintainer tried the rehearsal links on his phone through the T3 Code app; they failed because the site bound only to loopback, and he noted it "should have been a tail scale link" and "needs to look good on mobile".
+
+## Tailnet access
+
+`try:suggestions` now accepts `--host PRIVATE_IPV4`, validated by the owner app's existing private-network rule (loopback, RFC 1918, or RFC 6598, which includes Tailscale's 100.64.0.0/10). Public and wildcard addresses are refused. The owner, reader and intake origins follow the chosen address. Rehearsal tests 19 pass, 2 opt-in skips, including tailnet and LAN acceptance and public refusal. No bootstrap or session rule changed; the one-time sign-in link now simply works from another tailnet device.
+
+## Phone-first suggesting mode (Sol)
+
+An iPhone 13 inspection showed four overlapping entry controls, a long inline instruction paragraph, an **Edit source** button under every block (370 on one page) and heavy heading outlines. The redesign: one **Suggest edits** entry (the forge edit link becomes quiet text and hides while suggesting), a safe-area-aware bottom toolbar with the toggle, change count and **Review & send**, a one-time dismissible hint, **Edit source** only for the active block, collapsed change sheet, full-height review sheet on phones and side panel on desktop, subtle active-block highlight, 44 px targets, 16 px inputs and dark-theme styling. Integrity behavior is unchanged.
+
+Renderer suite passed; the offline Quartz browser run covered iPhone 13 emulation and 360 to 1280 px widths. Coordinator check of the live tailnet site at iPhone size: no horizontal overflow, clean top, hint and toolbar visible. Physical iPhone Safari, the software keyboard and real safe-area behavior remain unverified.
+
+## Real iOS Safari verification
+
+The maintainer pointed out that device emulators are available. The coordinator drove an iPhone 18 Pro iOS 27 simulator (real WebKit Safari) on the tailnet against the live rehearsal. Suggesting mode, tap-to-caret and typing with the iOS keyboard worked, but the fixed bottom toolbar jumped into the middle of the screen and covered the edited text when the keyboard opened; Chromium emulation had not shown this. A first fix based on visual-viewport measurements did not trigger in real WebKit. The second fix hides the toolbar, hint and status on touch devices whenever a suggesting surface has focus, restores them shortly after blur, centers the active block above the keyboard and moves the change count onto the active block chip. Re-verified on the simulator: toolbar hidden, edited heading visible above the keyboard with its tracked insertion and the chip reading "Edit source · 1 change".
+
+The `?cbdebug=viewport` diagnostic cannot be used on the private reader, which refuses all query strings; a hash-based switch would be needed. Physical-device testing remains with the maintainer.

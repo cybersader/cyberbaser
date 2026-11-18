@@ -1,0 +1,22 @@
+<figure class="cb-map cb-map-trust not-content">
+  <figcaption class="cb-map-caption"><strong>Contribution history does not assign permissions</strong><span>Illustrative future grants, not selected roles or today's permission system.</span></figcaption>
+  <div class="cb-map-two-rules">
+    <p><strong>Evidence of good work</strong><span>Changes how a proposal is reviewed.</span></p>
+    <p><strong>An explicit owner grant</strong><span>Changes which actions a person may take.</span></p>
+  </div>
+  <p class="cb-map-scroll-hint">Scroll to compare every permission.</p>
+  <div class="cb-map-scroll" tabindex="0" role="region" aria-label="Illustrative trust and permission matrix, horizontally scrollable on narrow screens">
+    <table class="cb-map-matrix">
+      <caption>Two people with different history and separately assigned authority</caption>
+      <colgroup><col class="cb-map-person-col"><col class="cb-map-history-col"><col><col><col><col></colgroup>
+      <thead><tr><th scope="col">Person</th><th scope="col">Local history</th><th scope="col">Review</th><th scope="col">Apply</th><th scope="col">Publish</th><th scope="col">Private read</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">Regular contributor<small>Work the owner knows</small></th><td>Established</td><td><span class="cb-map-none" aria-label="Not granted">—</span></td><td><span class="cb-map-none" aria-label="Not granted">—</span></td><td><span class="cb-map-none" aria-label="Not granted">—</span></td><td><span class="cb-map-none" aria-label="Not granted">—</span></td></tr>
+        <tr><th scope="row">New reviewer<small>Given a narrow responsibility</small></th><td>New</td><td class="cb-map-granted"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10 4 4 8-9"/></svg><span>Gardening<br>only</span></td><td><span class="cb-map-none" aria-label="Not granted">—</span></td><td><span class="cb-map-none" aria-label="Not granted">—</span></td><td><span class="cb-map-none" aria-label="Not granted">—</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="cb-map-matrix-key"><span>— Not granted in this example</span><span>One grant: review · Gardening · revocable</span></div>
+  <p class="cb-map-footnote">A reviewer can decide on a Gardening proposal without being allowed to change the page, publish it, or read private notes.</p>
+  <details class="cb-map-description"><summary>Permission model and implementation limits</summary><p>This counterexample separates familiarity from authority: an established contributor can have no effectful grants, while a newcomer can receive a narrow review grant. These are illustrative assignments, not automatic defaults. Trust can shape review effort but cannot create grants. Private access remains independent. In the proposed first configuration only the owner holds effect authority. Today's Apply action includes publication, so any future delegation of that combined action would need permission for all its effects. General delegated grants and automated trust progression are unimplemented.</p></details>
+</figure>

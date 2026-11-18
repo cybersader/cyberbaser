@@ -7,7 +7,7 @@ status: research
 tags: [architecture, contribution, governance, testing]
 ---
 
-**Forgejo Lane A adapter implemented and hermetically tested against injected Forgejo metadata and real local Git objects. Not validated against a live Forgejo instance, not installed, not linked from rendered pages, not an offered contributor path, and not production authority.**
+**Forgejo Lane A adapter implemented and hermetically tested against injected Forgejo metadata and real local Git objects. Not yet validated against a live Forgejo instance; the check for that is prepared on [Forgejo Lane A live validation](/cyberbaser/development/forgejo-lane-a-live-validation/). Not installed, not linked from rendered pages, not an offered contributor path, and not production authority.**
 
 `@cyberbaser/forgejo-intake` is an effectful but no-authority adapter around the pure [`@cyberbaser/proposal`](/cyberbaser/design/proposal-contract/) contract. It treats one Forgejo pull request as a carrier, binds the request to exact API metadata and inert Git objects, and emits one canonical proposal plus a separately verified Forgejo-local trust subject. It does not create, update, merge, label, or comment on the pull request. It never writes canonical source.
 

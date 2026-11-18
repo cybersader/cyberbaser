@@ -1,0 +1,116 @@
+---
+title: Review projection model
+description: "A first-principles account of what a page, block, passage, operation, and projection are in Cyberbaser, how those map to Obsidian and CMS models, and how honest each rendering rung is allowed to claim to be."
+sidebar:
+  order: 22.5
+status: research
+tags: [design, architecture, translation-layer, tradeoffs]
+---
+
+This page exists because the owner-review surface was quietly inventing a content model.
+
+Building the review modes required deciding what a *block* is, what counts as a *changed passage*, and what a rendered view is allowed to imply. Those decisions were made while writing code, which is the wrong order. They also belong to the architecture rather than to one surface, because the same concepts have to line up with Obsidian, with any CMS-shaped authoring tool, and with the pinned renderer.
+
+This is a working recommendation, not a locked schema.
+
+## What is already settled, and is not restated here
+
+- [First-principles primitives](/cyberbaser/concepts/primitives/) defines the vault, single source of truth, wikilinks, backlinks, round-trip editability, and open authoring.
+- [Translation layer](/cyberbaser/design/translation-layer/) defines the **publish tier contract**: Tier 1 features must survive an edit, Tier 2 renders best-effort but never corrupts source, Tier 3 is untranslated with a documented workaround.
+- [Proposal contract](/cyberbaser/design/proposal-contract/) defines the canonical external adapter output.
+- The measured rule from R12 stands: source application changes only declared bytes, and whole-file re-serialization is out.
+
+The gap is the layer between those: everything a human actually looks at.
+
+## The objects, from the ground up
+
+Authority flows in one direction. Each object below is either **authoritative** (the thing a decision binds to) or **derived** (reconstructible, discardable, never an input to application).
+
+| Object | Definition | Status |
+|---|---|---|
+| **Bytes** | An ordered UTF-8 byte sequence | Authoritative |
+| **Source file** | A repository-relative path plus its bytes at a pinned revision | Authoritative |
+| **Operation** | A base-relative byte range, the expected old bytes, and replacement bytes | Authoritative |
+| **Change set** | Ordered, non-overlapping operations against one pinned base, decided atomically | Authoritative |
+| **Candidate** | The bytes produced by replaying a change set over its base | Derived, verifiable |
+| **Block** | A contiguous byte span the projection recognizes as one structural unit | Derived |
+| **Passage** | The merged span of blocks touched by one or more operations | Derived |
+| **Projection** | Any human-facing view computed from bytes plus a change set | Derived |
+| **Page** | What a reader sees at a published URL | Derived, by a replaceable renderer |
+
+Three rules follow, and they are the point of the model:
+
+1. **A projection may never become an input.** Nothing a projection computes can flow back into an operation, a candidate, or an application job. If a projection disappeared, no authority would be lost.
+2. **Blocks are a reading convenience, not a unit of authority.** A change is bound to byte ranges, never to "block 4". Blocks may be recomputed differently tomorrow without invalidating a single proposal.
+3. **Derivation must be total or refused.** A projection either covers the document contiguously with no byte dropped, or it declares itself underivable. It never silently approximates. This is the same fail-closed instinct as the write path, applied to reading.
+
+## How this maps to the neighbours
+
+The maintainer's instinct was right that this is CMS-shaped territory. The mapping is close in vocabulary and sharply different in authority.
+
+| Cyberbaser | Obsidian | Typical CMS | Renderer (pinned Quartz) |
+|---|---|---|---|
+| Source file bytes | A note, a real `.md` file on disk | A content record, usually rows or JSON in a database | Build input |
+| Block | A block, addressable with `^block-id` | A block, component, or structured field | An AST node |
+| Passage | The text you have selected | A field being edited | Nothing; not a renderer concept |
+| Change set | An edit you make in the editor | A draft revision of the record | Nothing |
+| Candidate | The file after saving | The published version of the record | New build input |
+| Page | Preview pane output | The rendered entry | The emitted URL |
+
+The divergence that matters: **a CMS's authoritative unit is the structured record, and its file export is derived. Cyberbaser is the exact inverse.** The bytes are authoritative and every structure is derived. A CMS can safely round-trip through its own model because the model is the truth. Cyberbaser cannot, which is exactly what the 4.6% byte-identity measurement showed.
+
+This does not forbid CMS-shaped presentation. It constrains one thing: whatever an authoring surface shows a person, its output must be exact base-bound operations, not a re-serialized document.
+
+Obsidian sits closer to Cyberbaser than a CMS does, because its authoritative unit is also a file on disk. That is why Obsidian is a first-class surface rather than an integration target.
+
+## The review fidelity ladder
+
+"Approximate reading projection" is a disclaimer. A contract needs rungs, and each rung needs to say what it can and cannot honour.
+
+| Rung | What it shows | Requires | Status |
+|---|---|---|---|
+| **R0 · exact source** | The bytes, with declared operations marked | Nothing | Implemented; always available |
+| **R1 · structural reading** | Headings, paragraphs, lists, quotes, fenced code, thematic breaks, frontmatter, and inline emphasis, code, and links | Nothing beyond the file | Implemented in the static surface |
+| **R2 · vault-semantic** | Wikilinks, embeds, callouts, and block references resolved against the vault | Read access to the whole vault at the pinned revision | Not built |
+| **R3 · published rendering** | What the reader will actually see | Running the pinned renderer over the candidate | Not built |
+
+The rules that make a rung honest:
+
+- **Every projection declares its rung on screen.** No rung may be presented as another, and R1 may never be described as a preview of the published page.
+- **A construct outside the current rung degrades that block to R0 with a stated reason,** rather than being rendered wrongly or dropped. Both surfaces now do this: a block containing a callout, table (with or without outer pipes), embed, image, math, task list, footnote, inline HTML or an HTML comment, block reference, renderer-executed fence, setext heading, indented block, or nested page metadata is shown as exact source labelled `not interpreted here`. Byte offsets that fall outside the base or inside a multi-byte character refuse the whole projection rather than guessing a string index, and Windows line endings keep their structure.
+- **A changed passage is always shown at R0.** The bytes under decision are never paraphrased by a renderer. This is also why change marking inside rendered output was never needed: the passage reveals its source, the way live preview reveals source at the cursor.
+- **Rungs map onto the publish tiers, they do not replace them.** Publish tiers describe what survives an edit and what the renderer supports. Rungs describe what a review surface is willing to claim it is showing. A Tier 1 feature can sit at R0 in review and still be fully supported when published.
+
+R1 deliberately renders links and wikilinks as non-navigating, unresolved marks. Resolution is an R2 capability, and pretending otherwise would be the exact dishonesty this ladder exists to prevent.
+
+## Pluggable rendering pipelines
+
+The honest answer is to specify the seam and ship one implementation.
+
+A projection provider is a function, not a plugin system:
+
+```text
+(bytes, changeSet) → { blocks, rung, uninterpreted[] } | { underivable, reason }
+```
+
+Everything the surface needs sits behind that signature. Adding R2 or R3 later means adding a provider, not redesigning the surface.
+
+What should **not** be built speculatively is a plugin architecture with multiple renderers. R3 in particular is not a plugin: it means running the pinned renderer over a candidate, which brings build time, sandboxing, cache invalidation, and staleness questions that only pay off once a real need exists. R2 needs whole-vault read access at a pinned revision, which is a genuine authority question rather than a rendering one.
+
+So: the seam is specified, one provider exists, and no plugin system is selected.
+
+## What this settles, and what it does not
+
+Settled as working direction:
+
+- authority flows bytes → operations → candidate, and projections are always downstream;
+- blocks and passages are derived reading units and never carry authority;
+- derivation is total or refused; and
+- every projection declares its rung and degrades to exact source rather than guessing.
+
+Still open:
+
+- whether R2 or R3 is ever built, and what authority R2's vault access requires;
+- which rung the real owner surface should default to;
+- whether the proposal contract itself gains any structural vocabulary, which it does not need today; and
+- how this model meets a rich contributor authoring surface, which remains unselected.

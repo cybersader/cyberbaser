@@ -1,0 +1,75 @@
+---
+title: Develop the community system design from existing evidence
+description: "Integrated proposal for local passkey accounts, scoped action authority, effect-phase revocation, contribution revisions and trust history, grounded in existing contracts and staged delivery."
+status: research
+tags: [architecture, contribution, governance, identity]
+---
+
+## Scope and outcome
+
+The maintainer asked to continue designing the systems using the stored knowledge. Two bounded Sol source/document reviews completed: contribution/governance and identity/access/authority. They gathered evidence rather than selecting architecture and did not sub-delegate. The coordinator reconciled the findings into the first integrated [community system design](/cyberbaser/design/community-system-design/).
+
+The design separates identity/access state, editorial/governance evidence and canonical source/policy. It supplies conceptual contracts and acceptance cases, not new runtime capability, a selected wire schema or independent security certification. No implementation or deployment was authorized by this design request.
+
+## Existing foundations and consequential gaps
+
+Exact proposal v1, finite queue evidence, trust classification, immutable owner decisions, explicit Apply events, durable jobs and the forge observation ledger are reusable foundations. They do not already supply a community history store, general scoped authorization or verified account-to-action authority.
+
+Coordinator checks confirmed the decisive findings:
+
+- current bootstrap sessions hold CSRF state, not a verified principal or scoped grant;
+- configured owner/forge identity is not evidence of who authenticated;
+- Publish storage relies on caller authentication, and source checks before application are not current account/grant checks;
+- durable recovery can continue after process restart has revoked browser sessions;
+- post-apply recovery deliberately avoids fresh authoring-host reads;
+- existing Apply includes publication effects and cannot safely be exposed as an apply-only delegated permission;
+- trust IDs are lowercased, which must not become a universal identity-normalization rule;
+- the queue expires and is not permanent contribution history; and
+- current owner evidence responses are not safe public contributor receipts or a multi-user access model.
+
+These findings describe the current worktree. The newer unapplied candidate outside it was not inspected, rebuilt, integrated or judged defective by this wave. No current live-state verification occurred.
+
+## Recommended contracts
+
+### Account custody and browser identity
+
+Propose a narrow explicit exception allowing an owner-operated account component to own its local accounts, public passkey bindings, session verifiers and revocation state. That is local identity authority and must be named honestly; replaceability alone does not exempt it from existing restrictions. Keep all such custody out of proposal/trust packages, rendering, unauthenticated intake, Git policy and governance artifacts. This amendment requires owner selection before implementation.
+
+Recommend one enrolled owner first, no public local registration, a stable privileged HTTPS hostname and narrow RP ID, independent reader host/cookie scope, and the stricter separate-registrable-domain boundary for the separately gated private-preview path. Internal private numeric binding may remain only under a tested external-origin/ingress contract. Recovery, timeouts, authenticator lifecycle, storage and backup restoration still require exact contracts; do not revive old sessions/grants from a backup or leave legacy bootstrap as a weaker alternate publisher login.
+
+### Action authority and durable effects
+
+Propose a single internal subject/action/content/destination authorization contract across evidence reads, review, Apply, Save-and-publish, Publish and recovery. A review grant is not a publisher grant. Permission applies before metadata enumeration as well as object reads. Existing owner-only records retain their historical provenance rather than being relabelled as verified accounts.
+
+Recommend durable accepted intent that survives ordinary logout, while current account/grant revocation gates new effects. Effect-start admission and revocation need a serialized ordering, bounded validity and preserved evidence. A step already admitted may complete or be reconciled; no claim is made that revocation recalls an in-flight external request. Later effects require their own valid admission.
+
+The phase table distinguishes draft, authorization without acceptance, accepted/pre-effect work, in-flight or ambiguous application, locally changed/unpushed source, in-flight push and already-published observation. Revocation may leave a local change held before publication. Owner recovery must explain that outcome without automatic rollback, duplicate jobs or silent push. This is a proposed change to continuation authority, not current behavior or a proven transaction mechanism.
+
+### Community records and trust
+
+Preserve v1 bytes and separate future contribution threads, immutable revisions, feedback, exact decisions and effect observations. Revision B cannot inherit revision A's approval. Keep private evidence apart from deliberate public credit. Contribution-history identity, deduplication, retention and privacy must be selected before it drives trust progression.
+
+Start with manual local designation and explainable trust recommendations, not an automatic reputation engine. The concrete dogfood roughly-three-edit/no-appeal policy remains scoped to that vault and was not changed. Future reconsideration needs new linked records rather than mutable old receipts.
+
+## Delivery sequence
+
+1. Select the narrow custody, origin, session/recovery and effect-authority contracts.
+2. Synthetically prove named owner authority across all routes and recovery, without a new public lane.
+3. Recover the existing candidate and separately authorize one real source-bound owner loop, including renderer/credential/platform gates and existing migration holds.
+4. Finish usable account-free participation with explicit receipt/privacy and human evidence.
+5. Add recurring contributors, richer revisions/authoring, credit and delegated review.
+6. Consider delegated release and cross-base evidence only on demonstrated need.
+
+For the split-source first owner loop, alternate delivery editing and external Apply stay disabled until their return-to-authoritative-source mechanism is selected and proven. Successful authentication is not source reconciliation or deployment readiness.
+
+## Knowledge-base reconciliation
+
+The intuitive community model points to this lower-level design rather than duplicating its contracts. The index, project context and focus are aligned. Authentication research points to the proposed custody and action contract. Container research no longer recommends upstream SSO after the maintainer rejected it.
+
+The older proposal operating model's stale-approval question was corrected from existing September evidence: approval may record historical intent, while Apply independently checks current eligibility. This restores an already-made decision, not a new schema change. Dogfood moderation wording remains intact with an explicit note distinguishing it from general product progression.
+
+## Verification and limits
+
+Scoped whitespace, frontmatter-shape, local page-link, targeted anchor, private-locator and knowledge-ops chronology checks cover the design changes. Proposed acceptance cases are not tests run. Local docs compiler/dependencies are absent; no dependency installation, full site build, browser acceptance or runtime tests were performed.
+
+Only canonical/orientation documents and private research reports changed. No application code, authentication/account stores, credentials, source vaults, live services, containers, commits, pushes or publication were touched. Neither new roles nor the identity-custody exception has been activated or silently locked.

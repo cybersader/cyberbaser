@@ -1,0 +1,46 @@
+---
+title: "2026-10-02 · Quartz selected for replacing Publish"
+description: "The owner selected Quartz presentation with content and URL preservation; sampled evidence informs a gated plan, not a completed or activated migration."
+date: 2026-10-02
+status: research
+tags: [planning, inventory, meta]
+---
+
+## Decision and rationale
+
+After read-only inventory and bounded public comparison, the owner explicitly chose: **“Yes, use Quartz and preserve the content and existing URLs.”** This selects a new presentation for Cyberbase rather than pixel parity with Obsidian Publish. Reuse the existing Quartz route where it meets the preservation requirements; do not build a broader publishing system by momentum.
+
+Preserve intended public content/assets and existing publicly used URLs on `cybersader.com`, including `/README`, relevant deep links, exact case, and encoded paths. Never expand publication to all repository/vault content or republish deliberately excluded/private notes for parity. Newly discovered exposure conflicts require owner resolution.
+
+Cyberbase is the owner's desktop Obsidian vault. GitHub holds content, but desktop freshness is unverified. No new management integration or source authority follows. Quartz remains a replaceable renderer, not a global Cyberbaser requirement; authoring and source backends remain replaceable.
+
+## Observed evidence, not acceptance
+
+The preceding 2026-10-02 inventory and sample reported:
+
+- The [existing Quartz target](https://cybersader.github.io/cyberbase/) exposed **931 sitemap URLs**. That count establishes neither full content/asset parity nor correctness of every page.
+- Inspected Pages metadata had no custom domain. Ownership and routing of `cybersader.com` were not verified.
+- The inspected [production workflow](https://github.com/cybersader/cyberbase/blob/4994bb6ce40a8f2dfb06f979ec8b49bb6ed63560/.github/workflows/publish-site.yml) pins Cyberbaser `eac9f1f`, older than local `2e0bafb`. An upgrade remains a separate review. Push filters omit asset-only changes; impact depends on consumed files.
+- `https://cybersader.com/README` returned an HTTP shell that limited article and visual comparison. Quartz's root uses `index.md` and differs from README. No root README counterpart was found in the sampled sitemap; this is not a proven 404 or permission to send arbitrary missing paths home.
+- Two Quartz notes matched selected headings/prose landmarks in pinned GitHub source. Their Publish counterparts were not compared; no three-way or whole-vault parity was established.
+- One referenced Publish stylesheet request stopped on an authentication/quota-related status whose exact code was not retained. It remains unknown, not a diagnosed broken visitor asset. No retry or alternate route followed.
+
+The [publication selection configuration](https://github.com/cybersader/cyberbase/blob/4994bb6ce40a8f2dfb06f979ec8b49bb6ed63560/publish.yml) is scoped, not an instruction to publish everything. The source repository is public, so filtering the site does not conceal tracked files or Git history. No newly diagnosed leak or secret-free history audit is claimed. These are sampled observations and metadata, not owner browser acceptance. This documentation pass made no new remote requests.
+
+## Implementation and acceptance gates
+
+The [canonical practical plan](/cyberbaser/development/quartz-publishing-migration/) records five stages, none completed by this entry:
+
+1. **Pin and inventory:** verify saved desktop changes and writers/sync, choose the source baseline, inventory actual Publish pages/assets/URLs and current Quartz routes, then classify direct pages, equivalent redirects, fragment/assets, and unresolved mappings. No complete manifest exists yet; authentication-blocked evidence stays unknown without bypass.
+2. **Minimum corrections:** let the manifest determine README handling, links/assets, path/base-URL differences, and relevant asset-only trigger behavior. Preserve untouched source bytes, no whole-file serialization or mass renames.
+3. **Contained preview acceptance:** separately authorize a disposable renderer preview with pinned inputs, machine-check selected content and every known old URL, anchors and assets, then obtain representative owner browser acceptance with explicit coverage limits. Normal owner-alpha startup can start intake and recover jobs; it is not passive preview.
+4. **Production cutover:** obtain explicit owner approval for the production pins/configuration and domain routing only after evidence passes. Retain source/build/output identities, and establish separately verifiable recovery procedures for source, site, and DNS. Exact DNS commands await actual setup. Verify production content and old URLs before declaring replacement accepted.
+5. **Cancel last:** retain Publish until owner acceptance of production and old-URL verification. Cancellation needs independent authorization; subscription/service retention and recovery implications remain uncertain.
+
+## Changes and non-consequences
+
+Added the canonical plan and one index pointer; recorded the selected direction in `FOCUS.md` and the existing no-R-number amendment format in `41-QUESTIONS-RESOLVED.md`. Cyberbaser's identity and hard constraints did not change, so `PROJECT_CONTEXT.md` and the roadmaps were not rewritten.
+
+No code, configuration, vault content, CI, production pins, DNS, subscription, commit, push, merge, or external publication changed. The existing local customization was preserved. This selects direction, not migration activation or permission to cancel.
+
+Suggestions/Apply and future orchestration integration are not prerequisites for replacing Publish. The first real suggestion run, owner-review checkpoint, Q09, and Q10 remain open. No rich editor, CRDT authority, or automatic publication policy was selected.

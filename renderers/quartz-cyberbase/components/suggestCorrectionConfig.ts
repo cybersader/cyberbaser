@@ -1,4 +1,7 @@
+import type { EditEntryPlacement } from "./editEntryConfig"
 import { createHash } from "node:crypto"
+import { isPrivateNetworkIpv4Host } from "./editLink"
+import { DEFAULT_CHALLENGE_PROVIDER, getChallengeProvider } from "./challenge/registry"
 
 export const SUGGEST_CORRECTION_ENABLE_VALUE = "enabled"
 export const ACCOUNT_FREE_INTAKE_PATH = "/v1/corrections"
@@ -20,6 +23,9 @@ export interface SuggestCorrectionEnabledOptions {
   sourceRepository: string
   sourceRevision: string
   text?: string
+  editEntry?: EditEntryPlacement
+  challengeSiteKey?: string
+  challengeProvider?: string
 }
 
 export type SuggestCorrectionOptions =
@@ -32,6 +38,8 @@ export interface SuggestCorrectionEnvironment {
   bindingDigest: string | undefined
   sourceRepository: string | undefined
   sourceRevision: string | undefined
+  challengeSiteKey?: string
+  challengeProvider?: string
 }
 
 export interface PublicSuggestionBinding {
@@ -82,19 +90,26 @@ function canonicalHttpsUrl(value: string, name: string, repository = false): str
   return value
 }
 
+/**
+ * One exact canonical HTTPS origin (public deployments), or one private-network
+ * IPv4 HTTP origin with an explicit port (the owner's local site talking to the
+ * intake the owner app starts beside it). Same private ranges as owner mode.
+ */
 export function resolveIntakeOrigin(value: string | undefined): string {
   const origin = required(value, "CYBERBASER_ACCOUNT_FREE_INTAKE_ORIGIN")
+  const message = "CYBERBASER_ACCOUNT_FREE_INTAKE_ORIGIN must be one exact canonical HTTPS origin or one private-network IPv4 HTTP origin with an explicit port"
   if (Buffer.byteLength(origin, "utf8") > 2 * 1024 || Buffer.from(origin, "utf8").toString("utf8") !== origin) {
-    throw new Error("CYBERBASER_ACCOUNT_FREE_INTAKE_ORIGIN must be one exact canonical HTTPS origin")
+    throw new Error(message)
   }
   let url: URL
   try {
     url = new URL(origin)
   } catch {
-    throw new Error("CYBERBASER_ACCOUNT_FREE_INTAKE_ORIGIN must be one exact canonical HTTPS origin")
+    throw new Error(message)
   }
+  const privateHttp = url.protocol === "http:" && isPrivateNetworkIpv4Host(url.hostname) && url.port !== ""
   if (
-    url.protocol !== "https:"
+    !(url.protocol === "https:" || privateHttp)
     || url.username !== ""
     || url.password !== ""
     || url.hostname.endsWith(".")
@@ -103,7 +118,7 @@ export function resolveIntakeOrigin(value: string | undefined): string {
     || url.hash !== ""
     || url.origin !== origin
   ) {
-    throw new Error("CYBERBASER_ACCOUNT_FREE_INTAKE_ORIGIN must be one exact canonical HTTPS origin")
+    throw new Error(message)
   }
   return origin
 }
@@ -193,6 +208,21 @@ export function computePageId({
   return `page-v1:${digest}`
 }
 
+/** Public site keys only; absence is distinct from a malformed empty key. */
+export function resolveChallengeSiteKey(
+  value: string | undefined,
+  providerId = DEFAULT_CHALLENGE_PROVIDER,
+): string | undefined {
+  const provider = getChallengeProvider(providerId)
+  if (!provider) throw new Error("CYBERBASER_SUGGESTION_CHALLENGE_PROVIDER must match a registered provider id")
+  if (value === undefined) return undefined
+  if (!provider.validateSiteKey(value)) {
+    // Preserve the existing build diagnostic; acceptance belongs to the provider.
+    throw new Error("CYBERBASER_SUGGESTION_CHALLENGE_SITE_KEY must contain 1 to 256 ASCII letters, digits, underscores or hyphens")
+  }
+  return value
+}
+
 export function resolveSuggestCorrectionOptions(
   env: SuggestCorrectionEnvironment,
 ): SuggestCorrectionOptions {
@@ -203,12 +233,19 @@ export function resolveSuggestCorrectionOptions(
       `CYBERBASER_ACCOUNT_FREE_INTAKE must be unset or '${SUGGEST_CORRECTION_ENABLE_VALUE}'`,
     )
   }
-  return {
+  const options: SuggestCorrectionEnabledOptions = {
     enabled: true,
     intakeOrigin: resolveIntakeOrigin(env.intakeOrigin),
     bindingDigest: requireBindingDigest(env.bindingDigest),
     sourceRepository: requireSourceRepository(env.sourceRepository),
     sourceRevision: requireSourceRevision(env.sourceRevision),
+  }
+  const challengeProvider = env.challengeProvider ?? DEFAULT_CHALLENGE_PROVIDER
+  const challengeSiteKey = resolveChallengeSiteKey(env.challengeSiteKey, challengeProvider)
+  return {
+    ...options,
+    ...(challengeSiteKey === undefined ? {} : { challengeSiteKey }),
+    ...(challengeSiteKey === undefined || challengeProvider === DEFAULT_CHALLENGE_PROVIDER ? {} : { challengeProvider }),
   }
 }
 

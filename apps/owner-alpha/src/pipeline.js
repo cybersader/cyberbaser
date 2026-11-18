@@ -1,3 +1,5 @@
+import { digestBytes } from '@cyberbaser/proposal-queue';
+import { validateChangeSetCorrection } from './change-set-operation.js';
 import { randomUUID } from 'node:crypto';
 import { applyAcceptedOperation } from './apply.js';
 import { createJsonArtifactOnce, readJsonArtifact } from './artifacts.js';
@@ -132,7 +134,7 @@ function serializeApplication(application) {
     candidateDigest: application.candidateDigest,
     candidateByteLength: application.candidateByteLength,
     candidateBytesBase64: Buffer.from(application.candidateBytes).toString('base64'),
-    correction: {
+    correction: application.correction.operationType === 'change-set' ? validateChangeSetCorrection(application.correction) : {
       operationType: application.correction.operationType,
       baseByteLength: application.correction.baseByteLength,
       baseDigest: application.correction.baseDigest,
@@ -155,6 +157,13 @@ function deserializeApplication(value) {
   const candidateBytes = Buffer.from(value.candidateBytesBase64, 'base64');
   if (candidateBytes.toString('base64') !== value.candidateBytesBase64) {
     fail('invalid-source-applied-artifact', 'durable candidate bytes are not canonical base64');
+  }
+  if (value.correction.operationType === 'change-set') {
+    const correction = validateChangeSetCorrection(value.correction);
+    if (candidateBytes.length !== correction.candidateByteLength || digestBytes(candidateBytes) !== correction.candidateDigest
+      || value.candidateDigest !== correction.candidateDigest || value.baseDigest !== correction.baseDigest
+      || value.sourcePath !== correction.proposal.changeSet.files[0].path) fail('invalid-source-applied-artifact', 'durable change-set effect bindings disagree');
+    return deepFreeze({ ...value, candidateBytes, correction });
   }
   const expectedOldBytes = Buffer.from(value.correction.expectedOldBytesBase64, 'base64');
   const replacementBytes = Buffer.from(value.correction.replacementBytesBase64, 'base64');
@@ -419,6 +428,14 @@ async function executeLocked(input, config, context, dependencies) {
   );
   let state = ensured.state;
   bindings = ensured.bindings;
+  // Owner-direct authority must survive every restart, including after the
+  // source effect but before commit/push. Never infer it from job state alone.
+  const durableSession = bindings?.session ?? await optionalArtifact(context, paths.session, options);
+  if (durableSession?.origin?.type === 'owner-direct') {
+    bindings ??= await boundInputs(input, config, context, paths, dependencies, options);
+    const { guardOwnerDirect } = await import('./owner-direct.js');
+    await guardOwnerDirect({ context, config, jobId, ...bindings });
+  }
   if (TERMINAL_NO_RESUME.has(state.state)) return pipelineSummary(state, paths);
   if (state.state === 'accepted') {
     bindings ??= await boundInputs(input, config, context, paths, dependencies, options);
@@ -490,6 +507,30 @@ async function executeLocked(input, config, context, dependencies) {
               'canonical checkout or remote branch advanced after the edit was bound',
               { expected: bindings.session.baseCommit, actual: checkout.head },
             );
+          }
+          if (bindings.operation.schemaVersion === 2) {
+            const guard = bindings.session.origin?.type === 'owner-direct'
+              ? (await import('./owner-direct.js')).guardOwnerDirect
+              : (await import('./proposal-application.js')).guardChangeSetApplication;
+            await guard({ context, config, jobId, ...bindings });
+          }
+          // A publication source is an injected candidate, not a second source
+          // authority. Recheck it at the final pre-effect gate, also on recovery.
+          if (bindings.session.origin?.type === 'owner-publication') {
+            const origin = bindings.session.origin;
+            if (!isPlainObject(origin)
+              || Object.keys(origin).sort().join(',') !== 'authorizationDigest,draftId,reference,type'
+              || !/^[0-9a-f]{64}$/u.test(origin.draftId)
+              || !/^[0-9a-f]{64}$/u.test(origin.authorizationDigest)
+              || !isPlainObject(origin.reference)) {
+              fail('invalid-publication-origin', 'publication job provenance is invalid');
+            }
+            if (typeof dependencies.revalidateSource !== 'function') {
+              fail('publication-guard-unavailable', 'publication requires a pre-application source guard');
+            }
+          }
+          if (typeof dependencies.revalidateSource === 'function') {
+            await dependencies.revalidateSource({ jobId, session: bindings.session, operation: bindings.operation });
           }
           state = await transition(context, state, 'applying', 'apply-exact-accepted-save', dependencies);
           application = null;
@@ -770,8 +811,22 @@ export async function getOwnerAlphaJob({ config: configInput, projectRoot, conte
     config,
     projectRoot ?? DEFAULT_OWNER_ALPHA_PROJECT_ROOT,
   );
+  const paths = pipelineArtifactPaths(jobId);
   const state = await loadDurableJob(store, jobId, artifactOptions(config));
-  return pipelineSummary(state, pipelineArtifactPaths(jobId));
+  // Where the change came from: the owner's own edit, or an approved suggestion.
+  const session = await optionalArtifact(store, paths.session, artifactOptions(config));
+  let origin = null;
+  if (session && typeof session.relativePath === 'string') {
+    origin = session.origin?.type === 'approved-proposal' && typeof session.origin.queueId === 'string'
+      ? { type: 'approved-proposal', queueId: session.origin.queueId, relativePath: session.relativePath }
+      : { type: session.origin?.type === 'owner-publication' ? 'owner-publication' : 'owner-edit', relativePath: session.relativePath };
+  }
+  const filename = session?.relativePath?.split('/').at(-1)?.replace(/\.md$/u, '');
+  const frontmatter = session?.source?.text?.match(/^---\r?\n([\s\S]*?)^---\r?$/mu)?.[1];
+  const titleLine = frontmatter?.match(/^title:[ \t]*([^\r\n]+)$/mu)?.[1];
+  const title = titleLine?.trim().replace(/^(["'])(.*)\1$/u, '$2') || filename;
+  const page = session && typeof session.slug === 'string' ? { title: title || 'Your page', slug: session.slug } : null;
+  return deepFreeze({ ...pipelineSummary(state, paths), origin, page });
 }
 
 /** Narrow server adapter: durable acceptance precedes the automatic effect pipeline. */

@@ -1,0 +1,25 @@
+---
+title: Hosted edit-to-review smoke
+description: "Record the bounded hosted test-note edit, actual capture and persistent changed review, with source-authority and usability limits."
+tags: [implementation, testing, governance]
+---
+
+## Outcome
+
+The owner-requested hosted test-note edit completed one bounded **API edit → actual hosted read/capture → persistent changed review** path. One disposable test note was created at version 1 and edited to version 2. The existing reader/runtime/handler captured it once; two authenticated review views then reused the capture without another host read. This is not a browser/editor workflow, publication, or a real Cyberbase source change.
+
+## Evidence
+
+The independent composition review passed, and one offline actual-store test passed before the hosted run. The final run recorded one discovery, one hosted read, one Prepare and one source session. The returned text matched the independently known synthetic fixture. Its **194-byte** base and **191-byte** candidate differ only by the exact byte splice at offsets **173–182**, replacing `synthetic` with `edited`; all undeclared bytes, including Unicode and trailing bytes, were preserved. The actual canonical draft persisted as **3,351 bytes** and reloaded through the store.
+
+Two full authenticated changed-review responses contained the captured base and candidate without another host read. Seven writer routes were denied; replay, unauthenticated access, second Prepare and direct Publish were refused. There were no authorization artifacts, executable jobs or canonical-source application or publication.
+
+The actual persistent-store path exercised ignore checks, locking, draft write/fsync, reload and revalidation. All **51 tracked direct children** closed: 48 read-only ignore checks, one lock operation and two helper calls. This is not a universal descendant-cleanup guarantee. Git responses were synthetic and HTTP was in memory. The unchanged canonical base was synthetic and remained untouched; the hosted test note was intentionally edited.
+
+The owned note's conditional recoverable deletion was applied and local scratch absence was verified. No independent trash listing or browser/editor delivery acknowledgement was recorded. The saved test draft was removed with the disposable local fixture and is not user-openable.
+
+## Limits and retained history
+
+This evidence does not establish browser editing, editor synchronization, UI or human acceptance, real Git, publication, or universal original-host raw-byte fidelity. Real Cyberbase remains untouched, the browser route remains paused, and no additional source or publication authority follows. Prior November 6 access blocks and capture failures remain in the [hosted reader smoke chronology](/cyberbaser/agent-context/zz-log/2026-11-06-hosted-reader-smoke/); this success does not rewrite those earlier outcomes.
+
+This evidence required no code changes beyond preservation checkpoint `e008353`. At the time of the smoke and documentation run, no new commit, push or merge was authorized or performed; any later local checkpoint is separate from that run. See the [owner publication rehearsal guide](/cyberbaser/development/owner-publication-rehearsal/) for the current evidence boundary.

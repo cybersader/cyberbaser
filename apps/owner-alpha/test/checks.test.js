@@ -386,6 +386,35 @@ describe('pinned Quartz integration', () => {
     expect(typeof renderPinnedQuartz).toBe('function');
   });
 
+  test('rejects malformed suggestion form inputs before any renderer command runs', async () => {
+    const root = await temporary('bad-suggestions');
+    const base = {
+      contentDir: path.join(root, 'content'),
+      outputDir: path.join(root, 'output'),
+      workspaceDir: path.join(root, 'workspace'),
+      ownerOrigin: 'http://127.0.0.1:4317',
+    };
+    const valid = {
+      intakeOrigin: 'http://127.0.0.1:4319',
+      bindingDigest: `sha-256=:${Buffer.alloc(32, 1).toString('base64')}:`,
+      sourceRepository: 'https://github.com/cybersader/cyberbase.git',
+      sourceRevision: 'a'.repeat(40),
+    };
+    for (const suggestions of [
+      'enabled',
+      { ...valid, intakeOrigin: 'https://intake.example' },
+      { ...valid, intakeOrigin: 'http://8.8.8.8:4319' },
+      { ...valid, bindingDigest: 'sha256:abc' },
+      { ...valid, sourceRepository: 'git@github.com:cybersader/cyberbase.git' },
+      { ...valid, sourceRevision: 'main' },
+    ]) {
+      const code = typeof suggestions === 'string' || suggestions.intakeOrigin !== valid.intakeOrigin
+        ? (typeof suggestions === 'string' ? 'invalid-render-suggestions' : 'private-network-origin-required')
+        : 'invalid-render-suggestions';
+      await expectCode(() => renderPinnedQuartz({ ...base, suggestions }), code);
+    }
+  });
+
   test('container rendering fails closed instead of fetching when the immutable seed is absent', async () => {
     const root = await temporary('missing-container-seed');
     const previous = process.env.OWNER_ALPHA_STATE_PROFILE;

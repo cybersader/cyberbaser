@@ -51,6 +51,13 @@ export function configInput(root, overrides = {}) {
       pendingRetentionMs: 2_592_000_000,
       expiredGraceMs: 604_800_000,
     },
+    reviewIpc: {
+      enabled: false,
+      socketPath: null,
+      requestTimeoutMs: 5_000,
+      maxConcurrentRequests: 4,
+      maxListEntries: 100,
+    },
     limits: {
       maxBodyBytes: 98_304,
       requestTimeoutMs: 5_000,
@@ -62,7 +69,14 @@ export function configInput(root, overrides = {}) {
   };
 }
 
-export async function createFixture() {
+export const DEFAULT_PAGES = Object.freeze([{ path: SOURCE_PATH, text: BASE_TEXT }]);
+
+function pageRecord(page) {
+  const bytes = Buffer.from(page.text, 'utf8');
+  return `${page.path}\0${bytes.length}\0${digest(bytes)}\n`;
+}
+
+export async function createFixture({ pages = DEFAULT_PAGES } = {}) {
   const root = await mkdtemp(path.join(tmpdir(), 'cyberbaser-intake-app-'));
   const checkout = path.join(root, 'checkout');
   const bare = path.join(root, 'objects.git');
@@ -73,9 +87,11 @@ export async function createFixture() {
   await git(checkout, ['init', '--initial-branch=main']);
   await git(checkout, ['config', 'user.name', 'Intake Test']);
   await git(checkout, ['config', 'user.email', 'intake@example.invalid']);
-  await mkdir(path.join(checkout, 'docs'), { recursive: true });
   await mkdir(path.join(checkout, '.cyberbaser'), { recursive: true });
-  await writeFile(path.join(checkout, SOURCE_PATH), BASE_TEXT);
+  for (const page of pages) {
+    await mkdir(path.dirname(path.join(checkout, page.path)), { recursive: true });
+    await writeFile(path.join(checkout, page.path), page.text);
+  }
   await writeFile(path.join(checkout, '.cyberbaser', 'trust.yml'), POLICY_TEXT);
   await git(checkout, ['add', '--all']);
   await git(checkout, ['commit', '-m', 'Published source']);
@@ -84,16 +100,18 @@ export async function createFixture() {
   await git(checkout, ['remote', 'add', 'origin', bare]);
   await git(checkout, ['push', 'origin', 'HEAD:refs/heads/main']);
 
-  const baseBytes = Buffer.from(BASE_TEXT, 'utf8');
   const manifest = prepareSourceBindingManifest({
     source: { repository: REPOSITORY, revision },
     publication: {
       publishPolicyDigest: digest(Buffer.from('publish-policy-v1\n')),
-      selectedTreeDigest: digest(Buffer.from(`${SOURCE_PATH}\0${baseBytes.length}\0${digest(baseBytes)}\n`)),
+      selectedTreeDigest: digest(Buffer.from(pages.map(pageRecord).join(''))),
     },
     renderer: { name: 'quartz-cyberbase', revision: 'a'.repeat(40) },
     trustPolicy: { status: 'valid', digest: digest(Buffer.from(POLICY_TEXT)) },
-    pages: [{ path: SOURCE_PATH, byteLength: baseBytes.length, digest: digest(baseBytes) }],
+    pages: pages.map((page) => {
+      const bytes = Buffer.from(page.text, 'utf8');
+      return { path: page.path, byteLength: bytes.length, digest: digest(bytes) };
+    }),
   });
   const bindingDigest = sourceBindingDigest(manifest);
   await writeFile(
@@ -103,18 +121,27 @@ export async function createFixture() {
   );
 
   const config = validateConfig(configInput(root));
+  const pageIdFor = (pagePath) => {
+    const page = manifest.pages.find((candidate) => candidate.path === pagePath);
+    if (!page) throw new Error(`fixture has no page ${pagePath}`);
+    return page.pageId;
+  };
+  const defaultPageId = pageIdFor(pages[0].path);
   return {
     root,
+    checkout,
+    revision,
     config,
     manifest,
     bindingDigest,
-    pageId: manifest.pages[0].pageId,
+    pageId: defaultPageId,
+    pageIdFor,
     intent(overrides = {}) {
       return {
         schemaVersion: 1,
         artifactType: ACCOUNT_FREE_INTENT_ARTIFACT_TYPE,
         bindingDigest,
-        pageId: manifest.pages[0].pageId,
+        pageId: defaultPageId,
         selection: { quote: 'teh', prefix: 'Correct ', suffix: ' typo.' },
         replacement: 'the',
         rationale: 'Correct the misspelling.',

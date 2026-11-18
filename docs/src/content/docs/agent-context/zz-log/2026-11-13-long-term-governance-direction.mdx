@@ -1,0 +1,26 @@
+---
+title: Design the community destination before the first release
+description: "The maintainer requires short- and long-term architecture together, preserving Discourse-inspired trust rather than treating community as an owner-tool add-on."
+status: research
+tags: [architecture, governance, contribution, identity]
+---
+
+## Maintainer requirements
+
+The maintainer confirmed the embedded authentication direction subject to passkey support, recalled the original Discourse-inspired model, and then challenged an architecture that appeared to account only for the short-term owner tool. Both short- and long-term goals must influence the foundation.
+
+Source recovery found explicit Discourse-style inspiration in R03 and the canonical problem page. A historical hub bill of materials intentionally reduced v1 trust to a manual list and excluded accounts, a reputation engine and RBAC. That explains part of the narrowing; it is not proof that the full community vision was permanently abandoned. Later owner review and session implementations also supersede portions of that historical proposal.
+
+Better Auth's [passkey documentation](https://www.better-auth.com/docs/plugins/passkey) confirms support for WebAuthn/FIDO2, platform authenticators and external security keys. No plugin was installed or tested. A stable relying-party identity, secure origin, account recovery and session/permission contract remain implementation requirements.
+
+## Proposed architecture response
+
+The [contribution, trust and access map](/cyberbaser/design/contribution-trust-and-access/#long-term-architecture-delivered-in-smaller-configurations) now describes a target community architecture and smaller delivery configurations. It separates identity, local trust policy, editorial workflow, effect authorization, governance evidence, and private access/publication.
+
+Near-term owner-only permissions are a small initial policy, not a universal ownership assumption. Manual trust designation is a starting point, not a claim that earned-trust progression is complete. Future scoped delegation must not collapse reviewer and publisher authority or bypass exact-source safeguards. Rich proposals, contributor discussion, revisions, credit and trust history remain first-class design concerns even where implementation is deferred.
+
+The owner required long-term accounting; they did not approve the newly proposed role model, trust thresholds, workflow schema, delegation, automation or federation protocol. Those remain explicit design work. Existing no-authority package and exact-operation boundaries remain unchanged, and local credential custody still needs explicit reconciliation with existing architecture rules.
+
+## Scope and verification
+
+Updated canonical synthesis and current orientation only. Scoped whitespace and local page-link checks were run; no application tests, full docs build, browser operation, credential access, source application, deployment or publication was performed. This is a proposed architecture response, not runtime acceptance or implementation authority.

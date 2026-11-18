@@ -1,0 +1,37 @@
+---
+title: Read-only publication connection results
+description: "Record scoped synthetic acceptance, the first failed read, and a separately authorized successful backend capture with its remaining owner-handoff limits."
+tags: [implementation, testing, governance]
+---
+
+## Outcome
+
+The read-only publication connection remains **backend integration in progress**, not a shipped or owner-usable live contribution path. The first bounded live attempt failed strict transport-contract validation; its raw response was not retained, so its exact cause remains unproven. After the offline completion-marker client repair and independent delta review, a separately authorized second bounded attempt successfully captured one public page, matched its exact validated digest to the pinned base, and passed authenticated HTTP review. The fresh-browser owner handoff is still unavailable, and further live reads require fresh bounded authority.
+
+## Bounded evidence before the live attempt
+
+The scoped implementation evidence includes an enforceable no-writer runtime/router boundary and full unchanged-page review views, while preserving exact source and session validation. Selected gates passed: **6 runtime/server tests with 308 assertions**; **18 launcher tests**; a separate **one-case changed-store integration**; a current-core adapter recheck of **25 tests and 1,885 assertions**; and a credential-scanner selection of **26 tests and 37,075 assertions**. These are scoped results, not a broad suite pass or production build. The later measured credential-regex complexity repair preserves matching semantics.
+
+The isolated canonical base was verified clean and pinned with only the selected public source and policy content. Private launcher/configuration mistakes were corrected before live access. Earlier local diagnostic and repair work did not itself access the live source. A prior **240-second timeout** remains unattributed and its cleanup uncertain; later timing work does not rewrite that history.
+
+## Live attempts and their limits
+
+The first authorized run started isolated listeners, consumed its initial bootstrap once, served the authenticated owner page, completed discovery, and verified pinned-base readiness. It attempted exactly one hosted read. Strict transport-contract validation failed, surfaced as HTTP 409 during preparation. A source-only clarification identified a documented completion marker as the **likely** response-shape mismatch. Because the raw response was not retained, this does not prove the exact live envelope or the initial failure cause.
+
+The private client repair recognizes the documented completion marker and explicitly validates a projection into the unchanged adapter. Its contained client run passed **75 tests**, comprising **63 unchanged existing tests and 12 new cases**. Independent delta review passed with **zero blockers** and did not rerun the suite. The review confirmed closed wrapper checks, exact marker handling, preservation of structured content and optional fields, unknown-key refusal, and no retry behavior. Source clarification was relayed rather than independently fetched; the actual failed live envelope remains unknown. The failed first-run process was stopped. No full captured review or digest comparison, source edit, executable job, publication authorization, publication, deployment, or human review was established by that first attempt.
+
+After separate bounded owner authorization, the second run completed one discovery, one Prepare, one hosted read, one pinned-base readiness check, and **17 HTTP checks**. The captured page was unchanged, and its exact validated digest matched the pinned base; this was not inferred from length alone. Authenticated read-only review returned HTTP 200 twice without another hosted read. Ten writer routes returned HTTP 403. There were zero publication authorizations, executable jobs or source changes, and the isolated checkout remained clean. The second run used fresh owned isolated state and left the existing live application and rehearsal untouched. It used two helper credential requests; no credentials were persisted or reproduced. This establishes read-only backend capture, comparison and authenticated HTTP review for **one public page**, not product publishing, raw-disk byte fidelity, concurrent-edit coherence, deployment, or human acceptance.
+
+The run record says the owned process was retained and captured review access expires no later than 30 minutes after readiness. Current liveness and remaining time are not asserted. The one-time bootstrap was consumed by the automated in-memory session; a fresh browser cannot authenticate, so the captured review is not currently owner-usable and no live launch link or command is provided. Safe owner browser handoff is the next useful scope, but its implementation is not selected or authorized. Any additional live read requires fresh bounded authority; there is no automatic refresh or retry.
+
+## Distinguish source evidence, synthetic acceptance, and live evidence
+
+- **Source evidence** identifies the documented completion marker and supports a narrow compatibility hypothesis. It cannot reconstruct the unretained live response.
+- **Synthetic acceptance** covers the scoped runtime/server, launcher, changed-store, current-core, and credential-scanner gates above. It does not establish live transport compatibility.
+- **Live evidence** includes the first failed transport read and a separately authorized second bounded attempt that captured one page, matched its exact validated digest to the pinned base, and passed authenticated read-only HTTP review. It does not establish product publishing, downstream deployment, raw-disk or concurrent-edit guarantees, human acceptance, or an owner-usable fresh-browser handoff.
+
+The existing [rehearsal guide](/cyberbaser/development/owner-publication-rehearsal/) retains its synthetic launch command and distinguishes its disposable local Git effects from simulated downstream stages. The command is not a way to open or repeat the live review. The second backend capture does not change the synthetic rehearsal or establish a product publishing path.
+
+## Closeout boundaries
+
+This documentation records the measured state only. It changes no code, configuration, private driver, live evidence, or authorization. No suite rerun, production build, network access, browser, live retry, human review, commit, or push was part of this documentation closeout. The current-status orientation and rehearsal guide were updated before this dated chronology entry.

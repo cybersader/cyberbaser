@@ -311,5 +311,22 @@ export function createForgejoGitReader({
     return result;
   }
 
-  return Object.freeze({ readPullRequest });
+  /**
+   * Re-read the base evidence for one retained pull request from local
+   * objects only: the Markdown blob at `path` in commit `revision` and the
+   * trust policy at that same commit. No fetch, no refs touched. A watcher
+   * uses this to prove durable queue entries on recovery.
+   */
+  async function readRetained({ revision: inputRevision, path: inputPath } = {}) {
+    const revision = requireSha(inputRevision, 'revision');
+    if (typeof inputPath !== 'string' || inputPath.length === 0) fail('invalid-path', 'path must be a repository-relative Markdown path');
+    await requireCommit(revision, 'retained base');
+    const { stdout: treeBytes } = await run(['ls-tree', '-z', revision, '--', literalPathspec(inputPath)]);
+    const entry = parseTreeEntry(treeBytes, inputPath, 'retained base tree entry');
+    const baseBytes = await readBlob(`${revision}:${inputPath}`, 'retained base Markdown blob', blobLimit);
+    const policy = await readPolicy(revision);
+    return Object.freeze({ revision, path: inputPath, mode: entry.mode, baseBytes, policy });
+  }
+
+  return Object.freeze({ readPullRequest, readRetained });
 }

@@ -1,0 +1,71 @@
+---
+title: "2026-08-21 · Knowledge ops and UI review"
+description: "Restored the missing chronological knowledge-ops layer, replaced an ad hoc review port with a documented one-command real fixture, and recorded the Wave 1 owner-review checkpoint and its evidence boundary."
+date: 2026-08-21
+status: research
+tags: [meta, governance, testing]
+---
+
+## Why this entry exists
+
+The maintainer opened the canonical docs site to review the new owner proposal UI and found no review entry point there. The review fixture had been launched separately on an unrelated local port and explained only in chat. The maintainer also noticed that the dated `zz-log` stopped in April even though the project had made many consequential decisions and completed several implementation waves.
+
+Both observations were correct. Current-state documents had been maintained, but the chronological knowledge-ops layer had drifted. The project could tell a new agent what is true now, but not provide a clean dated trail of how the intervening evidence changed the design.
+
+## What happened during the log gap
+
+This is a reconstruction, not a substitute for the missing contemporaneous entries. Canonical pages and Git history remain the authority for exact details.
+
+- The 1,430-file source measurement rejected whole-file Markdown reserialization and locked exact base-bound source operations.
+- `OD-01` completed the one genuine owner self-dogfood correction required in that phase. `OD-02` and `OD-03` were superseded rather than silently counted as completed.
+- The private owner-alpha wiki gained a durable one-Save exact source-to-live pipeline, restart recovery, private numeric-address binding, and one real Cyberbase Save/push/deploy/live verification.
+- The two-stage decision-ledger adapter was implemented, installed in Cyberbase, repaired after two fail-closed integration mismatches, and published one valid unclassified live observation.
+- Linux/amd64 owner-alpha container packaging and the container-isolated Forgejo 16.0.2 phase-one gate were mechanically accepted within their documented evidence boundaries.
+- The shared proposal contract, Forgejo Lane A adapter, carrier-neutral local queue, account-free Lane B mechanics, optional sibling intake app, disabled Quartz form, and local-only intake deployment bundle were implemented.
+- R23 installed emitted-site URL continuity enforcement. R24 verified contributor authorship for the measured one-commit GitHub fork-and-squash path.
+- A controlled local Iroh carrier fixture passed direct-IP, local-relay, interruption continuation, duplicate, and Lane B replay checks without selecting a production transport.
+- Wave 1 added live same-host queue review, independent owner validation, and immutable exactly-once decision-only approval or rejection records. The real acceptance proved restart recovery, history after queue purge, continued intake, and no source, Git, queue-lifecycle, deployment, rebuild, publication, or owner-job effect.
+
+## UI review delivery correction
+
+A coherent interface review should not require the maintainer to infer which unrelated port contains the product surface. It must arrive through one of the normal project paths:
+
+1. a deployed surface, when deployment is separately authorized;
+2. a review entry point documented in the canonical docs; or
+3. one explicit command that launches the complete authenticated local fixture.
+
+The owner-review checkpoint now uses the third path. From `docs/`, run:
+
+```bash
+bun run review:owner-alpha
+```
+
+The command starts the real live queue writer, private Unix-socket review seam, independent owner validation, immutable decision store, privileged HTTP routes, and three disposable proposals. It opens an authenticated loopback browser automatically, keeps every proposal decision effect-free, and removes the temporary fixture on `Ctrl-C`. The docs page [Owner proposal UI review](/cyberbaser/development/owner-proposal-ui-review/) provides the durable entry point and review questions.
+
+The Starlight docs site remains the canonical knowledge base, not the product authority surface. The privileged owner UI intentionally stays on its separate exact origin. The correction is to coordinate the experience through docs and one command, not to weaken the origin boundary by embedding privileged controls into Starlight.
+
+## Restored guardrail
+
+The docs preflight now compares `.claude/FOCUS.md`'s `Last updated` date with the newest dated `zz-log` filename. If current project orientation advances beyond the chronological log, local docs development and builds fail with an explicit knowledge-ops error.
+
+This check is intentionally narrow. It cannot prove that every entry is good, but it prevents another months-long silent gap while the current-state layer continues moving.
+
+Going forward, every meaningful research, architecture, product-direction, real acceptance, or implementation wave must leave all three layers aligned in the same session:
+
+- canonical explanation in the relevant docs page;
+- current orientation in `.claude/`; and
+- chronology, dead ends, evidence, and handoff in one dated `zz-log` entry.
+
+## First maintainer reaction
+
+The maintainer's immediate assessment was that the owner-alpha interface is very ugly. After the functional test, they clarified that the problem should have been obvious: it does not feel like a normal authoring or editorial approval experience for a content-focused person. It exposes far too much information, is not beautiful, and the review treatment reads as AI-generated dashboard slop. That is accepted as direct product feedback, not a request for minor styling polish. The current surface is a backend-functional alpha with minimum security structure, not a visual target or a product-quality interface.
+
+The functional behavior passed, but the presentation needs a first-principles redesign informed by content authoring, wiki moderation, and editorial approval products. The target is not a prettier engineering dashboard. The primary interface should foreground the proposed wording and owner decision, use progressive disclosure for integrity evidence, and feel calm and familiar to someone focused on content rather than implementation.
+
+The maintainer then completed two actions in the real local fixture: one rejection and one approval intent. The runtime retained two immutable decision-only artifacts, both with every effect-boundary field false. The source checkout remained clean, checkout `HEAD` exactly matched the bare remote's `main`, the queue remained retained, and the owner store had no job directory or durable delta outside `proposal-review/`. This is genuine maintainer interaction with synthetic disposable proposals. It is not a real contributor rejection, independent-owner evidence, or contributor-to-live proof.
+
+## Current next step
+
+The first maintainer interaction completed the narrow behavior test and rejected the visual and information design. That makes a content-first redesign the immediate checkpoint before the approved-proposal pipeline adapter. The redesign must lead with proposed wording, move exact evidence behind disclosure, add deliberate immutable confirmation, and make **Source unchanged** primary on the receipt. See the [owner proposal review redesign log](/cyberbaser/agent-context/zz-log/2026-08-21-owner-proposal-review-redesign/) for the implementation and verification record.
+
+Approval still records intent only. The approved-proposal pipeline adapter and connected contributor-to-live slice remain later work. Neither is authorized by a decision made in the review fixture.

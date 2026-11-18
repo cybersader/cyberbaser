@@ -1,0 +1,24 @@
+---
+title: "2026-09-27 · Forgejo first, on TrueNAS"
+description: "The maintainer chose Forgejo before the connected slice and asked whether it needs a VM on TrueNAS. Checked the TrueNAS app catalog: the forge is a rootless app at Forgejo 16.0.5, matching this project's pins; the runner app wants the NAS Docker socket and is not needed yet. Recorded the slice-shape decisions."
+date: 2026-09-27
+status: research
+tags: [setup, architecture, governance]
+---
+
+## Maintainer direction
+
+Asked as a funnel: the maintainer chose to set up Forgejo before building the three links of the connected slice, and, for when that slice is built, the suggestion form only on the owner's private local site and the intake started by the owner app. Mid-turn, the maintainer said they run TrueNAS and assumed Forgejo would need a bare-metal VM because it is DevOps-shaped.
+
+## What was checked
+
+Direct fetches to the TrueNAS and Forgejo sites are blocked from this container, so the TrueNAS apps catalog repository was cloned read-only and the two app definitions read directly:
+
+- `forgejo` (community train): image `codeberg.org/forgejo/forgejo:16.0.5-rootless`, Postgres 17 or 18, unprivileged user, no host mounts, one data dataset, web and SSH ports, optional TrueNAS certificate. Forgejo 16 is what `@cyberbaser/forgejo-intake` and the owner-alpha Forgejo adapter are pinned to.
+- `forgejo-runner`: image `code.forgejo.org/forgejo/runner:13.2.0`, with an option to mount `/var/run/docker.sock`. That socket is root on the NAS. The phase-one gate's accepted runner shape keeps jobs in unprivileged run-scoped containers; on a NAS the runner belongs in a VM with its own engine, and this project needs no runner until checks or publishing move to Forgejo.
+
+Canonical page: [Forgejo on TrueNAS](/cyberbaser/development/forgejo-on-truenas/).
+
+## Recorded
+
+The slice-shape and Forgejo-first decisions are in `.claude/41-QUESTIONS-RESOLVED.md` as a no-R-number direction amendment and in FOCUS. Nothing is installed; no lane is offered; GitHub remains authority.

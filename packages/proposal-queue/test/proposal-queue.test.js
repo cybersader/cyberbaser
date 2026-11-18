@@ -15,7 +15,7 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 import { parseConfig } from '@cyberbaser/trust';
-import { prepareProposal, serializeProposal } from '@cyberbaser/proposal';
+import { createChangeSetProposal, serializeChangeSetProposal, changeSetProposalDigest, prepareProposal, serializeProposal } from '@cyberbaser/proposal';
 import {
   DEFAULT_QUEUE_CONFIG,
   ProposalQueueError,
@@ -344,6 +344,25 @@ describe('filesystem safety, locking, and crash recovery', () => {
     for (const [name, bytes] of Object.entries(before)) {
       expect(await readFile(path.join(entryDirectory, name))).toEqual(bytes);
     }
+  });
+
+  test('exposes a serialized non-mutating review snapshot while the writer lock remains held', async () => {
+    const fixtureValue = await fixture();
+    const accepted = await fixtureValue.queue.enqueue(laneBInput());
+    expect(Object.keys(fixtureValue.queue.review).sort()).toEqual(['list', 'load']);
+    expect((await fixtureValue.queue.review.list({ state: 'pending-review' }))[0].queueId)
+      .toBe(accepted.receipt.queueId);
+    expect((await fixtureValue.queue.review.load(accepted.receipt.queueId)).state.state)
+      .toBe('pending-review');
+
+    const entryDirectory = path.join(fixtureValue.root, 'pending', accepted.receipt.queueId);
+    const temporary = path.join(entryDirectory, '.state.tmp-review-proof');
+    await writeFile(temporary, '{}\n', { mode: 0o600 });
+    await expectCodeAsync(
+      () => fixtureValue.queue.review.list({ state: 'pending-review' }),
+      'unexpected-queue-artifact',
+    );
+    expect(await readFile(temporary, 'utf8')).toBe('{}\n');
   });
 
   test('read-only inspection refuses a queue that requires recovery without cleaning it', async () => {
@@ -678,5 +697,62 @@ describe('retention, capacity, idempotency, and semantic projection', () => {
     }));
     expect(next.replayed).toBe(false);
     expect(next.receipt.queueId).not.toBe(first.receipt.queueId);
+  });
+});
+
+
+describe('canonical v2 queue compatibility', () => {
+  function v2Text() {
+    const operations = [['teh', 'the'], ['process', 'workflow']].map(([expected, replacement], i) => {
+      const start = BASE.indexOf(Buffer.from(expected));
+      return { operationId: `edit-${i}`, start, end: start + Buffer.byteLength(expected), expected, replacement };
+    });
+    return serializeChangeSetProposal(createChangeSetProposal(BASE, {
+      proposalId: 'queue:v2-test',
+      source: { repository: 'https://forge.example/owner/wiki.git', revision: 'revision-1', path: 'docs/example.md' },
+      operations,
+      submission: { submittedAt: stamp(), rationale: 'Suggested edits.', evidence: [], identityClaim: null },
+    }));
+  }
+
+  test('retains exact v2 bytes and digests through replay, mixed recovery and read-only inspection', async () => {
+    const item = await fixture();
+    const text = v2Text();
+    const input = laneBInput({ proposalText: text });
+    const first = await item.queue.enqueue(input);
+    const old = await item.queue.enqueue(laneBInput());
+    expect(first.receipt.proposalDigest).toBe(changeSetProposalDigest(JSON.parse(text)));
+    expect(first.receipt.proposalByteLength).toBe(Buffer.byteLength(text));
+    expect((await item.queue.enqueue(input)).receipt).toEqual(first.receipt);
+    const replayOnly = await item.queue.enqueue({ ...input, proposalText: null, baseBytes: null, policy: null });
+    expect(replayOnly.replayed).toBe(true);
+    expect((await item.queue.review.load(first.receipt.queueId)).semantics.operations).toHaveLength(2);
+    expect(await readFile(path.join(item.root, 'pending', first.receipt.queueId, 'proposal.json'), 'utf8')).toBe(text);
+    await closeTracked(item.queue);
+    const recovered = await openTracked({ config: { root: item.root }, clock: () => stamp(), resolveEvidence });
+    const mixed = await recovered.review.list();
+    expect(mixed.map((entry) => entry.proposal.schemaVersion).sort()).toEqual([1, 2]);
+    expect((await recovered.review.load(first.receipt.queueId)).proposalText).toBe(text);
+    expect((await recovered.review.load(old.receipt.queueId)).proposal.schemaVersion).toBe(1);
+    await closeTracked(recovered);
+    const inspected = await inspectProposalQueue({ config: { root: item.root }, resolveEvidence });
+    try { expect((await inspected.load(first.receipt.queueId)).proposalText).toBe(text); }
+    finally { await inspected.close(); }
+  });
+
+  test('v2 recovery requires exact base and rejects a tampered classification', async () => {
+    const item = await fixture();
+    const result = await item.queue.enqueue(laneBInput({ proposalText: v2Text() }));
+    await closeTracked(item.queue);
+    await expect(openProposalQueue({
+      config: { root: item.root }, clock: () => stamp(),
+      resolveEvidence: async () => ({ baseBytes: Buffer.from('not the retained base'), policy: POLICY }),
+    })).rejects.toMatchObject({ code: 'base-length-mismatch' });
+    const file = path.join(item.root, 'pending', result.receipt.queueId, 'classification.json');
+    const classification = JSON.parse(await readFile(file, 'utf8'));
+    classification.classification.route = 'quick-review';
+    await writeFile(file, `${JSON.stringify(classification)}\n`);
+    await expect(openProposalQueue({ config: { root: item.root }, clock: () => stamp(), resolveEvidence }))
+      .rejects.toMatchObject({ code: 'classification-mismatch' });
   });
 });

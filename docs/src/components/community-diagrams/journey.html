@@ -1,0 +1,41 @@
+<figure class="cb-map cb-map-journey not-content">
+  <figcaption class="cb-map-caption"><strong>How a contribution reaches the source</strong><span>Proposed community workflow. Revision feedback and public intake are not yet offered.</span></figcaption>
+  <p class="cb-map-scroll-hint">Scroll the diagram horizontally for the complete route.</p>
+  <div class="cb-map-scroll" tabindex="0" role="region" aria-label="Contribution workflow diagram, horizontally scrollable on narrow screens">
+    <svg class="cb-map-drawing" viewBox="0 0 760 470" aria-hidden="true">
+      <defs><marker id="cb-j-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1 7 4 1 7" class="cb-map-arrowhead"/></marker></defs>
+      <path d="M224 36V238" class="cb-map-guide"/>
+      <text x="20" y="58" class="cb-map-label">Reader correction</text><text x="20" y="80" class="cb-map-note">No account required</text>
+      <text x="20" y="128" class="cb-map-label">Returning contributor</text><text x="20" y="150" class="cb-map-note">Optional account + passkey</text>
+      <text x="20" y="198" class="cb-map-label">Editor, forge or agent</text><text x="20" y="220" class="cb-map-note">A replaceable authoring tool</text>
+      <path d="M202 64H238V154H270M202 134H238M202 204H238V154" class="cb-map-route"/>
+      <path d="M238 154H270" class="cb-map-route" marker-end="url(#cb-j-arrow)"/>
+      <path d="M270 96H444L460 112V224H270Z" class="cb-map-document"/><path d="M444 96V112H460" class="cb-map-route"/>
+      <text x="286" y="125" class="cb-map-label">Exact proposal</text><text x="286" y="148" class="cb-map-note">Pinned file · exact edit</text>
+      <path d="M286 162H444" class="cb-map-guide"/>
+      <text x="286" y="186" class="cb-map-code">− Water daily.</text><text x="286" y="208" class="cb-map-code cb-map-green">+ Water when dry.</text>
+      <text x="365" y="246" text-anchor="middle" class="cb-map-micro">Illustrative edit, not live content</text>
+      <path d="M460 154H588" class="cb-map-route" marker-end="url(#cb-j-arrow)"/>
+      <circle cx="600" cy="154" r="8" class="cb-map-junction"/>
+      <text x="600" y="104" text-anchor="middle" class="cb-map-label">Review this version</text><text x="600" y="128" text-anchor="middle" class="cb-map-note">Check, discuss, decide</text>
+      <path d="M608 154H710V208" class="cb-map-route"/>
+      <path d="M703 208H717" class="cb-map-stop"/>
+      <text x="710" y="232" text-anchor="middle" class="cb-map-note">Close</text>
+      <path d="M600 162V272H254V208H268" class="cb-map-route cb-map-dashed" marker-end="url(#cb-j-arrow)"/>
+      <text x="446" y="264" text-anchor="middle" class="cb-map-note">Feedback → new revision</text>
+      <path d="M624 154V300H280V376" class="cb-map-route" marker-end="url(#cb-j-arrow)"/>
+      <text x="484" y="319" text-anchor="middle" class="cb-map-note">Approval records a decision. It does not write.</text>
+      <path d="M20 346H740" class="cb-map-divider"/>
+      <text x="20" y="384" class="cb-map-note"><tspan x="20">Owner-controlled</tspan><tspan x="20" dy="20">effect route</tspan></text>
+      <circle cx="280" cy="388" r="10" class="cb-map-junction cb-map-junction-accent"/>
+      <path d="M292 388H464M488 388H678" class="cb-map-effect" marker-end="url(#cb-j-arrow)"/>
+      <rect x="466" y="378" width="20" height="20" class="cb-map-source-mark"/>
+      <circle cx="690" cy="388" r="8" class="cb-map-junction"/>
+      <text x="280" y="426" text-anchor="middle" class="cb-map-label">Separate owner act</text>
+      <text x="476" y="426" text-anchor="middle" class="cb-map-label">Exact application</text>
+      <text x="690" y="426" text-anchor="middle" class="cb-map-label">Publication</text>
+      <text x="476" y="450" text-anchor="middle" class="cb-map-note">Undeclared bytes stay untouched</text>
+    </svg>
+  </div>
+  <details class="cb-map-description"><summary>Workflow and implementation limits</summary><p>Readers, recurring contributors and replaceable tools submit source-bound proposals, not source writes. The example sentence is synthetic. Review may close the proposal, request a new revision or record approval. A new revision needs its own review; the feedback loop is proposed, not implemented. Approval alone changes no source. A separate authorized owner act starts exact application and permitted publication. Today's Apply action combines those effects. Account-free public participation, passkey accounts and richer revision workflows remain target capabilities.</p></details>
+</figure>

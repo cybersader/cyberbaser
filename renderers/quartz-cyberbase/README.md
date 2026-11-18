@@ -1,8 +1,9 @@
 # quartz-cyberbase
 
 The Quartz renderer spoke for the `cybersader/cyberbase` site. It is a pinned,
-reproducible wrapper around an upstream Quartz checkout, with zero forked Quartz
-source.
+reproducible wrapper around an upstream Quartz checkout. Default builds leave
+upstream source unchanged. Optional source provenance uses a small hash-attested
+adapter patch in the disposable checkout, not a separately maintained Quartz fork.
 
 ## What this is (and is not)
 
@@ -72,6 +73,228 @@ Known behavior of this version, all confirmed by measurement:
 **Open sub-decision: Quartz v5.** Not evaluated. Bumping the pin means re-running
 the OFM conformance suite and the vault build, and re-checking every item above.
 Do not bump it as a routine dependency update.
+
+## Optional source provenance
+
+Set `CYBERBASER_SOURCE_PROVENANCE=enabled` for both `setup.sh` and `build.sh` to
+emit `<page-slug>.provenance.json` beside each source-backed HTML page. Unset or
+`disabled` keeps the existing output; other values fail closed. This is build
+metadata for a browser suggestion ledger, not a source writer or an enabled
+editing interface.
+
+The adapter captures the exact input bytes before Quartz trims them, carries
+per-file maps through text transforms and the Markdown/HTML pipeline, and emits
+after transclusion expansion. SHA-256 and byte length describe the **build input**,
+including original CRLF and leading/trailing whitespace, not normalized Markdown
+or HTML. The normal verbatim publication projection preserves that identity. A
+caller that rewrites projected content must not equate this digest with the
+canonical source digest, including for the source fallback. This adapter supports
+only the verbatim projection: `packages/projection/src/project.js` defaults to
+`lowercase=false` and copies each selected page with `copyFileSync`; it does not
+strip or redact body regions. Excluded files never enter this renderer. A future
+rewriting/redacting projection needs a proven original-byte coverage map and must
+mark blocks overlapping rewritten/uncovered regions non-editable (without text),
+or keep provenance disabled. Re-reading the canonical vault to recover omitted
+content is forbidden.
+
+### Contract v2 (additive block fallback)
+
+`plugins/provenanceContract.ts` is renderer-neutral. `ProvenanceSink.write(page,
+manifest)` is the small pluggable emission interface. Quartz supplies a filesystem
+sink; another renderer can produce the same manifest without depending on Quartz
+or its patch. Version 2 retains the v1 source identity and leaf semantics, adding
+`blocks`; readers may accept v1 without source fallback and v2 with it. Do not
+silently reinterpret an unknown version.
+
+Example HTML for the seven-byte source `Hi 😀`:
+
+```html
+<p data-cb-node="cb0">Hi 😀</p>
+```
+
+Corresponding sidecar shape (`sha256` below stands for the 64-character lowercase
+hex digest of those exact seven bytes):
+
+```json
+{
+  "schema": "cyberbaser.source-provenance",
+  "version": 2,
+  "source": { "path": "note.md", "byteLength": 7, "sha256": "<sha256>" },
+  "leaves": [{
+    "id": "cb0.0", "parent": "cb0", "child": 0, "text": "Hi 😀",
+    "runs": [{ "rendered": [0, 5], "source": [0, 7], "kind": "exact" }],
+    "exact": [0, 7]
+  }],
+  "blocks": [{
+    "id": "block0", "parent": "cb0", "source": [0, 7],
+    "text": "Hi 😀", "editable": true
+  }]
+}
+```
+
+- `source.path` is the POSIX path relative to the published input directory, never
+  an absolute local path. Only editable `blocks[].text` contains original source;
+  the complete file and frontmatter are never emitted.
+- Each leaf identifies one DOM `Text` child using its existing parent's
+  `data-cb-node` and its **`childNodes` index**, not `children` index. `$body` means
+  the source body root, normally `article.popover-hint` in this adapter. `id` is
+  the deterministic parent/index pair. IDs are stable for an identical input and
+  pinned pipeline, not persistent IDs across source changes.
+- `text` is exact DOM `Text.data`, including whitespace before CSS layout collapse.
+  Browser CRLF normalization is accounted for. `rendered` ranges are half-open
+  **UTF-16** coordinates for DOM selection; `source` ranges are half-open **UTF-8
+  byte** coordinates, always at complete Unicode boundaries.
+- `kind: "exact"` means the indicated source bytes decode to the indicated text.
+  Adjacent exact ranges are coalesced only when source intervals touch. `exact`
+  on a leaf additionally certifies its entire text as one contiguous source slice.
+- `kind: "atom"` retains the full source atom for a rendered transformation:
+  entities, Markdown escapes, smart punctuation, normalized line endings and
+  arrows. It does **not** claim that source bytes equal the displayed character.
+  A consumer must replace a complete atom, never an interior portion.
+- Unmapped runs have a `reason` instead of `source`/`kind`. Current codes are
+  `target-derived-wikilink`, `target-derived-tag`, `callout-title`, `math`,
+  `transclusion`, `raw-text-element`, `generated-whitespace`, and
+  `generated-or-unmapped`. They are explicitly not editable in place.
+
+Only parent attributes are added. No text wrappers, new layout boxes, innerHTML
+replacement, or source serialization are introduced. Adjacent HAST text nodes are
+merged with their maps because HTML parsing merges them too. This minimizes DOM
+changes, including inside tables, syntax highlighting and MathML. Authored
+`data-cb-*` attributes are removed before assigning adapter locators.
+
+The browser must scope lookup to the source body, require exactly one matching
+parent and text child, compare `Text.data` with `text`, and verify the full pinned
+source identity before using any interval. Revalidate after DOM mutation. Reject
+missing/duplicate locators, stale text, surrogate-interior positions, partial
+atoms, gaps, overlaps, and cross-source or discontinuous selections. Unannotated
+chrome/generated component text is not editable. Malformed author HTML or later
+client rewriting can invalidate locators; do not guess a replacement match.
+Provenance alone is not authentication, approval, Markdown safety, a freshness
+check, or permission to apply a change. The proposal and integrity gates remain
+mandatory.
+
+### Exact block source and privacy
+
+`blocks[].parent` identifies the enclosing rendered element by `data-cb-node`, not
+a text child. `source` remains a half-open original UTF-8 byte range; editable
+`text` is exactly that slice decoded without normalizing CRLF, Unicode or Markdown.
+The editor must preserve those bytes for unchanged text, and submit only declared
+base-bound operations through the same suggestion ledger and proposal gates.
+
+Blocks cover paragraphs, headings, leaf list items (including the list marker),
+ordinary blockquote paragraphs, **whole callouts**, **whole tables** (not rows),
+math blocks, fenced/indented code and thematic breaks. Child paragraphs inside a
+callout, table or leaf item do not create overlapping fallback blocks. A parent
+list item's own paragraph can coexist with its nested leaf items. Locators are
+attached only where the original block still has one provable rendered element;
+removed, duplicated or unprovable DOM boundaries get no fallback, never a guessed
+match. Transcluded descendants have no hosting-page source authority.
+
+The initial hook parses the untransformed, trimmed original with the same configured
+Markdown parser/extensions. It matches the transformed AST to those original
+boundaries, so OFM's preprocessing cannot hide a comment by deleting it before
+classification. Internal AST metadata (never source-authored attributes) survives
+raw-HTML reparsing and the pinned KaTeX block replacement. Unknown source-boundary
+changes retain a non-editable block with `reason: "transformed-boundary"`.
+
+**Fail-closed rules:**
+
+- Any `%%` or `<!--` in a source block disables it (`obsidian-comment` or
+  `html-comment`), including comments removed before parsing, prefixes/suffixes,
+  nested table/list/callout content, unmatched delimiters and conservative false
+  positives in code examples. The emission boundary checks again.
+- Raw HTML in a block, or an authored raw-HTML ancestor around it, disables the
+  fallback (`raw-html`). This is deliberately broader than detecting stripped or
+  hidden HTML: arbitrary HTML/CSS cannot prove that all its source is visible.
+- Frontmatter is never a block. Definitions/footnote definitions nested inside a
+  block disable it (`unpublished-source`); standalone non-rendered definitions
+  produce no locator. Nothing reads a file outside the published build input.
+- Obsidian embeds and Markdown images disable their enclosing block
+  (`transclusion`). Foreign and same-file transcluded descendants cannot become
+  editable hosting-page blocks. Only the local embed directive receives a disabled
+  locator where it survives rendering; foreign source is never fetched for editing.
+- A non-editable block **omits `text` entirely**. Example:
+  `{"id":"block4","parent":"cb9","source":[100,160],"editable":false,"reason":"obsidian-comment"}`.
+  Its coordinates identify a boundary, not permission to fetch the missing text.
+- Maximum source text per block is **8 KiB in UTF-8**, not 8,192 UTF-16 code units.
+  Larger blocks omit text with `reason: "too-large"`. The complete serialized
+  sidecar, including the newline, is capped at **4 MiB**. If it exceeds that budget,
+  all editable block payloads are withheld with `too-large`; if necessary the
+  rendered leaf map is withheld too. If metadata alone still exceeds the cap, the
+  build fails before the sink writes anything. Never truncate a source slice.
+
+A blocked source fallback does not make otherwise proven visible leaf spans
+unsafe: the two surfaces retain their separate exact-range checks. Neither one
+may recover hidden source through an alternate endpoint.
+
+### Pinned adapter patch
+
+`patches/quartz-4.5.2-provenance.patch` changes exactly four upstream files:
+
+| Upstream file | Adapter seam |
+| --- | --- |
+| `quartz/plugins/types.ts` | Optional pre-parse, per-file text-transform, HTML-handler and final-render hooks. |
+| `quartz/processors/parse.ts` | Invoke pre-trim capture; pass the same file through preprocessing; install supported `mdast-util-to-hast` handlers. Used by both single-thread and worker builds. |
+| `quartz/plugins/transformers/ofm.ts` | Route find-and-replace through our local position-preserving adapter. |
+| `quartz/components/renderPage.tsx` | Invoke final annotation after transclusions are expanded. Transcluded text is noneditable rather than incorrectly bound to the hosting page. |
+
+`patches/quartz-4.5.2-provenance.sha256.json` records pristine and enabled SHA-256
+for every target. Both setup and build verify all targets before applying anything;
+unknown hashes, substituted paths, and mixed patch states fail closed. Exact
+already-enabled hashes allow idempotent enabled builds. Disabled builds refuse an
+already-patched checkout: re-run setup from the pristine seed instead of silently
+leaving enabled code or stale sidecars in an off build. The seed is read-only.
+No `node_modules` files are patched. The local find-and-replace adapter retains the
+upstream MIT license. No global hooks or `String.prototype` mutations are used.
+
+### Verification
+
+Run the lightweight contract/guard and existing renderer checks:
+
+`build-contained -- bash renderers/quartz-cyberbase/tests/run.sh`
+
+Run real-CLI synthetic acceptance (requires the installed pinned offline seed):
+
+`build-contained -- node renderers/quartz-cyberbase/tests/provenance-build.mjs`
+
+Run the 57-page corpus gate, extracting only the permitted curation folder through
+`git archive origin/main` into a fresh temporary directory:
+
+`CYBERBASER_CORPUS_VAULT=/path/to/vault build-contained -- node renderers/quartz-cyberbase/tests/provenance-build.mjs --corpus`
+
+The vault path is supplied by the operator and never stored in the repository.
+
+`QUARTZ_SEED_DIR` can select another pristine, pin-verified offline seed. The test
+materializes its own checkout and never uses a running rehearsal. Test-only config
+uses local fonts and omits social-image generation to avoid font downloads;
+**the complete configured source-transformer chain, actual Quartz CLI, emitters,
+page rendering, and final HTML parse remain in use**. This is mechanical static
+build acceptance, not a browser editing/usability claim.
+
+Measured on 2026-11-16: **125,462 / 126,944 substantive body Unicode characters
+mapped (98.8326%) across 57 pages**, comprising 125,336 exact characters and 126
+transformed atoms. All final HTML text locators were checked, and all **3,092
+exact whole-leaf ranges** matched the original source bytes. The denominator
+excludes whitespace-only leaves and collapses HTML ASCII whitespace outside
+`pre`, matching the prior research measure; raw text maps are also checked.
+The v2 corpus gate additionally verified **1,860 editable blocks and 25
+non-editable blocks**, all 25 refused as `transclusion` (Markdown image embeds).
+Every emitted block text matched its exact original UTF-8 slice and contained
+neither `%%` nor `<!--`; every disabled block omitted text.
+
+Synthetic acceptance covers emoji, CRLF, entities, escapes, alias versus
+target-derived wikilinks, whole callouts/tables, leaf lists, quoted paragraphs,
+inline HTML, inline/fenced code, multiple math blocks and transclusions. Hidden
+comments at paragraph edges and inside lists/tables/callouts, authored hidden-HTML
+wrappers, nested non-rendered definitions, frontmatter exclusion, image embeds,
+and an oversized block prove refusal. The expanded fixtures produce 19 editable
+and 14 non-editable blocks: `raw-html=2`, `transclusion=2`, `obsidian-comment=6`,
+`html-comment=2`, `unpublished-source=1`, `too-large=1`. Unit checks cover both size
+caps, cross-source and duplicate-locator refusal. Acceptance also proves
+two-worker/single-thread equivalence and an exact source splice whose rebuilt
+body changes only the declared prose. The uninstrumented versus disabled golden
+matched **all 16 emitted fixture files byte-for-byte**. Hash-drift rejection is
+exercised too.
 
 ## Theme
 
@@ -160,13 +383,296 @@ Quartz exit code. Useful env vars:
   `/owner/edit?relativePath=…&slug=…` with both exact values percent-encoded.
   Owner mode is same-origin, local-only, and rejected when `CI` is true.
 - `CYBERBASER_ACCOUNT_FREE_INTAKE=enabled` — explicit opt-in for the account-free
-  form. Unset is the fail-closed default. Enabling also requires one exact HTTPS
-  intake origin, retained binding digest, credential-free source repository,
-  and immutable source revision through the corresponding
-  `CYBERBASER_ACCOUNT_FREE_*` variables. The browser receives only the intake
-  action, binding digest, and opaque page ID. Current public builds leave this
-  unset; the form is not offered.
+  form. Unset is the fail-closed default. Enabling also requires one exact
+  intake origin (canonical HTTPS, or a private-network IPv4 HTTP origin with an
+  explicit port for the owner's local site), retained binding digest,
+  credential-free source repository, and immutable source revision through the
+  corresponding `CYBERBASER_ACCOUNT_FREE_*` variables. The browser receives
+  the intake action, binding digest, and opaque page ID, plus published source
+  identity when provenance is separately enabled. Current public
+  builds leave this unset; the form is not offered publicly. The owner app sets
+  these itself for the private local site when its `suggestions.form` is on.
+- `CYBERBASER_SUGGESTION_CHALLENGE_SITE_KEY=…` — optional public challenge site
+  key, meaningful only when the correction form is enabled. The default provider
+  is Turnstile, whose keys use 1–256 ASCII letters, digits, underscores or hyphens.
+  Empty or provider-rejected values fail the enabled build. Without a key, no
+  widget or provider script loads and the JSON request stays unchanged. With a
+  key, opening an inline editor loads the selected provider's script and renders
+  a `suggest-correction` widget before the Send button. The single-use token goes only in `Cyberbaser-Challenge-Token`, never
+  the JSON intent or URL, and the widget resets after every attempt. Server-side
+  verification and a matching CORS header allowlist are required separately;
+  this renderer neither verifies tokens nor holds a secret.
+- `CYBERBASER_SUGGESTION_CHALLENGE_PROVIDER=…` — optional registry id; defaults to
+  `turnstile`. An unknown id (including an empty string) fails an enabled build,
+  even without a site key. A valid provider id alone never enables a widget.
+  Disabled correction forms ignore both challenge inputs.
 - `QUARTZ_REF=…` — override the pin in `setup.sh` (for evaluating a bump only).
+
+This renderer emits no Content-Security-Policy meta tag or hosting header.
+A host that supplies its own CSP must allow `https://challenges.cloudflare.com`
+in both `script-src` and `frame-src` only when the challenge is configured.
+Owner-alpha's separate reader CSP and explicit build-environment allowlist do
+not yet pass or allow this optional key; exporting it in the parent shell alone
+will not enable the widget through that app. These offline tests do not validate
+live Turnstile or authorize enabling a public form. Other providers require their
+own reviewed script/frame CSP permissions; no provider adds host policy itself.
+
+## Suggesting an edit on the page
+
+The UI uses 44px touch targets, 16px input/source-editor text, theme-aware colors,
+and a faint 2 px caret-block rule without a background tint. Only the block
+containing the caret or deliberate tap exposes its **Edit Markdown** gutter
+button. Hover does nothing; controls take no flow space. The document overlay
+layer keeps controls reachable even for clipping callouts and scrollable tables.
+
+With the account-free form enabled and `CYBERBASER_SOURCE_PROVENANCE=enabled`
+passed to **both setup and build**, readers can suggest changes directly on the
+rendered page. One **Suggest edits** entry turns on **Suggesting** and disappears
+while editing. The forge’s **Edit this page** remains a quiet alternate link only
+while reading. A compact toolbar holds the suggesting toggle, Undo, Redo, Markdown, change count and
+**Review & send**. It stays above the phone’s safe area at the bottom and in the
+bottom-right corner on desktop. Turning suggesting off keeps the draft.
+
+A small first-use hint explains that changes remain suggestions until the owner
+applies them. **Got it** remembers dismissal in localStorage; blocked storage does
+not prevent editing. The hint never inserts instructions above the article.
+
+1. Click into mapped text and type to insert. Select words and type to replace.
+   Backspace/Delete suggests a deletion. The original text stays visible in red
+   strikethrough; additions appear in green underline. Link labels and bold text
+   retain their links/formatting. Edits inside green text update that same change.
+2. Tap the count chip to open the changes sheet on phones and medium desktops.
+   It starts collapsed and stays above, not over, the toolbar. Roomy desktops show
+   margin cards; medium-width layouts reserve space when cards are opened so they
+   do not cover the article. Cards show the nearest section heading and surrounding text, with the change marked inline, an optional comment, and **Remove**. Removal is undoable.
+   **Review & send** opens the complete batch in a full-height phone sheet or
+   desktop side panel. Escape or **Back to editing** closes review.
+   Draft operations and local comments survive reload in sessionStorage, keyed
+   by opaque page ID and the pinned base digest. Remove restores that change’s original text.
+3. Add an optional **Why?**, HTTPS **Source link**, and configured bot check, then
+   choose **Send N suggestions**. Comments join the submission rationale, not the
+   five-field operation records. Successful submission shows the queue receipt,
+   clears the draft and marks, and returns the unchanged original page. Only an
+   owner can apply a proposal to the source.
+
+Generated text, transformed atoms and discontinuous selections are not edited
+by guesswork. On v2 provenance pages, clicking a dashed transformed region shows an anchored explanation with **Edit Markdown**. Refused blocks explain that they cannot be edited here and offer no editor. Discontinuous
+rendered selections still refuse editing. Plain-text paste uses the same
+exact-range route; HTML paste, drops, formatting commands cannot mutate the source model.
+Use **Remove** to restore one suggestion, or **Undo** and **Redo** on the toolbar
+to travel through the draft. Consecutive typing at the same caret coalesces until
+a pause over one second, a caret jump or a different editing action. Deletions,
+Markdown **Done** and review removal each make a separate history step.
+Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl+Y and browser history-input events use the same
+bounded, 100-step ledger history; an open Markdown editor keeps its own isolated session. Selections must stay within one verified
+exact run, not cross Markdown syntax boundaries. IME input is captured separately
+from the browser's transient composition DOM.
+
+Unsent changes install a native full-unload warning. Internal link navigation is
+captured before pinned Quartz’s window-level SPA handler (which ignores
+`defaultPrevented`), with **Stay** and **Discard and leave**. Stay preserves the
+ledger; discard clears only this page’s draft and replays the approved link through
+Quartz. Links within an actively edited article remain text-editing targets.
+No changes means no warning. This guard covers link-triggered SPA navigation,
+not programmatic `spaNavigate` calls or browser-history traversal.
+
+### Editing a block’s Markdown source
+
+In Suggesting mode, click a target-derived wikilink label, callout title, math
+region or other transformed text, or choose the **Markdown** toolbar button, Ctrl/Cmd+Shift+M, or the small `</>`
+button beside the caret’s block. Hover never activates a block. A faint left
+rule and absolutely positioned gutter control take no flow space; narrow phones
+use a top-right overlay with a coarse-pointer 44 px target. The rendered block temporarily gives way to a compact, labelled editor
+headed **Editing Markdown**. Markdown highlighting and faded syntax away
+from the cursor’s line provide a source-first live-preview feel. The editor
+shows green inserted text and red struck-through deletion widgets; it does not
+render arbitrary Markdown or execute raw HTML.
+
+**Done** translates the block’s local original-byte operations to page-base
+coordinates and adds **Markdown edit** cards to the same pending suggestion.
+Reopening the block resumes its tracked draft. **Cancel** or **Escape** discards
+only the current editor session and returns focus to its opener. Source edits
+persist through reload, support per-operation Remove, and use the unchanged
+five-field `/v2/suggestions` payload alongside rendered edits in other blocks.
+
+**Mixing policy:** rendered and source edits cannot coexist in the same block,
+even when their individual splices would be disjoint. Discard that block’s
+rendered-text edits before opening its source. Once it has source edits, use
+**Edit Markdown** to continue, or discard its source edits to resume rendered
+editing. The guard includes boundary insertions and checks the merged sorted,
+non-overlapping operations again before Done and submission.
+
+Only published, editable v2 blocks are available, with an 8 KiB original-source
+cap. Hidden comments, raw HTML, embeds/transclusions, oversized or unpublished
+blocks show the provenance refusal reason without opening or loading an editor.
+A v1 sidecar without `blocks` keeps the original safe-edit refusal; it never
+infers Markdown from rendered text.
+
+The editor uses `@cyberbaser/suggestion-ledger` with the **complete block** as its
+local base. It verifies that local base, not the unavailable complete page.
+CM6’s UTF-16 transaction coordinates convert against the pre-transaction block
+view into UTF-8 ledger offsets; simultaneous changes apply right-to-left.
+Explicit LF splitting retains literal CR characters, so existing CRLF and mixed
+line endings survive without normalization. Enter uses CRLF when the block has
+it, and Backspace/Delete handle a CRLF pair together. Partial CRLF or surrogate
+edits fail closed. The source editor supports plain-text changes, not formatting
+commands or native undo; use Cancel to abandon a session, then Undo/Redo after Done or Remove on a card.
+
+### Vendored, replaceable source editor
+
+Components depend on `SourceEditor` / `SourceEditorSession` in
+`components/sourceEditor.ts`, not CM6 APIs. CM6 is the first implementation.
+A same-origin, content-addressed script under `static/source-editor.<hash>.js`
+loads only when an eligible block first opens, once per browser window. Pages
+that never open the editor fetch no additional script. No CDN, remote font,
+external editor service or install at setup/build time is required. The host’s
+CSP must allow its own static scripts; no external script origin is added.
+
+`setup.sh` verifies and copies the committed asset into the materialized Quartz
+checkout’s static directory. It does not modify the pristine seed or its pinned
+upstream dependency lock. The standalone `source-editor/package-lock.json` pins
+all 20 dependency packages; all third-party packages are MIT-licensed, with their
+full notices embedded in the asset and recorded under `source-editor/LICENSES/`.
+The first-party adapter follows the repository’s AGPL-3.0 license. The current
+bundle, including full license notices, is **353,841 bytes raw / 110,468 bytes
+gzip** (level 9).
+
+Direct versions are state **6.5.2**, view **6.38.6**, lang-markdown **6.3.4**,
+language **6.11.3**, Lezer common **1.2.3**, highlight **1.2.1**, markdown
+**1.4.3**, and lr **1.4.2**. The lock and exact overrides also pin CM autocomplete
+**6.20.4**, lang-css **6.3.1**, lang-html **6.4.12**, lang-javascript **6.2.5**,
+lint **6.9.8**, and Lezer css **1.3.9**, html **1.3.13**, javascript **1.5.6**.
+
+With its locked build dependencies installed and Bun **1.3.14**, verify a
+byte-identical rebuild with
+`build-contained -- bun renderers/quartz-cyberbase/source-editor/build.mjs`.
+The script performs no install or network request. An intentional dependency or
+implementation update uses the same command with `--write` after review; it
+updates the hashed asset, `.sha256` receipt, and generated component asset name.
+The offline test always checks the committed SHA-256; when build dependencies
+are present it also rebuilds and checks byte identity.
+
+### Sparse source model and v2 submission
+
+The sidecar identity must match the page's separately embedded provenance
+`{path, byteLength, sha256}`. Every leaf must identify one unique parent and the
+exact `childNodes` text child. Stale text, invalid offsets, surrogate interiors,
+missing/duplicate parents and overlapping source ranges refuse suggesting mode.
+Only verified exact runs become editable. Owned wrappers retain their pinned
+origins; DOM text and locator ownership are rechecked before editing or sending.
+The page's original Text nodes are retained and restored during SPA cleanup.
+
+`@cyberbaser/suggestion-ledger` requires the **complete base bytes** and verifies
+their digest. Rendered editing deliberately has neither for the complete page.
+`suggestModeModel.ts` is a thin sparse origin-token adapter instead: original
+Unicode tokens retain exact
+base-byte coordinates, inserted tokens have no original coordinates, and
+operations come only from verified run slices. It never pads unknown regions,
+invents offsets, fetches raw Markdown, serializes HTML to Markdown, or claims to
+validate a full-file digest. The intake resolves and verifies the complete
+historical source. Adjacent/dependent edits within one run coalesce; independent
+operations sort by pinned offsets and cannot overlap.
+
+The browser posts the strict v2 account-free correction intent to
+`/v2/suggestions` on the configured intake origin. Each operation is exactly
+`{operationId,start,end,expected,replacement}` with UTF-8 offsets into the original
+base. The batch has at most 50 operations, 16 KiB per expected/replacement span,
+and 64 KiB aggregate text. Optional rationale/evidence and stable retry keys use
+the existing intent/challenge policy. Challenge tokens remain header-only. No
+source path, author, repository, revision or candidate file enters the intent.
+The browser fetches same-origin provenance JSON, and lazily fetches the vendored
+source-editor asset only if opened. No other service is added beyond the
+configured intake and optional challenge provider.
+
+### Missing or stale provenance falls back to the block editor
+
+Without a valid sidecar and matching embedded identity, the existing pencil and
+selection editor remains available. Select words and choose **Suggest edit**, or
+click a block pencil. The block opens as a full-width plain-text editor. **Cancel**
+or **Escape** restores the original nodes; sending shows a receipt beside the
+unchanged original block. Nested containers are not flattened. This fallback
+continues using `/v1/corrections` with derived quote/context/replacement, not v2.
+Its Unicode/word-boundary diff supplies up to 40 code points of adjacent context;
+blank **Why?** uses `Suggested an edit to this page.` Formatting can prevent exact
+quote matching, which explains that the reader should choose a smaller phrase.
+
+Disabled forms attach no markup, CSS or browser scripts. The inert vendored
+asset may exist in static output, but it is not loaded. Provenance remains
+separately opt-in; leaving both features off preserves existing page markup.
+
+### Verification
+
+Run `build-contained -- bash renderers/quartz-cyberbase/tests/run.sh` for the
+existing fallback/challenge checks plus fake-DOM provenance, sparse operations,
+strict v2 intent/receipt and 2,400 deterministic Unicode reconstruction checks,
+plus fake v2 source blocks, exact block/global byte translation, mixed-EOL/CRLF,
+emoji, multi-range changes, cancellation, overlap/refusal and vendored hash/rebuild.
+Run `build-contained -- node renderers/quartz-cyberbase/tests/suggest-build.mjs`
+for an offline three-page pinned Quartz build and real headless Playwright
+selection/typing, link/bold/insert byte-splice reconstruction, inserted-text edits,
+CM6 wikilink/callout/math/emoji/table source edits, CRLF preservation, lazy loading,
+tracked decorations, Done/Cancel/Escape/focus, draft reload, mobile tray,
+overlap/refusal, v2 receipt and old/stale/missing sidecar fallback. It uses the existing offline seed (override
+`QUARTZ_SEED_DIR` with an absolute path), throwaway fixture files and a random
+loopback port; it does not touch any running rehearsal or real vault.
+Strict browser checking is
+`build-contained -- docs/node_modules/.bin/tsc -p renderers/quartz-cyberbase/tests/tsconfig.browser.json`.
+These are mechanical checks, not a human usability or live challenge acceptance.
+
+## Adding a challenge provider
+
+The browser contract is `ChallengeProvider` in `components/challenge/registry.ts`:
+
+```ts
+{
+  id: string,
+  scriptUrl: string, // constant credential-free HTTPS URL
+  validateSiteKey(key: string): boolean,
+  mount(container, { siteKey, action, onToken, onExpire, onError }): {
+    reset(): void,
+    remove(): void,
+  },
+}
+```
+
+The core form owns script loading once per URL, bounded in-memory tokens, the
+`Cyberbaser-Challenge-Token` header, keeping tokens out of the body and URL,
+disabling submit without a token, resetting after each attempt, SPA cleanup, and
+plain error messages. Providers only render and report tokens or lifecycle
+callbacks. They must disable SDK-generated response form fields, avoid script
+loading, requests and token storage, and access browser globals only inside
+`mount`. `validateSiteKey` is pure and rejects unsafe configuration. Build-time
+imports must work without a browser. Script URLs must never depend on site keys,
+form fields, environment values, or other runtime input.
+
+To contribute one provider:
+
+1. Add `components/challenge/providers/<id>.ts`, exporting an object that satisfies
+   `ChallengeProvider`. Use a stable lowercase id, one constant HTTPS script URL,
+   provider-specific safe public-key validation, and an adapter from the SDK's
+   callbacks and widget handle to the contract. Start from `providers/turnstile.ts`.
+2. Statically import that object in `components/challenge/registry.ts` and add
+   `[provider.id, provider]` to its `providers` map. No core form branch, dynamic
+   import, or custom script loader is needed. `setup.sh` copies the entire
+   challenge directory, and the inline browser entry bundles the static registry.
+3. Add `tests/<id>-provider.test.ts`. Import the provider and call
+   `runChallengeProviderConformance` from `tests/conformance/challenge-provider.ts`
+   with a safe fake site key and an `install(fakeWindow)` SDK fixture. That fixture
+   returns token/expiry/error triggers, mount assertions, and reset/remove
+   counters; see `tests/turnstile-provider.test.ts`. The shared suite supplies the
+   fake DOM/global and prohibits script loading and requests. It checks constant
+   HTTPS script configuration, unsafe-key rejection, token delivery, expiry,
+   errors, reset, and removal. The runner discovers `*-provider.test.ts` files.
+4. From the repository root run
+   `build-contained -- bash renderers/quartz-cyberbase/tests/run.sh`. The lifecycle
+   suite also bundles the real inline entry and tests header-only transport,
+   submission gating, per-attempt resets, loader failures, and SPA cleanup offline.
+5. Add the matching server-side verifier provider with **the same id** in
+   `apps/account-free-intake`, using that side's registry and conformance suite.
+   Configure `botCheck.provider: '<id>'` there and
+   `CYBERBASER_SUGGESTION_CHALLENGE_PROVIDER=<id>` here. Document the provider's
+   host CSP requirements and verification configuration in the PR. Browser
+   conformance alone is not server verification or permission to offer the lane.
 
 ## How CI uses it
 
@@ -216,3 +722,12 @@ leaked into a spoke.
 - `packages/publish` — the `publish.yml` boundary and `sluggify()` used by the projection
 - `packages/projection` — produces the projected content tree this renderer consumes
 - Upstream: <https://github.com/jackyzha0/quartz> · <https://quartz.jzhao.xyz/configuration>
+
+### Edit entry placement
+
+With the shared editor enabled, `CYBERBASER_EDIT_ENTRY` accepts `auto` (default),
+`floating`, or `inline`. `auto` uses a 56 px safe-area-aware bottom-right pencil
+on coarse-pointer devices or widths up to 600 px, and a quiet 36 px metadata icon
+on desktop. Both owner navigation and visitor entry use the same presentation.
+Unknown values fail closed. Owner-app config exposes this as
+`suggestions.editEntry`; it changes rendered cache identity, not source authority.

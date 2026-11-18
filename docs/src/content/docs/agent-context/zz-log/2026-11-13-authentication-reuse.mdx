@@ -1,0 +1,30 @@
+---
+title: Existing authentication and SSO reference
+description: "Bounded sibling inspection distinguishes embedded Better Auth from upstream SSO and keeps publication grants independent."
+status: research
+tags: [research, architecture, security]
+---
+
+:::note[Later maintainer correction]
+The maintainer subsequently rejected shared SSO and preferred basic embedded Better Auth, while restoring the broader contribution, trust and governance scope. The recommendation below is historical, not current direction. See [the correction](/cyberbaser/agent-context/zz-log/2026-11-13-contribution-model-restored/).
+:::
+
+## Direction and result
+
+The maintainer pointed to an existing sibling's Better Auth and SSO implementation as a reference for Cyberbaser's identity work. One bounded Sol researcher inspected source and focused documentation, returning a private evidence report. No sibling changes or live access were requested or performed.
+
+The reference uses Better Auth for embedded credentials and a separate OIDC relying-party flow. It is not established as a central identity provider for Cyberbaser. The coordinator verified key account options, authorization-code/PKCE construction and exact issuer/subject binding logic.
+
+**Recommendation:** if a suitable upstream SSO provider remains available, evaluate registering Cyberbaser as an independent client. Reuse the upstream login, not the sibling's session database, cookies or application permissions. Embedded library/pattern reuse remains an alternative if local credential custody is wanted. No provider or integration approach is selected by this recommendation.
+
+## Architectural implications
+
+The canonical [authentication reuse assessment](/cyberbaser/research/authentication-reuse/) distinguishes stable identity, application sessions and scoped publishing grants. Every Save/Apply/Publish route still needs Cyberbaser's own permission decision and exact job binding. Source-read or workspace permission does not imply publishing authority. A host-issued publishing capability was not established by the inspection.
+
+Reference code and historical migration documentation have distinctions that matter; do not transplant username-based account linking, shared-session behavior, assurance fallbacks or code without checking current binding semantics, revocation and licensing. Detailed sibling provenance remains private.
+
+## Limits and next input
+
+Existing upstream provider availability and deployed configuration remain unknown. No tests, builds, credentials, runtime stores, real content, browser sessions, containers or authentication endpoints were used. The source inspection is not live interoperability or a security certification. Container, renderer, credential-broker and real-source readiness gaps remain separate.
+
+The next identity input is whether the previously used upstream provider is still the intended maintained login service. This research does not authorize account/provider configuration, secret access, publication, source relocation or a host-specific dependency.

@@ -31,6 +31,11 @@
 !packages/proposal/src/**
 !packages/proposal/schema/
 !packages/proposal/schema/**
+!packages/forgejo-intake/
+!packages/forgejo-intake/package.json
+!packages/forgejo-intake/bun.lock
+!packages/forgejo-intake/src/
+!packages/forgejo-intake/src/**
 !packages/account-free-intake/
 !packages/account-free-intake/package.json
 !packages/account-free-intake/bun.lock
@@ -41,6 +46,13 @@
 !packages/proposal-queue/bun.lock
 !packages/proposal-queue/src/
 !packages/proposal-queue/src/**
+!packages/proposal-review/
+!packages/proposal-review/package.json
+!packages/proposal-review/bun.lock
+!packages/proposal-review/src/
+!packages/proposal-review/src/**
+!packages/proposal-review/schema/
+!packages/proposal-review/schema/**
 
 !deploy/
 !deploy/account-free-intake/

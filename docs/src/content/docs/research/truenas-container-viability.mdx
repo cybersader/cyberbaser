@@ -1,0 +1,118 @@
+---
+title: Container deployment on TrueNAS
+description: "Evidence-led assessment of native Apps, isolated rendering, identity-authorized publishing and the remaining platform gates."
+status: research
+tags: [architecture, setup, security, research]
+---
+
+## Recommendation
+
+**Assess TrueNAS-managed Custom Apps using Compose first. A VM is not inherently required, but the current owner-alpha package is not a ready-to-install, identity-authorized TrueNAS deployment.** Use a VM if the actual platform cannot preserve the required controls, or if separating application execution from the NAS kernel is an explicit requirement. Do not choose a VM simply because Cyberbaser uses containers.
+
+The proposed application arrangement is a trusted private owner controller/publisher, an independently confined renderer, a scoped credential service and a separate identity provider if needed. Keep optional intake off for the first proof. Keep existing authoring authority, repository hosting and public hosting during integration; the container decision does not migrate any of them.
+
+This assessment combines four bounded research reports: existing package, current platform documentation, security/identity boundaries and deployment/authority arrangements. The coordinator checked key source paths and independently fetched the two decisive platform references. No host was inspected and no application, container, build, test or publication ran. The actual TrueNAS version, hardware and available identity service are unknown.
+
+## Which kind of container?
+
+| Route | Evidence | Recommendation |
+|---|---|---|
+| TrueNAS Custom App via Compose YAML | Official 25.10 documentation supports the route and host networking. YAML checking is syntactic, not a semantic acceptance of all runtime settings. | First candidate to assess against the actual installed release and exact application contract. |
+| TrueNAS system container | Separate LXC-style facility, not interchangeable with deploying the application's OCI image. The retrieved 25.10 guidance labels it experimental. | Do not use it as a presumed equivalent of either Custom Apps or a VM. |
+| Docker nested in a system container | Retrieved 27 Early instructions require privileged ID mapping and capability policy `ALLOW`, and warn of direct host-root access for container root. | Reject as a shortcut to an isolated Docker host for this deployment. This is a version-specific documented route, not a claim about every possible system-container setup. |
+| Containers inside a Linux VM | Adds a separate guest kernel and separately administered engine. No actual guest deployment was tested here. | Conditional fallback or deliberate stronger NAS boundary. Still needs the same application authority and renderer separation. |
+| Off-NAS Linux backend | Can preserve the conventional engine contract and reduce NAS lifecycle coupling. Availability of a suitable always-on host is unknown. | Valid alternative if such a host already exists. Prefer host-local active state and NAS backup over unverified network-mounted working state. |
+
+Do not install a second Docker daemon or enable unsupported host modifications to make the package fit. A rootless application image is not evidence of a rootless Docker engine. A portal marked HTTPS is not evidence of TLS termination or authentication.
+
+The retrieved official pages explicitly identify 25.10 as stable documentation and 27 as early-release documentation. This is **not** a claim about the owner's installed version or the latest generally available release. Historical Forgejo catalog versions in the earlier setup guide were not recertified by this wave.
+
+## What the existing package actually supplies
+
+The inspected code provides Linux/amd64 Docker packaging with:
+
+- an immutable, already-present image and `pull_policy: never`;
+- mandatory host networking, exact private numeric IPv4 binding and adjacent owner/reader ports;
+- explicit rootless/rootful profiles and numeric ownership checks;
+- a read-only image root, dropped capabilities and no-new-privileges;
+- an exact writable delivery/vault mount, separate durable state, credential-free config and a private credential-socket directory;
+- a pinned offline Quartz dependency seed, bounded setup commands, readiness-aware health and classified restart recovery.
+
+The recorded runtime acceptance was rootless Docker on ext4. It does not establish rootful TrueNAS Apps execution, ZFS ACL behavior, generic OCI portability, ARM support or a real container-to-live publication. ZFS is not rejected by filesystem name; the specific lock, hard-link, atomic-replacement and sync semantics still need evidence on the selected storage. Do not recursively change an existing vault's ownership or ACLs to satisfy the container.
+
+Key anchors: `deploy/owner-alpha/compose.yaml:3-64`, `:92-145`; `deploy/owner-alpha/entrypoint.sh:31-96`; `apps/owner-alpha/src/apply.js:368-429`; `apps/owner-alpha/src/artifacts.js:30-115`; [container deployment contract](/cyberbaser/development/owner-alpha-container-deployment/).
+
+## Four gaps that packaging cannot solve
+
+### 1. A named publisher and consistent authorization
+
+The existing session records contain a CSRF token after local bootstrap, not a verified account principal. Publication authority records use configured owner identity. These are valid pieces of a single-owner local capability model, not a completed named-account authorization system.
+
+Bind a verified principal to explicit publishing permission and exact repository, selected content, destination, policy and job evidence. Gate **Save-and-publish, Apply and Publish**, including recovery/bootstrap alternatives; adding a role check to only one button leaves other effectful paths outside the new boundary. Specify when authorization becomes durable and how expiry or revocation affects pending versus already-started work. Logging out cannot undo a push.
+
+The maintainer subsequently preferred embedded Better Auth with passkeys and rejected shared SSO; the earlier upstream-provider recommendation is superseded. Use a stable verified principal, not a mutable display name or arbitrary identity header. A named HTTPS ingress still needs an explicit external-origin contract and no direct-backend bypass. The [community system design](/cyberbaser/design/community-system-design/) proposes account custody, scoped action checks and phase-based job revocation; none is implemented by the container package. These requirements protect privileged publication without imposing accounts on readers or ordinary account-free contributions.
+
+Evidence: `apps/owner-alpha/src/server.js:1756-1812`; `apps/owner-alpha/src/owner-publication-store.js:234-257,298-334`; `apps/owner-alpha/src/pipeline.js:314-337,481-512`. The later recovered candidate remains separate, unapplied evidence; its bootstrap improvements do not supply named-principal roles.
+
+### 2. A real renderer isolation boundary
+
+The baseline renderer executes fixed setup/build scripts under the application's identity, mounts and network. That means a compromised renderer process could access the application's writable checkout, job state and credential socket. This is an inference from process authority, **not a demonstrated exploitable parser defect**. Fixed scripts, a scrubbed environment and pinned packages do not remove filesystem capabilities.
+
+The proposed render boundary receives only the approved projection, pinned toolchain and disposable working/output space. It receives no `.git`, writable canonical source, job store, credential/bootstrap socket, NAS pool or engine socket. Deny egress by default and bound memory, CPU, process count, disk, time and concurrency. Bind checked output to its job before promotion; rendered output never becomes source or authorization evidence. Parsers and validators left in the controller still belong to the trusted computing base.
+
+The current Compose file has no explicit CPU, memory or PID ceilings. Its executable render tmpfs is not a complete memory budget. Baseline Quartz configuration selects Google Fonts with build-time fetching, so offline dependency installation is **not** proof of no-egress rendering. Freeze local resources or define an equally narrow verified resource arrangement before claiming offline rendering.
+
+Render lifecycle management must be narrow and trusted. Do not give the web application unrestricted Docker management merely so it can launch sibling containers. The exact render-job interface and lifecycle supervisor remain design work, not a selected generic execution framework.
+
+Evidence checked by the coordinator: `deploy/owner-alpha/compose.yaml:6-55`; `apps/owner-alpha/src/quartz-renderer.js:32-87,123-160`; `renderers/quartz-cyberbase/quartz.config.ts:38-52`.
+
+### 3. Credential custody and ingress
+
+The package includes a credential-helper client, **not a production credential broker**. Its current request checks protocol, hostname and repository path; the wire request has no actor/job/branch/candidate grant. A read-only socket-directory mount still permits requests to the socket. Restrict access to the trusted publisher and provision independently scoped credential custody. Do not claim per-job broker enforcement unless its authenticated protocol actually implements that promise.
+
+A non-default-port Forgejo exchange is a compatibility question: the inspected helper compares Git's `host` field against `URL.hostname`. A focused future synthetic check must resolve this before support is claimed. Forge push credentials and private deployment-observer credentials are separate requirements.
+
+Hosted identity and TLS also require an external-origin contract. The baseline expects numeric HTTP origins, and its owner/reader ports share a host. Ports isolate origins, **not cookies**. Use separate privileged/reader hosts with host-only Secure/HttpOnly cookies, deliberate SameSite/CSRF rules and tested callbacks. Never rewrite all incoming Origin values to bypass checks. Historical local-pilot distinct-loopback behavior is not a proven NAS TLS configuration.
+
+Evidence: `deploy/owner-alpha/git-credential-owner-alpha-socket.js:51-63,87-105`; `apps/owner-alpha/src/server.js:155-156,1810-1832`; RFC 6265 §8.5. The deployment guide's old GitHub-only description is not evidence that all current Forgejo package integration is complete.
+
+### 4. Source and publication reconciliation
+
+Preserve the desktop author's current content and local edits. An isolated delivery checkout holds a pinned publication baseline; it must not become a second independently edited master. Its HEAD alone does not prove the live site version.
+
+For an **authoring-to-Publish** path, the candidate already exists in the authoritative authoring copy. Capture its coherent version, review the exact delivery delta, publish that version and record its outcome. No reverse content copy is necessary. Later authoring edits remain visibly unpublished rather than being swept into the accepted job.
+
+A correction created only in a delivery editor or external Apply path is different: it needs an explicit source-first or source-bound reconciliation mechanism. For the first split-source loop, refuse these alternate writer paths until that mechanism exists. Do not silently merge, cherry-pick, regenerate or synchronize a dirty vault. Publication success and source acknowledgement must remain distinguishable durable outcomes.
+
+A delivery Git checkout can contain excluded files and historical objects. Its name does not make it public-safe. Check complete publication selection and asset closure; public serving gets approved output only, never source history or private evidence.
+
+## Optional services and the VM threshold
+
+Keep intake disabled for the first proof. The separate intake container has a nonwriter identity and queue, but cross-container review-socket ownership and lifecycle parity are unproven. A same-UID child process is not equivalent containment. Later integration must preserve source-read scope, queue ownership and no access to publishing credentials.
+
+Forgejo is optional and needs no Actions runner merely to accept pull requests. Arbitrary workflow execution is a separate risk. Do not attach a runner to the NAS or owner-app engine socket. Independently isolated compute or a guest with its own engine is the appropriate candidate when those jobs are introduced; a VM hosting the owner app does not automatically make CI safe in that same guest.
+
+A VM materially helps when the owner requires a separate kernel from valuable NAS services, when container controls cannot meet the chosen threat model, or when supported platform management cannot preserve the deployment contract. It does not repair renderer/publisher co-residence, broad mounts, credential leakage or missing application authorization.
+
+## Smallest path to a defensible deployment
+
+1. **Identify the actual host:** exact TrueNAS version/edition, CPU architecture, spare RAM/storage, intended private access and existing identity service. No installation yet.
+2. **Freeze a coherent candidate:** recover the newer reviewed work rather than recreating it; choose the integration base and a supported image build/distribution method. Do not build on or modify the NAS appliance by assumption.
+3. **Specify the missing boundaries:** actor/action/job authorization; hosted origins/session behavior; narrow credential custody; renderer input/output/lifecycle; single authoring authority and selected first publication.
+4. **Prepare release-specific Compose:** preserve every required mount, numeric identity, hardening option and state marker. Explain lifecycle differences from the existing command-line management helper. Define resource ceilings, private listeners, image replacement and single-writer behavior.
+5. **After scoped execution permission, prove the design synthetically:** use disposable datasets, synthetic content and a local bare remote. Check platform UID/ACL/socket/rename/link/sync behavior, identity refusals and alternate-route bypass, renderer isolation and resource termination, readiness, restart, ambiguous-state refusal and same-job replay. Do not execute held renderer/migration cases by renaming them container tests.
+6. **Then prove one real authorized publication:** exact source/destination, one permitted principal, inspected publication delta and live witness, with unrelated authoring changes preserved. No bundled domain, forge or source-authority cutover.
+
+Backup policy must cover source, policy and private job state consistently, with protected off-machine recovery and a restore test. Container rollback cannot undo a public commit. Restore with the writer disabled until remote/deployment identity and local job evidence agree. Do not start two writers during replacement or infer recovery from an HTTP health response alone.
+
+## Sources and evidence limits
+
+Official sources were retrieved on 2026-11-13. Platform documentation establishes supported concepts, not this installation's effective controls.
+
+- [TrueNAS 25.10 Custom App screens](https://www.truenas.com/docs/scale/25.10/scaleuireference/apps/installcustomappscreens/): Custom YAML, host networking, UID/GID and resource settings. Independently fetched during synthesis.
+- [TrueNAS 27 Early system containers](https://www.truenas.com/docs/scale/27/containers/managingcontainers/): explicit nested-Docker privilege requirements. Independently fetched during synthesis; not used as a stable-version claim.
+- [TrueNAS 25.10 system containers](https://www.truenas.com/docs/scale/25.10/scaletutorials/containers/), [Apps storage](https://apps.truenas.com/getting-started/app-storage/), [25.10 developer mode](https://www.truenas.com/docs/scale/25.10/scaletutorials/systemsettings/advanced/developermode/): supporting version-specific storage and appliance constraints gathered by the platform researcher.
+- [Docker Engine security](https://docs.docker.com/engine/security/), [OIDC Core](https://openid.net/specs/openid-connect-core-1_0.html), [RFC 6265](https://www.rfc-editor.org/rfc/rfc6265): architecture/security references gathered by the security researcher.
+- [Dated research chronology](/cyberbaser/agent-context/zz-log/2026-11-13-container-viability-research/) and [real owner setup plan](/cyberbaser/development/real-owner-setup-plan/).
+
+No runtime/security certification, rootful or TrueNAS acceptance, fresh live-site evidence, source synchronization implementation or completed identity integration follows. The recommendation is conditional native Custom Apps/Compose first, not an owner-selected deployment or authorization to install.

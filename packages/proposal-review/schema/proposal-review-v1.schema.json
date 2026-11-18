@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cyberbaser.dev/schema/proposal-review-v1.schema.json",
+  "title": "Cyberbaser proposal review artifacts v1",
+  "oneOf": [
+    { "$ref": "#/$defs/reviewEvidence" },
+    { "$ref": "#/$defs/reviewSummary" },
+    { "$ref": "#/$defs/ownerDecision" }
+  ],
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha-256=:[A-Za-z0-9+/]{43}=:$"
+    },
+    "utcSecond": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "reviewEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "artifactType", "queueId", "proposal", "receipt", "carrier", "classification", "state"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "artifactType": { "const": "cyberbaser-proposal-review-evidence" },
+        "queueId": { "type": "string", "pattern": "^Q-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+        "proposal": { "type": "object" },
+        "receipt": { "type": "object" },
+        "carrier": { "type": "object" },
+        "classification": { "type": "object" },
+        "state": { "type": "object" }
+      }
+    },
+    "reviewSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "artifactType", "queueId", "proposalId", "proposalDigest", "candidateDigest", "reviewEvidenceDigest", "source", "receivedAt", "expiresAt", "state", "lane", "tier", "route"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "artifactType": { "const": "cyberbaser-proposal-review-summary" },
+        "queueId": { "type": "string" },
+        "proposalId": { "type": "string", "minLength": 1 },
+        "proposalDigest": { "$ref": "#/$defs/digest" },
+        "candidateDigest": { "$ref": "#/$defs/digest" },
+        "reviewEvidenceDigest": { "$ref": "#/$defs/digest" },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["repository", "revision", "path"],
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "revision": { "type": "string", "minLength": 1 },
+            "path": { "type": "string", "minLength": 1 }
+          }
+        },
+        "receivedAt": { "$ref": "#/$defs/utcSecond" },
+        "expiresAt": { "$ref": "#/$defs/utcSecond" },
+        "state": { "enum": ["pending-review", "expired"] },
+        "lane": { "enum": ["lane-a", "lane-b"] },
+        "tier": { "type": "string", "minLength": 1 },
+        "route": { "enum": ["auto-merge", "quick-review", "full-review", "reject"] }
+      }
+    },
+    "ownerDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "artifactType", "queueId", "action", "reason", "decidedAt", "decisionAuthority", "authorityScope", "reviewEvidenceDigest", "reviewEvidence", "effectBoundary"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "artifactType": { "const": "cyberbaser-proposal-owner-decision" },
+        "queueId": { "type": "string" },
+        "action": { "enum": ["approve", "reject"] },
+        "reason": { "type": "string", "minLength": 1 },
+        "decidedAt": { "$ref": "#/$defs/utcSecond" },
+        "decisionAuthority": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "identity"],
+          "properties": {
+            "type": { "const": "owner-alpha-local" },
+            "identity": { "type": "string", "minLength": 1 }
+          }
+        },
+        "authorityScope": { "const": "decision-only" },
+        "reviewEvidenceDigest": { "$ref": "#/$defs/digest" },
+        "reviewEvidence": { "$ref": "#/$defs/reviewEvidence" },
+        "effectBoundary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["appliesSource", "writesSource", "commits", "pushes", "deploys", "publishes", "rebuilds"],
+          "properties": {
+            "appliesSource": { "const": false },
+            "writesSource": { "const": false },
+            "commits": { "const": false },
+            "pushes": { "const": false },
+            "deploys": { "const": false },
+            "publishes": { "const": false },
+            "rebuilds": { "const": false }
+          }
+        }
+      }
+    }
+  }
+}

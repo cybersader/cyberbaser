@@ -1,0 +1,105 @@
+/* Markdown viewers display these exported image fallbacks without executing
+   Astro. The compiled docs already show the live figure, so suppress its duplicate. */
+.sl-markdown-content img[alt^="Portable diagram: "],
+.sl-markdown-content p:has(img[alt^="Portable diagram: "]) { display: none; }
+
+/* Repository-authored technical figures, not reusable marketing cards.
+   Redesign informed by Unslop, Damir Sokolovsky (@heydamir), CC BY 4.0:
+   https://github.com/heydamir/unslop. No upstream implementation copied. */
+.cb-map {
+  --map-ink: var(--sl-color-white);
+  --map-muted: var(--sl-color-gray-2);
+  --map-line: var(--sl-color-gray-4);
+  --map-paper: var(--sl-color-black);
+  --map-ground: var(--sl-color-gray-6);
+  --map-accent: var(--sl-color-accent-high);
+  --map-accent-ground: var(--sl-color-accent-low);
+  container-type: inline-size;
+  margin: 2rem 0 3rem;
+  min-width: 0;
+  color: var(--map-ink);
+  font-family: var(--sl-font, system-ui, sans-serif);
+  line-height: 1.5;
+}
+.cb-map *, .cb-map *::before, .cb-map *::after { box-sizing: border-box; }
+.sl-markdown-content .cb-map :where(div, p, span, strong, small, svg, details, summary, figcaption, table),
+.cb-map :where(div, p, span, strong, small, svg, details, summary, figcaption, table) { margin: 0; }
+.cb-map :is(div, span, strong, small) { min-width: 0; }
+.cb-map .cb-map-caption { display: grid; gap: 8px; padding: 16px 0; border-top: 2px solid var(--map-ink); }
+.cb-map-caption > strong { font-size: 1.2rem; line-height: 1.3; font-weight: 500; color: var(--map-ink); }
+.cb-map-caption > span { max-width: 72ch; font-size: 0.8125rem; color: var(--map-muted); }
+.cb-map-scroll { width: 100%; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; scrollbar-color: var(--map-muted) var(--map-ground); }
+.cb-map-scroll:focus-visible, .cb-map-description > summary:focus-visible { outline: 2px solid var(--map-accent); outline-offset: 4px; }
+.cb-map .cb-map-scroll-hint { display: none; padding: 8px 0 12px; font-size: 0.8125rem; color: var(--map-muted); }
+.cb-map .cb-map-drawing, .sl-markdown-content .cb-map .cb-map-drawing {
+  display: block; width: 100%; min-width: 700px; max-width: none; height: auto;
+  overflow: visible; font-family: inherit;
+}
+.cb-map-drawing text { fill: var(--map-ink); }
+.cb-map-drawing .cb-map-label { font-size: 16px; font-weight: 500; }
+.cb-map-drawing .cb-map-note { font-size: 14px; font-weight: 400; fill: var(--map-muted); }
+.cb-map-drawing .cb-map-micro { font-size: 13px; font-weight: 400; fill: var(--map-muted); }
+.cb-map-drawing .cb-map-code { font-family: var(--sl-font-mono, monospace); font-size: 13px; }
+.cb-map-drawing .cb-map-green { fill: var(--map-ink); font-weight: 500; }
+.cb-map-route, .cb-map-effect, .cb-map-guide, .cb-map-divider, .cb-map-stop, .cb-map-foundation-rule {
+  fill: none; stroke: var(--map-muted); stroke-width: 1.5; stroke-linejoin: round;
+}
+.cb-map-effect { stroke: var(--map-accent); stroke-width: 2; }
+.cb-map-guide { stroke: var(--map-line); stroke-width: 1; }
+.cb-map-divider { stroke: var(--map-line); }
+.cb-map-stop { stroke: var(--map-ink); stroke-width: 2; }
+.cb-map-dashed { stroke-dasharray: 5 5; }
+.cb-map-arrowhead { fill: none; stroke: var(--map-muted); stroke: context-stroke; stroke-width: 1.3; }
+.cb-map-junction { fill: var(--map-paper); stroke: var(--map-ink); stroke-width: 1.5; }
+.cb-map-junction-accent { stroke: var(--map-accent); stroke-width: 2; }
+.cb-map-document { fill: var(--map-ground); stroke: var(--map-muted); stroke-width: 1; }
+.cb-map-boundary { fill: none; stroke: var(--map-muted); stroke-width: 1; stroke-dasharray: 7 5; }
+.cb-map-source-mark { fill: var(--map-accent-ground); stroke: var(--map-accent); stroke-width: 2; }
+.cb-map-render-mark { fill: var(--map-paper); stroke: var(--map-muted); stroke-width: 1.5; }
+.cb-map-gate { fill: var(--map-paper); stroke: var(--map-ink); stroke-width: 1.5; }
+.cb-map-foundation-rule { stroke: var(--map-accent); stroke-width: 2; }
+.cb-map .cb-map-description { margin-top: 16px; border-top: 1px solid var(--map-line); padding: 12px 0; font-size: 0.8125rem; }
+.cb-map-description > summary { cursor: pointer; color: var(--map-muted); text-decoration: underline; text-underline-offset: 4px; text-decoration-color: var(--map-line); }
+.cb-map-description > summary:hover { color: var(--map-ink); text-decoration-color: var(--map-accent); }
+.cb-map .cb-map-description[open] > p { margin-top: 12px; max-width: 72ch; color: var(--map-ink); }
+.cb-map .cb-map-legend { display: flex; flex-wrap: wrap; gap: 12px 24px; margin-top: 12px; font-size: 0.8125rem; color: var(--map-muted); }
+.cb-map-legend > span { display: inline-flex; align-items: center; gap: 8px; }
+.cb-map-line-sample { display: inline-block; width: 24px; height: 0; border-top: 1.5px solid var(--map-muted); }
+.cb-map-line-dashed { border-top-style: dashed; }
+.cb-map-line-effect { border-color: var(--map-accent); border-width: 2px; }
+.cb-map .cb-map-two-rules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; padding: 16px 0 24px; }
+.cb-map-two-rules p { display: grid; gap: 4px; }
+.cb-map-two-rules strong { font-weight: 500; font-size: 0.9375rem; }
+.cb-map-two-rules span { color: var(--map-muted); font-size: 0.8125rem; }
+.cb-map .cb-map-matrix { display: table; width: 100%; min-width: 700px; border-collapse: collapse; table-layout: fixed; font-size: 0.8125rem; line-height: 1.5; }
+.cb-map-matrix caption { text-align: left; color: var(--map-muted); font-size: 0.8125rem; padding: 0 0 12px; }
+.cb-map-person-col { width: 26%; }
+.cb-map-history-col { width: 17%; }
+.cb-map .cb-map-matrix :is(th, td) { padding: 20px 8px; background: none; color: var(--map-ink); border: 0; border-bottom: 1px solid var(--map-line); text-align: center; vertical-align: middle; }
+.cb-map .cb-map-matrix th { font-weight: 500; }
+.cb-map .cb-map-matrix thead th { font-size: 0.8125rem; padding: 12px 8px; border-block: 1px solid var(--map-muted); }
+.cb-map .cb-map-matrix th:first-child { text-align: left; padding-left: 0; }
+.cb-map .cb-map-matrix :is(th, td):nth-child(2) { border-right: 1px solid var(--map-muted); }
+.cb-map-matrix small { display: block; margin-top: 4px; color: var(--map-muted); font-size: 0.75rem; font-weight: 400; }
+.cb-map-none { font-size: 1rem; color: var(--map-muted); }
+.cb-map .cb-map-matrix .cb-map-granted { background: var(--map-accent-ground); }
+.cb-map .cb-map-granted > svg, .sl-markdown-content .cb-map .cb-map-granted > svg { display: block; width: 20px; height: 20px; margin: 0 auto 4px; stroke: var(--map-accent); stroke-width: 1.5; fill: none; }
+.cb-map .cb-map-matrix-key { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px; padding: 12px 0; color: var(--map-muted); font-size: 0.75rem; }
+.cb-map .cb-map-footnote { max-width: 68ch; padding-top: 12px; font-size: 0.875rem; }
+.cb-map ::selection { background: var(--map-accent-ground); color: var(--map-ink); }
+@container (max-width: 699px) {
+  .cb-map .cb-map-scroll-hint { display: block; }
+}
+@container (max-width: 460px) {
+  .cb-map .cb-map-two-rules { grid-template-columns: 1fr; gap: 16px; }
+  .cb-map-caption > strong { font-size: 1.125rem; }
+}
+@media print {
+  .cb-map { break-inside: avoid; }
+  .cb-map-scroll { overflow: visible; }
+  .cb-map .cb-map-drawing, .sl-markdown-content .cb-map .cb-map-drawing, .cb-map .cb-map-matrix { min-width: 0; }
+  .cb-map .cb-map-scroll-hint, .cb-map-description { display: none; }
+}
+@media (forced-colors: active) {
+  .cb-map { --map-ink: CanvasText; --map-muted: CanvasText; --map-line: GrayText; --map-paper: Canvas; --map-ground: Canvas; --map-accent: LinkText; --map-accent-ground: Canvas; }
+}

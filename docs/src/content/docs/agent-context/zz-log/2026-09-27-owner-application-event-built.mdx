@@ -1,0 +1,54 @@
+---
+title: "2026-09-27 · Owner application event accepted and built"
+description: "The maintainer accepted the application-event proposal with two corrections: people act from the UI, never commands, on a resilient machine-callable backend. Built the Apply to page act on the approved receipt: strict re-check, create-once event, one ordinary Save job. Proven end to end on a throwaway repository."
+date: 2026-09-27
+status: implementation
+tags: [design, governance, testing, contribution]
+---
+
+## Maintainer direction
+
+Three things from the maintainer in this session, recorded rather than inferred:
+
+- The core shape of the [Owner application event](/cyberbaser/design/owner-application-event/) proposal is accepted: a second explicit owner act, the existing Save pipeline as the only writer, create-once events, no auto-apply.
+- "Nobody will ever be running commands." The act belongs in the UI. The backend under it must stay resilient and machine-callable. So the first-draft answer of a terminal script was wrong for this product, and the act is a button on the approved receipt with the same privileged API behind it.
+- Questions to the maintainer must run as an upside-down funnel, high level first, for someone who holds the vision but is not in the weeds. The earlier question set was too abstract and referential. On the three follow-up questions (aim, deliberateness, limits) the maintainer stated no preference, so the recommended answers were taken and are recorded on the design page.
+
+## What was built
+
+- `apps/owner-alpha/src/proposal-application.js`: the event artifact and its closed validator; a read-only status (`not-decided`, `rejected`, `stale`, `unapplicable`, `eligible`, `applied`); derivation of the pipeline's edit session and source operation from the prepared input and the exact blob, with the owner pipeline's own rules applied first; the rendered-site slug resolver that reads the owner edit link back from the built site; and the act itself, which prepares the input if missing, re-checks everything, requires a clean checkout at the checked tip, records the event, and starts the job.
+- The review service gained `applicationStatus` and `apply`; the handler gained `POST /api/review/<queueId>/apply`; the receipt gained the application step in four states with one sheet; `public/apply.js` drives it and hands the owner to the job page. The real server wires the pipeline's Save entry, the site root, and the owner origin into the service. The checkpoint fixture shows "not available in this setup".
+- Two source helpers (`liveUrlForSlug`, `pathMatchesPolicy`) and two input-adapter helpers (`decisionDigest`, `readApprovedProposalInput`) are now exported.
+
+Canonical guide: [Applying an approved suggestion](/cyberbaser/development/applying-approved-suggestion/).
+
+## Design changes from the draft
+
+- The proposed off-by-default `applications.enabled` config block was dropped. The act already runs only under the durable policy that lets a Save commit and push; a second switch for the same effect would be a knob without a boundary behind it.
+- The proposed provenance trailer in the commit message was deferred. The pipeline reconstructs the expected message from policy when it reconciles a commit after a crash, so a custom message would break that path. Provenance is durable in the event and in the job's session `origin`.
+- Inputs are prepared as part of the act, so no one has to run the input script first.
+
+## Checks
+
+```text
+bun test apps/owner-alpha/test/proposal-application.test.js
+  2 passed, 59 expectations: real intake, real decisions, real pipeline, real local bare remote;
+  status without effect; frontmatter and stale refused with no event; one event, one job,
+  exact bytes, one commit, one push, completed; second act refused; never-started attempt
+  retried as attempt 2; slug resolver reads the site and refuses disagreement
+bun test apps/owner-alpha/test/server.test.js
+  44 passed: receipt in every state, apply route checks and hand-off, refusals
+OWNER_ALPHA_ACCEPTANCE=1 bun test apps/owner-alpha/test/proposal-review-browser.test.js
+  1 passed, 63 expectations: real Chromium on a phone-sized dark viewport approves, sees
+  Put it on the page, opens and dismisses the sheet with focus returned, confirms, lands on
+  the job page, and returns to a receipt that reads On its way to the page with the stage
+  and a Follow it link; screenshots inspected
+OWNER_ALPHA_ACCEPTANCE=1 bun test apps/owner-alpha/test/proposal-review-acceptance.test.js apps/owner-alpha/test/acceptance.test.js
+  2 passed: decision-only boundary and Git-effect acceptance unchanged
+bun test apps/owner-alpha/test deploy/owner-alpha/test/structure.test.js
+  240 passed, 4 skipped, 0 failed
+```
+
+## Boundaries
+
+No approved suggestion has been applied to the real Cyberbase. Nothing merged, deployed, or exposed. The review checkpoint has not run. Lane A and Lane B posture is unchanged. Q09 remains open.

@@ -1,0 +1,70 @@
+# Optional overlay. Without --profile public, neither file starts any service.
+# Use public-profile.js: it rejects the intentional image digest placeholder.
+services:
+  account-free-intake-queue-init:
+    profiles:
+      - public
+
+  account-free-intake:
+    profiles:
+      - public
+    networks:
+      account-free-intake-internal:
+        ipv4_address: 172.30.93.2
+      # Turnstile Siteverify needs outbound HTTPS. Not shared with cloudflared.
+      account-free-intake-verification-egress: {}
+    secrets:
+      - source: turnstile-secret
+        target: turnstile-secret
+
+  cloudflared:
+    profiles:
+      - public
+    # An operator must replace this with a verified, locally loaded digest.
+    image: ${CLOUDFLARED_IMAGE:-cloudflare/cloudflared@sha256:REPLACE_WITH_VERIFIED_CLOUDFLARED_DIGEST}
+    pull_policy: never
+    read_only: true
+    user: "65532:65532"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+    command:
+      - tunnel
+      - --no-autoupdate
+      - run
+      - --token-file
+      - /run/secrets/cloudflared-token
+    depends_on:
+      account-free-intake:
+        condition: service_healthy
+    networks:
+      account-free-intake-internal:
+        ipv4_address: 172.30.93.3
+      account-free-intake-tunnel-egress: {}
+    secrets:
+      - source: cloudflared-token
+        target: cloudflared-token
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,mode=0700,uid=65532,gid=65532,size=8m
+
+networks:
+  account-free-intake-internal:
+    ipam:
+      config:
+        - subnet: 172.30.93.0/29
+  account-free-intake-verification-egress:
+    driver: bridge
+    internal: false
+  account-free-intake-tunnel-egress:
+    driver: bridge
+    internal: false
+
+# Compose file-backed secrets are read-only mounts, not environment values.
+# Host permissions must permit uid 65532 to read the two files.
+secrets:
+  turnstile-secret:
+    file: ${ACCOUNT_FREE_INTAKE_TURNSTILE_SECRET_PATH:?set ACCOUNT_FREE_INTAKE_TURNSTILE_SECRET_PATH to an absolute secret file}
+  cloudflared-token:
+    file: ${ACCOUNT_FREE_INTAKE_TUNNEL_TOKEN_PATH:?set ACCOUNT_FREE_INTAKE_TUNNEL_TOKEN_PATH to an absolute secret file}

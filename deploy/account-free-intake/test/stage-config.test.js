@@ -36,6 +36,13 @@ async function fixture() {
       pendingRetentionMs: 2592000000,
       expiredGraceMs: 604800000,
     },
+    reviewIpc: {
+      enabled: false,
+      socketPath: null,
+      requestTimeoutMs: 5000,
+      maxConcurrentRequests: 4,
+      maxListEntries: 100,
+    },
     limits: {
       maxBodyBytes: 98304,
       requestTimeoutMs: 5000,

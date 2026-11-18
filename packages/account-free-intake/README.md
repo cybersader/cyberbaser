@@ -143,7 +143,7 @@ const result = await deriveAccountFreeProposal({
 });
 ```
 
-Derivation uses a quote operation through `prepareProposal()`, serializes and reparses the canonical proposal, and reapplies it against the exact base bytes. It sets `submission.identityClaim` to `null` and supplies no receiver-verified subject. With a valid bound trust policy, the result must classify as tier `anonymous`, route `full-review`; a contradictory tier or route fails internally. A missing or malformed bound policy remains fail-closed at the classifier's `unknown`/`full-review` result and never gains identity or a stronger route.
+For a v1 intent, derivation uses a quote operation through `prepareProposal()`, serializes and reparses the canonical proposal, and reapplies it against the exact base bytes. It sets `submission.identityClaim` to `null` and supplies no receiver-verified subject. With a valid bound trust policy, the result must classify as tier `anonymous`, route `full-review`; a contradictory tier or route fails internally. A missing or malformed bound policy remains fail-closed at the classifier's `unknown`/`full-review` result and never gains identity or a stronger route.
 
 The deeply frozen result contains the canonical proposal/text/digest, `verifiedSubject: null`, base-policy evidence, classification, sanitized binding metadata, and the caller's inert idempotency key for the later queue boundary. It has no durable or write effect.
 
@@ -176,3 +176,13 @@ bun test packages/account-free-intake/test
 ```
 
 The suite covers strict intent keys and limits, authority/identity injection rejection, canonical manifest and page-ID vectors, deterministic ordering, retained exact binding lookup, stale and contradictory bindings, real local historical Git objects, base-policy binding, absent policy, no Git/network mutation, exact CRLF/tabs/trailing-space/emoji/combining-form preservation, missing and ambiguous quotes, canonical proposal replay, anonymous trust routing, and deep immutability.
+
+## Multi-operation suggestion intent (v2)
+
+The existing v1 APIs and canonical bytes are unchanged. Additive APIs are `validateSuggestionIntent`, `serializeSuggestionIntent`, `parseSuggestionIntent`, `suggestionIntentDigest`, `validateVersionedIntent`, and `versionedIntentDigest`. `deriveAccountFreeProposal` dispatches by the validated intent schema version.
+
+A strict v2 intent contains `schemaVersion: 2`, the same `artifactType: 'cyberbaser-account-free-correction-intent'`, `bindingDigest`, opaque `pageId`, `operations`, and required nullable `idempotencyKey`. Optional `rationale` defaults to null; optional `evidence` defaults to an empty array. No other keys are accepted. The operations are exactly `{operationId,start,end,expected,replacement}` with ascending, distinct UTF-8 byte offsets into the retained base. IDs are unique. There are 1–50 operations, at most 16 KiB per expected/replacement span and 64 KiB aggregate expected plus replacement bytes. The intent itself is bounded to 256 KiB. Canonical serializers fix key order and append one LF; the parser rejects all other byte spellings. Omitted optional values normalize before the intent digest, so equivalent default metadata has the same replay binding.
+
+The binding and Git resolver are exactly the v1 resolvers. Derivation calls `createChangeSetProposal`, validates each exact base slice and the combined candidate, and produces the canonical v2 artifact/digest. It does not write files. When rationale is absent/null, artifact rationale is the receiver-supplied neutral `Suggested edits.` because the unchanged proposal submission contract requires nonblank text. This is not a claim that the reader supplied a rationale.
+
+The shared proposal v2 trust bridge classifies the combined exact before/after file using `@cyberbaser/trust`, including OFM checks, original leading-BOM handling and existing policy semantics. It never treats a v2 artifact as a loose collection of independently trusted splices. Identity remains null and the same anonymous full-review invariant applies. The HTTP carrier is documented in `apps/account-free-intake/README.md`; it uses the separate `POST /v2/suggestions` endpoint and shared attempt/work budgets.

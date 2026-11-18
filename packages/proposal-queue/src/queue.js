@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { applyProposal, classifyProposal, parseProposal, proposalDigest, serializeProposal, validateProposal } from '@cyberbaser/proposal';
+import { applyProposal, classifyProposal, proposalDigest, serializeProposal, validateProposal } from '@cyberbaser/proposal';
+import { parseVersionedProposal, validateChangeSetProposal, serializeChangeSetProposal, changeSetProposalDigest, applyChangeSetProposal, classifyChangeSetProposal } from '@cyberbaser/proposal';
 import { fail } from './errors.js';
 import { createQueueFilesystem } from './filesystem.js';
 import {
@@ -28,10 +29,29 @@ function exactBytes(value, label) {
   if (value instanceof Uint8Array) return Buffer.from(value);
   fail('invalid-bytes', `${label} must be text or bytes`);
 }
-const sourcePartitionDigest = (proposal) => digestBytes(Buffer.from(`${proposal.source.repository}\0${proposal.source.path}`, 'utf8'));
+// Artifact bytes and queue metadata remain unchanged. Dispatch only the pure
+// validation/application/trust seams, including during restart recovery.
+const parseProposal = (bytes) => parseVersionedProposal(bytes).proposal;
+const serializeVersioned = (proposal) => proposal.schemaVersion === 2 ? serializeChangeSetProposal(proposal) : serializeProposal(proposal);
+const digestVersioned = (proposal) => proposal.schemaVersion === 2 ? changeSetProposalDigest(proposal) : proposalDigest(proposal);
+const applyVersioned = (base, proposal) => proposal.schemaVersion === 2 ? applyChangeSetProposal(base, proposal) : applyProposal(base, proposal);
+const classifyVersioned = (base, proposal, config, subject) => proposal.schemaVersion === 2
+  ? classifyChangeSetProposal(base, proposal, config, subject) : classifyProposal(base, proposal, config, subject);
+const sourceOf = (proposal) => proposal.schemaVersion === 2
+  ? { repository: proposal.changeSet.repository, revision: proposal.changeSet.baseRevision, path: proposal.changeSet.files[0].path }
+  : proposal.source;
+const sourcePartitionDigest = (proposal) => {
+  const source = sourceOf(proposal);
+  return digestBytes(Buffer.from(`${source.repository}\0${source.path}`, 'utf8'));
+};
 
 export function proposalSemantics(value) {
-  const proposal = typeof value === 'string' || value instanceof Uint8Array ? parseProposal(value) : validateProposal(value);
+  const proposal = typeof value === 'string' || value instanceof Uint8Array ? parseProposal(value) : value?.schemaVersion === 2 ? validateChangeSetProposal(value) : validateProposal(value);
+  if (proposal.schemaVersion === 2) {
+    const file = proposal.changeSet.files[0];
+    return deepFreeze({ source: sourceOf(proposal), baseByteLength: file.base.byteLength, baseDigest: file.base.digest,
+      operations: file.operations, candidateByteLength: file.candidate.byteLength, candidateDigest: file.candidate.digest });
+  }
   return deepFreeze({
     source: { repository: proposal.source.repository, revision: proposal.source.revision, path: proposal.source.path },
     baseByteLength: proposal.operation.baseByteLength,
@@ -97,11 +117,11 @@ function parseEntryArtifacts(queueId, location, artifacts) {
   const state = parseCanonicalMetadata(artifacts['state.json'], validateStateArtifact, 'state.json');
   if (receipt.queueId !== queueId || state.queueId !== queueId) fail('queue-id-mismatch', 'entry artifacts do not bind their directory identifier');
   if (receipt.lane !== carrier.lane) fail('queue-lane-mismatch', 'receipt and carrier lane disagree');
-  if (receipt.proposalDigest !== proposalDigest(proposal) || receipt.proposalByteLength !== proposalBytes.length) fail('proposal-digest-mismatch', 'receipt does not bind the exact canonical proposal bytes');
+  if (receipt.proposalDigest !== digestVersioned(proposal) || receipt.proposalByteLength !== proposalBytes.length) fail('proposal-digest-mismatch', 'receipt does not bind the exact canonical proposal bytes');
   if (receipt.sourcePartitionDigest !== sourcePartitionDigest(proposal)) fail('source-partition-mismatch', 'receipt source partition does not match the proposal');
   if (state.createdAt !== receipt.receivedAt) fail('queue-time-mismatch', 'state creation must match receipt time');
   if (state.state === 'pending-review' && state.updatedAt !== receipt.receivedAt) fail('queue-time-mismatch', 'pending state update time must match receipt time');
-  if (!Buffer.from(serializeProposal(proposal), 'utf8').equals(proposalBytes)) fail('noncanonical-proposal', 'proposal.json must contain exact canonical proposal bytes');
+  if (!Buffer.from(serializeVersioned(proposal), 'utf8').equals(proposalBytes)) fail('noncanonical-proposal', 'proposal.json must contain exact canonical proposal bytes');
   return freezeEntry({
     queueId, location, proposalText: proposalBytes.toString('utf8'), proposal, receipt,
     carrier, classification, state, semantics: proposalSemantics(proposal),
@@ -152,8 +172,8 @@ async function verifyEvidence(entry, resolveEvidence) {
   const baseBytes = exactBytes(evidence.baseBytes, 'resolved baseBytes');
   const policy = validatePolicyInput(evidence.policy);
   if (policy.status !== entry.classification.policyStatus || policy.digest !== entry.classification.policyDigest) fail('policy-evidence-mismatch', 'resolved base policy does not match durable classification evidence');
-  applyProposal(baseBytes, entry.proposal);
-  const recomputed = classifyProposal(baseBytes, entry.proposal, policy.config, entry.classification.verifiedSubject);
+  applyVersioned(baseBytes, entry.proposal);
+  const recomputed = classifyVersioned(baseBytes, entry.proposal, policy.config, entry.classification.verifiedSubject);
   if (!compareJson(recomputed, entry.classification.classification)) fail('classification-mismatch', 'durable classification does not match recomputed proposal evidence');
 }
 function buildIndexes(entries) {
@@ -248,6 +268,26 @@ function validateInspectionFilesystem(value) {
   return value;
 }
 
+function listState(optionsInput = {}) {
+  if (!isRecord(optionsInput)) fail('invalid-list-options', 'list options must be an object');
+  const unknownKeys = Object.keys(optionsInput).filter((key) => key !== 'state');
+  if (unknownKeys.length > 0) fail('unknown-field', `list options contain unknown field ${unknownKeys[0]}`);
+  const state = optionsInput.state ?? null;
+  if (state !== null && !['pending-review', 'expired'].includes(state)) {
+    fail('invalid-queue-state', 'state filter must be pending-review, expired, or null');
+  }
+  return state;
+}
+
+function serialExecutor() {
+  let tail = Promise.resolve();
+  return (action) => {
+    const result = tail.then(action, action);
+    tail = result.then(() => undefined, () => undefined);
+    return result;
+  };
+}
+
 export async function inspectProposalQueue(options = {}) {
   if (!isRecord(options)) fail('invalid-inspect-options', 'inspectProposalQueue options must be an object');
   const unknown = Object.keys(options).filter((key) => !INSPECT_KEYS.includes(key));
@@ -287,11 +327,7 @@ export async function inspectProposalQueue(options = {}) {
     },
     async list(optionsInput = {}) {
       requireOpen();
-      if (!isRecord(optionsInput)) fail('invalid-list-options', 'list options must be an object');
-      const unknownKeys = Object.keys(optionsInput).filter((key) => key !== 'state');
-      if (unknownKeys.length > 0) fail('unknown-field', `list options contain unknown field ${unknownKeys[0]}`);
-      const state = optionsInput.state ?? null;
-      if (state !== null && !['pending-review', 'expired'].includes(state)) fail('invalid-queue-state', 'state filter must be pending-review, expired, or null');
+      const state = listState(optionsInput);
       for (const entry of entries) await verifyEvidence(entry, resolveEvidence);
       return Object.freeze(entries.filter((entry) => state === null || entry.state.state === state));
     },
@@ -321,8 +357,11 @@ export async function openProposalQueue(options = {}) {
   await filesystem.prepare(config.root);
   const lock = await filesystem.acquireLock(config.root);
   let closed = false;
+  let closing = false;
+  let closePromise = null;
   let entries;
   let indexes;
+  const execute = serialExecutor();
   const refresh = (next) => { entries = next; indexes = buildIndexes(entries); };
   try {
     const recovered = await recover({ filesystem, config, resolveEvidence, clock });
@@ -331,87 +370,128 @@ export async function openProposalQueue(options = {}) {
     await lock.release();
     throw error;
   }
-  const requireOpen = () => { if (closed) fail('queue-closed', 'proposal queue is closed'); };
+  const requireOpen = () => {
+    if (closed || closing) fail('queue-closed', 'proposal queue is closed');
+  };
+
+  const review = Object.freeze({
+    async load(queueIdInput) {
+      requireOpen();
+      const queueId = validateQueueId(queueIdInput);
+      return execute(async () => {
+        const snapshot = await scanEntriesReadonly(filesystem, config);
+        const entry = buildIndexes(snapshot).byId.get(queueId);
+        if (entry === undefined) fail('queue-entry-not-found', `${queueId} is not retained`);
+        await verifyEvidence(entry, resolveEvidence);
+        return entry;
+      });
+    },
+    async list(optionsInput = {}) {
+      requireOpen();
+      const state = listState(optionsInput);
+      return execute(async () => {
+        const snapshot = await scanEntriesReadonly(filesystem, config);
+        buildIndexes(snapshot);
+        for (const entry of snapshot) await verifyEvidence(entry, resolveEvidence);
+        return Object.freeze(snapshot.filter((entry) => state === null || entry.state.state === state));
+      });
+    },
+  });
+
   return Object.freeze({
+    review,
     async enqueue(input) {
       requireOpen();
-      exactObject(input, ENQUEUE_KEYS, 'enqueue input');
-      const carrierInput = validateCarrierInput(input.carrier);
-      const idempotency = validateIdempotencyInput(input.idempotency, carrierInput.lane);
-      const digests = idempotencyDigests(carrierInput, idempotency);
-      const replay = digests.replayScope === null ? null : indexes.replay.get(digests.replayScope) ?? null;
-      if (replay !== null) {
-        if (replay.receipt.requestDigest !== digests.requestDigest) fail('idempotency-conflict', 'lane-scoped idempotency identity is bound to a different request digest');
-        if (input.proposalText !== null && proposalDigest(parseProposal(exactBytes(input.proposalText, 'proposalText'))) !== replay.receipt.proposalDigest) fail('idempotency-conflict', 'lane-scoped idempotency identity is bound to a different proposal');
-        return deepFreeze({ replayed: true, receipt: replay.receipt });
-      }
-      if (input.proposalText === null && input.baseBytes === null && input.policy === null) return deepFreeze({ replayed: false, receipt: null });
-      const proposalBytes = exactBytes(input.proposalText, 'proposalText');
-      const proposal = parseProposal(proposalBytes);
-      const baseBytes = exactBytes(input.baseBytes, 'baseBytes');
-      const policy = validatePolicyInput(input.policy);
-      const verifiedSubject = normalizeVerifiedSubject(input.verifiedSubject);
-      if (carrierInput.lane === 'lane-b' && verifiedSubject !== null) fail('lane-b-subject-forbidden', 'Lane B queue submissions must remain anonymous');
-      applyProposal(baseBytes, proposal);
-      const classification = createClassificationArtifact(policy, verifiedSubject, classifyProposal(baseBytes, proposal, policy.config, verifiedSubject));
-      const receivedAt = utcSecond(clock(), 'queue clock');
-      const queueId = queueIdFromFactory(idFactory);
-      if (indexes.byId.has(queueId)) fail('queue-id-collision', 'idFactory returned an existing queue identifier');
-      const receipt = createReceipt({
-        queueId, lane: carrierInput.lane, receivedAt,
-        expiresAt: addDays(receivedAt, config.pendingRetentionDays),
-        digest: proposalDigest(proposal), proposalByteLength: proposalBytes.length,
-        requestDigest: digests.requestDigest, idempotencyKeyDigest: digests.idempotencyKeyDigest,
-        sourcePartition: sourcePartitionDigest(proposal),
+      return execute(async () => {
+        exactObject(input, ENQUEUE_KEYS, 'enqueue input');
+        const carrierInput = validateCarrierInput(input.carrier);
+        const idempotency = validateIdempotencyInput(input.idempotency, carrierInput.lane);
+        const digests = idempotencyDigests(carrierInput, idempotency);
+        const replay = digests.replayScope === null ? null : indexes.replay.get(digests.replayScope) ?? null;
+        if (replay !== null) {
+          if (replay.receipt.requestDigest !== digests.requestDigest) fail('idempotency-conflict', 'lane-scoped idempotency identity is bound to a different request digest');
+          if (input.proposalText !== null && digestVersioned(parseProposal(exactBytes(input.proposalText, 'proposalText'))) !== replay.receipt.proposalDigest) fail('idempotency-conflict', 'lane-scoped idempotency identity is bound to a different proposal');
+          return deepFreeze({ replayed: true, receipt: replay.receipt });
+        }
+        if (input.proposalText === null && input.baseBytes === null && input.policy === null) return deepFreeze({ replayed: false, receipt: null });
+        const proposalBytes = exactBytes(input.proposalText, 'proposalText');
+        const proposal = parseProposal(proposalBytes);
+        const baseBytes = exactBytes(input.baseBytes, 'baseBytes');
+        const policy = validatePolicyInput(input.policy);
+        const verifiedSubject = normalizeVerifiedSubject(input.verifiedSubject);
+        if (carrierInput.lane === 'lane-b' && verifiedSubject !== null) fail('lane-b-subject-forbidden', 'Lane B queue submissions must remain anonymous');
+        applyVersioned(baseBytes, proposal);
+        const classification = createClassificationArtifact(policy, verifiedSubject, classifyVersioned(baseBytes, proposal, policy.config, verifiedSubject));
+        const receivedAt = utcSecond(clock(), 'queue clock');
+        const queueId = queueIdFromFactory(idFactory);
+        if (indexes.byId.has(queueId)) fail('queue-id-collision', 'idFactory returned an existing queue identifier');
+        const receipt = createReceipt({
+          queueId, lane: carrierInput.lane, receivedAt,
+          expiresAt: addDays(receivedAt, config.pendingRetentionDays),
+          digest: digestVersioned(proposal), proposalByteLength: proposalBytes.length,
+          requestDigest: digests.requestDigest, idempotencyKeyDigest: digests.idempotencyKeyDigest,
+          sourcePartition: sourcePartitionDigest(proposal),
+        });
+        const carrier = createDurableCarrier(carrierInput, digests.replayScope);
+        const state = createPendingState(queueId, receivedAt);
+        const artifacts = artifactBytes({ proposalBytes, receipt, carrier, classification, state });
+        admissionCheck(entries, receipt.sourcePartitionDigest, retainedBytes(artifacts), config);
+        const stage = await filesystem.createStage(config.root, queueId, artifacts);
+        try {
+          await filesystem.commitStage(stage, path.join(config.root, 'pending', queueId));
+        } catch (error) {
+          await filesystem.removeStaging(config.root);
+          refresh(await scanEntries(filesystem, config));
+          throw error;
+        }
+        const entry = await readEntry(filesystem, config.root, 'pending', queueId);
+        refresh([...entries, entry].sort((a, b) => a.receipt.receivedAt.localeCompare(b.receipt.receivedAt) || a.queueId.localeCompare(b.queueId)));
+        return deepFreeze({ replayed: false, receipt: entry.receipt });
       });
-      const carrier = createDurableCarrier(carrierInput, digests.replayScope);
-      const state = createPendingState(queueId, receivedAt);
-      const artifacts = artifactBytes({ proposalBytes, receipt, carrier, classification, state });
-      admissionCheck(entries, receipt.sourcePartitionDigest, retainedBytes(artifacts), config);
-      const stage = await filesystem.createStage(config.root, queueId, artifacts);
-      try {
-        await filesystem.commitStage(stage, path.join(config.root, 'pending', queueId));
-      } catch (error) {
-        await filesystem.removeStaging(config.root);
-        refresh(await scanEntries(filesystem, config));
-        throw error;
-      }
-      const entry = await readEntry(filesystem, config.root, 'pending', queueId);
-      refresh([...entries, entry].sort((a, b) => a.receipt.receivedAt.localeCompare(b.receipt.receivedAt) || a.queueId.localeCompare(b.queueId)));
-      return deepFreeze({ replayed: false, receipt: entry.receipt });
     },
     async load(queueIdInput) {
       requireOpen();
       const queueId = validateQueueId(queueIdInput);
-      refresh(await scanEntries(filesystem, config));
-      const entry = indexes.byId.get(queueId);
-      if (entry === undefined) fail('queue-entry-not-found', `${queueId} is not retained`);
-      await verifyEvidence(entry, resolveEvidence);
-      return entry;
+      return execute(async () => {
+        refresh(await scanEntries(filesystem, config));
+        const entry = indexes.byId.get(queueId);
+        if (entry === undefined) fail('queue-entry-not-found', `${queueId} is not retained`);
+        await verifyEvidence(entry, resolveEvidence);
+        return entry;
+      });
     },
     async list(optionsInput = {}) {
       requireOpen();
-      if (!isRecord(optionsInput)) fail('invalid-list-options', 'list options must be an object');
-      const unknownKeys = Object.keys(optionsInput).filter((key) => key !== 'state');
-      if (unknownKeys.length > 0) fail('unknown-field', `list options contain unknown field ${unknownKeys[0]}`);
-      const state = optionsInput.state ?? null;
-      if (state !== null && !['pending-review', 'expired'].includes(state)) fail('invalid-queue-state', 'state filter must be pending-review, expired, or null');
-      refresh(await scanEntries(filesystem, config));
-      for (const entry of entries) await verifyEvidence(entry, resolveEvidence);
-      return Object.freeze(entries.filter((entry) => state === null || entry.state.state === state));
+      const state = listState(optionsInput);
+      return execute(async () => {
+        refresh(await scanEntries(filesystem, config));
+        for (const entry of entries) await verifyEvidence(entry, resolveEvidence);
+        return Object.freeze(entries.filter((entry) => state === null || entry.state.state === state));
+      });
     },
     async expireDue() {
       requireOpen();
-      refresh(await scanEntries(filesystem, config));
-      for (const entry of entries) await verifyEvidence(entry, resolveEvidence);
-      const result = await expireAndPurge({ filesystem, config, at: clock() });
-      refresh(result.entries);
-      return result.result;
+      return execute(async () => {
+        refresh(await scanEntries(filesystem, config));
+        for (const entry of entries) await verifyEvidence(entry, resolveEvidence);
+        const result = await expireAndPurge({ filesystem, config, at: clock() });
+        refresh(result.entries);
+        return result.result;
+      });
     },
     async close() {
       if (closed) return;
-      closed = true;
-      await lock.release();
+      if (closePromise !== null) return closePromise;
+      closing = true;
+      closePromise = execute(async () => {
+        await lock.release();
+        closed = true;
+      }).catch((error) => {
+        closing = false;
+        closePromise = null;
+        throw error;
+      });
+      return closePromise;
     },
     stats() {
       requireOpen();

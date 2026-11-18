@@ -144,6 +144,11 @@ if [ -d "$HERE/components" ]; then
     echo "    + $(basename "$f")"
     cp "$f" "$QUARTZ_DIR/quartz/components/"
   done
+  if [ -d "$HERE/components/challenge" ]; then
+    echo "    + challenge/ (registry and provider modules)"
+    mkdir -p "$QUARTZ_DIR/quartz/components/challenge"
+    cp -R "$HERE/components/challenge/." "$QUARTZ_DIR/quartz/components/challenge/"
+  fi
   if [ -d "$HERE/components/scripts" ]; then
     mkdir -p "$QUARTZ_DIR/quartz/components/scripts"
     for f in "$HERE"/components/scripts/*.inline.ts; do
@@ -153,6 +158,17 @@ if [ -d "$HERE/components" ]; then
     done
   fi
 fi
+
+# Vendored, content-addressed source editor: offline copy only, never install into the seed.
+mkdir -p "$QUARTZ_DIR/quartz/static"
+for asset in "$HERE"/vendor/source-editor.*.js; do
+  [ -f "$asset" ] || { echo "ERROR: vendored source editor is missing." >&2; exit 1; }
+  ( cd "$HERE/vendor" && sha256sum --check "$(basename "$asset").sha256" )
+  cp "$asset" "$QUARTZ_DIR/quartz/static/"
+done
+
+# Verify/apply only in the separate materialized checkout, never in the seed.
+node "$HERE/patches/apply-provenance.mjs" "$QUARTZ_DIR"
 
 # Quartz ships a sample content/ dir; build.sh replaces it with the projection.
 echo "==> setup complete: $QUARTZ_DIR"

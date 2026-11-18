@@ -1,3 +1,5 @@
+import type { SuggestionIntent } from "./suggestModeClient"
+
 const ACCOUNT_FREE_INTENT_ARTIFACT_TYPE = "cyberbaser-account-free-correction-intent" as const
 const ACCOUNT_FREE_INTENT_SCHEMA_VERSION = 1 as const
 const INTENT_MAX_BYTES = 96 * 1024
@@ -122,7 +124,7 @@ export function buildCorrectionIntent(input: CorrectionIntentInput): CorrectionI
   return intent
 }
 
-export function serializeCorrectionIntent(intent: CorrectionIntent): string {
+export function serializeCorrectionIntent(intent: CorrectionIntent | SuggestionIntent): string {
   return `${JSON.stringify(intent)}\n`
 }
 
@@ -254,8 +256,9 @@ export async function readBoundedJsonResponse(
 
 export async function submitCorrectionIntent(
   action: string,
-  intent: CorrectionIntent,
+  intent: CorrectionIntent | SuggestionIntent,
   fetcher: typeof fetch = fetch,
+  challengeToken?: string,
 ): Promise<SubmissionResult> {
   const response = await fetcher(action, {
     method: "POST",
@@ -267,6 +270,7 @@ export async function submitCorrectionIntent(
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
+      ...(challengeToken === undefined ? {} : { "Cyberbaser-Challenge-Token": challengeToken }),
     },
     body: serializeCorrectionIntent(intent),
   })
@@ -278,20 +282,28 @@ export async function submitCorrectionIntent(
   }
   if (response.status === 200 || response.status === 202) {
     const fields = receiptFields(payload)
-    const details = [
-      fields.status === null ? null : `Status: ${fields.status}.`,
-      fields.queueId === null ? null : `Queue ID: ${fields.queueId}.`,
-    ].filter((value): value is string => value !== null)
     return {
       accepted: true,
       replayed: response.status === 200,
-      message: [response.status === 200 ? "Correction already received." : "Correction received.", ...details].join(" "),
+      message: `${response.status === 200 ? "Thanks — already sent for review." : "Thanks — sent for review."}${fields.queueId === null ? "" : ` Receipt ${fields.queueId}.`} The page stays unchanged until the owner applies the edit.`,
     }
   }
   const code = errorCodeFromResponse(payload)
+  const unmatchedQuote = code !== null && ["quote-not-found", "quote-ambiguous", "correction-quote-not-found", "correction-quote-ambiguous"].includes(code)
+  const friendlyMessage = unmatchedQuote
+    ? "This part of the page is formatted in a way we couldn't match. Try selecting a smaller plain-text phrase."
+    : response.status === 403 && code === "challenge-failed"
+    ? "Couldn't confirm you're human. Please try again."
+    : response.status === 503 && code === "challenge-unavailable"
+      ? "Verification is temporarily unavailable. Please try again later."
+      : response.status === 429 && code === "rate-limited"
+        ? "Too many suggestions from here right now. Please try again later."
+        : response.status === 503 && code === "queue-capacity"
+          ? "Suggestions are paused while the owner reviews the backlog."
+          : null
   return {
     accepted: false,
     replayed: false,
-    message: code === null ? "Submission failed. Try again." : `Submission failed (${code}). Try again.`,
+    message: friendlyMessage ?? (code === null ? "Submission failed. Try again." : `Submission failed (${code}). Try again.`),
   }
 }

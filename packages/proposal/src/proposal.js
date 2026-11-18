@@ -49,6 +49,13 @@ const UTF8_DECODER = new TextDecoder('utf-8', {
   ignoreBOM: true,
 });
 
+// Package-private reuse by v2. Not re-exported by the public v1 entry point.
+export {
+  requireExactKeys, requireProposalId, requireSafeInteger, requireDigest,
+  normalizeSource, normalizeSubmission, decodeUtf8, utf8Bytes, deepFreeze,
+  enforceProposalSize,
+};
+
 export const PROPOSAL_SCHEMA_VERSION = 1;
 export const PROPOSAL_ARTIFACT_TYPE = 'cyberbaser-proposal';
 export const PROPOSAL_MAX_BYTES = 256 * 1024;

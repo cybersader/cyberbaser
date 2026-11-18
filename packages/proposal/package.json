@@ -7,7 +7,9 @@
   "main": "src/index.js",
   "exports": {
     ".": "./src/index.js",
-    "./schema/v1": "./schema/proposal-v1.schema.json"
+    "./schema/v1": "./schema/proposal-v1.schema.json",
+    "./schema/v2": "./schema/proposal-v2.schema.json",
+    "./v2": "./src/v2.js"
   },
   "scripts": {
     "test": "bun test test"

@@ -5,7 +5,19 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WRAPPER_DIR="$(cd "$HERE/.." && pwd)"
 
 bun "$HERE/edit-links.test.ts"
+bun "$HERE/edit-entry.test.ts"
+bun "$HERE/note-actions.test.ts"
+bun "$HERE/analytics.test.ts"
 bun "$HERE/suggest-correction.test.ts"
+bun "$HERE/suggest-diff.test.ts"
+bun "$HERE/suggest-challenge.test.ts" # imports suggest-mode.test.ts
+bun "$HERE/suggest-history.test.ts"
+bun "$HERE/suggest-source-editor.test.ts"
+bun "$HERE/suggest-viewport.test.ts"
+bun "$HERE/provenance-contract.test.ts"
+for provider_test in "$HERE"/*-provider.test.ts; do
+  bun "$provider_test"
+done
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT

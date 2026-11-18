@@ -12,6 +12,7 @@ export const CONTAINER_PATHS = Object.freeze({
   bindingsRoot: '/srv/cyberbaser/source-bindings',
   gitDir: '/srv/cyberbaser/source-objects.git',
   queueRoot: '/var/lib/cyberbaser/proposal-queue',
+  botCheckSecretFile: '/run/secrets/turnstile-secret',
 });
 const MAX_CONFIG_BYTES = 64 * 1024;
 
@@ -138,6 +139,10 @@ export async function stageIntakeConfig({
       || config.gitDir !== CONTAINER_PATHS.gitDir
       || config.queue.root !== CONTAINER_PATHS.queueRoot
     )) fail('container config paths do not match the fixed mount contract');
+    if (requireContainerContract && config.botCheck
+      && config.botCheck.secretFile !== CONTAINER_PATHS.botCheckSecretFile) {
+      fail('container botCheck.secretFile must use the read-only Turnstile secret mount');
+    }
     return config;
   } catch (error) {
     await rm(activeFile, { force: true });

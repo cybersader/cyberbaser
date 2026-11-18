@@ -1,0 +1,74 @@
+---
+title: Applying an approved suggestion
+description: "What the owner sees and does to put an approved suggestion on the page, what the app checks first, what it records, and what the tests prove. Built 2026-09-27; not yet used on the real Cyberbase."
+sidebar:
+  order: 11.5
+status: research
+tags: [setup, governance, testing, contribution]
+---
+
+Approving a suggestion changes nothing on the page. Putting it on the page is a second step the owner takes from the receipt. This page is the practical guide to that step. The reasoning behind its shape is on [Owner application event](/cyberbaser/design/owner-application-event/).
+
+:::caution[Mechanically proven, not yet used for real]
+The step is implemented and tested against a throwaway repository. No approved suggestion has been applied to the real Cyberbase yet. The [first real application run](/cyberbaser/development/first-real-application/) has a run sheet, and it names what still has to exist before the run is possible without a terminal.
+:::
+
+## The steps
+
+1. **Open the receipt** of an approved suggestion, from the inbox's Decided list or straight after approving.
+2. **Read the section under your decision.** It says one of four things:
+   - **Put it on the page.** The page is still exactly as you reviewed it. One button: **Apply to page**.
+   - **Cannot be applied as it is.** The page changed since the review, or the trust policy did. The reason is spelled out. Your approval stays recorded; to make the change now, edit the page yourself.
+   - **The page pipeline cannot apply this yet.** The change is one your own Save path would refuse, for example a change inside the metadata block at the top of the page, or one larger than your policy allows for a single save. Again the reason is spelled out and your approval stays recorded.
+   - **On its way to the page.** You already applied it. The stage is in plain words, with a link to follow the job.
+3. **Tap Apply to page.** A sheet names the change and the page and says what happens next: the page changes and is published, in the background, the same way your own saves are.
+4. **Confirm.** You land on the job page, titled **Putting the suggestion on the page**. It shows six steps in order, with the current one marked: checking the page, changing the page and saving the commit, pushing to your repository, waiting for the site to build, checking the live page, refreshing your local copy. It ends with **Live on the page**, or says in plain words where it stopped. The page links back to the suggestion.
+5. **Come back to the receipt any time.** It shows the current stage and keeps the link. In the inbox's Decided list, the row reads **Approved** until you apply, **Applied** while the job runs, and **Live** once the change is confirmed on the page.
+6. **If the suggestion came from a pull request on your forge**, the receipt also reminds you that the request is still open there and that you close it yourself; this app never writes to your forge.
+
+In the checkpoint fixture launched by `bun run --cwd docs review:owner-alpha`, the receipt says applying is not available in that setup, because the fixture has no pipeline behind it. The step works in the real owner app.
+
+## What the app checks before anything happens
+
+Everything below is checked when you tap **Apply to page**, again in the job before the page is touched, and nothing is written if any check fails:
+
+- an Approve decision exists for this suggestion, and no earlier attempt already reached the page;
+- the page at your branch tip is the exact Git object you reviewed, and the base and result reproduce byte for byte;
+- your trust policy is unchanged since the review;
+- your rendered owner site carries the page, so there is a live page to verify afterwards;
+- the change obeys your own pipeline's rules: the path is inside your edit policy, the file is LF-only UTF-8, the change is within your size limits, and it does not touch YAML frontmatter;
+- your checkout is clean and sits exactly at the branch tip that was just checked.
+
+## What gets recorded
+
+- **One application event** per attempt, under `proposal-applications/` in the private owner store, create-once, mode 0600. It names the input, the decision, the exact page identity, the slug and live URL, the policy revision, and the job it started.
+- **One ordinary Save job**, with an immutable edit session whose `origin` says it came from an approved suggestion, and an immutable source operation carrying the exact bytes.
+- **The prepared input**, if it did not already exist. It stays decision-only and its gate stays `not-authorized`.
+
+If the job never starts, for example because another owner action holds the store, the event records an attempt that never ran and the receipt offers the step again. Once any attempt has changed the page, no further attempt is accepted for that suggestion. Undoing an applied suggestion is a normal owner edit.
+
+## The machine interface
+
+The same act is available to a script or another program through the privileged owner API, with the owner session and CSRF token:
+
+```text
+POST /api/review/<queueId>/apply      { "queueId": "<queueId>", "csrf": "<token>" }
+GET  /api/decisions/<queueId>         includes "application": the same status the receipt shows
+```
+
+The programmatic entry points are `assessProposalApplication` and `applyApprovedProposal` in `apps/owner-alpha/src/proposal-application.js`. The input adapter's local script `apps/owner-alpha/bin/prepare-approved-proposal.js` still exists for inspecting inputs; the app prepares inputs itself when you apply.
+
+## Evidence
+
+`apps/owner-alpha/test/proposal-application.test.js` runs the real account-free intake, records real decisions, and drives the real owner pipeline against a local bare Git remote with deployment and live verification stubbed:
+
+- before any act, the status of each suggestion is reported without writing anything: eligible, rejected, not decided, or unapplicable;
+- a frontmatter suggestion and a suggestion whose page the owner edited after approving are refused with the stated reason and no event;
+- the real act writes one event, starts one job, the job changes exactly the declared bytes, makes one single-path commit with the owner's prefix, pushes it to the remote, and completes; the job's session records its origin;
+- a second act on the same suggestion is refused with nothing written;
+- an attempt whose job never started is retryable, and the retry is attempt 2 and completes;
+- the rendered-site slug resolver reads the owner edit link back from the site, returns nothing for a page the site does not carry, and refuses when two pages disagree.
+
+`apps/owner-alpha/test/server.test.js` covers the receipt in every state, the apply route's session, CSRF, and body checks, the hand-off to the job page, the job page in owner words for both a Save and a suggestion, the Applied and Live labels in the Decided list, and the refusals when the page moved, when already applied, and when applying is unavailable. The browser acceptance clicks through approve, apply, the job page, and the Decided list on a phone-sized dark viewport.
+
+This is mechanical evidence. It establishes that the act exists and holds its boundary. It does not establish independent usability, a shipped lane, or a real contributor-to-live result.

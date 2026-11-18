@@ -1,6 +1,10 @@
 import { constants } from 'node:fs';
 import { lstat, open, realpath } from 'node:fs/promises';
 import path from 'node:path';
+import { validateClientAddress } from './client-address.js';
+import { validateChallengeConfig } from './challenge/registry.js';
+import { IntakeConfigError, fail, isRecord, exactObject, exactInteger, normalizedAbsolutePath } from './control-config.js';
+export { IntakeConfigError } from './control-config.js';
 import { validateProposalQueueConfig } from '@cyberbaser/proposal-queue';
 
 const CONFIG_MAX_BYTES = 64 * 1024;
@@ -15,6 +19,7 @@ const TOP_LEVEL_KEYS = Object.freeze([
   'bindingsRoot',
   'gitDir',
   'queue',
+  'reviewIpc',
   'limits',
 ]);
 const LISTEN_KEYS = Object.freeze(['host', 'port']);
@@ -26,6 +31,42 @@ const QUEUE_KEYS = Object.freeze([
   'pendingRetentionMs',
   'expiredGraceMs',
 ]);
+const REVIEW_IPC_KEYS = Object.freeze([
+  'enabled',
+  'socketPath',
+  'requestTimeoutMs',
+  'maxConcurrentRequests',
+  'maxListEntries',
+]);
+// The forge watcher: optional. When present and enabled, the service polls one
+// Forgejo repository for open pull requests and feeds them into the same queue
+// as Lane A entries, read-only towards the forge.
+const FORGEJO_KEYS = Object.freeze([
+  'enabled',
+  'apiBaseUrl',
+  'repository',
+  'cloneDir',
+  'pollIntervalMs',
+  'tokenFile',
+]);
+const FORGEJO_REPOSITORY_KEYS = Object.freeze(['url', 'owner', 'name', 'baseBranch']);
+const FORGEJO_MIN_POLL_MS = 10_000;
+const FORGEJO_MAX_POLL_MS = 3_600_000;
+const FORGEJO_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/u;
+export const LAYERED_LIMIT_DEFAULTS = Object.freeze({
+  perSenderCapacity: 3,
+  perSenderRefillPerHour: 3,
+  perNetworkCapacity: 10,
+  perNetworkRefillPerDay: 10,
+  perPageCapacity: 2,
+  perPageRefillPerDay: 2,
+});
+// Preserve the original attempt-default export for existing operator tooling.
+export const WORK_LIMIT_DEFAULTS = Object.freeze({
+  perSenderOperationBudget: 50,
+  perSenderByteBudget: 64 * 1024,
+});
+const ALL_LAYERED_LIMIT_DEFAULTS = Object.freeze({ ...LAYERED_LIMIT_DEFAULTS, ...WORK_LIMIT_DEFAULTS });
 const LIMIT_KEYS = Object.freeze([
   'maxBodyBytes',
   'requestTimeoutMs',
@@ -33,48 +74,6 @@ const LIMIT_KEYS = Object.freeze([
   'tokenBucketCapacity',
   'tokenBucketRefillPerSecond',
 ]);
-
-export class IntakeConfigError extends Error {
-  constructor(code, message) {
-    super(message);
-    this.name = 'IntakeConfigError';
-    this.code = code;
-  }
-}
-
-function fail(code, message) {
-  throw new IntakeConfigError(code, message);
-}
-
-function isRecord(value) {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
-
-function exactObject(value, keys, label) {
-  if (!isRecord(value)) fail('invalid-config', `${label} must be an object`);
-  const unknown = Object.keys(value).find((key) => !keys.includes(key));
-  if (unknown !== undefined) fail('invalid-config', `${label} contains unknown field ${unknown}`);
-  const missing = keys.find((key) => !Object.hasOwn(value, key));
-  if (missing !== undefined) fail('invalid-config', `${label} is missing field ${missing}`);
-  return value;
-}
-
-function exactInteger(value, expected, label) {
-  if (value !== expected) fail('invalid-config', `${label} must be ${expected}`);
-  return value;
-}
-
-function normalizedAbsolutePath(value, label) {
-  if (typeof value !== 'string' || !path.isAbsolute(value) || path.normalize(value) !== value) {
-    fail('invalid-config', `${label} must be one normalized absolute path`);
-  }
-  if (value === path.parse(value).root || value.includes('\0')) {
-    fail('invalid-config', `${label} must not be a filesystem root or contain NUL`);
-  }
-  return value;
-}
 
 function canonicalHttpsOrigin(value, label) {
   if (typeof value !== 'string' || value.length === 0 || value.length > 2048) {
@@ -101,15 +100,73 @@ function canonicalHttpsOrigin(value, label) {
   return parsed.origin;
 }
 
-function canonicalRepository(value) {
+// The owner's private local site may host the form over plain HTTP on one
+// private numeric IPv4 address with an explicit port. These are the same ranges
+// owner-alpha binds to (loopback, RFC 1918, RFC 6598); exact range endpoints are
+// never usable hosts. Public deployments keep the HTTPS-only rule above.
+const PRIVATE_IPV4_RANGES = Object.freeze([
+  [0x7f000000, 0x7fffffff], // 127.0.0.0/8
+  [0x0a000000, 0x0affffff], // 10.0.0.0/8
+  [0xac100000, 0xac1fffff], // 172.16.0.0/12
+  [0xc0a80000, 0xc0a8ffff], // 192.168.0.0/16
+  [0x64400000, 0x647fffff], // 100.64.0.0/10
+]);
+
+export function isPrivateNetworkIpv4Host(value) {
+  if (typeof value !== 'string' || !/^(?:(?:0|[1-9][0-9]{0,2})\.){3}(?:0|[1-9][0-9]{0,2})$/u.test(value)) return false;
+  let numeric = 0;
+  for (const octet of value.split('.')) {
+    const parsed = Number(octet);
+    if (parsed > 255) return false;
+    numeric = numeric * 256 + parsed;
+  }
+  return PRIVATE_IPV4_RANGES.some(([low, high]) => numeric > low && numeric < high);
+}
+
+function privateNetworkHttpOrigin(value) {
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return null;
+  }
+  if (
+    parsed.protocol !== 'http:'
+    || !isPrivateNetworkIpv4Host(parsed.hostname)
+    || parsed.username !== ''
+    || parsed.password !== ''
+    || parsed.port === ''
+    || parsed.pathname !== '/'
+    || parsed.search !== ''
+    || parsed.hash !== ''
+    || parsed.origin !== value
+  ) {
+    return null;
+  }
+  return parsed;
+}
+
+/** One exact HTTPS origin, or one private-network IPv4 HTTP origin with an explicit port. */
+function canonicalFormOrigin(value, label) {
   if (typeof value !== 'string' || value.length === 0 || value.length > 2048) {
-    fail('invalid-config', 'repository must be a bounded canonical HTTPS URL');
+    fail('invalid-config', `${label} must be a bounded HTTPS or private-network HTTP origin`);
+  }
+  if (privateNetworkHttpOrigin(value) !== null) return value;
+  if (value.startsWith('http:')) {
+    fail('invalid-config', `${label} may use HTTP only on one private numeric IPv4 address with an explicit port`);
+  }
+  return canonicalHttpsOrigin(value, label);
+}
+
+function canonicalRepository(value, label = 'repository') {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 2048) {
+    fail('invalid-config', `${label} must be a bounded canonical HTTPS URL`);
   }
   let parsed;
   try {
     parsed = new URL(value);
   } catch {
-    fail('invalid-config', 'repository must be a canonical HTTPS URL');
+    fail('invalid-config', `${label} must be a canonical HTTPS URL`);
   }
   if (
     parsed.protocol !== 'https:'
@@ -123,7 +180,7 @@ function canonicalRepository(value) {
     || parsed.hostname.endsWith('.')
     || parsed.toString() !== value
   ) {
-    fail('invalid-config', 'repository must be one canonical credential-free HTTPS repository URL');
+    fail('invalid-config', `${label} must be one canonical credential-free HTTPS repository URL`);
   }
   return value;
 }
@@ -143,26 +200,120 @@ function deepFreeze(value) {
   return value;
 }
 
+function validateForgejo(input) {
+  if (input === undefined || input === null) return null;
+  if (isRecord(input) && input.enabled === false) {
+    exactObject(input, ['enabled'], 'forgejo');
+    return Object.freeze({ enabled: false });
+  }
+  exactObject(input, FORGEJO_KEYS, 'forgejo');
+  if (input.enabled !== true) fail('invalid-config', 'forgejo.enabled must be a boolean');
+  exactObject(input.repository, FORGEJO_REPOSITORY_KEYS, 'forgejo.repository');
+  const repositoryUrl = canonicalRepository(input.repository.url, 'forgejo.repository.url');
+  const api = new URL(canonicalHttpsUrlWithPort(input.apiBaseUrl, 'forgejo.apiBaseUrl'));
+  const repository = new URL(repositoryUrl);
+  if (api.origin !== repository.origin || api.pathname !== '/api/v1') {
+    fail('invalid-config', 'forgejo.apiBaseUrl must be the exact same-origin /api/v1 for forgejo.repository.url');
+  }
+  for (const key of ['owner', 'name']) {
+    const value = input.repository[key];
+    if (typeof value !== 'string' || !FORGEJO_ID_RE.test(value) || value.endsWith('.')) {
+      fail('invalid-config', `forgejo.repository.${key} must be one Forgejo identifier`);
+    }
+  }
+  if (repository.pathname !== `/${input.repository.owner}/${input.repository.name}.git`) {
+    fail('invalid-config', 'forgejo.repository.url must match forgejo.repository.owner and name');
+  }
+  const baseBranch = input.repository.baseBranch;
+  if (typeof baseBranch !== 'string' || baseBranch.length === 0 || baseBranch.length > 255
+    || /[\s~^:?*[\\]|\.\.|@\{|^\/|\/$|\/\/|^\.|\.lock$/u.test(baseBranch)) {
+    fail('invalid-config', 'forgejo.repository.baseBranch must be one plain branch name');
+  }
+  if (!Number.isSafeInteger(input.pollIntervalMs) || input.pollIntervalMs < FORGEJO_MIN_POLL_MS || input.pollIntervalMs > FORGEJO_MAX_POLL_MS) {
+    fail('invalid-config', `forgejo.pollIntervalMs must be between ${FORGEJO_MIN_POLL_MS} and ${FORGEJO_MAX_POLL_MS}`);
+  }
+  return Object.freeze({
+    enabled: true,
+    apiBaseUrl: api.toString(),
+    repository: Object.freeze({
+      url: repositoryUrl,
+      owner: input.repository.owner,
+      name: input.repository.name,
+      baseBranch,
+    }),
+    cloneDir: normalizedAbsolutePath(input.cloneDir, 'forgejo.cloneDir'),
+    pollIntervalMs: input.pollIntervalMs,
+    tokenFile: input.tokenFile === null ? null : normalizedAbsolutePath(input.tokenFile, 'forgejo.tokenFile'),
+  });
+}
+
+// Like canonicalHttpsOrigin plus a path, and a self-hosted forge may carry one
+// explicit port.
+function canonicalHttpsUrlWithPort(value, label) {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 2048) {
+    fail('invalid-config', `${label} must be a bounded HTTPS URL`);
+  }
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    fail('invalid-config', `${label} must be a canonical HTTPS URL`);
+  }
+  if (parsed.protocol !== 'https:' || parsed.username !== '' || parsed.password !== ''
+    || parsed.search !== '' || parsed.hash !== '' || parsed.hostname.endsWith('.') || parsed.toString() !== value) {
+    fail('invalid-config', `${label} must be one canonical credential-free HTTPS URL`);
+  }
+  return value;
+}
+
 export function validateConfig(input) {
-  exactObject(input, TOP_LEVEL_KEYS, 'config');
+  const optional = ['forgejo', 'botCheck', 'clientAddress'].filter((key) => isRecord(input) && Object.hasOwn(input, key));
+  const keys = [...TOP_LEVEL_KEYS, ...optional];
+  exactObject(input, keys, 'config');
   if (input.schemaVersion !== 1) fail('invalid-config', 'schemaVersion must be 1');
   if (input.enabled !== true) fail('intake-disabled', 'enabled must be literal true');
+  const forgejo = validateForgejo(input.forgejo);
+  const botCheck = validateChallengeConfig(input.botCheck);
+  const clientAddress = validateClientAddress(input.clientAddress);
 
-  const publicOrigin = canonicalHttpsOrigin(input.publicOrigin, 'publicOrigin');
-  exactObject(input.listen, LISTEN_KEYS, 'listen');
-  if (input.listen.host !== '0.0.0.0') fail('invalid-config', 'listen.host must be 0.0.0.0');
-  if (!Number.isSafeInteger(input.listen.port) || input.listen.port < 1 || input.listen.port > 65535) {
-    fail('invalid-config', 'listen.port must be an integer from 1 through 65535');
+  // The public form endpoint is off when listen is null. The service then runs
+  // for the review socket and the forge watcher only; at least one input must be on.
+  const formEnabled = input.listen !== null;
+  if (!formEnabled && !(forgejo?.enabled === true)) {
+    fail('invalid-config', 'listen may be null only when the forgejo watcher is enabled');
   }
-
-  if (!Array.isArray(input.allowedFormOrigins) || input.allowedFormOrigins.length === 0) {
-    fail('invalid-config', 'allowedFormOrigins must contain at least one origin');
-  }
-  const allowedFormOrigins = input.allowedFormOrigins.map((origin, index) => (
-    canonicalHttpsOrigin(origin, `allowedFormOrigins[${index}]`)
-  ));
-  if (new Set(allowedFormOrigins).size !== allowedFormOrigins.length) {
-    fail('invalid-config', 'allowedFormOrigins must not contain duplicates');
+  let publicOrigin = null;
+  let listen = null;
+  let allowedFormOrigins = [];
+  if (formEnabled) {
+    publicOrigin = canonicalFormOrigin(input.publicOrigin, 'publicOrigin');
+    exactObject(input.listen, LISTEN_KEYS, 'listen');
+    if (!Number.isSafeInteger(input.listen.port) || input.listen.port < 1 || input.listen.port > 65535) {
+      fail('invalid-config', 'listen.port must be an integer from 1 through 65535');
+    }
+    const privateOrigin = privateNetworkHttpOrigin(publicOrigin);
+    if (privateOrigin === null) {
+      // Public HTTPS origins sit behind a terminating proxy; the service binds all interfaces.
+      if (input.listen.host !== '0.0.0.0') fail('invalid-config', 'listen.host must be 0.0.0.0');
+    } else if (input.listen.host !== privateOrigin.hostname || input.listen.port !== Number(privateOrigin.port)) {
+      // A private HTTP origin is served directly: bind exactly that address and port.
+      fail('invalid-config', 'listen must bind exactly the private-network publicOrigin address and port');
+    }
+    listen = { host: input.listen.host, port: input.listen.port };
+    if (!Array.isArray(input.allowedFormOrigins) || input.allowedFormOrigins.length === 0) {
+      fail('invalid-config', 'allowedFormOrigins must contain at least one origin');
+    }
+    allowedFormOrigins = input.allowedFormOrigins.map((origin, index) => (
+      canonicalFormOrigin(origin, `allowedFormOrigins[${index}]`)
+    ));
+    if (new Set(allowedFormOrigins).size !== allowedFormOrigins.length) {
+      fail('invalid-config', 'allowedFormOrigins must not contain duplicates');
+    }
+  } else {
+    if (input.publicOrigin !== null) fail('invalid-config', 'publicOrigin must be null when listen is null');
+    if (!Array.isArray(input.allowedFormOrigins) || input.allowedFormOrigins.length !== 0) {
+      fail('invalid-config', 'allowedFormOrigins must be empty when listen is null');
+    }
   }
 
   exactObject(input.queue, QUEUE_KEYS, 'queue');
@@ -176,8 +327,37 @@ export function validateConfig(input) {
     expiredGraceDays: queueDays(input.queue.expiredGraceMs, 'queue.expiredGraceMs'),
   });
 
-  exactObject(input.limits, LIMIT_KEYS, 'limits');
+  exactObject(input.reviewIpc, REVIEW_IPC_KEYS, 'reviewIpc');
+  if (typeof input.reviewIpc.enabled !== 'boolean') fail('invalid-config', 'reviewIpc.enabled must be a boolean');
+  let reviewSocketPath = null;
+  if (input.reviewIpc.enabled) {
+    reviewSocketPath = normalizedAbsolutePath(input.reviewIpc.socketPath, 'reviewIpc.socketPath');
+    if (path.dirname(reviewSocketPath) === path.parse(reviewSocketPath).root) {
+      fail('invalid-config', 'reviewIpc.socketPath parent must not be a filesystem root');
+    }
+  } else if (input.reviewIpc.socketPath !== null) {
+    fail('invalid-config', 'reviewIpc.socketPath must be null when reviewIpc is disabled');
+  }
+  const reviewIpc = Object.freeze({
+    enabled: input.reviewIpc.enabled,
+    socketPath: reviewSocketPath,
+    requestTimeoutMs: exactInteger(input.reviewIpc.requestTimeoutMs, 5_000, 'reviewIpc.requestTimeoutMs'),
+    maxConcurrentRequests: exactInteger(input.reviewIpc.maxConcurrentRequests, 4, 'reviewIpc.maxConcurrentRequests'),
+    maxListEntries: exactInteger(input.reviewIpc.maxListEntries, 100, 'reviewIpc.maxListEntries'),
+  });
+
+  const layeredKeys = Object.keys(ALL_LAYERED_LIMIT_DEFAULTS).filter((key) => isRecord(input.limits) && Object.hasOwn(input.limits, key));
+  exactObject(input.limits, [...LIMIT_KEYS, ...layeredKeys], 'limits');
+  const layeredLimits = {};
+  for (const [key, fallback] of Object.entries(ALL_LAYERED_LIMIT_DEFAULTS)) {
+    const value = Object.hasOwn(input.limits, key) ? input.limits[key] : fallback;
+    if (!Number.isSafeInteger(value) || value < 1 || value > 1_000_000) {
+      fail('invalid-config', `limits.${key} must be an integer from 1 through 1000000`);
+    }
+    layeredLimits[key] = value;
+  }
   const limits = Object.freeze({
+    ...layeredLimits,
     maxBodyBytes: exactInteger(input.limits.maxBodyBytes, 98_304, 'limits.maxBodyBytes'),
     requestTimeoutMs: exactInteger(input.limits.requestTimeoutMs, 5_000, 'limits.requestTimeoutMs'),
     maxConcurrentRequests: exactInteger(input.limits.maxConcurrentRequests, 4, 'limits.maxConcurrentRequests'),
@@ -185,14 +365,16 @@ export function validateConfig(input) {
     tokenBucketRefillPerSecond: exactInteger(input.limits.tokenBucketRefillPerSecond, 1, 'limits.tokenBucketRefillPerSecond'),
   });
 
-  const parsedPublicOrigin = new URL(publicOrigin);
   return deepFreeze({
     schemaVersion: 1,
     enabled: true,
     publicOrigin,
-    publicHost: parsedPublicOrigin.host,
-    listen: { host: '0.0.0.0', port: input.listen.port },
+    publicHost: publicOrigin === null ? null : new URL(publicOrigin).host,
+    listen,
     allowedFormOrigins,
+    forgejo,
+    botCheck,
+    clientAddress,
     repository: canonicalRepository(input.repository),
     bindingsRoot: normalizedAbsolutePath(input.bindingsRoot, 'bindingsRoot'),
     gitDir: normalizedAbsolutePath(input.gitDir, 'gitDir'),
@@ -204,6 +386,7 @@ export function validateConfig(input) {
       pendingRetentionDays: queueConfig.pendingRetentionDays,
       expiredGraceDays: queueConfig.expiredGraceDays,
     },
+    reviewIpc,
     limits,
   });
 }
@@ -239,6 +422,18 @@ export async function validateRuntimePaths(config) {
   await assertPathComponents(config.bindingsRoot, { mustExist: true, directory: true }, 'bindingsRoot');
   await assertPathComponents(config.gitDir, { mustExist: true, directory: true }, 'gitDir');
   await assertPathComponents(config.queue.root, { mustExist: false, directory: true }, 'queue.root');
+  if (config.botCheck) {
+    await assertPathComponents(config.botCheck.secretFile, { mustExist: true, directory: false }, 'botCheck.secretFile');
+  }
+  if (config.forgejo?.enabled) {
+    await assertPathComponents(config.forgejo.cloneDir, { mustExist: false, directory: true }, 'forgejo.cloneDir');
+    if (config.forgejo.tokenFile !== null) {
+      await assertPathComponents(path.dirname(config.forgejo.tokenFile), { mustExist: true, directory: true }, 'forgejo.tokenFile parent');
+    }
+  }
+  if (config.reviewIpc.enabled) {
+    await assertPathComponents(path.dirname(config.reviewIpc.socketPath), { mustExist: true, directory: true }, 'reviewIpc.socketPath parent');
+  }
   return config;
 }
 

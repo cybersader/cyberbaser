@@ -91,11 +91,50 @@ async function runFixed(command, args, options, code) {
  * Render one already-projected lane through Cyberbaser's fixed Quartz wrapper.
  * The executable and script paths are constants; callers supply directories only.
  */
-export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, ownerOrigin }) {
+const DIGEST_RE = /^sha-256=:[A-Za-z0-9+/]{43}=:$/u;
+const COMMIT_RE = /^[0-9a-f]{40}$/u;
+
+// Public suggestion-form build inputs only. Secret paths and server verification
+// policy stay outside this description; the renderer validates its own registry.
+export function suggestionEnvironment(suggestions) {
+  if (suggestions === null || suggestions === undefined) return {};
+  if (typeof suggestions !== 'object' || Array.isArray(suggestions)) {
+    fail('invalid-render-suggestions', 'suggestions must be null or one binding description');
+  }
+  validatePrivateNetworkHttpOrigin(suggestions.intakeOrigin, 'suggestions.intakeOrigin');
+  if (typeof suggestions.bindingDigest !== 'string' || !DIGEST_RE.test(suggestions.bindingDigest)) {
+    fail('invalid-render-suggestions', 'suggestions.bindingDigest must be one RFC 9530 SHA-256 digest');
+  }
+  if (typeof suggestions.sourceRepository !== 'string' || !suggestions.sourceRepository.startsWith('https://')) {
+    fail('invalid-render-suggestions', 'suggestions.sourceRepository must be one HTTPS repository URL');
+  }
+  if (typeof suggestions.sourceRevision !== 'string' || !COMMIT_RE.test(suggestions.sourceRevision)) {
+    fail('invalid-render-suggestions', 'suggestions.sourceRevision must be one commit ID');
+  }
+  if (suggestions.editEntry !== undefined && !['auto', 'floating', 'inline'].includes(suggestions.editEntry)) fail('invalid-render-suggestions', 'suggestions.editEntry must be auto, floating, or inline');
+  return {
+    CYBERBASER_EDIT_ENTRY: suggestions.editEntry ?? 'auto',
+    CYBERBASER_ACCOUNT_FREE_INTAKE: 'enabled',
+    // Suggesting mode maps rendered text to exact source bytes; the renderer
+    // emits that provenance only when asked (off = byte-identical output).
+    CYBERBASER_SOURCE_PROVENANCE: 'enabled',
+    CYBERBASER_ACCOUNT_FREE_INTAKE_ORIGIN: suggestions.intakeOrigin,
+    CYBERBASER_ACCOUNT_FREE_BINDING_DIGEST: suggestions.bindingDigest,
+    CYBERBASER_ACCOUNT_FREE_SOURCE_REPOSITORY: suggestions.sourceRepository,
+    CYBERBASER_ACCOUNT_FREE_SOURCE_REVISION: suggestions.sourceRevision,
+    ...(suggestions.challenge ? {
+      CYBERBASER_SUGGESTION_CHALLENGE_PROVIDER: suggestions.challenge.provider,
+      CYBERBASER_SUGGESTION_CHALLENGE_SITE_KEY: suggestions.challenge.siteKey,
+    } : {}),
+  };
+}
+
+export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, ownerOrigin, suggestions = null }) {
   const content = absoluteDirectory(contentDir, 'contentDir');
   const output = absoluteDirectory(outputDir, 'outputDir');
   const workspace = absoluteDirectory(workspaceDir, 'workspaceDir');
   validatePrivateNetworkHttpOrigin(ownerOrigin, 'ownerOrigin');
+  const formEnvironment = suggestionEnvironment(suggestions);
   const quartzDir = path.join(workspace, 'quartz');
   const seedEnvironment = await offlineSeedEnvironment();
 
@@ -111,6 +150,9 @@ export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, 
         QUARTZ_LOCK_SHA256: PINNED_QUARTZ_LOCK_SHA256,
         QUARTZ_INSTALL_SHA256: PINNED_QUARTZ_INSTALL_SHA256,
         ...seedEnvironment,
+        ...(formEnvironment.CYBERBASER_SOURCE_PROVENANCE
+          ? { CYBERBASER_SOURCE_PROVENANCE: formEnvironment.CYBERBASER_SOURCE_PROVENANCE }
+          : {}),
       }),
     },
     'quartz-setup-failed',
@@ -124,6 +166,7 @@ export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, 
         OUTPUT_DIR: output,
         CYBERBASER_EDIT_LINK_MODE: 'owner',
         CYBERBASER_OWNER_ORIGIN: ownerOrigin,
+        ...formEnvironment,
       }),
     },
     'quartz-build-failed',
@@ -134,6 +177,7 @@ export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, 
     revision: PINNED_QUARTZ_COMMIT,
     tag: PINNED_QUARTZ_REF,
     outputDir: output,
+    suggestionForm: formEnvironment.CYBERBASER_ACCOUNT_FREE_INTAKE === 'enabled',
     commands: {
       setup: ['bash', SETUP_SCRIPT, quartzDir],
       build: ['bash', BUILD_SCRIPT, content, quartzDir],

@@ -19,9 +19,15 @@ WP2 packages the private owner-alpha wiki as one Linux/amd64 OCI image with expl
 
 The package is mechanically accepted but not published to a registry. Docker Desktop, bridge publishing, physical-device Save evidence, and an external-forge/live-site Save from the container remain outside the claim.
 
+## From a suggestion to the page: what the owner does
+
+Approving a suggestion and putting it on the page are two explicit owner acts. [Applying an approved suggestion](/cyberbaser/development/applying-approved-suggestion/) explains **Apply to page**; its decision-only input is described on [Approved proposal input](/cyberbaser/development/approved-proposal-input/). The maintainer's sheet for the first real run on Cyberbase is [First real application run](/cyberbaser/development/first-real-application/), and the owner turns outside suggestions on from one config section as described on [Suggestions on the private site](/cyberbaser/development/suggestions-on-the-private-site/).
+
+Forge pull requests reach the same inbox once the maintainer's Forgejo exists: [Forgejo on TrueNAS](/cyberbaser/development/forgejo-on-truenas/) is the setup plan and [Forgejo Lane A live validation](/cyberbaser/development/forgejo-lane-a-live-validation/) the prepared first read.
+
 ## Account-free intake Lane B
 
-WP4 Lane B is implemented as a strict account-free derivation package, a carrier-neutral local proposal queue, a separate optional Bun intake service, a disabled-by-default Quartz correction form, and local-only OCI/Compose packaging. The intake service is a sibling of owner-alpha, not part of the owner-authority process, and its only durable write is a dedicated proposal queue. The implementation is mechanically tested but not publicly deployed, human-tested, offered, or authorized to write source. Q09 remains open. See [Account-free intake Lane B](/cyberbaser/development/account-free-intake/).
+WP4 Lane B is implemented as a strict account-free derivation package, a carrier-neutral local proposal queue, a separate optional Bun intake service, a disabled-by-default Quartz correction form, and local-only OCI/Compose packaging. The intake service is a sibling of owner-alpha, not part of the owner-authority process, and its only durable write is a dedicated proposal queue. The implementation is mechanically tested but not publicly deployed, human-tested, offered, or authorized to write source. Since 2026-09-30 the owner can turn the form on for their private local site from one `suggestions` section of the owner config; the owner app derives the intake's settings and starts and stops it beside itself ([Suggestions on the private site](/cyberbaser/development/suggestions-on-the-private-site/)). Q09 remains open. See [Account-free intake Lane B](/cyberbaser/development/account-free-intake/).
 
 ## Docs site: local development
 
@@ -29,10 +35,32 @@ WP4 Lane B is implemented as a strict account-free derivation package, a carrier
 cd docs
 bun install
 bun run dev              # http://localhost:4321/cyberbaser/
-bun run dev:host         # bind to 0.0.0.0 for LAN or Tailscale
+bun run dev:host         # bind to 0.0.0.0 for LAN or a trusted private transport
 ```
 
 The dev server hot-reloads content and component changes. The base path is `/cyberbaser`, so include it in test URLs.
+
+## Proposal review research and mechanical baseline
+
+Two deliberately separate review entry points are available.
+
+Launch the unprivileged, static/no-effect research surface for realistic fixtures, side-by-side Current and Proposed proof, mobile stacking, blocked states, receipt previews, and the eight-frame system walkthrough:
+
+```bash
+bun run review:proposal-mockup
+```
+
+See [Proposal review mockup](/cyberbaser/development/proposal-review-mockup/) for the four review modes, capability labels, screenshot and test commands, the exact no-effect boundary, and the maintainer comprehension checkpoint. The component evaluation behind those modes is in [Reusable components for proposal review](/cyberbaser/research/proposal-review-components/).
+
+Launch the authenticated real same-host mechanical baseline separately:
+
+```bash
+bun run review:owner-alpha
+```
+
+That command starts the live queue writer, private review socket, independent owner validation, immutable decision store, and privileged review routes together. It remains the mechanically accepted decision-only proof and is not replaced or refactored by the mockup. See [Owner proposal UI review](/cyberbaser/development/owner-proposal-ui-review/) for its exact authority, shutdown behavior, and evidence boundary.
+
+The maintainer checkpoint for that surface is prepared, not run: [Owner review maintainer checkpoint](/cyberbaser/development/owner-review-checkpoint/) holds the launch steps, the seven realistic disposable proposals, the cold questions, and explicit pass/fail criteria for the reading modes, semi-rendering limits, decision bar and sheet, Compare, and the decision-only meaning of Approve.
 
 ## Docs site: build and tests
 
@@ -66,7 +94,7 @@ bash renderers/quartz-cyberbase/tests/run.sh
 bun test deploy/account-free-intake/test
 ```
 
-`@cyberbaser/correction` is the exact UTF-8 quote/offset and single-splice primitive. `@cyberbaser/proposal` builds the canonical one-file, one-splice external adapter-output contract around it and feeds receiver-verified subjects into the existing trust classifier. Both packages are pure and no-I/O. `@cyberbaser/account-free-intake`, `@cyberbaser/proposal-queue`, the sibling intake app, the disabled Quartz form, and the local deployment bundle implement Lane B through retained review evidence only. None writes source or closes Q09. See [Proposal Contract](/cyberbaser/design/proposal-contract/) and [Account-free intake Lane B](/cyberbaser/development/account-free-intake/).
+`@cyberbaser/correction` is the exact UTF-8 quote/offset and single-splice primitive. `@cyberbaser/proposal` builds the canonical one-file, one-splice external adapter-output contract around it and feeds receiver-verified subjects into the existing trust classifier. Both packages are pure and no-I/O. `@cyberbaser/account-free-intake`, `@cyberbaser/proposal-queue`, the sibling intake app, the disabled Quartz form, the local deployment bundle, and the same-host owner review fixture implement Lane B through immutable decision-only evidence. None writes source or closes Q09. See [Proposal Contract](/cyberbaser/design/proposal-contract/) and [Account-free intake Lane B](/cyberbaser/development/account-free-intake/).
 
 ## Forgejo intake adapter
 

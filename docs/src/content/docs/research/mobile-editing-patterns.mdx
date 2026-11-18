@@ -1,0 +1,49 @@
+---
+title: Mobile editing entry and finish controls
+description: "How Google Docs, Wikipedia mobile, GitBook, GitHub, Obsidian, Substack, Apple Pages and Material/HIG guidance place the edit entry and Save/Cancel controls on phones, including keyboard-safe placement in iOS Safari, and what Cyberbaser adopted."
+status: research
+tags: [research, contribution, design]
+---
+
+## Why this exists
+
+The maintainer tested in-place editing on a phone. The Edit button looked heavy, there was no clear way to finish while typing, and the raw Markdown page hid Save below the fold. This page records how comparable products solve the same problems and which choices Cyberbaser took (2026-11-17).
+
+## What we adopted
+
+| Choice | Precedent |
+|---|---|
+| Bottom-right pencil on phones, shrinking while scrolling down | Google Docs mobile edit button; Material 3 FAB guidance (lower right, least likely to cover content, collapses on scroll) |
+| Labeled pencil plus "Edit" at the right of the title row on desktop | GitBook header Edit (starts a change request); GitHub file pencil |
+| A visible "Editing" / "Suggesting" chip while editing | Wikipedia mobile visual editor testing: people could not tell reading from editing |
+| "Cancel" text instead of an X, with Discard / Save draft / Keep editing | Wikipedia replaced its X with a back arrow so it would not look destructive |
+| Finish controls move to the top while the keyboard is open | iOS Safari overlays the keyboard on bottom fixed bars; `interactive-widget` is not shipped in Safari |
+| Visitors finish with Send, the owner with Save | Google Docs separates Suggesting from Editing; GitBook uses a distinct change-request state |
+
+## Product notes
+
+- **Google Docs mobile:** a pencil button at the bottom right enters editing. Suggesting is a separate "Suggest changes" switch. Suggestions are accepted or rejected per highlight.
+- **Wikipedia mobile:** pencils on the article and its sections. The finish is a two-step "Next" then "Publish", with words instead of icons after testing. Testers said the keyboard pushed Next/Save too high, and most did not notice the toolbar.
+- **GitBook / GitHub:** desktop entry at the top right. Changes become a change request or pull request with a diff before merge.
+- **Obsidian:** a reading/editing switch in the header, autosave, and a customizable toolbar above the keyboard.
+- **Substack app:** Next then Publish, with undo/redo and formatting above the keyboard.
+- **Apple Pages (iPhone):** a reading view with an Edit button, specifically to stop the keyboard from opening by accident.
+
+## iOS Safari keyboard constraints
+
+- A `position: fixed; bottom: 0` bar is covered or displaced when the keyboard opens, because the layout viewport does not shrink.
+- A `visualViewport` inset, `innerHeight - visualViewport.height - visualViewport.offsetTop`, can move a bottom bar. In our real iOS 27 simulator test, the first measurement-based attempt did not trigger reliably, so Cyberbaser hides the bottom chrome and anchors finish controls at the top while a surface has focus.
+- `interactive-widget=resizes-content` works in Android Chrome and Firefox and is implemented in WebKit, but it is not confirmed in a shipping Safari, so treat it as progressive enhancement only.
+
+## Sources
+
+- https://www.mediawiki.org/wiki/VisualEditor_on_mobile/Toolbar_refresh
+- https://www.mediawiki.org/wiki/Design/Research/VE_on_mobile
+- https://m3.material.io/components/floating-action-button/guidelines
+- https://gitbook.com/docs/collaboration/change-requests
+- https://obsidian.md/help/edit-and-read
+- https://support.substack.com/hc/en-us/articles/28586634838292-How-to-publish-a-post-from-the-Substack-app
+- https://support.apple.com/guide/pages-iphone/aside/tan535ba9530/ios
+- https://www.bram.us/2026/09/11/webkit-supports-interactive-widget-and-hopefully-safari-will-too/
+
+Google Docs mobile behavior came from third-party guides, because the official help page could not be fetched. Quip, Notion's current mobile editing and the GitHub mobile web editor had no usable sources.

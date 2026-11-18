@@ -1,0 +1,21 @@
+{
+  "quartzCommit": "4923affa7722dfc751f1074348e6dad214fe0c08",
+  "files": {
+    "quartz/plugins/types.ts": {
+      "pristine": "d1d68d08256c6d392988c2c7ab44a46e5798baaf645712d2ecfe69c43d0f577b",
+      "enabled": "3e3dc398d699ac6eac3bc4c5f949a5234eb6d41cd14046ae31ba3350cbb8fa34"
+    },
+    "quartz/processors/parse.ts": {
+      "pristine": "f247d04239720a920fb04d4caa5fff1934c98c14a0c8f2721164702f896a99c8",
+      "enabled": "7a5864aef7029c202cfa4acac2ccd17e906941526f88dc3c82b1d09315ee7ac8"
+    },
+    "quartz/plugins/transformers/ofm.ts": {
+      "pristine": "baee861c2638c0ddb6f3246c29e6a6f96bf789f7113098f1c648f8cd25f1f94e",
+      "enabled": "66ef6c514647a8d90c1088caeb0b0e706bed67508e7dfc3f4927bcfd5a2a2966"
+    },
+    "quartz/components/renderPage.tsx": {
+      "pristine": "bc7e6d32c048c721ec7e328c3294af281c4841fc30e24e653515d6fa64c06708",
+      "enabled": "76d935173aa4f53238bc2294e1882200f53c960b8ac4cb7a7260a06b3cfe4ffa"
+    }
+  }
+}

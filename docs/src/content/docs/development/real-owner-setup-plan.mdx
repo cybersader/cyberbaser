@@ -1,0 +1,107 @@
+---
+title: Real owner setup and hosting plan
+description: "A proposed always-on private backend, preserved authoring source, and identity-authorized publishing route."
+status: research
+tags: [owner-workflow, setup, architecture, governance]
+---
+
+## The outcome
+
+Maintain real pages through a private owner workspace and deliberately publish them through an identity-authorized route. The maintainer accepts publication as part of this outcome; permanently disabling publication is not the goal. Publishing must be tied to an authenticated identity and a permission to perform the particular action.
+
+This is a setup plan, not an installation or source move. The proposed hosting arrangement below still needs the maintainer's selection and host compatibility checks. The maintainer subsequently preferred basic embedded Better Auth and rejected shared SSO. Account custody, session and action-permission contracts remain unimplemented; see the restored [contribution, trust and access model](/cyberbaser/design/contribution-trust-and-access/).
+
+**Container research update, 2026-11-13:** four bounded researchers found that a VM is not intrinsically required. Assess TrueNAS-managed Custom Apps/Compose first, with a trusted controller/publisher, independently confined renderer and scoped credential service. This supersedes the earlier VM-first recommendation, not its historical rationale. The existing package does not yet implement that separation or named-account publishing authorization. A VM remains conditional on platform compatibility and the required NAS-kernel boundary. See [container viability research](/cyberbaser/research/truenas-container-viability/) for evidence, blockers and the proposed proof sequence.
+
+## Where Cyberbase would live
+
+Cyberbase is the knowledge base, not one server process. Cyberbaser is the software controlling changes and publication; Quartz produces the reader-facing site.
+
+| Part | Current evidence | Recommended initial arrangement |
+|---|---|---|
+| Authoritative authoring notes | The desktop vault exists and contains local modifications | Keep it authoritative during setup. Preserve those edits and explicitly reconcile the selected baseline before any relocation. |
+| Private owner app, publishing job state and dedicated delivery checkout | Synthetic desktop pilot plus a separate unapplied implementation candidate; real delivery binding is unresolved | TrueNAS-managed Custom Apps/Compose is the first candidate, with separate publisher and render authority, a dedicated service identity and narrowly scoped storage. A Linux VM is a conditional alternative. The delivery checkout is a controlled application target, not a competing authoring master. |
+| Repository hosting | Existing GitHub dogfood infrastructure; Forgejo installation is not established here | Keep the existing authoritative remote initially. Forgejo on TrueNAS remains an optional, separately validated migration, not a prerequisite for this first publishing loop. |
+| Account/session component | Local owner bootstrap/session mechanism exists; no named-account publishing integration is established | Basic embedded Better Auth is the maintainer's preferred direction, not shared SSO. Specify replaceable account custody, recovery, sessions and action permissions before implementation. Anonymous contribution stays independent. |
+| Public reader site | Historical Quartz hosting and an unfinished replacement of the existing public presentation | Keep the current public hosting during setup. An authenticated private publisher can update a public static site without exposing the private app. Public-domain cutover remains a separate exact deployment step. |
+| Backups | No backup/restore readiness was checked in this session | Back up source history, private policy and job state, and identity-service recovery material separately. Use off-machine copies and test restore; NAS snapshots alone are not independent backups. |
+
+Native Apps would share the NAS kernel; a VM adds a separate guest-kernel boundary and separately administered engine. Neither arrangement automatically isolates the renderer from publisher credentials inside the app. The current container package has not passed on TrueNAS. Confirm the installed release, CPU architecture, supported runtime/networking, storage semantics, ownership, resource limits and recovery before choosing the exact deployment profile. Use the supported managed Apps route rather than installing a second host daemon or using privileged nested Docker as an isolation shortcut.
+
+Do not install build workers with the NAS Docker socket or broad pool mounts. A future Forgejo Actions runner belongs in a separately isolated guest with its own engine; neither contributor jobs nor build jobs gain source-policy, identity-service or NAS-administration authority. The earlier [Forgejo setup plan](/cyberbaser/development/forgejo-on-truenas/) is historical planning, not an installed-service inventory or current-version certification. Its catalog and adapter versions require a fresh check before provisioning.
+
+The owner app currently requires specific private numeric-address, Host/Origin, cookie and networking behavior. A hostname, HTTPS ingress or OIDC gateway is not a drop-in proxy toggle. Design and verify the external-origin contract before offering remote private access; never relax exact-origin checks just to make the proxy work. See the existing [container deployment contract](/cyberbaser/development/owner-alpha-container-deployment/).
+
+## Identity and publishing authority
+
+### What is already present
+
+Source inspection of the recovered private app shows one-time bootstrap capabilities becoming in-memory device sessions with CSRF tokens. Requests require a valid session, and mutation routes have additional origin and request checks. Recorded owner identity comes from configuration. This is a single-owner local capability model; a configured identity string does not prove the human behind each session is that named account.
+
+This limited inspection is not a whole-application security review. Historical Forgejo/OIDC reference architectures describe possible arrangements, not an implemented identity adapter for the current owner app. Their older CMS-oriented direct-write assumptions do not override exact-operation and owner-authority constraints.
+
+### Existing authentication reference
+
+A bounded inspection found headless Better Auth and a separate upstream OIDC client. The maintainer then clarified that the SSO service belonged alongside that tool and is not wanted here. **Prefer basic embedded Better Auth**, with independent sessions and Cyberbaser-specific action permissions, not shared cookies, databases or sibling roles. Before implementation, explicitly reconcile account custody with the existing prohibition on identity-source-of-record and durable session-credential authority in Cyberbaser components. See [authentication reuse](/cyberbaser/research/authentication-reuse/). This owner setup is one part of the [broader contribution model](/cyberbaser/design/contribution-trust-and-access/), not a replacement for account-free suggestions or richer authoring.
+
+### Proposed minimum contract
+
+1. **Authenticate the person.** Use a stable local account identifier and maintained authentication primitives, with protections appropriate to a publishing account. Better Auth is the preferred embedded direction; exact factors, account admission, credential custody, recovery, session expiry, logout and revocation must be specified and tested. Display name or email matching alone must not confer an existing privileged identity.
+2. **Authorize the action server-side.** Begin with one explicitly permitted owner principal. Reading a public page needs no publisher account. Signing in does not automatically grant editing, approval, application, publication or administration. External contributors can still propose without an account where that path is offered; this identity requirement protects privileged actions, not all contributions.
+3. **Scope the grant.** Bind publishing permission to the exact repository, selected page or reviewed publication set, branch, destination and current policy. A private network address, forged identity header, host workspace membership or possession of a general forge login is insufficient.
+4. **Make the action deliberate.** Publish authorizes the exact reviewed version and its stated commit/push/deployment effects. Opening a page, logging in, capturing text or approving a suggestion does not publish. Any existing combined Save-and-publish action must say what it does and enforce the same publishing permission. Avoid a lower-privileged Save or Apply route bypassing the Publish gate.
+5. **Keep machine credentials separate.** A scoped server-side service credential performs the allowed push/deploy action after authorization. Never give browser/editor clients a broad forge credential or mount a general user credential store into the app. The existing container credential-helper client does not supply a production broker by itself; broker provisioning and scope are an explicit gap.
+6. **Retain exact-source safety.** Revalidate source/base, reviewed candidate, selected policy and applicable actor permission before accepting the job. Define the point where a durable job becomes authorized and how revocation affects queued versus already-started work. Exact operations preserve undeclared bytes; identity does not authorize whole-file regeneration or broader publication.
+7. **Record and recover.** Bind the authenticated actor, authorization decision, policy revision, exact candidate/base, destination and durable job identity. Do not put tokens into records. Replays recover the same accepted outcome rather than publishing twice. Specify session expiry, logout and authorization revocation behavior without implying rollback of an already-public result.
+
+An ingress identity check alone is insufficient. If a trusted gateway supplies identity, the backend must be inaccessible by bypass paths and must validate the authenticated assertion through a defined trust boundary; arbitrary client-supplied headers never establish authority. Public static content and private account, source, review and job state must remain separated.
+
+## Implementation sequence
+
+### 1. Recover and freeze the coherent candidate
+
+Inventory the existing later implementation and its private receipts, then compare its exact preimages with the chosen integration base. Recover rather than recreate the V6 work. Do not apply a patch made for the earlier checkout blindly to this worktree, and do not modify a root from which the existing pilot serves files. Preserve the incomplete final independent composition verdict as incomplete; completed component reviews and mechanical composition checks remain separate evidence.
+
+**Exit:** one identified candidate, known integration base and rollback plan. No service restart or real publication follows just from collecting it.
+
+### 2. Pin the real source and permitted publication
+
+Protect the existing desktop edits. Do not stash, commit, discard, synchronize or copy them wholesale to make the checkout clean. Determine the explicitly selected baseline and one already-public page for the first loop; resolve differing desktop, repository and published versions deliberately. The full selected publication delta must be reviewed before a build can expose it.
+
+Prepare a dedicated delivery checkout with a clean pinned base once its creation and binding are authorized. It is a controlled projection/application target, not a new source of truth. Define how an accepted owner change returns to or is reconciled with the authoritative authoring copy; do not silently establish two independently writable masters. Do not substitute the dirty desktop path into the saved configuration or invent a missing checkout in place.
+
+**Exit:** exact source identity, selected page/publication scope, base, intended destination, allowed Git effects, and reconciliation behavior. No unknown local change is swept into a publication.
+
+### 3. Select hosting and identity, then implement the missing connection
+
+Confirm the intended private service host and verify its actual version/runtime before writing deployment instructions. Design the preferred embedded-account component within the broader contribution/access model; do not restart upstream-SSO discovery. Reconcile credential custody, then freeze origin/session/action permissions before implementing the smallest missing adapter. Do not select a new editor or hand an external spoke direct source-write authority.
+
+**Exit:** tested named-principal binding and owner-only publishing permission, plus a deployable private hosting configuration. Required refusal cases include invalid credentials, account-binding collisions, an authenticated nonpublisher, expired/revoked authorization, forged identity headers, cross-origin mutations, and bypass through alternate writer routes or ingress assumptions. Use synthetic fixtures first; test claims must state which boundary was actually exercised.
+
+### 4. Integrate once and verify the permitted operational boundary
+
+Integrate the exact candidate and identity changes as one coherent release. Verify the prepared offline renderer immediately before use; the read-only seed inspection is not rendering acceptance. Do not default to online dependency acquisition or broaden mounts/credentials to make startup succeed.
+
+The retained migration execution hold still applies to its native rehearsal and real-site work. Permission to plan identity-authorized publication does not silently clear that specific hold. Resolve any applicable execution gate explicitly before the corresponding operation, rather than routing around it as a private preview.
+
+**Exit:** the private service is operable under the selected identity and policy, with isolated storage, restart recovery and no unintended public access. Deployment itself requires its concrete target and scope to be agreed.
+
+### 5. Prove one real publication
+
+The owner authenticates, edits one selected already-public page, reviews the exact captured version and deliberately publishes. Check the exact authorized commit and push, deployment identity and intended live URL. Confirm that a nonpublisher cannot trigger the same effect, the accepted job remains discoverable across restart, and replay does not duplicate the change.
+
+**Exit:** one real identity-authorized owner publication with preserved unrelated edits and a recoverable outcome. This does not prove general multi-user usability, complete migration parity, or authority for a domain change.
+
+### 6. Move infrastructure only when it earns its place
+
+After the ordinary loop works, consider moving the repository and Actions to Forgejo, moving the authoritative authoring home, or hosting the public reader on TrueNAS. Each changes a separate responsibility and has its own recovery requirements. The already-selected retirement of Publish remains the destination, but actual domain cutover and subscription actions require their exact final scope and acceptance evidence.
+
+## Decisions still needed
+
+The immediate missing input is the **actual TrueNAS version and hardware**, so the container candidate can be matched to supported platform behavior rather than guessed. The hosting decision remains whether TrueNAS should be the always-on private backend while the existing public host stays in place during transition. Research recommends assessing managed Custom Apps/Compose first, not automatically adding a VM. The account direction is now basic embedded Better Auth, not shared SSO. Account custody, registration/recovery and the contributor-to-owner permission model still need design; public contributors must not be forced into publisher accounts. Source relocation and public hosting migration are not bundled into the hosting decision.
+
+## Evidence and chronology
+
+- [Read-only readiness result](/cyberbaser/agent-context/zz-log/2026-11-13-real-source-readiness/): preserved modified source, missing saved checkout, bounded offline seed eligibility, no activation.
+- [Hosting and identity planning direction](/cyberbaser/agent-context/zz-log/2026-11-13-owner-hosting-and-identity-plan/): the maintainer permits planning publication with an identity/authorization condition; TrueNAS remains a proposed placement.
+- [Publication and migration boundary](/cyberbaser/development/quartz-publishing-migration/): source reconciliation, URL preservation and separate live cutover.

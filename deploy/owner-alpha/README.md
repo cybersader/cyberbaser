@@ -95,6 +95,12 @@ Edit only non-secret policy and deployment values. Required container-specific v
     "host": "127.0.0.1",
     "port": 4317
   },
+  "proposalReview": {
+    "enabled": false,
+    "socketPath": null,
+    "requestTimeoutMs": 5000,
+    "maxListEntries": 100
+  },
   "repository": {
     "checkout": "/vault"
   },
@@ -107,7 +113,7 @@ Edit only non-secret policy and deployment values. Required container-specific v
 }
 ```
 
-Replace `127.0.0.1` only with the exact accepted private numeric IPv4 address assigned in the Linux namespace. Keep the Git remote credential-free. Do not add tokens, passwords, private keys, bootstrap capabilities, or helper output.
+Replace `127.0.0.1` only with the exact accepted private numeric IPv4 address assigned in the Linux namespace. Keep `proposalReview` disabled in this container profile. WP2 does not mount the intake review socket and makes no cross-container UID/GID authorization or shared-socket parity claim. Keep the Git remote credential-free. Do not add tokens, passwords, private keys, bootstrap capabilities, or helper output.
 
 At startup, the read-only source config is copied without following symlinks into a private `/run/owner-alpha` tmpfs file. The application loads only that process-owned, mode-`0600`, one-link copy.
 

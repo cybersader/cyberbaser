@@ -1,0 +1,23 @@
+---
+title: Research a WYSIWYG suggesting mode
+description: "After rejecting the context-field form and finding the block editor underwhelming, the maintainer asked for Google-Docs-style tracked suggestions; four Sol workers measured source mapping, prototyped, researched prior art and designed batching."
+status: log
+tags: [research, contribution, design]
+---
+
+## Sequence
+
+During the first real-content walkthrough the maintainer rejected the suggestion form ("context immediately before, context immediately after ... terrible"). Two Sol workers replaced it with an inline block editor and made private-site links survive chat apps (one-layer double-encoding recovery, `/cyberbase` redirect, HTML 404, `SIGUSR1` fresh sign-in). A coordinator headless check on the rebuilt site found desktop pencil buttons hidden under Quartz's left sidebar; the coordinator moved them inside the content column and verified selection → edit → send → receipt end to end. Owner-alpha 572 pass / 7 skip; renderer suite passed. These changes are uncommitted at this entry.
+
+The maintainer then asked whether a CriticMarkup-style WYSIWYG suggesting mode was possible instead of block editing, and approved measurement, a mockup and research "with a bunch of Sol agents".
+
+## Wave
+
+Four GPT-6.1 Sol workers in parallel, no sub-delegation, real vault read only via `git archive`/`git show` of `origin/main`:
+
+1. **Measurement:** 98.83% of substantive rendered characters on 57 real pages map to exact source bytes through the instrumented Quartz v4.5.2 chain; gaps are target-derived wikilink labels, callout titles, math and generated whitespace.
+2. **Prototype:** self-contained suggesting mode on the real Awesome Peripherals page with inline tracked insertions/deletions, margin cards, exact splices, CriticMarkup view and byte-exact check; 19 headless checks passed. Published for review at `/cyberbaser/prototypes/suggesting-mode.html`.
+3. **Prior art:** ranks a source-first CodeMirror 6 live-preview editor with a suggestion ledger first, rendered-page editing with provenance second, rich-text islands third; visual Git CMS tools serialize whole files.
+4. **Batching:** recommends the single-file multi-operation proposal successor with Approve all / Reject all first.
+
+Synthesis and owner decisions: [WYSIWYG suggesting mode](/cyberbaser/research/wysiwyg-suggesting-mode/). Nothing in the product is selected or built from this research yet.

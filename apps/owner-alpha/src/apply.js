@@ -1,3 +1,4 @@
+import { applyOwnerChangeSet, validateChangeSetCorrection, proveChangeSetOutsideBytes } from './change-set-operation.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { constants } from 'node:fs';
@@ -66,6 +67,7 @@ function decodeOperationBytes(value, label) {
 }
 
 function correctionFromArtifact(input) {
+  if (input.artifactType === 'owner-alpha-source-operation' && input.schemaVersion === 2 && input.operationType === 'change-set') return validateChangeSetCorrection(input);
   if (input.artifactType !== 'owner-alpha-source-operation'
     || input.schemaVersion !== 1
     || input.operationType !== 'offset') return null;
@@ -355,7 +357,7 @@ export async function applyAcceptedOperation({ checkout, operation, lock } = {},
 
     let candidateBytes;
     try {
-      candidateBytes = applyCorrection(baseBytes, accepted.correction);
+      candidateBytes = accepted.correction.operationType === 'change-set' ? applyOwnerChangeSet(baseBytes, accepted.correction) : applyCorrection(baseBytes, accepted.correction);
     } catch (error) {
       fail('accepted-operation-invalid', 'accepted correction could not be reconstructed against current source', {
         correctionCode: error?.code ?? 'unknown',
@@ -441,7 +443,7 @@ export async function applyAcceptedOperation({ checkout, operation, lock } = {},
       candidateDigest: appliedDigest,
       candidateByteLength: appliedBytes.length,
       candidateBytes: Buffer.from(appliedBytes),
-      correction: {
+      correction: accepted.correction.operationType === 'change-set' ? accepted.correction : {
         ...accepted.correction,
         expectedOldBytes: Buffer.from(accepted.correction.expectedOldBytes),
         replacementBytes: Buffer.from(accepted.correction.replacementBytes),
@@ -449,7 +451,7 @@ export async function applyAcceptedOperation({ checkout, operation, lock } = {},
           ? { selector: { ...accepted.correction.selector } }
           : {}),
       },
-      exactSplice: {
+      exactSplice: accepted.correction.operationType === 'change-set' ? proveChangeSetOutsideBytes(baseBytes, appliedBytes, accepted.correction.proposal) : {
         start: accepted.correction.start,
         end: accepted.correction.end,
         oldByteLength: accepted.correction.expectedOldBytes.length,

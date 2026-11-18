@@ -5,6 +5,8 @@ import {
   prepareProposal,
   proposalDigest,
   serializeProposal,
+  createChangeSetProposal, validateChangeSetProposal, serializeChangeSetProposal,
+  changeSetProposalDigest, classifyChangeSetProposal,
 } from '@cyberbaser/proposal';
 import {
   asBuffer,
@@ -12,7 +14,7 @@ import {
   fail,
   normalizeUtcSecond,
 } from './contract.js';
-import { validateCorrectionIntent } from './intent.js';
+import { validateVersionedIntent } from './suggestion-intent.js';
 
 function requireResolver(value, label) {
   if (!value || typeof value.resolve !== 'function') {
@@ -80,7 +82,7 @@ export async function deriveAccountFreeProposal({
   proposalId,
   submittedAt,
 } = {}) {
-  const intent = validateCorrectionIntent(inputIntent);
+  const intent = validateVersionedIntent(inputIntent);
   const bindings = requireResolver(inputBindings, 'bindings');
   const git = requireResolver(inputGit, 'git');
   const timestamp = normalizeUtcSecond(submittedAt, 'submittedAt');
@@ -94,29 +96,32 @@ export async function deriveAccountFreeProposal({
     fail('unresolvable-binding', 'publication binding could not be resolved');
   }
   const evidence = normalizeGitEvidence(await git.resolve(binding), binding);
-  const proposal = prepareProposal(evidence.baseBytes, {
+  const source = {
+    repository: binding.manifest.source.repository,
+    revision: binding.manifest.source.revision,
+    path: binding.page.path,
+  };
+  const submission = {
+    submittedAt: timestamp, rationale: intent.rationale ?? 'Suggested edits.',
+    evidence: [...intent.evidence], identityClaim: null,
+  };
+  const isV2 = intent.schemaVersion === 2;
+  const proposal = isV2 ? createChangeSetProposal(evidence.baseBytes, {
+    proposalId, source, operations: intent.operations, submission,
+  }) : prepareProposal(evidence.baseBytes, {
     proposalId,
-    source: {
-      repository: binding.manifest.source.repository,
-      revision: binding.manifest.source.revision,
-      path: binding.page.path,
-    },
+    source,
     operation: {
       type: 'quote',
       selector: exactSelector(intent.selection),
       replacement: intent.replacement,
     },
-    submission: {
-      submittedAt: timestamp,
-      rationale: intent.rationale,
-      evidence: [...intent.evidence],
-      identityClaim: null,
-    },
+    submission,
   });
-  const proposalText = serializeProposal(proposal);
-  const reparsed = parseProposal(proposalText);
-  applyProposal(evidence.baseBytes, reparsed);
-  const classification = classifyProposal(
+  const proposalText = isV2 ? serializeChangeSetProposal(proposal) : serializeProposal(proposal);
+  const reparsed = isV2 ? validateChangeSetProposal(JSON.parse(proposalText), evidence.baseBytes) : parseProposal(proposalText);
+  if (!isV2) applyProposal(evidence.baseBytes, reparsed);
+  const classification = (isV2 ? classifyChangeSetProposal : classifyProposal)(
     evidence.baseBytes,
     reparsed,
     evidence.policy.status === 'valid' ? evidence.policy.config : null,
@@ -131,7 +136,7 @@ export async function deriveAccountFreeProposal({
   return deepFreeze({
     proposal: reparsed,
     proposalText,
-    proposalDigest: proposalDigest(reparsed),
+    proposalDigest: isV2 ? changeSetProposalDigest(reparsed) : proposalDigest(reparsed),
     verifiedSubject: null,
     basePolicy: {
       status: evidence.policy.status,

@@ -1,0 +1,39 @@
+<figure class="cb-map cb-map-horizons not-content">
+  <figcaption class="cb-map-caption"><strong>Delivery gates, not a replacement architecture</strong><span>Proposed sequence: solid routes are prerequisites; dashed branches are conditional. Nothing is marked complete.</span></figcaption>
+  <p class="cb-map-scroll-hint">Scroll horizontally to follow the delivery dependencies.</p>
+  <div class="cb-map-scroll" tabindex="0" role="region" aria-label="Delivery dependency diagram, horizontally scrollable on narrow screens">
+    <svg class="cb-map-drawing" viewBox="0 0 760 510" aria-hidden="true">
+      <defs><marker id="cb-h-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1 7 4 1 7" class="cb-map-arrowhead"/></marker></defs>
+      <text x="20" y="36" class="cb-map-label">One owner</text><text x="286" y="36" class="cb-map-label">A working community</text><text x="566" y="36" class="cb-map-label">Later, on evidence</text>
+      <path d="M256 52V426M540 52V426" class="cb-map-guide cb-map-dashed"/>
+      <path d="m40 82 8 8-8 8-8-8Z" class="cb-map-gate"/>
+      <text x="62" y="94" class="cb-map-label">Select the contracts</text><text x="62" y="118" class="cb-map-note">Account custody, recovery,</text><text x="62" y="138" class="cb-map-note">origins and action authority</text>
+      <path d="M40 100V188" class="cb-map-route" marker-end="url(#cb-h-arrow)"/>
+      <circle cx="40" cy="200" r="7" class="cb-map-junction"/>
+      <text x="62" y="204" class="cb-map-label">Prove the owner loop</text><text x="62" y="228" class="cb-map-note">Synthetic authority first;</text><text x="62" y="248" class="cb-map-note">real publication stays gated</text>
+      <path d="M40 208V304H300" class="cb-map-route" marker-end="url(#cb-h-arrow)"/>
+      <text x="62" y="294" class="cb-map-micro">Then prove usable participation</text>
+      <circle cx="312" cy="304" r="7" class="cb-map-junction"/>
+      <text x="334" y="308" class="cb-map-label">Account-free suggestions</text><text x="334" y="332" class="cb-map-note">Safe receipts + human evidence</text>
+      <path d="M312 294V212" class="cb-map-route" marker-end="url(#cb-h-arrow)"/>
+      <circle cx="312" cy="200" r="7" class="cb-map-junction"/>
+      <text x="334" y="204" class="cb-map-label">Recurring contributors</text><text x="334" y="228" class="cb-map-note">Versions, feedback,</text><text x="334" y="248" class="cb-map-note">history and credit</text>
+      <path d="M312 190V102" class="cb-map-route" marker-end="url(#cb-h-arrow)"/>
+      <circle cx="312" cy="90" r="7" class="cb-map-junction"/>
+      <text x="334" y="94" class="cb-map-label">Scoped review</text><text x="334" y="118" class="cb-map-note">Evidence-backed local trust</text>
+      <path d="M312 82V64H552V386" class="cb-map-route cb-map-dashed"/>
+      <path d="M552 176H566" class="cb-map-route cb-map-dashed" marker-end="url(#cb-h-arrow)"/>
+      <path d="M552 286H566" class="cb-map-route cb-map-dashed" marker-end="url(#cb-h-arrow)"/>
+      <path d="M552 386H566" class="cb-map-route cb-map-dashed" marker-end="url(#cb-h-arrow)"/>
+      <circle cx="574" cy="176" r="7" class="cb-map-junction"/>
+      <text x="594" y="180" class="cb-map-label">Delegated release</text><text x="594" y="204" class="cb-map-note">Explicit scoped grants</text>
+      <circle cx="574" cy="286" r="7" class="cb-map-junction"/>
+      <text x="594" y="290" class="cb-map-label">Private collaboration</text><text x="594" y="314" class="cb-map-note">Own access policy</text>
+      <circle cx="574" cy="386" r="7" class="cb-map-junction"/>
+      <text x="594" y="390" class="cb-map-label">Independent peers</text><text x="594" y="414" class="cb-map-note">Prove peer need first</text>
+      <path d="M20 452H740" class="cb-map-foundation-rule"/>
+      <text x="20" y="480" class="cb-map-label">Unchanged foundation</text><text x="226" y="480" class="cb-map-note">Owned source · exact changes · scoped authority · durable evidence</text>
+    </svg>
+  </div>
+  <details class="cb-map-description"><summary>Sequence and optional branches</summary><p>First select account custody, origin, recovery and authority contracts. Prove owner authority synthetically before separately authorizing a real source-bound publication loop. Finish usable account-free participation, then support recurring contributors with revision, feedback, history and credit contracts, and narrowly delegated review. Delegated release needs separate scoped authority decisions. Private collaboration and independent-peer evidence are optional later directions, not consequences of a publishing grant or a mandatory linear rollout; their dashed connections show conditional follow-on work rather than implementation prerequisites. Protocol work waits for demonstrated independent peer need. All stages retain the same authoritative source, exact-change boundary and evidence model. None of the nodes claims completion.</p></details>
+</figure>

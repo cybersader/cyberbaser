@@ -1,0 +1,45 @@
+---
+title: "2026-10-07 · Snapshot producer authorization"
+description: "Owner approval of private-copy producer policies and isolated implementation/tests, distinct from host execution and acceptance."
+date: 2026-10-07
+status: research
+tags: [architecture, planning, testing, meta]
+---
+
+## Owner approval, not producer completion
+
+The owner instructed, **“Go ahead with the recommended policies, producer implementation, and isolated tests.”** This authorizes the reviewed frozen r3 producer slice under the recommended subject-private verified-copy policy, outside canonical source. It removes the policy-decision blocker; it does not activate live settings or establish implementation, runtime isolation, acceptance or interoperability.
+
+The [canonical snapshot design](/cyberbaser/design/snapshot-preview-integration/) and the minimal FOCUS/decision-log direction entries now record this approval. No new R-number was assigned because a bounded producer slice is authorized without closing a general product question. The [October 6 consumer evidence](/cyberbaser/agent-context/zz-log/2026-10-06-snapshot-consumer-foundation/) remains unchanged, including 191 passed, zero skipped and zero failed with the real BLAKE3 provider.
+
+## Approved implementation policies
+
+| Boundary | Owner-approved policy |
+| --- | --- |
+| Private-copy budgets | 16 GiB of blobs per capture; 32 GiB per daemon capture store; approximately 25% of the state filesystem as a hostwide cap. |
+| Member-removal access | Immediate revocation. |
+| Physical cleanup | Durably queued when a daemon is stopped or unreachable; complete before future serving. |
+| Default retention | One hour for complete captures; 15 minutes for incomplete captures. |
+| Caller/operator bounds | Caller requests at most 24 hours; operator maximum seven days. |
+
+Existing r3 floor/reservation and other unchanged requirements remain design obligations, not additional owner choices introduced by this wave. These are implementation-policy approvals, not changes to deployed configuration.
+
+## Host ownership and peer-only status
+
+The host remains the sole producer owner. Its initial direct-session-confirmation hold was **superseded** when the owner expressly directed agent-message handoff and the host acknowledged acceptance; no further manual-copy confirmation is required. The host is recovering existing r3/journals and freezing bounded slices. Its intended first slice is actual synthetic capture plus private storage yielding descriptor/pages/chunks; no coding start, completion or artifact has been reported. Separate live-deployment preflight remains paused and is not a prerequisite for isolated producer work.
+
+The latest peer reports the private-state namespace/settings isolation fix merged but not deployed, with separate read-only preflight, operator prechecks and two low-severity findings still open. Earlier peer reports describe passing core tests and known baseline plugin/theme permission failures. Those are **unverified peer reports**, not independent host verification or producer acceptance; no live migration/deployment occurred according to the peer.
+
+All **27 producer acceptance cases** remain required. There is no actual producer-generated artifact or producer/consumer compatibility test yet. The consumer's existing deterministic correctness PASS does not prove producer capture coherence, completeness, authorization, retention/erasure, runtime isolation or interoperability.
+
+## Documentation validation
+
+Frontmatter tags, owned-file whitespace/privacy, authorization-versus-execution distinctions and log-after-FOCUS ordering passed. The prior decision-log contents, October 6 log, index and local configuration were preserved. `git diff --check` exited 0.
+
+One guarded cached-dependency `bun run --cwd docs preflight` exited 0, reporting `preflight: linux (cached)` and `knowledge ops: zz-log 2026-10-07 covers FOCUS 2026-10-07`. No installation, package test or full build ran.
+
+## Scope retained
+
+This wave records a decision only: no new code or package testing. No credentials, live room/source operations, settings activation, source-authority migration, deployment, publication, DNS, plugin actions, commit or push are authorized by it. Public documentation uses generic host language without private origin names, paths, references or fingerprints.
+
+S2 still lacks selected preview origin/access/content containment, publication-policy selection and authenticated job handoff. Source reconciliation, the first real suggestion, owner review checkpoint, Q09/Q10 and human usability remain open. Prior dirty documentation/configuration and the historical October 6 log are preserved.

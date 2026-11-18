@@ -21,3 +21,9 @@ Working log of research sessions. One file per meaningful session or decision. F
 - Trade-off rationale that's already settled — that's [Trade-offs](/cyberbaser/reference/tradeoffs/)
 
 The log entries are listed in the sidebar; browse by date.
+
+## Same-session guardrail
+
+Every meaningful research, architecture, product-direction, real acceptance, or implementation wave must add or update one dated log entry in the same session as its canonical docs and `.claude/` orientation changes.
+
+The docs preflight enforces a minimum mechanical check: the newest `YYYY-MM-DD-*.mdx` log date may not be older than the `Last updated` date in `.claude/FOCUS.md`. This does not replace judgment about entry quality, but it prevents the current-state layer from advancing for months while chronology remains silent.

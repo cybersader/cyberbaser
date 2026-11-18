@@ -176,6 +176,9 @@ afterEach(async () => {
   await Promise.all(cleanup.splice(0).map((target) => rm(target, { recursive: true, force: true })));
 });
 
+// `docker compose config` alone can take several seconds on a loaded CI runner.
+const COMPOSE_TIMEOUT_MS = 30_000;
+
 describe('Compose operator contract', () => {
   test('expands the rootless profile with host networking, hardened mounts, and no retained logs', () => {
     const model = composeConfig('rootless');
@@ -193,7 +196,7 @@ describe('Compose operator contract', () => {
     expect(init.logging).toEqual({ driver: 'none' });
     expect(init.volumes.map((mount) => mount.target)).toEqual(['/opt/cyberbaser/.workspace']);
     expect(init.environment).toMatchObject({ OWNER_ALPHA_RUNTIME_UID: '0', OWNER_ALPHA_RUNTIME_GID: '0' });
-  });
+  }, COMPOSE_TIMEOUT_MS);
 
   test('expands the rootful profile with the exact vault-owner identity and a networkless one-shot initializer', async () => {
     const root = await tempRoot('owner-alpha-rootful-env-');
@@ -219,7 +222,7 @@ describe('Compose operator contract', () => {
     expect(init.cap_add).toEqual(['CHOWN']);
     expect(init.volumes.map((mount) => mount.target)).toEqual(['/opt/cyberbaser/.workspace']);
     expect(init.environment).toMatchObject({ OWNER_ALPHA_RUNTIME_UID: '1000', OWNER_ALPHA_RUNTIME_GID: '1000' });
-  });
+  }, COMPOSE_TIMEOUT_MS);
 
   test('forbids bridge publishing, broad host access, mutable builds, and transport coupling', async () => {
     const compose = await text('deploy/owner-alpha/compose.yaml');
@@ -235,7 +238,7 @@ describe('Compose operator contract', () => {
     expect(allOperatorFiles).not.toMatch(/SSH_AUTH_SOCK|\.ssh\/|id_(?:rsa|ed25519)/u);
     expect(envExample).not.toMatch(/^(?:[A-Z0-9_]*(?:TOKEN|PASSWORD|SECRET|AUTHORIZATION)[A-Z0-9_]*)=/mu);
     expect(envExample).toMatch(/OWNER_ALPHA_IMAGE=.*@sha256:[a-f0-9]{64}/u);
-  });
+  }, COMPOSE_TIMEOUT_MS);
 });
 
 describe('operator configuration examples', () => {

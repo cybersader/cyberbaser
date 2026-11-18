@@ -1,0 +1,52 @@
+---
+title: Offline publication capture adapter completed
+description: "Close the private offline capture slice after synthetic conformance and independent source/evidence review, without connecting or activating a live reader."
+tags: [implementation, testing, governance]
+---
+
+## Outcome
+
+**The private offline capture adapter is completed and independently reviewed, but normal startup still has no connected authoring reader.** The user's goal remains **edit an existing public note → review the captured version → deliberate Publish → confirm its existing Quartz URL**. This slice advances capture validation, not the live connection or permission to publish.
+
+One contained deterministic run passed **25 tests, zero failures and 1,885 assertions** against the real capture, preparation and revalidation boundaries. Independent source/evidence review passed with matching fingerprints and no blockers for this offline slice. **The reviewer did not rerun the suite.** The current review UI remains unchanged and open; no process was started, stopped or replaced for this work.
+
+## Bounded implementation
+
+The adapter and adjacent deterministic tests remain private and ignored. The adapter accepts an explicit source/address binding and one trusted local read callback. It constructs one exact request, treats the returned data as untrusted and consumes only the structured result. The optional human-readable copy is not parsed or used as authority.
+
+Binding values are snapshotted before use. An invalid mapping causes no callback call; each valid request causes exactly one. Response identity is checked against the frozen binding, not a mutable request object handed to the callback. Unknown fields, accessor-based data, mismatched addresses, invalid versions, truncation and inconsistent lengths refuse. A successful result emits only the existing strict capture fields, with UTF-8 bytes and digest computed from the returned text. Private connector settings do not become mapping, reference or publication-artifact fields.
+
+Text is not trimmed, repaired or normalized. Multibyte and decomposed Unicode, absent final newlines, literal valid replacement characters and leading byte-order marks retain their returned representation. Ill-formed Unicode refuses. The private adapter refuses CR-containing text rather than converting it. Existing preparation independently refuses a leading byte-order mark. **The CR rule belongs to this adapter; core-wide CR behavior through other readers remains unverified.** This is a future integration qualification, not a verified core defect.
+
+Refusals expose only fixed safe diagnostic values. A validated finite retry hint can remain inert data; there is no sleep, retry, fallback read, transport or credential implementation. Strict unknown-field rejection deliberately fails closed, even for a benign upstream schema addition. Deployed compatibility must be verified rather than assumed.
+
+## Verification and review
+
+The single focused run used synthetic configuration and in-memory source/session values. It exercised the existing capture validator, successful preparation, byte-order-mark preparation refusal and source revalidation, rather than copying those validators. It covered binding mutation, callback request mutation, malformed and accessor-based results, exact text/byte/digest agreement, finite size boundaries, redacted failures and stale references after version or content changes. The default session creator was not called. Syntax checks passed separately before that run; no repair or rerun followed it.
+
+Before/after fingerprints showed all **649 protected tracked paths** and the index unchanged during implementation. Independent review recomputed source fingerprints, matched the tested adapter, tests and core source, and reconciled the recorded evidence. This is independent source/evidence inspection, **not an independent test-suite rerun**, live compatibility test or security certification.
+
+The private receipt now pins the actual contract and evidence documents by full fingerprints. A clerical filename mismatch is corrected while preserving the initial observation as history; no evidence was lost or recreated. Private provenance remains outside tracked prose.
+
+## What the evidence does not establish
+
+The demonstrated property is **returned-text self-consistency**. It does not prove original raw-disk byte fidelity, preservation through a live upstream character-decoding path, authoritative positive version semantics, or coherence while another process edits the source. A matching digest cannot establish those guarantees by itself.
+
+The ignored private tests are **not CI gates**. Successful conformance must be rerun against then-current core immediately before any future activation. An implementation-pinned synthetic shape is not a stable public contract or evidence that a deployed endpoint matches it.
+
+Normal startup still has no connected authoring reader. The owner application's root redirect reaches its own panel; it is **not an external authoring-workspace entry point**. No transport, public provider API, loader, runtime delivery mechanism or new product decision was selected here.
+
+## Remaining connection gates
+
+1. **Authorized transport and binding verification.** Obtain and verify an exact binding through separately authorized access. Do not infer or populate a real binding from synthetic evidence. Verify the deployed success and refusal envelopes, including strict unknown-field compatibility.
+2. **Upstream integrity guarantees.** Establish character preservation, authoritative version semantics and coherent capture under concurrent editing. Keep original disk-byte fidelity distinct from returned-text consistency.
+3. **Actual live source-byte cap.** Future wiring must pass the actual configured source limit to the adapter. Synthetic configuration and core validation do not prove this connection has been made.
+4. **Selected page and fresh baseline.** Map one existing public page to a freshly reconciled authoritative publishing baseline before enabling a writer.
+5. **Runtime delivery and normal entry.** Resolve delivery into the runtime mirror, startup wiring and navigation from the normal authoring workspace. The existing root redirect does not satisfy this gate.
+6. **Separate activation and publication authority.** Real activation and a first publication remain separately authorized through the existing owner-controlled route. No page was selected, enrolled or published in this slice.
+
+## Closeout boundaries
+
+The [rehearsal guide](/cyberbaser/development/owner-publication-rehearsal/) and current FOCUS now distinguish completed offline capture from the unconnected live workflow. Earlier interface acceptance evidence and failed-gate history remain unchanged and qualified in that guide. No UI change or human acceptance follows from this closeout.
+
+Only scoped whitespace, public-added-prose privacy and local link-existence checks accompany this documentation update. No test rerun, docs build, browser, network access, live configuration/source read, grant, startup, installation, commit or push occurs. This new dated log is written after the guide and current-status updates; private receipts retain implementation and review provenance without exposing it in tracked prose.

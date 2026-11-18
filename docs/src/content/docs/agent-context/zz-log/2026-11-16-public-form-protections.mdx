@@ -1,0 +1,31 @@
+---
+title: Build public-readiness protections for the suggestion form
+description: "Three parallel Sol workers added an optional Turnstile bot check, trusted client-address handling, per-sender/network/page limits, a widget in the Quartz form and an off-by-default Cloudflare Tunnel deploy profile; tests pass, nothing deployed."
+status: log
+tags: [contribution, testing, governance]
+---
+
+## Request
+
+After the access-tier direction, the maintainer confirmed the public account-free suggestion form as the next build and asked for subagents.
+
+## Work
+
+Three GPT-6.1 Sol workers ran in parallel with disjoint file ownership and a frozen contract (config keys, header name, error codes): the intake service (`apps/account-free-intake`), the Quartz form (`renderers/quartz-cyberbase`) and deployment (`deploy/account-free-intake`). None spawned further agents, committed, deployed or contacted Cloudflare.
+
+The full suites were initially blocked because the worktree lacked the locked sibling-package installs. The coordinator installed CI's dependency sequence with `--frozen-lockfile --ignore-scripts` inside the contained build boundary; no manifests or lockfiles changed. One existing review-socket protocol test then failed deterministically: it submits three corrections to one page and the new two-per-page limit refused the third. The behavior was correct, so the coordinator raised that test fixture's per-page capacity and left the limit itself covered in the server tests.
+
+A fourth Sol worker performed an independent read-only security review of client-address spoofing, bot-check bypass, CORS, limiter memory and privacy, renderer token handling and deployment trust boundaries. It found no defects. A loaded review skill prevented it from running tests; the coordinator's own runs cover that.
+
+## Results
+
+- Intake app: 125 pass, 0 fail. Neighbouring intake and queue packages: 51 pass, 0 fail.
+- Deploy structure: 20 pass, 1 opt-in image runtime test skipped, 0 fail.
+- Renderer suite: all four check groups passed.
+- Whitespace checks passed.
+
+The canonical description, defaults and limits are in [account-free intake](/cyberbaser/development/account-free-intake/#public-readiness-protections-off-by-default).
+
+## Not done
+
+No live Turnstile, tunnel, edge rule or browser challenge was exercised. The owner app does not yet pass a site key through, the public Cyberbase build does not enable the form, and receipt lookup and contributor accounts remain unbuilt. Opening the form publicly still needs a domain, Cloudflare account setup, a verified connector image digest and an explicit decision on Q09.

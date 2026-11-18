@@ -1,0 +1,51 @@
+<figure class="cb-map cb-map-authority not-content">
+  <figcaption class="cb-map-caption"><strong>Where source-write authority begins and ends</strong><span>Target boundaries. Account custody, named grants and renderer isolation remain unapproved or unbuilt.</span></figcaption>
+  <p class="cb-map-scroll-hint">Scroll horizontally to follow the data and authority routes.</p>
+  <div class="cb-map-scroll" tabindex="0" role="region" aria-label="Source and authority topology, horizontally scrollable on narrow screens">
+    <svg class="cb-map-drawing" viewBox="0 0 760 676" aria-hidden="true">
+      <defs><marker id="cb-a-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1 7 4 1 7" class="cb-map-arrowhead"/></marker></defs>
+      <path d="M242 56H738V446H242Z" class="cb-map-boundary"/>
+      <text x="258" y="44" class="cb-map-label">Owner-controlled authority</text>
+      <text x="20" y="44" class="cb-map-note">External proposals</text>
+      <text x="20" y="112" class="cb-map-label">Reader / tool / forge</text><text x="20" y="136" class="cb-map-note">Never a canonical writer</text>
+      <path d="M102 152V174H320" class="cb-map-route" marker-end="url(#cb-a-arrow)"/>
+      <text x="172" y="165" class="cb-map-micro">Exact proposal</text>
+      <circle cx="332" cy="174" r="7" class="cb-map-junction"/>
+      <text x="332" y="112" text-anchor="middle" class="cb-map-label">Editorial review</text><text x="332" y="136" text-anchor="middle" class="cb-map-note">Version + integrity</text><text x="332" y="156" text-anchor="middle" class="cb-map-micro">Local trust</text>
+      <path d="M332 183V270" class="cb-map-route" marker-end="url(#cb-a-arrow)"/>
+      <text x="344" y="228" class="cb-map-micro">Decision record</text>
+      <circle cx="332" cy="282" r="7" class="cb-map-junction"/>
+      <text x="282" y="310" class="cb-map-note">Approved version</text>
+      <text x="580" y="100" text-anchor="middle" class="cb-map-label">Private account state</text><text x="580" y="122" text-anchor="middle" class="cb-map-note">Passkeys, sessions, revocation</text>
+      <path d="M580 138V178" class="cb-map-route cb-map-dashed" marker-end="url(#cb-a-arrow)"/>
+      <text x="580" y="200" text-anchor="middle" class="cb-map-label">Current authorization</text><text x="580" y="222" text-anchor="middle" class="cb-map-note">Actor · action · scope · grant</text>
+      <path d="M580 236V266" class="cb-map-route cb-map-dashed" marker-end="url(#cb-a-arrow)"/>
+      <path d="M340 282H563" class="cb-map-route" marker-end="url(#cb-a-arrow)"/>
+      <text x="450" y="272" text-anchor="middle" class="cb-map-micro">Proposal + separate act</text>
+      <path d="m580 268 14 14-14 14-14-14Z" class="cb-map-gate"/>
+      <text x="604" y="286" class="cb-map-label">Executor</text>
+      <path d="M580 297V336H332V370" class="cb-map-effect" marker-end="url(#cb-a-arrow)"/>
+      <text x="434" y="329" text-anchor="middle" class="cb-map-micro">Exact source application</text>
+      <path d="M580 336V370" class="cb-map-route cb-map-dashed" marker-end="url(#cb-a-arrow)"/>
+      <text x="594" y="348" class="cb-map-micro">Gate each effect</text>
+      <rect x="322" y="380" width="20" height="20" class="cb-map-source-mark"/>
+      <text x="332" y="424" text-anchor="middle" class="cb-map-label">Canonical source</text>
+      <circle cx="580" cy="390" r="8" class="cb-map-junction"/>
+      <text x="594" y="376" class="cb-map-label">Trusted publisher</text>
+      <path d="M312 390H196V484H100V508" class="cb-map-route" marker-end="url(#cb-a-arrow)"/>
+      <text x="208" y="484" class="cb-map-note">Selected projection only</text>
+      <path d="M20 548H740" class="cb-map-guide"/>
+      <text x="20" y="576" class="cb-map-label">Isolated renderer</text><text x="20" y="600" class="cb-map-note">No source write</text><text x="20" y="622" class="cb-map-note">No publisher credentials</text>
+      <rect x="90" y="510" width="20" height="20" class="cb-map-render-mark"/>
+      <path d="M112 520H580V402" class="cb-map-route" marker-end="url(#cb-a-arrow)"/>
+      <text x="430" y="510" text-anchor="middle" class="cb-map-note">Checked output, not authority</text>
+      <path d="M590 390H710V590" class="cb-map-effect" marker-end="url(#cb-a-arrow)"/>
+      <text x="694" y="480" text-anchor="end" class="cb-map-micro">Permitted release</text>
+      <circle cx="710" cy="602" r="8" class="cb-map-junction"/>
+      <text x="710" y="630" text-anchor="end" class="cb-map-label">Published site</text>
+      <text x="710" y="652" text-anchor="end" class="cb-map-note">Bound destination + live check</text>
+    </svg>
+  </div>
+  <div class="cb-map-legend"><span><i class="cb-map-line-sample"></i>Content or evidence</span><span><i class="cb-map-line-sample cb-map-line-dashed"></i>Authority check</span><span><i class="cb-map-line-sample cb-map-line-effect"></i>Authorized effect</span></div>
+  <details class="cb-map-description"><summary>Boundary definitions and implementation limits</summary><p>External adapters send proposals to editorial review, which records a version-specific decision. Private account state supplies an actor for current authorization. An approved version and a separate explicit act reach the executor only under current actor, action, scope and grant checks. The executor applies exact source changes and gates each later effect. The canonical source provides only a selected projection to an isolated renderer. The renderer returns checked output, not source authority or credentials. The trusted publisher holds machine credentials, releases to the permitted destination and checks the live outcome. The dashed enclosure marks logical owner authority, not a selected container layout. Solid lines carry content or evidence, dashed arrows carry authorization checks, and labelled accent lines identify source or publication effects. Account custody needs approval; named-principal authorization, phase revocation and renderer isolation are target design rather than completed implementation.</p></details>
+</figure>

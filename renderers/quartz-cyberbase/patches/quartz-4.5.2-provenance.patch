@@ -1,0 +1,70 @@
+--- a/quartz/plugins/types.ts
++++ b/quartz/plugins/types.ts
+@@ -19,7 +19,10 @@
+ ) => QuartzTransformerPluginInstance
+ export type QuartzTransformerPluginInstance = {
+   name: string
+-  textTransform?: (ctx: BuildCtx, src: string) => string
++  beforeParse?: (ctx: BuildCtx, file: VFile, original: Uint8Array) => void
++  textTransform?: (ctx: BuildCtx, src: string, file?: VFile) => string
++  htmlHandlers?: import("mdast-util-to-hast").Options["handlers"]
++  finalizeHtml?: (ctx: BuildCtx, tree: import("hast").Root, file: import("./vfile").QuartzPluginData) => void
+   markdownPlugins?: (ctx: BuildCtx) => PluggableList
+   htmlPlugins?: (ctx: BuildCtx) => PluggableList
+   externalResources?: ExternalResourcesFn
+--- a/quartz/processors/parse.ts
++++ b/quartz/processors/parse.ts
+@@ -38,7 +38,10 @@
+   return (
+     unified()
+       // MD AST -> HTML AST
+-      .use(remarkRehype, { allowDangerousHtml: true })
++      .use(remarkRehype, {
++        allowDangerousHtml: true,
++        handlers: Object.assign({}, ...transformers.map((plugin) => plugin.htmlHandlers ?? {})),
++      })
+       // HTML AST -> HTML AST transforms
+       .use(transformers.flatMap((plugin) => plugin.htmlPlugins?.(ctx) ?? []))
+   )
+@@ -91,12 +94,16 @@
+         const perf = new PerfTimer()
+         const file = await read(fp)
+ 
++        for (const plugin of cfg.plugins.transformers) {
++          plugin.beforeParse?.(ctx, file, Buffer.from(file.value))
++        }
++
+         // strip leading and trailing whitespace
+         file.value = file.value.toString().trim()
+ 
+         // Text -> Text transforms
+         for (const plugin of cfg.plugins.transformers.filter((p) => p.textTransform)) {
+-          file.value = plugin.textTransform!(ctx, file.value.toString())
++          file.value = plugin.textTransform!(ctx, file.value.toString(), file)
+         }
+ 
+         // base data properties that plugins may use
+--- a/quartz/plugins/transformers/ofm.ts
++++ b/quartz/plugins/transformers/ofm.ts
+@@ -9,7 +9,8 @@
+   Code,
+ } from "mdast"
+ import { Element, Literal, Root as HtmlRoot } from "hast"
+-import { ReplaceFunction, findAndReplace as mdastFindReplace } from "mdast-util-find-and-replace"
++import type { ReplaceFunction } from "mdast-util-find-and-replace"
++import { findAndReplace as mdastFindReplace } from "../../cyberbase/provenanceFindReplace"
+ import rehypeRaw from "rehype-raw"
+ import { SKIP, visit } from "unist-util-visit"
+ import path from "path"
+--- a/quartz/components/renderPage.tsx
++++ b/quartz/components/renderPage.tsx
+@@ -197,6 +197,9 @@
+   // for the file cached in contentMap in build.ts
+   const root = clone(componentData.tree) as Root
+   renderTranscludes(root, cfg, slug, componentData)
++  for (const plugin of componentData.ctx.cfg.plugins.transformers) {
++    plugin.finalizeHtml?.(componentData.ctx, root, componentData.fileData)
++  }
+ 
+   // set componentData.tree to the edited html that has transclusions rendered
+   componentData.tree = root

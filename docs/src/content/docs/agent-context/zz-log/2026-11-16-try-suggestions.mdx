@@ -1,0 +1,26 @@
+---
+title: Prepare a hands-on suggestions rehearsal
+description: "One-command throwaway-vault launcher for trying account-free suggestions, approval and application in the maintainer's browser, plus optional private-site bot check wired through the owner app with Cloudflare test keys."
+status: log
+tags: [testing, contribution, setup]
+---
+
+## Request
+
+The maintainer asked to prepare something to test hands-on soon. They also hoped the agentic-workflow agent applies the protocol-driven controls principle; the principle was sent to that thread with a request to place it under its own knowledge-curation rules.
+
+## Work
+
+Two Sol workers ran in parallel with disjoint ownership and a frozen owner-config contract.
+
+- **Owner app bot check:** optional `suggestions.form.challenge` (`provider`, `siteKey`, `secretFile`, `expectedHostnames`) participates in policy identity and site-cache invalidation, derives the intake's `botCheck`, passes only provider and public site key to the renderer, and widens the reader CSP using the provider registry's `scriptOrigin`, so owner-alpha contains no vendor strings. The Turnstile provider accepts Cloudflare's test-response shape (hostname `example.com`, no action) only for the three exact published test secrets; real secrets keep strict checks. Two owner test fixtures that submit corpus-sized batches declared larger limits; product defaults are unchanged.
+- **Launcher:** `bun run --cwd docs try:suggestions` builds a throwaway Git vault with three short notes, a local bare remote and a private owner workspace on loopback, prints sign-in, page and Proposals links plus six steps, and removes its state on stop. `--prepare` installs the pinned app dependencies and Quartz seed once; `--challenge pass|fail|spent` uses Cloudflare's published test keys. Guide: [Try suggestions on a throwaway vault](/cyberbaser/development/try-suggestions/).
+
+## Verification
+
+- Worker: owner-alpha full suite 547 pass, 5 skip, 0 fail (before: 2 failures from the new per-sender limit hitting checkpoint fixtures).
+- Coordinator reruns: real-Quartz launcher and suggestions tests 15 pass, 0 fail (two suggestions accepted, third refused 429, authenticated review, approval without source change, exact apply, local push, rebuilt page, untouched other bytes, listeners closed, temporary root removed); intake 185 pass; deploy 20 pass, 1 opt-in skip. Only the `try:suggestions` line changed in `docs/package.json`; no lockfiles changed.
+
+## Not verified
+
+No headed browser, human walkthrough, visual widget check or real Cloudflare verification ran. Deployment and live confirmation in the rehearsal are simulated and labelled. The form does not yet capture a text selection automatically; the guide tells the tester to copy and paste the sentence.

@@ -57,6 +57,12 @@ require_mount "$GIT_ROOT" "$GIT_ROOT" ro
 require_mount "$VOLUME_ROOT" "$VOLUME_ROOT" rw
 require_mount "$RUN_ROOT" "$RUN_ROOT" rw tmpfs
 require_mount '/tmp' '/tmp' rw tmpfs
+# Only the public overlay supplies this secret. Never accept a writable mount.
+if [[ -e /run/secrets/turnstile-secret ]]; then
+  require_mount '/run/secrets/turnstile-secret' '/run/secrets/turnstile-secret' ro
+  [[ -f /run/secrets/turnstile-secret && ! -L /run/secrets/turnstile-secret ]] \
+    || fail 'Turnstile secret must be a regular non-symlink file'
+fi
 for path in "$RUN_ROOT" /tmp; do
   case ",$(mount_options "$path")," in
     *,nosuid,*nodev,*noexec,*) ;;

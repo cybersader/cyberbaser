@@ -1,0 +1,58 @@
+---
+title: "2026-10-06 · Snapshot consumer foundation"
+description: "Pure snapshot consumer implemented with isolated tests and independent bounded correctness PASS; producer and private preview remain gated."
+date: 2026-10-06
+status: research
+tags: [architecture, testing, meta]
+---
+
+## Authorized foundation, not integrated preview
+
+The owner authorized the snapshot foundation and isolated consumer tests. The host author reports an independent consumer-specific **PASS-WITH-EDITS**, with the edits applied before clearance. The coordinating session read the full committed contract and verified its frozen pin; identifying provenance stays private. This is consumer contract clearance, not host producer approval, security certification or completed interoperability.
+
+The [canonical integration page](/cyberbaser/design/snapshot-preview-integration/) now separates the pure verifier from future host capture and S2 private preview. FOCUS received a minimal current-state correction; existing direction and dirty documentation were preserved. No decision-log or roadmap amendment was needed.
+
+## Reconciled scope
+
+- The future producer retains immutable verified copies outside the canonical vault in subject-private state, replacing shared-folder pinning/garbage-collection changes. Current-connection initial synchronization and no pending CRDT updates are capture prerequisites; unsupported formats fail closed.
+- A canonical line manifest and SHA-256 capture identity bind source/scope, time, inventory, exclusions and status. Text preserves UTF-8 BOM/newline bytes as stored. Attachments use SHA-256 or BLAKE3; the pure consumer needs an explicitly trusted injected provider for BLAKE3 and must fail closed without it. No installs, downloads or hand-written cryptography.
+- The consumer checks canonical paths, exact byte order, counts, successful rows, supplied contiguous pages/chunks, final signals and constant identity against independent expected source/scope and optional pinned digests. Grant context is host-only, not a remotely verified wire binding. Producer collision verdicts remain producer-owned; hashes do not prove capture coherence, completeness, authentication, current authorization or collision logic.
+- The slice retains private validated byte copies with no usable partial success. It has no filesystem materializer, production network client, publication-policy selection/pinning, renderer, job or UI. Mandatory wire literals belong in the package, not this descriptive page.
+
+## Evidence status
+
+| Gate | Current evidence |
+| --- | --- |
+| Consumer authorization and contract freeze | Authorized; reviewed/frozen contract, reported independent edits applied, pin verified by coordinating session. |
+| Consumer implementation and isolated tests | Complete against the frozen contract at the pure package/synthetic-test layer; final default and provider-enabled runs passed. |
+| Final independent consumer verification | Bounded deterministic correctness **PASS** after one async-provider error-handling repair; no remaining confirmed correctness blocker, not security certification. |
+| Host producer build and acceptance | Blocked on its own human disk-quota, retention and member-removal erasure choices, plus a preexisting private-state namespace isolation fix. |
+| Producer/consumer interoperability | Not run; synthetic consumer vectors are not producer output or interoperability evidence. |
+
+### Implemented API and independent final results
+
+The coordinating session supplied these actual builder/verifier outcomes. `@cyberbaser/snapshot-verifier` exposes `verifySnapshot({ input, expected, limits, now, hashes })`: serialized descriptor plus page/chunk observations, optional raw manifest exactly corroborated against reconstruction, local limits, frozen evidence and private retained bytes with copy-on-read `readBytes(path)`. Package reference: `packages/snapshot-verifier/README.md`; public exports: `packages/snapshot-verifier/src/index.js`. The [consumer API section](/cyberbaser/design/snapshot-preview-integration/#pure-consumer-foundation-in-the-optional-host-integration) explains its boundary. Production performs no filesystem, environment, network or process-output operations.
+
+| Independent final run | Passed | Skipped | Failed | Expectations |
+| --- | ---: | ---: | ---: | ---: |
+| `bun run --cwd packages/snapshot-verifier test` | 186 | 5 explicit optional-provider gates | 0 | 840 |
+| Same suite with explicit `SNAPSHOT_TEST_BLAKE3_MODULE` | 191 | 0 | 0 | 861 |
+| Focused provider-error regressions across Bun 1.3.14 and Node 22.23.1 | 12 | 0 | 0 | 72 |
+
+The provider-enabled run used a vetted, already-installed `@noble/hashes` 1.8.0 (MIT) test adapter selected through an explicit test-only path. There is no runtime sibling-path coupling, installation or download; the core remains dependency-free with trusted synchronous BLAKE3 injection.
+
+The independent initial review ran 117 adversarial checks and found one confirmed blocker: an async-provider error-handling defect. It was repaired and focused reverified. The original reproduction then exited 0 with empty stderr, a sanitized invalid-provider refusal and no delayed rejection. **The full 117-check adversarial set was not rerun after repair.** Final package suites and focused regressions passed; the verifier reported no remaining confirmed correctness blocker and stopped testing.
+
+This is consumer-only completion, not full S1 completion, security certification or producer interoperability. The documentation worker read only the package README/public index after final evidence arrived, made no code edits and ran no package tests. Final evidence supersedes the first pass's pending implementation/test status.
+
+## Documentation validation
+
+Lightweight checks passed: both pages' frontmatter tags exist in `docs/tags.yml`; owned-file whitespace and private-provenance exclusion checks passed; the new log was saved after FOCUS. Protected preexisting index, decision-log and local-config hashes were unchanged. `git diff --check` exited 0.
+
+Cached-dependency checks established that preflight would not install. `bun run --cwd docs preflight` exited 0 and reported `preflight: linux (cached)` and `knowledge ops: zz-log 2026-10-06 covers FOCUS 2026-10-06`. No full build or package test was run by this documentation worker.
+
+## Boundaries retained
+
+S2 still requires a separate registrable preview origin, access/revocation, content containment, credential/network/navigation/lifetime controls, trusted owner policy selection and authenticated job handoff. Source reconciliation, Cyberbase migration, the first real suggestion, owner review checkpoint, Q09, Q10 and human usability remain open.
+
+No host edits, live source reads/writes, MCP/network calls, services, installations, full docs/renderer builds, public deployment/publication, DNS, plugin changes, commit or push occurred in this documentation pass. Consumer authorization does not authorize host work. Public documentation uses generic host language and excludes private origin names, paths, commit identifiers and contract fingerprints.

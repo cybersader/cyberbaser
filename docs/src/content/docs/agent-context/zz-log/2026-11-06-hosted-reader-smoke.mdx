@@ -1,0 +1,33 @@
+---
+title: Hosted reader smoke access check
+description: "Record the successful bounded hosted capture, preserving earlier access and capture failures and the limits of non-browser review evidence."
+tags: [implementation, testing, governance]
+---
+
+## Outcome
+
+The owner-directed hosted-reader goal remains a synthetic test note reaching the existing read-only review path, followed eventually by real dogfood under separate authority. The local harness passed its fake-only preflight and independent source review. Chronology matters: the initial native workspace access check could not verify readability through the current grant; its cause remains unknown and the result does not prove workspace absence, revocation or application-authentication failure. Later access succeeded. The first actual capture then failed generically; a subsequent instrumented attempt isolated an exact room-echo mismatch while the path matched. A minimal private mapping corrected the expected echo while retaining the exact request address/path and strict reader check. The final bounded actual hosted read passed for the synthetic fixture. This does not establish browser/editor use, publication or the real dogfood loop.
+
+## Bounded harness evidence
+
+The minimal private runner composes the existing reader, runtime and handler with synthetic Git responses and in-memory HTTP. Its fake-only preflight passed **one test**; the independent source review passed. A previously noted sync-check uses browser clients and a local relay, so it is not proof of hosted non-browser capture. No hosted content was read by the runner in this attempt.
+
+## Hosted access check and stop
+
+Earlier metadata and listing operations had shown metadata for the designated test workspace and its file listing; they did not read note content or establish later read access. The subsequent metadata check could not verify workspace readability through the current grant. Counting those two earlier operations, **three hosted operations** were used. There was no retry or address/profile fallback. No fixture was created, no content was read, and no helper invocation, application capture, browser action or deletion occurred.
+
+The initial access cause remains unknown; later access succeeded. Do not infer workspace absence, revocation or application-authentication failure from that first check.
+
+## Final actual hosted capture
+
+The first actual capture failed at Prepare with a generic diagnostic. A later instrumented attempt identified a strict room-echo mismatch while the requested path was correct. An owned synthetic source probe established that the request used the expected short address while the service returned its qualified form. Two focused fake-only mapping tests passed, and independent changed-delta review passed without rerunning them. The fixed private mapping preserves the original request address and exact path while requiring the pinned expected echo. It does not broadly accept aliases, rewrite the response or change the core reader.
+
+The final application-owned hosted read passed with **one discovery, one read, one Prepare and one source session**. The returned text matched the independently known **194-byte** synthetic source. Two authenticated reviews used the retained capture without another host read. Seven writer routes were denied; unauthenticated access, replay, second Prepare and direct Publish were refused. There were no authorization artifacts, executable jobs or source writes. Git answers remained synthetic and HTTP remained in memory.
+
+The owned note's recoverable deletion was applied and the local scratch root's absence verified. No independent trash listing was performed, and editor delivery was not acknowledged; do not claim editor synchronization. This is actual hosted returned-text capture plus actual core behavior, not browser/editor UI, real Git, publication or universal original-host raw-byte fidelity.
+
+## Separate browser and publication boundaries
+
+The browser route remains paused. The earlier browser request expired; its replacement is unused. Neither was approved or executed in the available evidence. The prior Nov 4 one-page read remains historical evidence and was not repeated here. The eventual real Cyberbase dogfood goal remains, but this evidence grants no source-read or publication authority.
+
+This documentation update follows code preservation checkpoint `e008353`, with no subsequent code changes. At the time of the smoke and documentation run, no new commit, push or merge was authorized or performed; any later local checkpoint is separate from that run. See the [owner publication rehearsal guide](/cyberbaser/development/owner-publication-rehearsal/) for the synthetic rehearsal and current evidence boundaries.

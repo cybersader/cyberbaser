@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "files": [
+    "browser-globals.d.ts",
+    "../components/suggestCorrectionDiff.ts",
+    "../components/suggestCorrectionSelection.ts",
+    "../components/suggestCorrectionClient.ts",
+    "../components/suggestCorrectionChallenge.ts",
+    "../components/scripts/suggest-correction.inline.ts"
+  ]
+}

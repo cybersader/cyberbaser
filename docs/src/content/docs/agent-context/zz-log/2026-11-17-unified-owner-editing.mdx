@@ -1,0 +1,92 @@
+---
+title: Shared page editing with a separate owner Save boundary
+description: "Visitors and owners share the exact-change page editor in the private rehearsal; owner Save uses a distinct durable authorization, while mobile finish controls remain visible."
+status: log
+tags: [contribution, testing, security]
+---
+
+The maintainer's phone walkthrough exposed two problems: editing hid the finish controls, and the owner's Edit link opened a separate whole-file Markdown surface whose Save was below a long textarea. This wave gives owners the existing tracked rendered-page editor without making their own changes pass through visitor intake and approval.
+
+## Experience
+
+On the suggestions-enabled private rehearsal, the visitor **Edit button** and the small private owner **Edit link** open the same rendered-page editing surface. Both retain exact source-bound changes, Undo/Redo, per-block Markdown, contextual review and per-change Remove. Rendered and Markdown changes still cannot mix within one block; hidden content remains excluded from source-editor blocks.
+
+Visitors finish with **Send · N**, then **Send suggestion**, retaining optional comments and the existing intake checks. Owners finish with **Save · N**, then **Continue to Save**, then **Save** on a separate owner-origin confirmation. That final confirmation is an intentional security tradeoff, not a visitor approval. The two role-entry controls remain separate; there is no cross-origin session probe.
+
+The **X** control leaves immediately when unchanged, otherwise offering **Discard**, **Save draft**, or **Keep editing**. Drafts are source-bound and tab-local, not server proposals. The review primary action sits bottom-right. Whole-file Markdown remains an advanced fallback in the enabled rehearsal, with fixed Save and X controls. A roughly 49 KB raw draft was restored in browser acceptance.
+
+Compatibility inspection found that owner-only builds without suggestions do not include the shared editor or provenance. Those builds, and pages missing provenance, retain the working raw Edit destination rather than redirecting into a nonexistent rendered editor. Independently enabled owner-only rendered editing is not implemented in this wave. Public build behavior remains the forge editor, without owner controls.
+
+## Authority boundary
+
+The coordinator directed a distinct durable owner-direct authorization with recovery checks, leaving visitor approvals unchanged. The implemented boundary is:
+
+1. The private owner entry authenticates and verifies source access before returning to the reader page.
+2. The reader uses the shared exact-operation ledger. Its native top-level form POST stages only a bounded, expiring in-memory handoff. It creates no authorization, executable job or source write.
+3. The owner origin obtains a fresh source session, rejects a stale revision or digest, and renders escaped change context under its existing strict CSP. Reader scripts and source HTML never run there.
+4. Save requires the existing owner session, exact owner Origin, CSRF token and a displayed edit token bound to the same session. It creates one immutable owner-direct authorization and starts the ordinary exact-change pipeline.
+5. The authorization binds job identity, base commit, policy revision, relative path, exact operations digest, complete source session and operation. Recovery verifies the record, including on a completed-job resume. Missing or changed authority fails closed.
+
+The operation envelope reuses canonical v2 derivation without inventing an approval decision. Owner-direct changes do not traverse intake or inherit visitor rate limits. The existing visitor approval guard remains in place. No whole-file serializer or second source writer was introduced.
+
+Cookies are host-scoped, not port-scoped: separate reader and owner ports do not mean the reader HTTP server never receives the session cookie. Reader scripts cannot read the HttpOnly cookie or obtain the owner CSRF token through the same-origin policy. Owner write routes still enforce Origin and CSRF. No credentialed cross-origin fetch was introduced.
+
+## Touch keyboard approach
+
+Finish controls sit bottom-right normally. When a touch editing surface has focus, they move to the visible viewport's top-right, including the safe-area inset, and reserve clearance above the caret. This does not depend on Safari reporting keyboard shrink. Visual-viewport resize/scroll and window resize/scroll update placement. This replaces the earlier approach that hid all finish controls while typing.
+
+## Verification
+
+- Full owner-alpha suite: **583 passed, 8 skipped, 0 failed**, with **43,129 assertions** across 40 files.
+- Focused suggestions-rehearsal suite: **19 passed, 2 skipped, 0 failed**. Opt-in live rehearsal tests were not enabled.
+- Focused renderer suite and strict browser TypeScript passed. Coverage includes the six combinations of shared-editor availability and page provenance, exact reconstruction, history, source-editor boundaries, viewport behavior, challenge-provider conformance and build guards.
+- The contained, offline three-page Quartz build and browser acceptance passed. It covered an eight-splice visitor submission, desktop/phone layouts, owner rendered and Markdown edits, cancel/draft restoration, owner-origin confirmation and the long raw-editor draft. The final private build emits the real owner link rather than replacing it in the test HTTP server.
+- A real HTTP/pipeline integration test applied two owner changes, including a Markdown block, as **one exact commit** in a throwaway repository. Untouched bytes were unchanged, no proposal approval/application event was fabricated, stale reuse failed, and deleting the authorization blocked recovery without changing Git state.
+- Negative HTTP tests reject missing session, wrong Origin, empty/missing CSRF, a different session's displayed edit token and stale source. Inert hostile-origin staging was tested separately from Save authority.
+- At 390 px width, a synthetic visual viewport of 420 px height with 40 px offset retained visible finish controls and caret clearance. Widths from 360 to 1280 px were exercised. Six owner screenshots were retained privately; review and raw fallback images were visually inspected.
+- Native T3 preview was used to enter editing, type a change, open the cancel sheet and discard on the synthetic app. No owned preview or test server was left running.
+
+The hermetic browser suite reported zero page errors and blocked pre-existing external theme requests. Its owner socket fixture intentionally cannot apply source writes: final browser confirmation and actual source effects are proven at separate layers, not claimed as one browser-driven final Save.
+
+## Delivery and limits
+
+The canonical [suggestions rehearsal guide](/cyberbaser/development/try-suggestions/) documents the visitor and owner flows. Its normal launch command is `bun run --cwd docs try:suggestions`; existing rehearsal instances must be stopped by their owner before launching a replacement. This wave did not start or restart the maintainer's running rehearsal.
+
+There was no commit, push, deployment, real-vault access or real source application. No new dependency was added. Real iOS Safari software-keyboard behavior, physical-device safe areas and maintainer acceptance remain unverified. The independently enabled owner-only rendered editor and a single consolidated role-entry control remain outside this implementation.
+
+
+## Maintainer feedback: pencil entry and a shorter owner Save
+
+The maintainer found the bordered Edit control too prominent, the three-tap owner Save redundant, the whole-file Markdown pill distracting, and the saving screen too technical. Owner and visitor entry now share one pencil presentation: 56 px, circular and safe-area-aware at the bottom-right on phones/coarse pointers, or a quiet 36 px inline metadata icon on desktop. `suggestions.editEntry` selects `auto` (default), `floating`, or `inline`; unknown values fail closed. The renderer receives `CYBERBASER_EDIT_ENTRY`. Placement invalidates the rendered-site cache but is excluded from the unchanged authority policy revision.
+
+Owner **Save · N** now stages directly and opens the existing separate-origin confirmation, removing the intermediate reader review sheet. **Back** restores both rendered and block-Markdown draft operations. Explicit owner Edit re-entry also resumes a paused draft. Visitor comments, review and challenge remain unchanged. **Edit whole file as Markdown** now sits below the cancel sheet's main choices. Unchanged cancel still exits immediately; a quiet **Markdown** metadata link keeps the fallback reachable outside editing.
+
+Saving now names the page and shows **Checking → Saving → Updating the site → Done**. Success offers **View page** and **Edit again**. Failure has one plain sentence; technical state, recovery instructions, job ID and rehearsal notices stay in **Details**. Polling, durable jobs, authorization, Origin/session/CSRF checks, inert staging and exact-splice application were not changed.
+
+Verification: owner-alpha **589 passed, 8 skipped, 0 failed**, with **43,169 assertions across 40 files**. The renderer focused suite and strict browser TypeScript passed. One contained offline three-page Quartz build and browser acceptance passed, including direct staging, confirmation Back draft restoration, placement options and polling progress/success. Screenshot inspection found a Quartz theme rule overriding the pencil's shape; a final shared-selector specificity correction was then verified against the built theme in 24 owner/visitor, phone/desktop, placement and light/dark combinations, without another full build. The final two entry screenshots use that final-source CSS; its final bundled artifact was not rebuilt. Screenshots remain private under `.workspace/concrete-flow/sol-pencil/`.
+
+The socket fixture cannot apply source writes; progress/success screenshots use synthetic read-only job records. Real software keyboards, physical safe-area behavior, deployment and the maintainer's running rehearsal were not exercised. No commit, push, real-vault application or live rehearsal restart occurred.
+
+## Mobile-pattern polish: visible mode and calmer controls
+
+[Wikipedia's mobile VisualEditor toolbar testing](https://www.mediawiki.org/wiki/VisualEditor_on_mobile/Toolbar_refresh) found that readers struggled to recognize editing mode. The shared editor now keeps an **Editing** (owner) or **Suggesting** (visitor) chip with a subtle green dot beside the history controls, including during touch-keyboard focus. **Cancel** replaces the cross glyph without changing immediate unchanged exit or the Discard / Save draft / Keep editing choices. The mobile utility cluster reserves extra caret clearance and does not collide with Cancel / Save at 360, 390 or 430 px.
+
+Following [Material 3 FAB guidance](https://m3.material.io/components/floating-action-button/guidelines), the floating pencil scales to 85% and fades to 70% while scrolling down, returning on scroll up or after scrolling stops. Reduced motion leaves it still. [GitBook's top-of-page actions](https://gitbook.com/docs/guides/customizing-your-site/how-to-customize-your-sites-configuration) and [GitHub's file-edit entry](https://docs.github.com/en/repositories/working-with-files/managing-files/editing-files) informed the quiet pencil-plus-**Edit** control aligned with desktop metadata. These are presentation references, not new contributor-usability evidence.
+
+The stray **Markdown** metadata link is removed. Owners retain **Edit whole file as Markdown** in the changed-draft Cancel sheet and as a quiet link on the existing owner confirmation page. One `--owner-primary` CSS variable supplies light/dark green for owner finish Save and success View page. Saving and success use the note name as the heading, with one **Saved** status in the card. Authority, Origin/CSRF/session handling, staging, visitor intake and exact source application are unchanged.
+
+Verification: contained renderer suite and strict browser TypeScript passed; owner-alpha **589 passed, 8 skipped, 0 failed**, **43,169 assertions across 40 files**. One full contained offline three-page Quartz build succeeded. Browser acceptance passed against that unchanged build, including mode text, Cancel targets, scroll down/up/stop and reduced motion, desktop label/alignment, absence of the metadata Markdown link, owner raw-link navigation, green light/dark primaries and one Saved status. Stale icon-only size assertions and a transition-start timing assertion were corrected in the test harness, then rerun with `--browser-only`; no second full build was run. Native T3 preview also inspected desktop and phone reading views; the owned tab was closed. The six requested stages were captured and visually inspected under `.workspace/concrete-flow/sol-polish2/`.
+
+Physical iOS/Safari keyboards, device safe areas, deployment and final browser-driven source writes remain unverified. Job screenshots use synthetic read-only records. No commit, push, real-vault access, rehearsal restart or new dependency occurred.
+
+## Phone retest follow-up
+
+- The floating status note ("Undone." and similar) stayed on screen indefinitely. It now clears itself after about 3.5 seconds or on tap. Only "Sending for owner review…" stays until the result. The in-form status line is unchanged for assistive technology.
+- Open design question raised by the maintainer: whether the edit entry (pencil) should be a Cyberbaser default at all, or a documented hook that each site or theme renders its own way, with defaults set from a future owner-facing settings surface. Not decided.
+- Change navigator: while editing, the toolbar shows previous/next arrows with "n of N". A jump scrolls the change to the middle of the screen and briefly outlines it (no motion under reduced-motion). With no current change, Next starts from the first change at or below the top of the screen. Scrolling by hand resets the position to the plain count. Tapping a change in the changes list jumps to it and closes the list on narrow screens. Checked headless on an iPhone 13 profile and at 1280 px against the live rehearsal: three changes, next/previous positions correct, highlight present, status note gone after four seconds.
+
+## Publish parity: note source controls
+
+The Cyberbase vault agent relayed an owner requirement: keep the copy, show-raw and source controls that `publish.js` provides on cybersader.com. Added `NoteActions` (header link row and "Interact with this note" footer), `NoteDates` (created/updated from vault frontmatter, replacing Quartz ContentMeta, whose date showed the projection copy time) and a pluggable `SourceHost` with a GitHub provider. Links come from the vault path, not the slug. Copy Markdown writes the raw file to the clipboard (Clipboard API with a promise item for Safari, writeText, then legacy copy on plain-HTTP sites, then opening the raw file). Checked on the rehearsal build at 1280 px and iPhone 13: correct links for an emoji-folder note, dates "May 15, 2024" / "Feb 12, 2025" from frontmatter, phone row reduced to two links, and in a policy-free localhost serve of the same build the clipboard received the 4,386-character raw note. Recorded as a migration must-have in the Quartz publishing migration page. PostHog analytics is left for the owner to decide.
+
+The owner then approved carrying PostHog over. Added `analyticsProviders.ts` (provider interface, PostHog provider using the official loader stub, settings embedded as validated JSON) and a render-nothing `Analytics` component. It is enabled only for public builds inside the vault repository or with an explicit opt-in, never for owner builds, so private edits and test runs are not counted. Unit-tested: settings, single init across repeated script runs, one page view per navigation, key and host validation. Not yet observed in a deployed build.

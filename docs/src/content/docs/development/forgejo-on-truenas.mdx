@@ -1,0 +1,53 @@
+---
+title: Forgejo on TrueNAS
+description: "How to stand up the maintainer's own Forgejo on TrueNAS for this project: the forge as a TrueNAS app, no runner until Actions are needed, and the runner in a VM when they are. Checked against the TrueNAS app catalog and this project's Forgejo 16 pins on 2026-09-27."
+sidebar:
+  order: 12.5
+status: research
+tags: [setup, architecture, governance]
+---
+
+The maintainer runs TrueNAS and asked whether Forgejo has to be a virtual machine or can be a TrueNAS app. Short answer: **the forge is fine as a TrueNAS app; the Actions runner is the part that deserves a VM, and this project does not need a runner yet.**
+
+:::note[What was checked]
+The TrueNAS community catalog's `forgejo` app ships `codeberg.org/forgejo/forgejo:16.0.5-rootless` with Postgres 17 or 18, runs as an unprivileged user, mounts no host paths, and stores everything on one dataset. Its `forgejo-runner` app ships `code.forgejo.org/forgejo/runner:13.2.0` and offers to mount the host's Docker socket. Forgejo 16.0.x is the current line; 15.0 is the LTS. This project's Forgejo adapters are pinned to Forgejo 16, so the catalog version matches. Read from the catalog's app definitions on 2026-09-27.
+:::
+
+## What Forgejo is for here, in order
+
+1. **A place where people can suggest changes as pull requests.** The Lane A adapter already turns one open Forgejo pull request into one exact proposal for the owner's review, read-only. It has only ever been run against injected metadata. A real instance lets it be validated live. This needs Forgejo and a copy of the vault repository. It needs **no runner**.
+2. **Login without a GitHub account.** Forgejo is an OpenID Connect provider out of the box. That is the identity seam the plan keeps open; nothing here selects it.
+3. **Running checks and publishing from Forgejo instead of GitHub.** That is the authority cutover the plan explicitly leaves out of this arc. It is the only step that needs Forgejo Actions and therefore a runner.
+
+So the near-term install is small: the forge, on the private network, holding a copy of the vault.
+
+## Where each piece runs
+
+| Piece | Run it as | Why |
+|---|---|---|
+| Forgejo | A TrueNAS app on its own dataset | Rootless image, no host mounts, Postgres included, ports and TLS handled by the app. Nothing about it is DevOps-shaped. |
+| Vault repository | A normal repository inside that Forgejo, seeded from GitHub | A Forgejo pull mirror would be read-only and could not accept pull requests. Authority stays with GitHub until a separate decision. |
+| Forgejo Actions runner | Not yet. Later, in a TrueNAS virtual machine with its own Docker engine | As an app, the runner wants `/var/run/docker.sock`, which is root on the NAS. A VM keeps that blast radius inside the VM. This project's own phase-one gate proved the runner shape that is safe: jobs in unprivileged run-scoped containers, never on the host. |
+| Public exposure | Not yet. Later, Cloudflare Tunnel or nothing | Private network first. Exposing a forge is its own safety decision. |
+
+## Installing the forge (TrueNAS UI, no terminal)
+
+1. **Datasets.** Make one dataset for Forgejo data and one for its Postgres data. Leave ownership to the app; the app's permissions step sets it.
+2. **Apps, Discover, Forgejo.** Install from the community train. Choose Postgres 18. Set the root URL to the exact address you will type in a browser, with the port, for example `https://forge.home.arpa:8443`; the app refuses anything that is not a full URL. Keep the web port published on the NAS's private address only. Keep SSH published too if you want SSH clones; HTTPS is enough for this project.
+3. **Certificate.** Pick a TrueNAS certificate for the app so the forge speaks HTTPS. This project's adapters require HTTPS and a canonical origin, and reject credentials in URLs.
+4. **First sign-in.** The first account created is the administrator. Make one owner account, and turn off open registration in Site Administration.
+5. **The vault repository.** In Forgejo, choose **New Migration**, pick Git or GitHub, paste the public vault address, and leave **This repository will be a mirror** unchecked. Forgejo copies the repository once, in the browser, with no Git client. A mirror would be read-only and could not take pull requests; a plain copy can. Authority stays with GitHub until a separate decision, so this copy will drift and is only for suggestions and validation.
+6. **Write down** the origin, the repository slug, and the Forgejo version shown in the footer. The intake adapter's configuration needs the first two.
+
+## What to do with it first
+
+- **Let pull requests reach your inbox.** Turn on the forge watcher in the intake service's config, pointing at the vault copy, and list the copy in your owner app's `repository.aliases`. Then open one pull request against the copy that changes one sentence on one page, and watch it appear in Proposals. The check, its pass and fail, and its record are on [Forgejo Lane A live validation](/cyberbaser/development/forgejo-lane-a-live-validation/); the design is [Pull requests in the inbox](/cyberbaser/design/pull-requests-in-the-inbox/). Only accounts you create can open a request. It does not offer a lane to anyone else.
+- **Do not** install workflows, register a runner, mirror to or from GitHub, or link the forge from the public site. Each of those is a later decision.
+
+## When a runner becomes worth it
+
+Only when the maintainer decides to move checks or publishing to Forgejo. Then: create a TrueNAS virtual machine (Debian, a small disk on ZFS), install Docker inside it, run the runner there with the run-scoped container labels the phase-one gate proved, and point it at the forge over the private network. The runner never mounts the NAS's Docker socket. Forgejo 16 is a non-LTS line with support ending in late October 2026; before moving anything authoritative, the adapters' version pin should be reviewed against the line the maintainer intends to stay on.
+
+## Evidence boundary
+
+This page is a setup plan checked against the app catalog definitions and this project's pins. Nothing has been installed. No live Forgejo has been validated by this project. Lane A remains not installed, not linked, and not offered.

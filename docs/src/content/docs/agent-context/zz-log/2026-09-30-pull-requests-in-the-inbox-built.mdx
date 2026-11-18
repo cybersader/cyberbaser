@@ -1,0 +1,40 @@
+---
+title: "2026-09-30 · Pull requests in the inbox, built"
+description: "The maintainer accepted the inbox-connection design and asked for it tests first. Built the forge watcher inside the intake service with a form-off mode, repository aliases in owner policy, the forge line and folded heads in Proposals, and the close reminder on applied receipts. Proven hermetically through the real service, queue, and owner app."
+date: 2026-09-30
+status: implementation
+tags: [design, governance, testing, contribution]
+---
+
+## Maintainer direction
+
+Asked as a funnel: accept the core shape; list the Forgejo copy as the same vault rather than moving authority; the owner closes requests in Forgejo themselves; build it, tests first.
+
+## What was built
+
+- **Owner policy.** `repository.aliases` (at most eight canonical HTTPS repository URLs, never the remote itself). `repositoryMatchesPolicy` is used at review and at Apply. An empty list leaves the pinned GitHub policy revision unchanged; a non-empty list changes it, as any policy change should.
+- **Adapter.** `listOpenPullRequests` on the Forgejo API client: one bounded read-only page after the version preflight. `readRetained` on the Git reader: base blob and policy from local objects only, for recovery.
+- **Intake service.** An optional `forgejo` config block; `listen`, `publicOrigin`, and `allowedFormOrigins` may be off when the watcher is on. `forgejo-watcher.js` prepares a private clone with gc off, loads the seen set from the open queue, polls, reads each new head through the adapter, retains the base commit under `refs/cyberbaser/lane-a/retained/`, and enqueues a Lane A entry with the verified forge subject. Recovery resolves Lane A entries from the clone before the queue opens to callers. The runtime starts no public listener when the form is off and stops the watcher on close. The launcher says which inputs are on.
+- **Owner inbox.** Rows and the review header carry *From pull request #N on your forge*, linking to the request built from the bound repository, plus the forge account number on the header. Several heads of one request are one row with earlier versions folded; the waiting count counts requests. The applied receipt reminds the owner to close the request in Forgejo.
+- **Packaging.** The intake app depends on `@cyberbaser/forgejo-intake`; both intake workflows, the container image, its ignore file, and their structure tests carry the package.
+
+Canonical page: [Pull requests in the inbox](/cyberbaser/design/pull-requests-in-the-inbox/), now marked accepted and built.
+
+## Findings during the build
+
+- Queue recovery runs before the queue is open to callers, so the watcher's evidence resolver must need only its clone, never the queue; clone preparation and the seen-set load are separate steps.
+- The adapter's temporary refs are deleted after each read, which would leave the base commit prunable; a retained ref per base commit and gc off in the clone keep recovery honest.
+- The intake app cannot import `@cyberbaser/proposal` directly (not a declared dependency); the test uses a relative path.
+
+## Checks
+
+```text
+bun test apps/account-free-intake/test packages/forgejo-intake/test packages/proposal-queue/test
+         deploy/account-free-intake/test/structure.test.js deploy/account-free-intake/test/stage-config.test.js
+         apps/owner-alpha/test deploy/owner-alpha/test/structure.test.js
+  354 passed, 0 failed
+```
+
+## Boundaries
+
+No live forge watched. Nothing exposed, offered, merged, or written to any forge. GitHub remains authority. The Lane A live validation and the first real application run still wait on the maintainer's Forgejo and machine.

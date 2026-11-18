@@ -1,19 +1,35 @@
+import { authorizeOwnerDirect, createOwnerHandoffStore, deriveOwnerDirect, validateOwnerHandoff } from './owner-direct.js';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { constants } from 'node:fs';
 import { lstat, open, realpath, rename, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { reviewProposalBinding, OWNER_DECISION_REASON_MAX_BYTES } from '@cyberbaser/proposal-review';
+import { validateDigest, validateQueueId } from '@cyberbaser/proposal-queue';
 import { loadOwnerAlphaConfig, validateOwnerAlphaConfig } from './config.js';
+import {
+  createProposalDecisionOverlay,
+  recordProposalDecision,
+  recoverProposalDecisions,
+} from './proposal-decisions.js';
+import { createProposalReviewClient } from './proposal-review-client.js';
+import { createOwnerProposalReviewSource } from './proposal-review.js';
+import { applyApprovedProposal, assessProposalApplication, listProposalApplicationProgress } from './proposal-application.js';
+import { documentProjection, segmentsWithinSpan } from '@cyberbaser/review-projection';
 import { fail, OwnerAlphaError } from './errors.js';
 import { listDurableJobs, loadDurableJob, validateJobId } from './job-state.js';
 import { ensureOwnerSite } from './site.js';
-import { createEditSession as createSourceEditSession } from './source.js';
+import { createEditSession as createSourceEditSession, liveUrlForSlug } from './source.js';
 import { prepareStore, storeContextFromConfig } from './store.js';
+import { startSuggestionIntake, suggestionFormOrigin, suggestionChallengeOrigin } from './suggestions.js';
+import { createOwnerPublicationRuntime, createPublicationSourceGuard } from './owner-publication-runtime.js';
+import { publicationDisplay } from './publication-display.js';
 
 const COOKIE_NAME = 'owner_alpha_session';
 export const MAX_OWNER_SESSIONS = 64;
 const DEFAULT_EDIT_SESSION_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_MAX_EDIT_SESSIONS = 64;
+const MAX_REVIEW_DECISION_BODY_BYTES = OWNER_DECISION_REASON_MAX_BYTES + 16 * 1024;
 const MAX_STATIC_BYTES = 64 * 1024 * 1024;
 const PUBLIC_ROOT = fileURLToPath(new URL('../public/', import.meta.url));
 const PROJECT_ROOT = path.resolve(fileURLToPath(new URL('../../../', import.meta.url)));
@@ -49,6 +65,18 @@ const READER_CSP = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net",
   "worker-src 'self' blob:",
 ].join('; ');
+
+// The reader site may post suggestions only to the intake the owner app runs
+// beside it, and only when the owner turned the form on.
+function readerCsp(config) {
+  const formOrigin = suggestionFormOrigin(config);
+  const reader = READER_CSP.replace("form-action 'none'", `form-action http://${config.listen.host}:${config.listen.port}`);
+  if (formOrigin === null) return reader;
+  const csp = reader.replace("connect-src 'self'", `connect-src 'self' ${formOrigin}`);
+  const challengeOrigin = suggestionChallengeOrigin(config);
+  if (challengeOrigin === null) return csp;
+  return `${csp.replace("script-src 'self'", `script-src 'self' ${challengeOrigin}`)}; frame-src ${challengeOrigin}`;
+}
 
 const CONTENT_TYPES = Object.freeze({
   '.avif': 'image/avif',
@@ -160,8 +188,9 @@ function textareaText(value) {
   return value.startsWith('\n') ? `\n${escaped}` : escaped;
 }
 
-function pageShell({ title, body, script = null }) {
+function pageShell({ title, body, script = null, bodyClass = null }) {
   const scriptTag = script ? `<script src="${script}" defer></script>` : '';
+  const bodyAttribute = bodyClass === null ? '' : ` class="${escapeHtml(bodyClass)}"`;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -171,27 +200,44 @@ function pageShell({ title, body, script = null }) {
 <link rel="stylesheet" href="/owner/assets/owner.css">
 ${scriptTag}
 </head>
-<body>
+<body${bodyAttribute}>
 ${body}
 </body>
 </html>
 `;
 }
 
-function editPage({ editSessionId, csrfToken, session }) {
+function signInPage() {
+  return pageShell({
+    title: 'Sign in',
+    script: '/owner/assets/bootstrap.js',
+    body: `<main class="owner-shell">
+<header class="owner-header"><h1 id="owner-bootstrap-heading">Sign in</h1></header>
+<label for="owner-bootstrap-token">One-time sign-in code</label>
+<input id="owner-bootstrap-token" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="43">
+<div class="actions"><button id="owner-bootstrap-submit" type="button">Sign in</button></div>
+<p id="owner-bootstrap-status" class="status" role="status" aria-live="polite"></p>
+<noscript><p>Signing in needs scripting enabled in this browser.</p></noscript>
+</main>`,
+  });
+}
+
+function editPage({ editSessionId, csrfToken, session, reviewEnabled, publicationEnabled }) {
   return pageShell({
     title: 'Owner edit',
     script: '/owner/assets/editor.js',
-    body: `<main class="owner-shell" id="owner-editor" data-edit-session-id="${escapeHtml(editSessionId)}" data-csrf="${escapeHtml(csrfToken)}">
-<header class="owner-header">
-<p class="eyebrow">Owner alpha</p>
+    body: `<main class="owner-shell" id="owner-editor" data-source-digest="${escapeHtml(session.source.digest)}" data-edit-session-id="${escapeHtml(editSessionId)}" data-csrf="${escapeHtml(csrfToken)}">
+<header class="owner-header review-detail-header">
+<div><p class="eyebrow">Owner alpha</p>
 <h1>Edit Markdown</h1>
-<p class="lede">One bounded Save publishes through the configured owner-controlled pipeline.</p>
+<a href="/owner/in-place?relativePath=${encodeURIComponent(session.relativePath)}&amp;slug=${encodeURIComponent(session.slug)}">Back to page editor</a></div>
+${reviewEnabled ? '<a href="/owner/review">Review proposals</a>' : ''}
+${publicationEnabled ? '<a href="/owner/publication">Publish workspace page</a>' : ''}
 </header>
 <form id="edit-form">
 <label for="edited-text">Markdown</label>
 <textarea id="edited-text" name="editedText" spellcheck="false" autocomplete="off">${textareaText(session.source.text)}</textarea>
-<div class="actions"><button type="submit" id="save-button">Save and publish</button></div>
+<div class="actions owner-finish"><button type="button" id="cancel-edit" aria-label="Cancel editing">Cancel</button><button type="submit" id="save-button">Save</button></div>
 <p id="form-status" class="status" role="status" aria-live="polite"></p>
 </form>
 </main>`,
@@ -221,32 +267,980 @@ function publicJob(job) {
   } else {
     result.failure = null;
   }
+  if (job.origin && typeof job.origin === 'object' && typeof job.origin.type === 'string') {
+    result.origin = { type: job.origin.type };
+    if (typeof job.origin.relativePath === 'string') result.origin.relativePath = job.origin.relativePath;
+    if (job.origin.type === 'approved-proposal' && typeof job.origin.queueId === 'string') {
+      result.origin.queueId = job.origin.queueId;
+    }
+  }
   return result;
 }
 
+// The job in the owner's words: five things that happen to a change on its way
+// to the page, which one is happening now, and what stopped if something did.
+// Raw pipeline states stay available under the plain-words stage.
+const JOB_STEPS = Object.freeze([
+  { key: 'check', label: 'Checking the page', states: ['accepted', 'preflighting', 'checking', 'rendering', 'ready-to-apply'] },
+  { key: 'change', label: 'Changing the page and saving the commit', states: ['applying', 'source-applied', 'committing', 'committed'] },
+  { key: 'push', label: 'Pushing to your repository', states: ['pushing', 'pushed'] },
+  { key: 'build', label: 'Waiting for the site to build', states: ['discovering-run', 'run-bound', 'monitoring-deployment', 'deployment-succeeded'] },
+  { key: 'live', label: 'Checking the live page', states: ['verifying-live', 'live-verification-failed'] },
+  { key: 'refresh', label: 'Refreshing your local copy', states: ['live-confirmed', 'rebuilding-local'] },
+]);
+const JOB_STOPS = Object.freeze({
+  completed: { step: 6, copy: 'Live on the page.' },
+  'blocked-pre-apply': { step: 0, copy: 'Stopped before changing the page. Nothing changed.' },
+  'deployment-failed': { step: 3, copy: 'The page changed and was pushed, but the site build failed.' },
+  'live-verification-failed': { step: 4, copy: 'Published, but the live page has not shown the change yet. Checking again.' },
+  'manual-intervention': { step: 1, copy: 'Stopped partway and needs your attention.' },
+  failed: { step: 0, copy: 'Stopped.' },
+  cancelled: { step: 0, copy: 'Cancelled.' },
+});
+
+function jobStepIndex(state) {
+  const index = JOB_STEPS.findIndex((step) => step.states.includes(state));
+  if (index !== -1) return index;
+  return JOB_STOPS[state]?.step ?? 0;
+}
+
+function jobStageCopy(state) {
+  if (state === null || state === undefined) return 'Never started';
+  if (JOB_STOPS[state]) return JOB_STOPS[state].copy;
+  const step = JOB_STEPS.find((item) => item.states.includes(state));
+  return step ? step.label : state;
+}
+
+// Display groups only. The underlying job state machine and recovery are unchanged.
+const SAVE_STEPS = Object.freeze([
+  { key: 'check', label: 'Checking', states: JOB_STEPS[0].states },
+  { key: 'save', label: 'Saving', states: [...JOB_STEPS[1].states, ...JOB_STEPS[2].states] },
+  { key: 'site', label: 'Updating the site', states: JOB_STEPS.slice(3).flatMap(step => step.states) },
+  { key: 'done', label: 'Done', states: ['completed'] },
+]);
+const SAVE_STOPS = Object.freeze(Object.fromEntries(Object.entries(JOB_STOPS).map(([state, value]) => [state, {
+  step: state === 'completed' ? 3 : value.step === 0 ? 0 : value.step < 3 ? 1 : 2,
+  copy: state === 'completed' ? 'Saved' : state === 'live-verification-failed' ? 'Updating the site' : 'The save did not finish. Open Details for what happened.',
+}])));
 function jobPage(job, readerOrigin) {
   const safe = publicJob(job);
+  if (safe.origin?.type === 'owner-publication') return publicationJobPage(safe);
+  const done = safe.state === 'completed';
+  const stopped = Object.hasOwn(SAVE_STOPS, safe.state) && !done && safe.state !== 'live-verification-failed';
+  const current = SAVE_STEPS.findIndex(step => step.states.includes(safe.state));
+  const active = current === -1 ? SAVE_STOPS[safe.state]?.step ?? 0 : current;
+  const copy = SAVE_STOPS[safe.state]?.copy ?? SAVE_STEPS[active].label;
+  const title = job.page?.title || safe.origin?.relativePath?.split('/').at(-1)?.replace(/\.md$/u, '') || 'Your page';
+  const slug = job.page?.slug ?? safe.origin?.relativePath?.replace(/\.md$/u, '');
+  const view = slug ? liveUrlForSlug(`${readerOrigin}/cyberbase/`, slug) : `${readerOrigin}/cyberbase/`;
+  const edit = safe.origin?.relativePath && slug ? `/owner/in-place?relativePath=${encodeURIComponent(safe.origin.relativePath)}&slug=${encodeURIComponent(slug)}` : `${readerOrigin}/cyberbase/`;
+  const steps = SAVE_STEPS.map((step, index) => {
+    const status = done || index < active ? 'done' : index === active ? (stopped ? 'stopped' : 'current') : 'pending';
+    return `<li class="job-step job-step-${status}" data-step="${step.key}" data-status="${status}">${step.label}</li>`;
+  }).join('');
+  const stages = escapeHtml(JSON.stringify({ steps: SAVE_STEPS, stops: SAVE_STOPS, technical: { steps: JOB_STEPS, stops: JOB_STOPS } }));
   return pageShell({
-    title: `Owner job ${safe.jobId}`,
-    script: '/owner/assets/job.js',
-    body: `<main class="owner-shell" id="owner-job" data-job-id="${escapeHtml(safe.jobId)}">
-<header class="owner-header">
-<p class="eyebrow">Owner alpha</p>
-<h1>Save job</h1>
-<p class="lede">This page reports the durable pipeline state. It has no mutation controls.</p>
-</header>
-<section class="job-card" aria-live="polite">
-<dl>
-<div><dt>Job</dt><dd id="job-id">${escapeHtml(safe.jobId)}</dd></div>
-<div><dt>State</dt><dd id="job-state">${escapeHtml(safe.state)}</dd></div>
-<div><dt>Updated</dt><dd id="job-updated">${escapeHtml(safe.updatedAt ?? '')}</dd></div>
-</dl>
-<p id="job-recovery" class="status">${escapeHtml(safe.recovery?.instruction ?? '')}</p>
-<p id="job-error" class="error" role="alert"></p>
+    title, script: '/owner/assets/job.js',
+    body: `<main class="owner-shell save-progress" id="owner-job" data-job-id="${escapeHtml(safe.jobId)}" data-stages="${stages}">
+<header class="owner-header"><h1 id="save-heading">${escapeHtml(title)}</h1></header>
+<section class="job-card" aria-live="polite"><p class="job-stage"><strong id="job-stage">${escapeHtml(copy)}</strong></p>
+<ol class="job-steps" id="job-steps"${done || stopped ? ' hidden' : ''}>${steps}</ol>
+<div class="save-result-links" id="save-result-links"${done ? '' : ' hidden'}><a class="save-view-page" href="${escapeHtml(view)}">View page</a><a href="${escapeHtml(edit)}">Edit again</a></div>
 </section>
-<p><a href="${escapeHtml(readerOrigin)}/cyberbase/">Return to Cyberbase</a></p>
+<details class="job-details" id="job-details"><summary>Details</summary><div id="job-rehearsal-details"></div>
+<p id="job-technical-stage">${escapeHtml(jobStageCopy(safe.state))}</p><p id="job-recovery" class="status">${escapeHtml(safe.recovery?.instruction ?? '')}</p>
+<p id="job-error" class="error">${safe.failure ? `Stopped (${escapeHtml(safe.failure.code)}).` : ''}</p>
+<p class="job-technical">Job <span id="job-id">${escapeHtml(safe.jobId)}</span> · state <span id="job-state">${escapeHtml(safe.state)}</span> · updated <span id="job-updated">${escapeHtml(safe.updatedAt ?? '')}</span></p></details>
+<p class="job-links">${safe.origin?.type === 'approved-proposal' ? `<a href="/owner/decisions/${encodeURIComponent(safe.origin.queueId)}">Back to the suggestion</a> · ` : ''}<a href="${escapeHtml(readerOrigin)}/cyberbase/">Return to Cyberbase</a></p></main>`,
+  });
+}
+
+function proposalText(bytesBase64) {
+  return Buffer.from(bytesBase64, 'base64').toString('utf8');
+}
+
+function compactReviewText(value, maximum = 160) {
+  const text = String(value).replace(/\s+/gu, ' ').trim();
+  if (text.length <= maximum) return text;
+  return `${text.slice(0, Math.max(1, maximum - 1)).trimEnd()}…`;
+}
+
+// Owners think in days, not minutes: show the date and keep the exact instant
+// on the element for anyone who needs it.
+function reviewTime(value) {
+  const instant = new Date(value);
+  const visible = Number.isNaN(instant.getTime())
+    ? value
+    : new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeZone: 'UTC' }).format(instant);
+  return `<time datetime="${escapeHtml(value)}" title="${escapeHtml(value)}">${escapeHtml(visible)}</time>`;
+}
+
+function proposalView(entry) {
+  const proposal = entry.evidence.proposal;
+  const binding = reviewProposalBinding(proposal);
+  const operations = entry.changes?.operations ?? binding.operations;
+  const first = operations[0];
+  const legacy = proposal.schemaVersion === 1 ? proposal.operation : null;
+  return Object.freeze({
+    version: proposal.schemaVersion, path: binding.source.path, operations,
+    operation: legacy ?? { ...first, type: 'offset' },
+    oldText: first.expected, replacementText: first.replacement,
+    prefix: first.context?.before ?? legacy?.selector?.prefix ?? '',
+    suffix: first.context?.after ?? legacy?.selector?.suffix ?? '',
+    hasContext: first.context !== undefined || legacy?.selector != null,
+  });
+}
+
+function changeInspection(entry) {
+  const view = proposalView(entry);
+  return `<section class="change-inspection" aria-label="Each exact change"><h2>${view.operations.length} ${view.operations.length === 1 ? 'change' : 'changes'}</h2>${view.operations.map((op, index) => {
+    const position = op.startPosition ? `Line ${op.startPosition.line}, column ${op.startPosition.column}` : `Bytes ${op.start}–${op.end}`;
+    return `<article class="inspected-change"><h3>Change ${index + 1} · ${escapeHtml(position)}</h3><p class="context-note">${escapeHtml(op.context?.before ?? '')}</p><div class="exact-change-grid"><div><h4>Before</h4><pre>${escapeHtml(op.expected)}</pre></div><div><h4>After</h4><pre>${escapeHtml(op.replacement)}</pre></div></div><p class="context-note">${escapeHtml(op.context?.after ?? '')}</p></article>`;
+  }).join('')}</section>`;
+}
+
+function changeName(view) {
+  if (view.version === 2) return `${view.path} — ${view.operations.length} ${view.operations.length === 1 ? 'change' : 'changes'}`;
+  const oldText = compactReviewText(view.oldText, 64);
+  const replacementText = compactReviewText(view.replacementText, 64);
+  if (oldText.length === 0) return `Add “${replacementText}”`;
+  if (replacementText.length === 0) return `Remove “${oldText}”`;
+  return `“${oldText}” to “${replacementText}”`;
+}
+
+function changedText(value) {
+  return value.length === 0
+    ? '<span class="empty-change">nothing</span>'
+    : escapeHtml(value);
+}
+
+function compactContext(value, maximum, { fromEnd = false } = {}) {
+  const text = String(value).replace(/\s+/gu, ' ');
+  if (text.length <= maximum) return text;
+  return fromEnd
+    ? `…${text.slice(-(maximum - 1))}`
+    : `${text.slice(0, maximum - 1)}…`;
+}
+
+function proposalContext(view, mode, { compact = false } = {}) {
+  const prefix = compact ? compactContext(view.prefix, 72, { fromEnd: true }) : view.prefix;
+  const suffix = compact ? compactContext(view.suffix, 72) : view.suffix;
+  const selected = mode === 'current' ? view.oldText : view.replacementText;
+  const bounded = compact ? compactReviewText(selected, 96) : selected;
+  const context = view.hasContext
+    ? `${escapeHtml(prefix)}<mark class="changed-word changed-${mode}">${changedText(bounded)}</mark>${escapeHtml(suffix)}`
+    : `<mark class="changed-word changed-${mode}">${changedText(bounded)}</mark>`;
+  return `<span class="proposal-prose">${context}</span>`;
+}
+
+function changeSummaryHtml(view, { compact = false } = {}) {
+  if (view.version === 2) return `<span class="proposal-prose">${escapeHtml(changeName(view))}</span>`;
+  const prefix = compact ? compactContext(view.prefix, 60, { fromEnd: true }) : view.prefix;
+  const suffix = compact ? compactContext(view.suffix, 60) : view.suffix;
+  const oldText = compact ? compactReviewText(view.oldText, 80) : view.oldText;
+  const newText = compact ? compactReviewText(view.replacementText, 80) : view.replacementText;
+  const removed = view.oldText.length === 0 ? '' : `<del class="changed-word changed-current">${escapeHtml(oldText)}</del>`;
+  const added = view.replacementText.length === 0 ? '' : `<ins class="changed-word changed-proposed">${escapeHtml(newText)}</ins>`;
+  const marks = `${removed}${removed !== '' && added !== '' ? ' ' : ''}${added}`;
+  return view.hasContext
+    ? `<span class="proposal-prose">${escapeHtml(prefix)}${marks}${escapeHtml(suffix)}</span>`
+    : `<span class="proposal-prose">${marks}</span>`;
+}
+
+function decisionEntry(decision, summary) {
+  return Object.freeze({
+    summary: {
+      schemaVersion: 1,
+      artifactType: 'cyberbaser-proposal-review-summary',
+      queueId: summary.queueId,
+      proposalId: summary.proposalId,
+      proposalDigest: summary.proposalDigest,
+      candidateDigest: summary.candidateDigest,
+      reviewEvidenceDigest: summary.reviewEvidenceDigest,
+      source: summary.source,
+      receivedAt: summary.receivedAt,
+      expiresAt: summary.expiresAt,
+      state: decision.reviewEvidence.state.state,
+      lane: summary.lane,
+      tier: summary.tier,
+      route: summary.route,
+    },
+    evidence: decision.reviewEvidence,
+    sourceVerification: null,
+  });
+}
+
+// A suggestion that arrived as a pull request on the owner's forge says so:
+// which request, where, and which forge account opened it. The link is built
+// from the repository the proposal is bound to, never from contributor text.
+function forgeOrigin(entry) {
+  const carrier = entry.evidence?.carrier;
+  if (carrier?.lane !== 'lane-a' || !carrier.metadata) return null;
+  const repository = String(entry.summary.source.repository);
+  let base;
+  try {
+    const url = new URL(repository);
+    if (url.protocol !== 'https:') return null;
+    base = url.toString().replace(/\.git$/u, '');
+  } catch {
+    return null;
+  }
+  const number = carrier.metadata.pullRequestNumber;
+  if (!Number.isSafeInteger(number) || number < 1) return null;
+  const subject = entry.evidence.classification?.verifiedSubject?.author;
+  const account = typeof subject === 'string' ? (/#user=(\d{1,20})$/u.exec(subject)?.[1] ?? null) : null;
+  return Object.freeze({
+    number,
+    url: `${base}/pulls/${number}`,
+    account,
+    headSha: carrier.metadata.headSha,
+    key: `${carrier.metadata.repositoryId}:${number}`,
+  });
+}
+
+function forgeOriginHtml(origin, { compact = false } = {}) {
+  if (origin === null) return '';
+  const account = origin.account === null ? '' : ` by forge account #${escapeHtml(origin.account)}`;
+  return `<span class="forge-origin">From <a href="${escapeHtml(origin.url)}" rel="noopener noreferrer">pull request #${origin.number}</a> on your forge${compact ? '' : account}</span>`;
+}
+
+// Several heads of one request are one suggestion in the owner's eyes: the
+// newest is the row, earlier heads fold beneath it.
+function groupActionable(entries) {
+  const groups = new Map();
+  const order = [];
+  for (const entry of entries) {
+    const origin = forgeOrigin(entry);
+    const key = origin === null ? `queue:${entry.summary.queueId}` : `forge:${origin.key}`;
+    if (!groups.has(key)) {
+      groups.set(key, []);
+      order.push(key);
+    }
+    groups.get(key).push(entry);
+  }
+  return order.map((key) => {
+    const members = [...groups.get(key)].sort((left, right) => right.summary.receivedAt.localeCompare(left.summary.receivedAt));
+    return { entry: members[0], earlier: members.slice(1) };
+  });
+}
+
+// Decided rows say how far a suggestion got: Rejected, Approved (not yet on
+// the page), Applied (on its way), or Live (confirmed on the page).
+function decisionLabel(decision, application) {
+  if (decision.action !== 'approve') return { key: 'reject', text: 'Rejected', at: decision.decidedAt };
+  if (application?.state === 'live') return { key: 'live', text: 'Live', at: application.appliedAt };
+  if (application?.state === 'applied') return { key: 'applied', text: 'Applied', at: application.appliedAt };
+  return { key: 'approve', text: 'Approved', at: decision.decidedAt };
+}
+
+function reviewSummaryCard(entry, href, decision = null, application = null, earlier = []) {
+  const view = proposalView(entry);
+  const rationale = compactReviewText(entry.evidence.proposal.submission.rationale, 180);
+  const path = `<span class="proposal-row-path">${escapeHtml(entry.summary.source.path)}</span>`;
+  const label = decision === null ? null : decisionLabel(decision, application);
+  const origin = forgeOrigin(entry);
+  const forge = forgeOriginHtml(origin, { compact: true });
+  const meta = decision === null
+    ? `${path}<span>Received ${reviewTime(entry.summary.receivedAt)}</span><span>Expires ${reviewTime(entry.summary.expiresAt)}</span>${forge}${entry.summary.route === 'reject' ? '<span class="attention-note">Your policy suggests rejecting</span>' : ''}`
+    : `<span class="decision-label decision-${label.key}">${label.text}</span><span>${reviewTime(label.at)}</span>${path}${forge}<span class="proposal-row-note">\u201c${escapeHtml(compactReviewText(decision.reason, 120))}\u201d</span>`;
+  const folded = earlier.length === 0
+    ? ''
+    : `<p class="earlier-versions">Earlier ${earlier.length === 1 ? 'version' : 'versions'} of this request: ${earlier.map((item) => `<a href="/owner/review/${encodeURIComponent(item.summary.queueId)}">received ${reviewTime(item.summary.receivedAt)}</a>`).join(', ')}</p>`;
+  return `<article class="proposal-row">
+<a class="proposal-row-link" href="${escapeHtml(href)}">
+<span class="proposal-row-change">${changeSummaryHtml(view, { compact: true })}</span>
+<span class="proposal-row-rationale">${escapeHtml(rationale)}</span>
+<span class="proposal-row-meta">${meta}</span>
+</a>
+${folded}</article>`;
+}
+
+function reviewListPage({ overlay, nextCursor }) {
+  const actionable = overlay.actionable.length === 0
+    ? '<p class="empty-state">Nothing is waiting for you.</p>'
+    : groupActionable(overlay.actionable).map(({ entry, earlier }) => reviewSummaryCard(
+        entry,
+        `/owner/review/${encodeURIComponent(entry.summary.queueId)}`,
+        null,
+        null,
+        earlier,
+      )).join('\n');
+  const history = overlay.history.length === 0
+    ? '<p class="empty-state">No decisions yet.</p>'
+    : overlay.history.map(({ decision, summary, application = null }) => reviewSummaryCard(
+        decisionEntry(decision, summary),
+        `/owner/decisions/${encodeURIComponent(summary.queueId)}`,
+        decision,
+        application,
+      )).join('\n');
+  const next = nextCursor === null
+    ? ''
+    : `<p class="pagination"><a href="/owner/review?cursor=${encodeURIComponent(nextCursor)}">More proposals</a></p>`;
+  const waitingCount = groupActionable(overlay.actionable).length;
+  const waiting = waitingCount === 1 ? '1 waiting' : `${waitingCount} waiting`;
+  const decided = overlay.history.length === 0 ? '' : `<span class="section-count">${overlay.history.length} shown</span>`;
+  return pageShell({
+    title: 'Proposals',
+    bodyClass: 'proposal-review-page',
+    body: `<main class="owner-shell review-shell" id="owner-review-list">
+<header class="owner-header review-list-header">
+<h1>Proposals</h1>
+<p class="lede">Suggested changes to your pages. Open one to read it in place and decide; deciding changes nothing on the page itself.</p>
+</header>
+<section class="review-section" id="needs-review" aria-labelledby="actionable-heading">
+<div class="section-heading"><h2 id="actionable-heading">Needs review</h2><span class="section-count">${waiting}</span></div>
+<div class="proposal-list">${actionable}</div>
+${next}
+</section>
+<section class="review-section decided-section" id="decided" aria-labelledby="history-heading">
+<div class="section-heading"><h2 id="history-heading">Decided</h2>${decided}</div>
+<div class="proposal-list">${history}</div>
+${overlay.historyTruncated ? '<p class="status">Only the newest decisions are shown here.</p>' : ''}
+</section>
+<p class="review-return"><a href="/">Return to Cyberbase</a></p>
 </main>`,
   });
+}
+
+const REVIEW_MODES = Object.freeze([
+  { key: 'changes', label: 'Changes', view: 'unified', hint: 'Removals and additions marked in place' },
+  { key: 'proposed', label: 'Proposed', view: 'proposed', hint: 'The page as it would read if applied' },
+  { key: 'current', label: 'Current', view: 'current', hint: 'The page as it reads today' },
+  { key: 'compare', label: 'Compare', view: null, hint: 'Both sides at once' },
+]);
+const REVIEW_MODE_KEYS = Object.freeze(REVIEW_MODES.map((mode) => mode.key));
+
+function reviewProjection(entry) {
+  const document = entry.document ?? null;
+  // A stated reason (for example the reading bound) means there is no text to
+  // project; passing nulls on would misreport the page as absent from the base.
+  if (document === null || document.reason !== null) return null;
+  const operations = proposalView(entry).operations;
+  const path = entry.summary.source.path;
+  return documentProjection({
+    files: [{
+      path,
+      exists: document.baseText !== null,
+      baseText: document.baseText,
+      candidateText: document.candidateText,
+    }],
+    operations: operations.map((operation) => ({ path, start: operation.start, end: operation.end, oldText: operation.expected, replacementText: operation.replacement })),
+  });
+}
+
+function segmentsHtml(segments) {
+  return segments.map((item) => {
+    if (item.kind === 'context') return escapeHtml(item.text);
+    if (item.kind === 'removed') return `<del class="doc-removed">${escapeHtml(item.text)}</del>`;
+    if (item.kind === 'added') return `<ins class="doc-added">${escapeHtml(item.text)}</ins>`;
+    const label = item.kind === 'insertion-point' ? 'insertion point' : 'removed here';
+    return `<span class="doc-point">\u27e8${escapeHtml(label)}\u27e9</span>`;
+  }).join('');
+}
+
+function tokenHtml(token) {
+  if (token.type === 'code') return `<code class="md-code">${escapeHtml(token.text)}</code>`;
+  if (token.type === 'strong') return `<strong>${escapeHtml(token.text)}</strong>`;
+  if (token.type === 'emphasis') return `<em>${escapeHtml(token.text)}</em>`;
+  if (token.type === 'link' || token.type === 'wikilink') {
+    return `<span class="md-link md-${token.type}" title="${escapeHtml(token.target)} \u00b7 not resolved in review">${escapeHtml(token.text)}</span>`;
+  }
+  return escapeHtml(token.text);
+}
+
+function blockHtml(block) {
+  const tokens = (block.tokens ?? []).map(tokenHtml).join('');
+  if (block.kind === 'heading') return `<p class="md-heading md-h${block.level}">${tokens}</p>`;
+  if (block.kind === 'paragraph') return `<p class="md-paragraph">${tokens}</p>`;
+  if (block.kind === 'quote') return `<blockquote class="md-quote">${tokens}</blockquote>`;
+  if (block.kind === 'code') return `<pre class="md-codeblock"><code>${escapeHtml(block.text)}</code></pre>`;
+  if (block.kind === 'rule') return '<hr class="md-rule">';
+  if (block.kind === 'list' || block.kind === 'ordered-list') {
+    const items = block.items.map((item) => `<li${item.depth > 0 ? ' class="md-nested"' : ''}>${item.tokens.map(tokenHtml).join('')}</li>`).join('');
+    return `<${block.kind === 'list' ? 'ul' : 'ol'} class="md-list">${items}</${block.kind === 'list' ? 'ul' : 'ol'}>`;
+  }
+  if (block.kind === 'frontmatter') {
+    const rows = block.entries.map((entry) => `<div><dt>${escapeHtml(entry.name)}</dt><dd>${escapeHtml(entry.value)}</dd></div>`).join('');
+    return `<div class="md-frontmatter"><p class="section-kicker">Page metadata</p><dl>${rows}</dl></div>`;
+  }
+  return '';
+}
+
+function documentEnd(source) {
+  return source.blocks.at(-1)?.end ?? 0;
+}
+
+function segmentsInBlock(segments, block, end) {
+  return segmentsWithinSpan(segments, block, end);
+}
+
+function blockSegments(segments, span, end) {
+  const scoped = [];
+  for (const item of segmentsInBlock(segments, span, end)) {
+    if (item.kind !== 'context' || item.text.length !== item.end - item.start) {
+      scoped.push(item);
+      continue;
+    }
+    const start = Math.max(item.start, span.start);
+    const end = Math.min(item.end, span.end);
+    const sliced = item.text.slice(start - item.start, end - item.start);
+    if (sliced.length > 0) scoped.push({ ...item, text: sliced });
+  }
+  return scoped;
+}
+
+// Blocks are keyed by the operation numbers they touch, so the removed and
+// added halves of one operation always land in the same region even when the
+// addition anchors at the start of the following block.
+function changedOperations(source, block, end) {
+  return new Set(segmentsInBlock(source.segments, block, end)
+    .filter((item) => item.kind !== 'context')
+    .map((item) => item.operation ?? source.segments.indexOf(item)));
+}
+
+function readingRegions(source) {
+  const end = documentEnd(source);
+  const regions = [];
+  let index = 0;
+  while (index < source.blocks.length) {
+    const changed = changedOperations(source, source.blocks[index], end);
+    if (changed.size === 0) {
+      regions.push({ changed: false, blocks: [source.blocks[index]] });
+      index += 1;
+      continue;
+    }
+    const blocks = [source.blocks[index]];
+    let cursor = index + 1;
+    while (cursor < source.blocks.length) {
+      const next = changedOperations(source, source.blocks[cursor], end);
+      if (next.size === 0 || [...next].every((id) => !changed.has(id))) break;
+      for (const id of next) changed.add(id);
+      blocks.push(source.blocks[cursor]);
+      cursor += 1;
+    }
+    regions.push({ changed: true, blocks });
+    index = cursor;
+  }
+  return regions;
+}
+
+function sourceRegionHtml(source, span, label, extraClass = '') {
+  return `<div class="md-source-wrap${extraClass}"><p class="md-source-label">${escapeHtml(label)}</p><div class="md-source">${segmentsHtml(blockSegments(source.segments, span, documentEnd(source)))}</div></div>`;
+}
+
+function readingHtml(source, className) {
+  const parts = [];
+  if (source.blocks.length === 0) {
+    // An empty pinned page has no blocks; the declared change is still shown.
+    parts.push(sourceRegionHtml(source, { start: 0, end: 0 }, 'Exact source \u00b7 changed passage'));
+  }
+  for (const region of readingRegions(source)) {
+    const span = { start: region.blocks[0].start, end: region.blocks.at(-1).end };
+    if (region.changed) {
+      parts.push(sourceRegionHtml(source, span, 'Exact source \u00b7 changed passage'));
+      continue;
+    }
+    const [block] = region.blocks;
+    if (block.uninterpreted.length > 0) {
+      parts.push(sourceRegionHtml(source, span, `Exact source \u00b7 not interpreted here: ${block.uninterpreted.join(', ')}`, ' md-source-uninterpreted'));
+      continue;
+    }
+    parts.push(blockHtml(block));
+  }
+  return `<div class="reading-body ${className}">${parts.join('')}</div>`;
+}
+
+function operationNote(view) {
+  const type = `${view.operation.type[0].toUpperCase()}${view.operation.type.slice(1)}`;
+  return `${type} operation at bytes ${view.operation.start}\u2013${view.operation.end}.`;
+}
+
+function unavailableModeHtml(reason, entry) {
+  if (entry.evidence.proposal.schemaVersion === 2) return `<p class="mode-unavailable">${escapeHtml(reason)}</p>${changeInspection(entry)}`;
+  const view = proposalView(entry);
+  return `<div class="mode-unavailable">
+<p class="section-kicker">This view cannot be shown</p>
+<p>${escapeHtml(reason)}</p>
+<p class="context-note">The page is never invented from partial evidence. Here is the exact change instead.</p>
+<div class="exact-change-grid">
+<div><h3>Current bytes</h3><pre><code>${escapeHtml(view.oldText)}</code></pre></div>
+<div><h3>Replacement bytes</h3><pre><code>${escapeHtml(view.replacementText)}</code></pre></div>
+</div>
+<p class="context-note">${escapeHtml(operationNote(view))}</p>
+</div>`;
+}
+
+function comparePanelHtml(projection, entry) {
+  const [file] = projection?.files ?? [];
+  if (file && projection.modes.current.available && projection.modes.proposed.available) {
+    const view = proposalView(entry);
+    const currentNote = view.oldText.length === 0 ? 'No current text' : 'Removed';
+    const proposedNote = view.replacementText.length === 0 ? 'Absent in the proposed result' : 'Added \u00b7 not yet approved';
+    return `<div class="proof-grid">
+<section class="proof proof-current" aria-label="Current source"><div class="proof-heading"><p class="proof-label">Current source</p><span class="semantic-label">${escapeHtml(currentNote)}</span></div>${readingHtml(file.current, 'compare-body')}</section>
+<section class="proof proof-proposed" aria-label="Proposed change"><div class="proof-heading"><p class="proof-label">Proposed change</p><span class="semantic-label">${escapeHtml(proposedNote)}</span></div>${readingHtml(file.proposed, 'compare-body')}</section>
+</div>`;
+  }
+  const view = proposalView(entry);
+  const contextNote = view.hasContext
+    ? 'The surrounding words come from the proposal\u2019s exact quote selector.'
+    : 'This offset-bound proposal does not include surrounding quote context.';
+  return `<div class="proof-grid">
+<section class="proof proof-current" aria-label="Current source"><div class="proof-heading"><p class="proof-label">Current source</p></div><p class="context-copy">${proposalContext(view, 'current')}</p><p class="context-note">${escapeHtml(contextNote)}</p></section>
+<section class="proof proof-proposed" aria-label="Proposed change"><div class="proof-heading"><p class="proof-label">Proposed change</p></div><p class="context-copy">${proposalContext(view, 'proposed')}</p><p class="context-note">${escapeHtml(contextNote)}</p></section>
+</div>
+<p class="context-note">${escapeHtml(operationNote(view))}</p>`;
+}
+
+function reviewModeNav(queueId, activeMode, projection) {
+  const links = REVIEW_MODES.map((mode) => {
+    const active = mode.key === activeMode;
+    const state = mode.view === null ? null : projection?.modes[mode.key] ?? null;
+    const hint = state !== null && state.available === false ? 'Not derivable' : mode.hint;
+    return `<a class="mode-tab${active ? ' active' : ''}" href="/owner/review/${encodeURIComponent(queueId)}?mode=${mode.key}"${active ? ' aria-current="page"' : ''}><strong>${escapeHtml(mode.label)}</strong><small>${escapeHtml(active ? hint : '')}</small></a>`;
+  }).join('');
+  return `<nav class="review-modes" aria-label="Review mode">${links}</nav>`;
+}
+
+function comparisonPanel(entry, activeMode) {
+  const projection = reviewProjection(entry);
+  const mode = REVIEW_MODES.find((item) => item.key === activeMode) ?? REVIEW_MODES[0];
+  const readingNote = 'This is a structural reading, not the published page.';
+  let panel;
+  if (mode.view === null) {
+    panel = comparePanelHtml(projection, entry);
+  } else if (projection === null) {
+    panel = unavailableModeHtml(entry.document?.reason ?? 'The pinned page text is not available in this review evidence.', entry);
+  } else if (!projection.modes[mode.key].available) {
+    panel = unavailableModeHtml(projection.modes[mode.key].reason, entry);
+  } else {
+    panel = readingHtml(projection.files[0][mode.view], `document-${mode.key}`);
+  }
+  return `<section class="comparison-section" aria-labelledby="comparison-heading">
+<h2 id="comparison-heading" class="visually-hidden">Read the change</h2>
+${reviewModeNav(entry.summary.queueId, mode.key, projection)}
+<p class="reading-note"><span>Removed text is <del>struck through</del>, added text is <ins>underlined</ins>, and everything else is the page's exact source.</span> <span>${escapeHtml(readingNote)}</span></p>
+<div class="mode-panel mode-panel-${mode.key}">${panel}</div>
+</section>`;
+}
+
+// Publication presentation uses only config or evidence already bound by the route.
+// These helpers never read the authoring host or broaden the public job projection.
+function publicationTitle(relativePath, text = '') {
+  return /^#\s+([^\r\n]+)$/mu.exec(text)?.[1]?.replace(/\s+#+\s*$/u, '').trim()
+    || (relativePath ? path.posix.basename(relativePath, '.md') : '') || 'Your page';
+}
+
+function publicationHeader(back = false) {
+  return `<header class="publication-appbar"><a class="publication-brand" href="/owner/publication">Cyberbaser <span>Publication</span></a>${back ? '<a href="/owner/publication">Back to your page</a>' : '<span class="publication-private">Private workspace</span>'}</header>`;
+}
+
+const PUBLICATION_STOPS = Object.freeze({
+  ...JOB_STOPS,
+  completed: { step: 6, copy: 'Published and confirmed.' },
+  'live-verification-failed': { step: 4, copy: 'The change was pushed. The live page is not confirmed yet. Checking again.' },
+  'manual-intervention': { step: 1, copy: 'Publication stopped. Check the record before taking another action.' },
+  failed: { step: 0, copy: 'Publication stopped. Changes may already have been made; check the record.' },
+  cancelled: { step: 0, copy: 'Publication cancelled. Check the record before starting another review.' },
+});
+
+function publicationJobPage(safe) {
+  const title = publicationTitle(safe.origin?.relativePath);
+  const current = jobStepIndex(safe.state);
+  const done = safe.state === 'completed';
+  const stopped = Object.hasOwn(PUBLICATION_STOPS, safe.state) && !done;
+  const stages = { steps: JOB_STEPS, stops: PUBLICATION_STOPS, activeCopy: 'Publishing this version' };
+  const uncertain = ['failed', 'manual-intervention', 'cancelled'].includes(safe.state);
+  const steps = JOB_STEPS.map((step, index) => {
+    const status = uncertain ? 'unknown' : done || index < current ? 'done' : index === current ? (stopped ? 'stopped' : 'current') : 'pending';
+    const label = { done: 'Done', current: 'In progress', stopped: 'Stopped', pending: 'Waiting', unknown: 'See record' }[status];
+    return `<li class="job-step job-step-${status}" data-step="${step.key}" data-status="${status}"><span>${escapeHtml(step.label)}</span><span class="publication-step-status">${label}</span></li>`;
+  }).join('');
+  return pageShell({ title: `${title} · Publication`, bodyClass: 'publication-page', script: '/owner/assets/publication.js',
+    body: `${publicationHeader(true)}<main class="publication-shell publication-job" id="owner-job" data-job-id="${escapeHtml(safe.jobId)}" data-stages="${escapeHtml(JSON.stringify(stages))}">
+<header class="publication-heading"><h1>${escapeHtml(title)}</h1></header>
+<section aria-label="Publication progress" aria-live="polite"><h2 id="job-stage">${escapeHtml(PUBLICATION_STOPS[safe.state]?.copy ?? stages.activeCopy)}</h2>
+<p class="publication-explanation" id="publication-job-note" data-complete-copy="The reviewed version completed its publication checks.">${done ? 'The reviewed version completed its publication checks.' : 'This runs in the background. You can close this page and return to follow its progress.'}</p>
+<ol class="job-steps" id="job-steps">${steps}</ol><p id="job-error" class="error" role="alert">${safe.failure ? `Stopped (${escapeHtml(safe.failure.code)}).` : ''}</p></section>
+<details class="technical-evidence"><summary>Details for the record</summary><div class="publication-record">
+<p>Source page ${escapeHtml(safe.origin?.relativePath ?? '—')}</p><p>Job <span id="job-id">${escapeHtml(safe.jobId)}</span></p><p>State <span id="job-state">${escapeHtml(safe.state)}</span></p><p>Updated <span id="job-updated">${escapeHtml(safe.updatedAt ?? '—')}</span></p>
+<p id="job-recovery">${escapeHtml(safe.recovery?.instruction ?? '')}</p></div></details></main>` });
+}
+
+function publicationLanding(config, csrfToken, readerOrigin) {
+  const mapping = config.ownerPublication.mappings[0];
+  const title = publicationTitle(mapping.relativePath);
+  const publicUrl = liveUrlForSlug(config.live.baseUrl, mapping.slug);
+  return pageShell({ title: `${title} · Publication`, bodyClass: 'publication-page', script: '/owner/assets/publication.js',
+    body: `${publicationHeader()}<main class="publication-shell publication-landing"><header class="publication-heading"><h1>${escapeHtml(title)}</h1></header>
+<section class="publication-intro"><h2>Review your page before publishing</h2><p>Capture the current authoring version and see exactly what would change. Reviewing does not change or publish the page.</p>
+<dl class="publication-destination"><dt>Public address</dt><dd><a href="${escapeHtml(publicUrl)}" rel="noreferrer">${escapeHtml(publicUrl)}</a></dd></dl></section>
+<form id="publication-form" data-action="prepare" data-mapping-id="${escapeHtml(mapping.id)}" data-csrf="${escapeHtml(csrfToken)}">
+<div class="publication-action"><p>Your next step is a private review.</p><button type="submit">Review changes</button></div><p id="publication-status" class="status" role="status"></p></form>
+<p class="publication-local-link"><a href="${escapeHtml(readerOrigin)}/cyberbase/">Browse the local site</a></p></main>` });
+}
+
+function publicationBlock(block, text, tracked = null) {
+  if (tracked?.kind === 'inline') {
+    const groups = tracked.groups.map((group) => group.runs.map((run) => {
+      const html = tokenHtml(run.token);
+      return run.kind === 'context' ? html : run.kind === 'added'
+        ? `<ins class="publication-ins" aria-label="Added">${html}</ins>`
+        : `<del class="publication-del" aria-label="Removed">${html}</del>`;
+    }).join(''));
+    if (block.kind === 'paragraph') return `<p class="md-paragraph">${groups[0]}</p>`;
+    if (block.kind === 'heading') return `<p class="md-heading md-h${block.level}">${groups[0]}</p>`;
+    if (block.kind === 'quote') return `<blockquote class="md-quote">${groups[0]}</blockquote>`;
+    if (block.kind === 'code') return `<pre class="md-codeblock">${groups[0]}</pre>`;
+    if (block.items) { const tag = block.kind === 'ordered-list' ? 'ol' : 'ul'; return `<${tag}>${block.items.map((item, index) => `<li${item.depth ? ' class="md-nested"' : ''}>${groups[index]}</li>`).join('')}</${tag}>`; }
+  }
+  return block.uninterpreted?.length || !blockHtml(block)
+    ? `<div class="publication-source-block"><p class="publication-source-label">Exact source · ${escapeHtml(block.uninterpreted?.join(', ') || block.kind)} is not rendered in this structural review</p><pre>${escapeHtml(text.slice(block.start, block.end))}</pre></div>`
+    : blockHtml(block);
+}
+
+// Publication-only decorative icons. Labels and state belong to their controls.
+function publicationIcon(name) {
+  const paths = {
+    previous: '<path d="m14 6-6 6 6 6"/>',
+    next: '<path d="m10 6 6 6-6 6"/>',
+    eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path class="publication-eye-slash" d="m3 3 18 18"/>',
+    panel: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/>',
+    previousSource: '<path d="M9 5H5v4m0-4 5 5m-5 3a7 7 0 1 0 3-6"/>',
+    close: '<path d="m6 6 12 12M6 18 18 6"/>',
+  };
+  return `<svg class="publication-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths[name]}</svg>`;
+}
+
+function publicationDocument(display, text, { previous = false } = {}) {
+  if (display.exactOnly) return `<div class="publication-exact-document"><p class="publication-source-label">Exact source</p><pre>${escapeHtml(text)}</pre></div>`;
+  const rows = previous ? display.file.current.blocks.filter((block) => block.kind !== 'gap').map((block) => ({ block })) : display.tracked.rows;
+  return rows.map((row) => {
+    const content = row.block ? publicationBlock(row.deleted ? { ...row.block, start: 0, end: row.previous[0].length } : row.block,
+      row.deleted ? row.previous[0] : text, row.tracked) : `<p class="publication-removal">${row.removed ? 'Text removed at this position.' : 'Whitespace changed at this position.'}</p>`;
+    const label = row.tracked && row.tracked.kind !== 'inline' ? `<p class="publication-change-label">${escapeHtml(row.tracked.reason)}</p>` : row.tracked?.note ? `<p class="publication-change-label">${escapeHtml(row.tracked.note)}</p>` : '';
+    return `<section class="publication-block${row.mark ? ' publication-change' : ''}${row.deleted ? ' publication-deleted-block' : ''}${row.tracked?.kind === 'added' ? ' publication-added-block' : ''}"${row.mark ? ` id="publication-change-${row.mark}" tabindex="-1" data-change="${row.mark}"` : ''}>${row.mark ? `<span class="publication-margin-mark" aria-label="Change ${row.mark}">${row.mark}</span>` : ''}${label}${content}${row.changed && row.tracked?.kind !== 'inline' && row.previous?.some((part) => part.length) ? `<details class="publication-previous-fragment"><summary aria-label="Previous exact source${row.mark ? ` for change ${row.mark}` : ''}">${publicationIcon('previousSource')} Previous</summary><pre>${escapeHtml(row.previous.join('\n'))}</pre></details>` : ''}</section>`;
+  }).join('');
+}
+
+function publicationCurrentPage(view) {
+  const title = publicationTitle(view.relativePath, view.text);
+  let primary = `<div class="publication-exact-document"><p class="publication-source-label">Exact source</p><pre>${escapeHtml(view.text)}</pre></div>`;
+  try {
+    const projection = documentProjection({ files: [{ path: view.relativePath, exists: true,
+      baseText: view.text, candidateText: view.text }], operations: [] }).files[0].proposed;
+    if (projection.available) {
+      const rendered = projection.blocks.filter((block) => block.kind !== 'gap').map((block) =>
+        `<section class="publication-block">${publicationBlock(block, view.text)}</section>`).join('');
+      if (rendered) primary = rendered;
+    }
+  } catch { /* Unsupported projection keeps the escaped exact document, never a fake operation. */ }
+  const detailsContent = `<section id="publication-review-details"><p>The captured page matches the pinned repository version. Current deployment has not been verified.</p><details class="technical-evidence"><summary>Exact source and review details</summary><div class="publication-record"><p>Pinned repository version ${escapeHtml(view.baseCommit)}.</p><p>${escapeHtml(view.relativePath)}</p><h3>Captured page · exact source</h3><pre>${escapeHtml(view.text)}</pre></div></details></section>`;
+  return pageShell({ title: `${title} · Review document`, bodyClass: 'publication-page publication-document-review', script: '/owner/assets/publication.js',
+    body: `${publicationHeader(true)}<main class="publication-review-app" data-marks-visible="false"><header class="publication-toolbar" aria-label="Document review controls"><div class="publication-toolbar-title"><h1>${escapeHtml(title)}</h1></div><div class="publication-review-controls"><span role="status">No changes</span><button type="button" id="publication-toggle-details" aria-expanded="false" aria-controls="publication-details-dialog" aria-haspopup="dialog" hidden>${publicationIcon('panel')}<span>Details</span></button></div><div class="publication-toolbar-publish"><span>Read only</span></div></header><div class="publication-document-scroll" id="publication-document-scroll" tabindex="0" aria-label="Reviewed document"><div class="publication-document-content"><article class="publication-reviewed-document" aria-label="Captured document">${primary}</article><details id="publication-review-fallback"><summary>Details</summary>${detailsContent}</details></div></div></main>${publicationDetailsDialog()}` });
+}
+
+function publicationDetailsDialog() {
+  return `<dialog id="publication-details-dialog" aria-labelledby="publication-details-heading"><header class="publication-details-header"><h2 id="publication-details-heading">Details</h2><button type="button" id="publication-close-details" aria-label="Close details" autofocus>${publicationIcon('close')}<span>Close</span></button></header><div id="publication-details-body"></div></dialog>`;
+}
+
+function publicationReviewPage(draft, job, modeKey, csrfToken, publishAvailable) {
+  const { session, operation, candidate } = draft.prepared;
+  const title = publicationTitle(session.relativePath, candidate.text);
+  const exactOperation = { path: session.relativePath, start: operation.start, end: operation.end,
+    oldText: Buffer.from(operation.expectedOldBytesBase64, 'base64').toString('utf8'),
+    replacementText: Buffer.from(operation.replacementBytesBase64, 'base64').toString('utf8') };
+  const display = publicationDisplay({ path: session.relativePath, baseText: session.source.text,
+    candidateText: candidate.text, operation: exactOperation });
+  const diagnostic = job.status === 'present'
+    ? `<p>This draft already has one job (${escapeHtml(job.state)}). It will not start again. Preparing unchanged evidence returns this same draft and job.</p>`
+    : job.status === 'missing' ? '' : '<p>Job state cannot be established safely. Publication is unavailable; do not assume the job is absent.</p>';
+  const publishable = publishAvailable && display.available && job.status === 'missing';
+  const action = !publishAvailable ? '<span>Read only</span>' : !display.available
+    ? '<p class="publication-unavailable" role="alert">The pinned source, exact operation and candidate are inconsistent or unavailable. Publish is disabled. Inspect the exact evidence.</p><button type="button" disabled>Publish unavailable</button>'
+    : job.status === 'present'
+      ? `<a class="publication-button" href="/owner/jobs/${draft.jobId}">View progress</a>`
+      : publishable
+        ? `<form id="publication-form" data-action="publish" data-draft-id="${draft.draftId}" data-csrf="${escapeHtml(csrfToken)}"><button type="submit">Publish</button><p id="publication-status" class="status" role="status"></p><noscript><p>JavaScript is required for deliberate publication confirmation.</p></noscript></form>`
+        : '<p>Publication status is unavailable. A job may already exist; reload this review before taking another action.</p><button type="button" disabled>Publish unavailable</button>';
+  const dialog = publishable ? `<dialog id="publication-dialog" aria-labelledby="publication-confirm-heading" aria-describedby="publication-confirm-consequence"><h2 id="publication-confirm-heading">Publish this version?</h2><p class="publication-dialog-title">${escapeHtml(title)}</p><p class="publication-meta">${escapeHtml(session.liveUrl)}</p><p id="publication-confirm-consequence">This runs checks, applies the exact reviewed change, commits and pushes it, then checks the deployment. Later authoring edits are not included.</p><div class="dialog-actions"><button type="button" class="publication-cancel" id="publication-cancel" autofocus>Cancel</button><button type="button" id="publication-confirm">Publish</button></div></dialog>` : '';
+  const secondary = modeKey === 'current' || modeKey === 'compare';
+  const comparison = display.available ? `<details id="publication-comparison"${modeKey === 'compare' ? ' open' : ''}><summary>Comparison with pinned repository version</summary><p>Exact comparison evidence, not a second publishing choice.</p><div class="proof-grid"><section><h3>Pinned repository version</h3><pre>${escapeHtml(session.source.text)}</pre></section><section><h3>Proposed version</h3><pre>${escapeHtml(candidate.text)}</pre></section></div></details>` : '';
+  const primary = display.available ? publicationDocument(display, candidate.text) : `<p role="alert">${escapeHtml(display.reason)}</p><pre>${escapeHtml(candidate.text)}</pre>`;
+  const marksVisible = modeKey !== 'proposed' && !display.tracked?.defaultClean;
+  const trackedCount = display.tracked?.rows.filter((row) => row.mark).length ?? 0;
+  const iconControl = (id, label, icon, extra = '', tooltip = label) => `<span class="publication-tool"><button type="button" id="publication-${id}" aria-label="${label}" aria-describedby="publication-${id}-tip" ${extra}>${publicationIcon(icon)}</button><span class="publication-tooltip" role="tooltip" id="publication-${id}-tip">${tooltip}</span></span>`;
+  const reviewLimit = display.coarse ? `<aside class="publication-review-limit"><h3>Whole-document review</h3><p>${escapeHtml(display.coarseReason)}</p>${display.tracked?.reason && display.tracked.reason !== display.coarseReason ? `<p>${escapeHtml(display.tracked.reason)}</p>` : ''}</aside>` : '';
+  const detailsContent = `<section id="publication-review-details">${reviewLimit}<details id="publication-previous-version"${modeKey === 'current' ? ' open' : ''}><summary>Pinned repository version</summary>${display.available && !display.exactOnly ? `<article class="publication-reviewed-document">${publicationDocument(display, session.source.text, { previous: true })}</article>` : `<pre>${escapeHtml(session.source.text)}</pre>`}</details>${comparison}<details class="technical-evidence"><summary>Exact source and review details</summary><div class="publication-record"><p>Captured authoring version ${draft.prepared.reference.source.version}. Draft ${draft.draftId}.</p><p>${escapeHtml(session.relativePath)} · ${escapeHtml(session.liveUrl)}</p>${diagnostic}${!display.available ? `<p>${escapeHtml(display.reason)}</p>` : ''}<h3>Pinned repository version · exact source</h3><pre>${escapeHtml(session.source.text)}</pre><h3>Entire proposed version · exact source</h3><pre>${escapeHtml(candidate.text)}</pre><h3>Authoritative exact operation</h3><p>Byte range ${operation.start}–${operation.end}. Derived display differences are never saved or applied.</p><h4>Expected old text</h4><pre>${escapeHtml(exactOperation.oldText)}</pre><h4>Replacement text</h4><pre>${escapeHtml(exactOperation.replacementText)}</pre></div></details></section>`;
+  const detailsDialog = publicationDetailsDialog();
+  return pageShell({ title: `${title} · Review document`, bodyClass: 'publication-page publication-document-review', script: '/owner/assets/publication.js',
+    body: `${publicationHeader(true)}<main class="publication-review-app" data-marks-visible="${marksVisible}"><header class="publication-toolbar" aria-label="Document review controls"><div class="publication-toolbar-title"><h1>${escapeHtml(title)}</h1></div><div class="publication-review-controls">${display.available && trackedCount > 0 ? `<div class="publication-change-controls" aria-label="Change navigation">${iconControl('previous-change', 'Previous change', 'previous')}<output id="publication-change-count" aria-hidden="true">${trackedCount} ${trackedCount === 1 ? 'change' : 'changes'}</output>${iconControl('next-change', 'Next change', 'next')}</div>` : ''}${display.available ? iconControl('toggle-marks', 'Show changes', 'eye', `aria-pressed="${marksVisible}"`, marksVisible ? 'Changes shown' : 'Changes hidden') : ''}<button type="button" id="publication-toggle-details" aria-expanded="false" aria-controls="publication-details-dialog" aria-haspopup="dialog" hidden>${publicationIcon('panel')}<span>Details</span></button></div><div class="publication-toolbar-publish">${action}</div><span id="publication-review-announcement" class="publication-sr-only" role="status" aria-live="polite" aria-atomic="true">${trackedCount} ${trackedCount === 1 ? 'change' : 'changes'}. ${marksVisible ? 'Changes shown.' : 'Changes hidden.'}</span></header><div class="publication-document-scroll" id="publication-document-scroll" tabindex="0" aria-label="Reviewed document"><div class="publication-document-content">${display.coarse ? '<aside class="publication-coarse" role="note">Whole-document review</aside>' : ''}<article class="publication-reviewed-document" aria-label="Proposed document">${primary}</article><details id="publication-review-fallback"${secondary ? ' open' : ''}><summary>Details</summary>${detailsContent}</details></div></div></main>${detailsDialog}${dialog}` });
+}
+
+function technicalEvidence(entry, { decision = null, queueRetained = null, title = 'Technical evidence' } = {}) {
+  const { evidence, summary, sourceVerification } = entry;
+  const trust = evidence.classification.classification;
+  const trustReasons = trust.reasons.length === 0
+    ? '<p class="empty-state">No classification reason codes were recorded.</p>'
+    : `<ul class="trust-reasons">${trust.reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join('')}</ul>`;
+  let decisionFacts = '';
+  if (decision !== null) {
+    const retained = queueRetained === true
+      ? 'Still retained in the proposal queue.'
+      : queueRetained === false
+        ? 'No longer retained; exact reviewed evidence is embedded here.'
+        : 'Queue retention could not be confirmed.';
+    decisionFacts = `<section><h3>Decision record</h3><dl class="technical-facts">
+<div><dt>Owner</dt><dd>${escapeHtml(decision.decisionAuthority.identity)}</dd></div>
+<div><dt>Authority scope</dt><dd>${escapeHtml(decision.authorityScope)}</dd></div>
+<div><dt>Queue copy</dt><dd>${escapeHtml(retained)}</dd></div>
+</dl></section>`;
+  }
+  return `<details class="technical-evidence">
+<summary>${escapeHtml(title)}</summary>
+<div class="technical-evidence-body">
+<section><h3>Source binding</h3><dl class="technical-facts">
+<div><dt>Path</dt><dd>${escapeHtml(summary.source.path)}</dd></div>
+<div><dt>Repository</dt><dd>${escapeHtml(summary.source.repository)}</dd></div>
+<div><dt>Revision</dt><dd>${escapeHtml(summary.source.revision)}</dd></div>
+<div><dt>Git blob</dt><dd>${escapeHtml(sourceVerification?.gitObjectId ?? 'embedded decision evidence')}</dd></div>
+<div><dt>Base digest</dt><dd>${escapeHtml(reviewProposalBinding(evidence.proposal).base.digest)}</dd></div>
+<div><dt>Candidate digest</dt><dd>${escapeHtml(reviewProposalBinding(evidence.proposal).candidate.digest)}</dd></div>
+</dl></section>
+<section><h3>Proposal record</h3><dl class="technical-facts">
+<div><dt>Queue ID</dt><dd>${escapeHtml(summary.queueId)}</dd></div>
+<div><dt>Proposal ID</dt><dd>${escapeHtml(summary.proposalId)}</dd></div>
+<div><dt>Proposal digest</dt><dd>${escapeHtml(summary.proposalDigest)}</dd></div>
+<div><dt>Review evidence</dt><dd>${escapeHtml(summary.reviewEvidenceDigest)}</dd></div>
+<div><dt>Received</dt><dd>${escapeHtml(summary.receivedAt)}</dd></div>
+<div><dt>Expires</dt><dd>${escapeHtml(summary.expiresAt)}</dd></div>
+</dl></section>
+<section><h3>Trust classification</h3><dl class="technical-facts">
+<div><dt>Tier</dt><dd>${escapeHtml(summary.tier)}</dd></div>
+<div><dt>Lane</dt><dd>${escapeHtml(summary.lane)}</dd></div>
+<div><dt>Route</dt><dd>${escapeHtml(summary.route)}</dd></div>
+<div><dt>Verified subject</dt><dd>${escapeHtml(evidence.classification.verifiedSubject ?? 'none')}</dd></div>
+<div><dt>Policy status</dt><dd>${escapeHtml(evidence.classification.policyStatus)}</dd></div>
+<div><dt>Policy digest</dt><dd>${escapeHtml(evidence.classification.policyDigest ?? 'none')}</dd></div>
+</dl><h4>Reason codes</h4>${trustReasons}</section>
+${decisionFacts}
+</div>
+</details>`;
+}
+
+function reviewIdentityHeader(entry, view) {
+  const { summary } = entry;
+  const proposal = entry.evidence.proposal;
+  const rationale = proposal.submission.rationale;
+  const references = proposal.submission.evidence;
+  // The contributor's own words are the most useful thing on the page after
+  // the change itself, so they are shown rather than hidden behind a
+  // disclosure. Only an unusually long note folds.
+  const note = rationale.length <= 320
+    ? `<p class="contributor-rationale">${escapeHtml(rationale).replaceAll('\n', '<br>')}</p>`
+    : `<p class="contributor-rationale">${escapeHtml(compactReviewText(rationale, 320))}</p>
+<details class="identity-details"><summary>Read the whole note</summary><p class="contributor-rationale">${escapeHtml(rationale).replaceAll('\n', '<br>')}</p></details>`;
+  const links = references.length === 0
+    ? ''
+    : `<p class="identity-references">References: ${references.map((url, index) => `<a href="${escapeHtml(url)}" rel="noopener noreferrer">${escapeHtml(new URL(url).hostname)}${references.length > 1 ? ` (${index + 1})` : ''}</a>`).join(', ')}</p>`;
+  return `<header class="owner-header review-detail-header">
+<a class="back-link" href="/owner/review">Back to Proposals</a>
+<h1>${escapeHtml(changeName(view))}</h1>
+<div class="identity-meta">
+<span class="identity-path">${escapeHtml(summary.source.path)}</span>
+<span>Received ${reviewTime(summary.receivedAt)}</span>
+<span>Expires ${reviewTime(summary.expiresAt)}</span>
+${forgeOriginHtml(forgeOrigin(entry))}
+</div>
+<div class="contributor-note">
+<p class="section-kicker">Why the contributor suggests it</p>
+${note}
+${links}
+</div>
+</header>`;
+}
+
+function decisionStep({ entry, csrfToken, view }) {
+  const { summary } = entry;
+  const advisory = summary.route === 'reject'
+    ? '<p class="policy-advisory">Your policy recommends rejecting this one. Read the wording and references first.</p>'
+    : '';
+  const change = escapeHtml(changeName(view));
+  const sourcePath = escapeHtml(summary.source.path);
+  // One sticky bar with the two real actions, and one sheet that asks the only
+  // question the owner has to answer. The boundary is stated once, in the sheet,
+  // in plain words, and again on the receipt.
+  return `<aside class="decision-bar" aria-label="Your decision">
+<div class="decision-bar-inner">
+<p class="decision-bar-change"><strong>${change}</strong><span>${sourcePath}</span></p>
+<div class="decision-actions">
+<button type="button" data-action="reject" class="decision-reject">${view.version === 2 ? 'Reject all' : 'Reject'}</button>
+<button type="button" data-action="approve" class="decision-approve">${view.version === 2 ? 'Approve all' : 'Approve'}</button>
+</div>
+<noscript><p class="decision-noscript">Recording a decision needs scripting enabled in this browser.</p></noscript>
+</div>
+</aside>
+<dialog id="decision-dialog" aria-labelledby="decision-dialog-title">
+<form id="review-decision-form" class="decision-sheet" data-queue-id="${escapeHtml(summary.queueId)}" data-review-evidence-digest="${escapeHtml(summary.reviewEvidenceDigest)}" data-csrf="${escapeHtml(csrfToken)}" data-max-reason-bytes="${OWNER_DECISION_REASON_MAX_BYTES}" data-suggestion-label="${change}" data-proposal-version="${view.version}">
+<h2 id="decision-dialog-title">Approve this suggestion?</h2>
+<p class="dialog-suggestion" id="decision-dialog-suggestion"><strong>${change}</strong><span>${sourcePath}</span></p>
+${advisory}
+<label for="decision-reason">Why?</label>
+<p class="field-help" id="decision-note-help">A short note, kept with your decision.</p>
+<textarea class="decision-reason" id="decision-reason" name="reason" rows="3" maxlength="${OWNER_DECISION_REASON_MAX_BYTES}" aria-describedby="decision-note-help decision-byte-count" required></textarea>
+<span id="decision-byte-count" class="byte-count" aria-live="polite"></span>
+<p id="decision-status" class="status" role="status" aria-live="polite" tabindex="-1"></p>
+<p id="decision-dialog-copy" class="decision-boundary">This records your decision and nothing else. The page stays exactly as it is.</p>
+<div class="dialog-actions"><button type="button" class="dialog-back" data-dialog-cancel>Cancel</button><button type="button" id="decision-confirm" data-action="approve">Approve suggestion</button></div>
+</form>
+</dialog>`;
+}
+
+function reviewDetailPage({ entry, csrfToken, mode = REVIEW_MODE_KEYS[0] }) {
+  const view = proposalView(entry);
+  return pageShell({
+    title: `Review ${changeName(view)}`,
+    script: '/owner/assets/review.js',
+    bodyClass: 'proposal-review-page',
+    body: `<main class="owner-shell review-shell" id="owner-review-detail">
+${reviewIdentityHeader(entry, view)}
+${changeInspection(entry)}
+${comparisonPanel(entry, mode)}
+${technicalEvidence(entry, { title: 'Details for the record' })}
+</main>
+${decisionStep({ entry, csrfToken, view })}`,
+  });
+}
+
+const STALE_REASON_COPY = Object.freeze({
+  'source-changed': 'The page changed after you reviewed this suggestion, so the exact change no longer fits.',
+  'source-missing': 'The page no longer exists at that path.',
+  'revision-unreachable': 'The version of the page this suggestion was written against is no longer on your branch.',
+  'trust-policy-changed': 'Your trust policy changed after the review. Look at the suggestion again before applying it.',
+  'checkout-moved': 'The page changed just now. Reload this screen and try again.',
+});
+const UNAPPLICABLE_REASON_COPY = Object.freeze({
+  'frontmatter-change': 'The change touches the metadata block at the top of the page, which the page pipeline does not edit yet.',
+  'page-not-rendered': 'The page is not part of the published site, so there would be no live page to check after publishing.',
+  'path-not-editable': 'The page is outside the paths your policy allows edits on.',
+  'source-not-lf-only': 'The page uses line endings the page pipeline does not accept.',
+  'source-too-large': 'The page is larger than your policy allows for one save.',
+  'changed-bytes-limit': 'The change is larger than your policy allows for one save.',
+  'replacement-limit': 'The new text is longer than your policy allows for one save.',
+  'changed-lines-limit': 'The change spans more lines than your policy allows for one save.',
+  'attempt-limit': 'Too many attempts have been made on this suggestion.',
+  'derivation-failed': 'The change could not be prepared for the page pipeline.',
+});
+// The step after approval, in the owner's words: whether the change can go on
+// the page now, why not, or how far along it is. One button, one sheet.
+function applicationStep({ application, view, summary, csrfToken, entry = null }) {
+  const change = escapeHtml(changeName(view));
+  const sourcePath = escapeHtml(summary.source.path);
+  const jobLink = (attempt) => `<a class="application-job-link" href="/owner/jobs/${encodeURIComponent(attempt.jobId)}">Follow it</a>`;
+  if (application === null) {
+    return `<section class="application-step application-unavailable" aria-labelledby="application-heading">
+<h2 id="application-heading">Putting it on the page</h2>
+<p>Not available in this setup. Your approval is recorded; the page is unchanged.</p>
+</section>`;
+  }
+  const { state } = application;
+  if (state === 'applied') {
+    const latest = application.latest;
+    const origin = entry === null ? null : forgeOrigin(entry);
+    const forgeFollowUp = origin === null
+      ? ''
+      : `<p class="forge-followup"><a href="${escapeHtml(origin.url)}" rel="noopener noreferrer">Pull request #${origin.number}</a> on your forge is still open. Close it there; this app never writes to your forge.</p>`;
+    return `<section class="application-step application-applied" aria-labelledby="application-heading">
+<h2 id="application-heading">On its way to the page</h2>
+<p class="application-stage"><strong>${escapeHtml(jobStageCopy(latest.jobState))}</strong> ${jobLink(latest)}</p>
+<p class="application-meta">Applied ${reviewTime(latest.appliedAt)}${latest.attempt > 1 ? ` · attempt ${latest.attempt}` : ''}</p>
+${forgeFollowUp}</section>`;
+  }
+  const earlier = application.attempts.length === 0
+    ? ''
+    : `<p class="application-meta">An earlier attempt stopped before changing the page. ${jobLink(application.attempts.at(-1))}</p>`;
+  if (state === 'stale') {
+    return `<section class="application-step application-blocked" aria-labelledby="application-heading">
+<h2 id="application-heading">Cannot be applied as it is</h2>
+<p>${escapeHtml(STALE_REASON_COPY[application.reason] ?? 'The page is no longer exactly what you reviewed.')}</p>
+<p>Your approval stays recorded. To make this change now, edit the page yourself.</p>
+${earlier}</section>`;
+  }
+  if (state === 'unapplicable') {
+    return `<section class="application-step application-blocked" aria-labelledby="application-heading">
+<h2 id="application-heading">The page pipeline cannot apply this yet</h2>
+<p>${escapeHtml(UNAPPLICABLE_REASON_COPY[application.reason] ?? 'The change could not be prepared for the page pipeline.')}</p>
+<p>Your approval stays recorded. To make this change now, edit the page yourself.</p>
+${earlier}</section>`;
+  }
+  if (state === 'eligible') {
+    return `<section class="application-step application-ready" aria-labelledby="application-heading">
+<h2 id="application-heading">Put it on the page</h2>
+<p>The page is still exactly as you reviewed it. Applying changes <span class="identity-path">${sourcePath}</span>, commits it, pushes it, and publishes it, the same way your own saves do.</p>
+<div class="application-actions"><button type="button" class="decision-approve" data-apply>Apply to page</button></div>
+<noscript><p class="decision-noscript">Applying needs scripting enabled in this browser.</p></noscript>
+${earlier}</section>
+<dialog id="decision-dialog" aria-labelledby="apply-dialog-title">
+<form id="apply-form" class="decision-sheet" data-queue-id="${escapeHtml(summary.queueId)}" data-csrf="${escapeHtml(csrfToken)}">
+<h2 id="apply-dialog-title">Apply this suggestion to the page?</h2>
+<p class="dialog-suggestion"><strong>${change}</strong><span>${sourcePath}</span></p>
+<p id="apply-status" class="status" role="status" aria-live="polite" tabindex="-1"></p>
+<p class="decision-boundary">This changes the page and publishes it. It runs in the background, and the next screen follows it step by step.</p>
+<div class="dialog-actions"><button type="button" class="dialog-back" data-dialog-cancel>Cancel</button><button type="button" id="apply-confirm" class="decision-approve">Apply to page</button></div>
+</form>
+</dialog>`;
+  }
+  return `<section class="application-step application-blocked" aria-labelledby="application-heading">
+<h2 id="application-heading">Putting it on the page</h2>
+<p>Could not check the page just now${application.reason ? ` (${escapeHtml(application.reason)})` : ''}. Reload to try again.</p>
+</section>`;
+}
+
+function decisionDetailPage({ decision, summary, queueRetained, application = null, csrfToken = '' }) {
+  const entry = decisionEntry(decision, summary);
+  const view = proposalView(entry);
+  const approved = decision.action === 'approve';
+  const applied = approved && application?.state === 'applied';
+  const consequence = approved
+    ? 'Nothing on the page changed when you approved. Putting it on the page is the separate step below.'
+    : 'Nothing on the page changed and nothing was published or scheduled.';
+  const boundary = applied
+    ? `<div class="source-unchanged source-applied"><strong>Applied</strong><span>Approving changed nothing. The change reached the page through the step below, by your own action.</span></div>`
+    : `<div class="source-unchanged"><strong>Source unchanged</strong><span>${consequence}</span></div>`;
+  return pageShell({
+    title: approved ? 'Suggestion approved' : 'Suggestion rejected',
+    bodyClass: 'proposal-review-page',
+    script: application?.state === 'eligible' ? '/owner/assets/apply.js' : null,
+    body: `<main class="owner-shell review-shell" id="owner-decision-detail">
+<header class="owner-header decision-receipt-header">
+<a class="back-link" href="/owner/review">Back to Proposals</a>
+<h1>${approved ? 'You approved this suggestion' : 'You rejected this suggestion'}</h1>
+<p class="decision-time">${reviewTime(decision.decidedAt)}</p>
+</header>
+<section class="decision-result ${approved ? 'decision-approved' : 'decision-rejected'}" aria-label="Your decision">
+<p class="context-copy">${changeSummaryHtml(view)}</p>
+<p class="receipt-path">${escapeHtml(summary.source.path)}</p>
+<blockquote class="decision-note">${escapeHtml(decision.reason)}</blockquote>
+${boundary}
+</section>
+${view.version === 2 ? changeInspection(entry) : ''}
+${approved ? applicationStep({ application, view, summary, csrfToken, entry }) : ''}
+${technicalEvidence(entry, {
+  decision,
+  queueRetained,
+  title: 'Details for the record',
+})}
+</main>`,
+  });
+}
+
+function optionalQueryObject(url, allowed) {
+  const found = new Map();
+  for (const [key, value] of url.searchParams) {
+    if (!allowed.includes(key) || found.has(key)) return null;
+    found.set(key, value);
+  }
+  return Object.fromEntries(found);
 }
 
 function queryObject(url, required) {
@@ -259,9 +1253,22 @@ function queryObject(url, required) {
   return Object.fromEntries(found);
 }
 
-async function readBoundedJson(request, maximum) {
+function parseBootstrapBody(text) {
+  const value = JSON.parse(text);
+  // A single string-valued member cannot hide duplicate (including escaped)
+  // keys. JSON.parse first validates string escapes and JSON whitespace.
+  if (!/^[\t\n\r ]*\{[\t\n\r ]*"(?:[^"\\]|\\[\s\S])*"[\t\n\r ]*:[\t\n\r ]*"(?:[^"\\]|\\[\s\S])*"[\t\n\r ]*\}[\t\n\r ]*$/u.test(text)
+    || Object.keys(value).length !== 1 || !Object.hasOwn(value, 'token')
+    || !exactToken(value.token)
+    || Buffer.from(value.token, 'base64url').toString('base64url') !== value.token) {
+    throw new Error('bootstrap-body');
+  }
+  return value;
+}
+
+async function readBoundedJson(request, maximum, parse = JSON.parse, mediaType = 'application/json') {
   const contentType = request.headers.get('content-type');
-  if (contentType !== 'application/json') throw Object.assign(new Error('content-type'), { status: 415 });
+  if ((mediaType === 'application/json' ? contentType : contentType?.split(';')[0]) !== mediaType) throw Object.assign(new Error('content-type'), { status: 415 });
   const declared = request.headers.get('content-length');
   if (declared !== null) {
     if (!/^(?:0|[1-9][0-9]*)$/u.test(declared)) throw Object.assign(new Error('length'), { status: 400 });
@@ -289,7 +1296,7 @@ async function readBoundedJson(request, maximum) {
   try {
     const bytes = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), total);
     const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    return JSON.parse(text);
+    return parse(text);
   } catch (error) {
     if (error?.status) throw error;
     throw Object.assign(new Error('json'), { status: 400 });
@@ -303,6 +1310,238 @@ function validateSaveBody(value, maximumEditedBytes) {
   if (!exactToken(value.editSessionId) || !exactToken(value.csrf) || typeof value.editedText !== 'string') return null;
   if (Buffer.byteLength(value.editedText, 'utf8') > maximumEditedBytes) return null;
   return value;
+}
+
+function reviewQueueId(encoded) {
+  let decoded;
+  try {
+    decoded = decodeURIComponent(encoded);
+    return validateQueueId(decoded);
+  } catch {
+    return null;
+  }
+}
+
+function validateDecisionBody(value, routeQueueId) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  const required = ['queueId', 'reviewEvidenceDigest', 'action', 'reason', 'csrf'];
+  const keys = Object.keys(value);
+  if (keys.length !== required.length || !required.every((key) => keys.includes(key))) return null;
+  if (value.queueId !== routeQueueId
+    || !['approve', 'reject'].includes(value.action)
+    || !exactToken(value.csrf)
+    || typeof value.reason !== 'string'
+    || value.reason.length === 0
+    || value.reason.trim() !== value.reason
+    || /\p{Cc}/u.test(value.reason)
+    || Buffer.byteLength(value.reason, 'utf8') > OWNER_DECISION_REASON_MAX_BYTES) return null;
+  try {
+    validateDigest(value.reviewEvidenceDigest, 'reviewEvidenceDigest');
+  } catch {
+    return null;
+  }
+  return value;
+}
+
+function validateApplyBody(value, routeQueueId) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  const keys = Object.keys(value).sort();
+  if (keys.length !== 2 || keys[0] !== 'csrf' || keys[1] !== 'queueId') return null;
+  if (value.queueId !== routeQueueId || !exactToken(value.csrf)) return null;
+  return { queueId: value.queueId, csrf: value.csrf };
+}
+
+function reviewErrorStatus(error) {
+  const code = error instanceof OwnerAlphaError ? error.code : 'review-failed';
+  if (code === 'lock-busy'
+    || code === 'decision-already-recorded'
+    || code === 'decision-evidence-mismatch'
+    || code === 'decision-evidence-conflict'
+    || code === 'review-ipc-invalid-cursor') return 409;
+  if (code === 'review-expired' || code === 'decision-expired') return 410;
+  if (code === 'review-ipc-not-found' || code === 'review-ipc-queue-entry-not-found') return 404;
+  if (code === 'review-source-timeout' || code === 'review-ipc-timeout') return 504;
+  if (code === 'review-source-unavailable'
+    || code === 'review-ipc-busy'
+    || code === 'review-ipc-internal-error') return 503;
+  if (code.startsWith('invalid-')
+    || code.startsWith('review-before-')
+    || code === 'review-not-actionable') return 400;
+  return 500;
+}
+
+export function createOwnerProposalReviewService({
+  config: configInput,
+  context,
+  source,
+  decisionClock = () => new Date(),
+  recoverDecisions = recoverProposalDecisions,
+  recordDecision = recordProposalDecision,
+  application = null,
+  assessApplication = assessProposalApplication,
+  applyApplication = applyApprovedProposal,
+  listProgress = listProposalApplicationProgress,
+} = {}) {
+  const config = validateOwnerAlphaConfig(configInput);
+  if (!config.proposalReview.enabled) return null;
+  // Applying an approved suggestion needs the owner pipeline's Save entry, a
+  // way to find the rendered page, and a job ID factory. Without them the
+  // service still reviews and decides, and the receipt says applying is not
+  // available here.
+  if (application !== null
+    && (typeof application.saveEdit !== 'function'
+      || typeof application.createJobId !== 'function'
+      || (typeof application.resolveSlug !== 'function'
+        && (typeof application.siteRoot !== 'string' || typeof application.ownerOrigin !== 'string')))) {
+    throw new TypeError('proposal application requires saveEdit, createJobId, and a slug resolver or siteRoot plus ownerOrigin');
+  }
+  if (!context
+    || !source
+    || typeof source.list !== 'function'
+    || typeof source.load !== 'function'
+    || typeof decisionClock !== 'function'
+    || typeof recoverDecisions !== 'function'
+    || typeof recordDecision !== 'function') {
+    throw new TypeError('enabled proposal review requires context, source, clock, recovery, and decision dependencies');
+  }
+
+  let cachedDecisions = null;
+  let recoveryInFlight = null;
+
+  async function recovered({ refresh = false } = {}) {
+    if (refresh && recoveryInFlight !== null) await recoveryInFlight;
+    if (!refresh && cachedDecisions !== null) return cachedDecisions;
+    if (recoveryInFlight !== null) return recoveryInFlight;
+    recoveryInFlight = Promise.resolve(recoverDecisions(context)).then((value) => {
+      cachedDecisions = value;
+      return value;
+    });
+    try {
+      return await recoveryInFlight;
+    } finally {
+      recoveryInFlight = null;
+    }
+  }
+
+  return Object.freeze({
+    async list({ cursor = null } = {}) {
+      const local = await recovered();
+      const seenCursors = new Set();
+      let filteredEntries = 0;
+      let pageCursor = cursor;
+      let page;
+      let complete;
+
+      while (true) {
+        const cursorKey = pageCursor ?? '<first-page>';
+        if (seenCursors.has(cursorKey)) {
+          throw new OwnerAlphaError('review-ipc-invalid-cursor', 'proposal review pagination repeated a cursor');
+        }
+        seenCursors.add(cursorKey);
+        page = await source.list({
+          state: 'pending-review',
+          cursor: pageCursor,
+          limit: config.proposalReview.maxListEntries,
+        });
+        complete = createProposalDecisionOverlay({
+          entries: page.entries,
+          decisions: local.decisions,
+        });
+        if (complete.actionable.length > 0 || page.nextCursor === null) break;
+        if (page.entries.length === 0 || page.nextCursor === pageCursor) {
+          throw new OwnerAlphaError('review-ipc-invalid-cursor', 'proposal review pagination made no forward progress');
+        }
+        filteredEntries += page.entries.length;
+        if (filteredEntries > local.decisions.length) {
+          throw new OwnerAlphaError('review-ipc-invalid-cursor', 'proposal review pagination exceeded the local decision bound');
+        }
+        pageCursor = page.nextCursor;
+      }
+
+      let history = complete.history.slice(0, config.proposalReview.maxListEntries);
+      if (application !== null && history.length > 0) {
+        // Applied and Live come from events and job state only; no Git here.
+        const progress = await listProgress(context, config);
+        history = history.map((entry) => Object.freeze({ ...entry, application: progress.get(entry.summary.queueId) ?? null }));
+      }
+      return Object.freeze({
+        actionable: complete.actionable,
+        history: Object.freeze(history),
+        historyTruncated: complete.history.length > history.length,
+        nextCursor: page.nextCursor,
+      });
+    },
+    async load(queueId) {
+      const local = await recovered();
+      const decision = local.decisions.find((entry) => entry.queueId === queueId) ?? null;
+      if (decision !== null) return Object.freeze({ entry: null, decision });
+      return Object.freeze({ entry: await source.load(queueId), decision: null });
+    },
+    async loadDecision(queueId) {
+      const local = await recovered();
+      const decision = local.decisions.find((entry) => entry.queueId === queueId) ?? null;
+      if (decision === null) return null;
+      let queueRetained = null;
+      try {
+        const current = await source.load(queueId);
+        createProposalDecisionOverlay({ entries: [current], decisions: [decision] });
+        queueRetained = true;
+      } catch (error) {
+        if (error instanceof OwnerAlphaError
+          && ['review-ipc-not-found', 'review-ipc-queue-entry-not-found'].includes(error.code)) {
+          queueRetained = false;
+        } else if (error instanceof OwnerAlphaError
+          && ['review-not-actionable', 'review-expired'].includes(error.code)) {
+          queueRetained = true;
+        } else if (!(error instanceof OwnerAlphaError)
+          || !['review-source-unavailable', 'review-source-timeout'].includes(error.code)) {
+          throw error;
+        }
+      }
+      const overlay = createProposalDecisionOverlay({ entries: [], decisions: [decision] });
+      return Object.freeze({ ...overlay.history[0], queueRetained });
+    },
+    async record(intent) {
+      const result = await recordDecision({
+        context,
+        source,
+        ownerIdentity: config.owner.identity,
+        intent,
+        clock: decisionClock,
+      });
+      await recovered({ refresh: true });
+      return result;
+    },
+    applicationAvailable: application !== null,
+    async applicationStatus(queueId) {
+      if (application === null) return null;
+      return assessApplication({
+        context,
+        config,
+        queueId,
+        git: application.git,
+        resolveSlug: application.resolveSlug ?? null,
+        siteRoot: application.siteRoot ?? null,
+        ownerOrigin: application.ownerOrigin ?? null,
+      });
+    },
+    async apply(queueId) {
+      if (application === null) fail('application-unavailable', 'applying suggestions is not available in this runtime');
+      return applyApplication({
+        context,
+        config,
+        queueId,
+        saveEdit: application.saveEdit,
+        createJobId: application.createJobId,
+        checkoutReady: application.checkoutReady,
+        git: application.git,
+        resolveSlug: application.resolveSlug ?? null,
+        siteRoot: application.siteRoot ?? null,
+        ownerOrigin: application.ownerOrigin ?? null,
+        clock: application.clock,
+      });
+    },
+  });
 }
 
 function safePathSegments(encodedPath, { directoryIndex = true } = {}) {
@@ -417,7 +1656,7 @@ async function staticResponse(root, encodedPath, request, options = {}) {
   }
   if (result.status !== 200) return errorResponse(result.status, result.status === 404 ? 'not-found' : 'static-unavailable');
   const bytes = result.bytes;
-  const csp = options.reader === true ? READER_CSP : OWNER_CSP;
+  const csp = options.csp ?? (options.reader === true ? READER_CSP : OWNER_CSP);
   const headers = securityHeaders({ cache: 'private, max-age=0, must-revalidate', csp });
   headers.set('Content-Type', result.contentType);
   headers.set('Content-Length', String(bytes.length));
@@ -433,6 +1672,7 @@ export function createReaderHandler({
   const expectedHost = `${config.listen.host}:${config.listen.readerPort}`;
   const expectedOrigin = `http://${expectedHost}`;
   const resolvedSiteRoot = siteRoot ?? path.resolve(projectRoot, config.workspace.site);
+  const csp = readerCsp(config);
 
   return async function ownerAlphaReaderFetch(request) {
     if (!(request instanceof Request)) return errorResponse(400, 'invalid-request');
@@ -447,13 +1687,49 @@ export function createReaderHandler({
       return errorResponse(400, 'invalid-url');
     }
     if (url.origin !== expectedOrigin) return errorResponse(421, 'invalid-host');
+    const redirect = (location) => {
+      const headers = securityHeaders({ csp });
+      headers.set('Location', location);
+      return new Response(null, { status: 308, headers });
+    };
+    const notFound = () => {
+      const acceptsHtml = request.headers.get('accept')?.split(',').some((range) => {
+        const [type, ...parameters] = range.trim().toLowerCase().split(';');
+        return type.trim() === 'text/html' && !parameters.some((parameter) => /^q\s*=\s*0(?:\.0*)?\s*$/u.test(parameter.trim()));
+      });
+      if (!acceptsHtml) return errorResponse(404, 'not-found');
+      const headers = securityHeaders({ csp });
+      headers.set('Content-Type', 'text/html; charset=utf-8');
+      return new Response(request.method === 'HEAD' ? null : '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Page not found</title><main><h1>Page not found</h1><p>This page is not available. <a href="/cyberbase/">Go to the site home</a>.</p></main></html>', { status: 404, headers });
+    };
     if (url.pathname === '/') return response(null, 302, { Location: '/cyberbase/' });
-    if (!url.pathname.startsWith('/cyberbase/')) return errorResponse(404, 'not-found');
+    if (url.pathname === '/cyberbase') {
+      if (url.search !== '') return errorResponse(400, 'unexpected-query');
+      return redirect('/cyberbase/');
+    }
+    if (!url.pathname.startsWith('/cyberbase/')) return notFound();
     if (url.search !== '') return errorResponse(400, 'unexpected-query');
-    return staticResponse(resolvedSiteRoot, url.pathname.slice('/cyberbase/'.length), request, {
-      cleanHtml: true,
-      reader: true,
-    });
+    const encodedPath = url.pathname.slice('/cyberbase/'.length);
+    const options = { cleanHtml: true, reader: true, csp };
+    const original = await staticResponse(resolvedSiteRoot, encodedPath, request, options);
+    if (original.status !== 404) return original;
+    // Some chat clients escape existing percent signs. Try exactly one extra
+    // layer, only after a miss, with the same segment and filesystem checks.
+    if (/%25/iu.test(encodedPath)) {
+      try {
+        const decodedPath = decodeURIComponent(encodedPath);
+        const directory = decodedPath.endsWith('/');
+        const segments = safePathSegments(directory ? decodedPath.slice(0, -1) : decodedPath, { directoryIndex: false });
+        const canonicalPath = segments.map((segment) => encodeURIComponent(segment)).join('/') + (directory ? '/' : '');
+        if (canonicalPath !== encodedPath) {
+          const recovered = await staticResponse(resolvedSiteRoot, canonicalPath, request, options);
+          if (recovered.status === 200) return redirect(`/cyberbase/${canonicalPath}`);
+        }
+      } catch {
+        // Unsafe or malformed extra encodings remain a miss, never a redirect.
+      }
+    }
+    return notFound();
   };
 }
 
@@ -501,8 +1777,12 @@ export function createOwnerAlphaHandler({
   publicRoot = PUBLIC_ROOT,
   createEditSession = createSourceEditSession,
   editSessions = createMemoryEditSessionStore(),
+  handoffs = createOwnerHandoffStore({ createId: token }),
+  directEdits = createMemoryEditSessionStore(),
   saveEdit,
   lookupJob,
+  proposalReview = null,
+  ownerPublication = null,
   createToken = token,
   createJobId = () => `OA-${randomUUID()}`,
 } = {}) {
@@ -515,6 +1795,18 @@ export function createOwnerAlphaHandler({
   }
   if (!editSessions || typeof editSessions.create !== 'function' || typeof editSessions.get !== 'function' || typeof editSessions.delete !== 'function') {
     throw new TypeError('editSessions must provide create, get, and delete');
+  }
+  if (config.proposalReview.enabled
+    && (!proposalReview
+      || typeof proposalReview.list !== 'function'
+      || typeof proposalReview.load !== 'function'
+      || typeof proposalReview.loadDecision !== 'function'
+      || typeof proposalReview.record !== 'function')) {
+    throw new TypeError('enabled proposal review requires list, load, loadDecision, and record dependencies');
+  }
+  if (config.ownerPublication.enabled
+    && ['prepare', 'load', 'loadCurrent', 'publish', 'readJob'].some((key) => typeof ownerPublication?.[key] !== 'function')) {
+    throw new TypeError('enabled owner publication requires prepare, load, loadCurrent, publish, and readJob dependencies');
   }
   // Each consumed bootstrap capability becomes one device session with its own
   // cookie and CSRF token, so one captured device secret is not every device's
@@ -548,6 +1840,14 @@ export function createOwnerAlphaHandler({
   function issueBootstrap() {
     outstanding = createBootstrapCapability();
     return outstanding.bootstrapToken;
+  }
+
+  function consumeBootstrap(value) {
+    if (outstanding === null || !sameSecret(value, outstanding.bootstrapToken)) return null;
+    const consumed = outstanding;
+    outstanding = null;
+    sessions.set(consumed.sessionToken, { csrfToken: consumed.csrfToken });
+    return consumed.sessionToken;
   }
 
   function resolveSession(cookieValue) {
@@ -586,22 +1886,72 @@ export function createOwnerAlphaHandler({
     }
     if (url.origin !== expectedOrigin) return errorResponse(421, 'invalid-host');
 
+    if (url.pathname === '/owner/sign-in') {
+      if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
+      if (url.search !== '') return errorResponse(400, 'unexpected-query');
+      return html(request.method === 'HEAD' ? null : signInPage());
+    }
+    const signInAsset = {
+      '/owner/assets/bootstrap.js': 'bootstrap.js',
+      '/owner/assets/owner.css': 'owner.css',
+    }[url.pathname];
+    if (signInAsset) {
+      if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
+      if (url.search !== '') return errorResponse(400, 'unexpected-query');
+      const assetResponse = await staticResponse(publicRoot, signInAsset, request, { directoryIndex: false });
+      assetResponse.headers.set('Cache-Control', 'no-store');
+      assetResponse.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive');
+      return assetResponse;
+    }
+
     if (url.pathname === '/owner/bootstrap') {
-      if (request.method !== 'GET') return response(null, 405, { Allow: 'GET' });
-      const query = queryObject(url, ['token']);
-      if (!query || outstanding === null || !sameSecret(query.token, outstanding.bootstrapToken)) {
-        return errorResponse(403, 'invalid-bootstrap');
+      if (request.method === 'POST') {
+        if (request.headers.get('origin') !== expectedOrigin) return errorResponse(403, 'invalid-origin');
+        if (url.search !== '') return errorResponse(400, 'unexpected-query');
+        let body;
+        try { body = await readBoundedJson(request, 256, parseBootstrapBody); }
+        catch (error) { return errorResponse(error?.status ?? 400, 'invalid-bootstrap-body'); }
+        const sessionToken = consumeBootstrap(body.token);
+        body.token = null;
+        if (sessionToken === null) return errorResponse(403, 'invalid-bootstrap');
+        return json({ ok: true }, 200, { 'Set-Cookie': cookieHeader(sessionToken) });
       }
-      const consumed = outstanding;
-      outstanding = null;
-      sessions.set(consumed.sessionToken, { csrfToken: consumed.csrfToken });
+      if (request.method !== 'GET') return response(null, 405, { Allow: 'GET, POST' });
+      const query = queryObject(url, ['token']);
+      const sessionToken = query ? consumeBootstrap(query.token) : null;
+      if (sessionToken === null) return errorResponse(403, 'invalid-bootstrap');
       return response(null, 303, {
-        Location: `${readerOrigin}/cyberbase/`,
-        'Set-Cookie': cookieHeader(consumed.sessionToken),
+        Location: config.ownerPublication.enabled ? '/owner/publication' : `${readerOrigin}/cyberbase/`,
+        'Set-Cookie': cookieHeader(sessionToken),
       });
     }
 
+    // Inert cross-origin handoff only. No cookie, CSRF, edit session, durable
+    // authorization, job or source write is created here. Even a hostile reader
+    // can do no more than ask the owner to inspect an expiring bounded draft.
+    if (url.pathname === '/owner/stage') {
+      if (request.method !== 'POST') return response(null, 405, { Allow: 'POST' });
+      if (url.search) return errorResponse(400, 'unexpected-query');
+      try {
+        const handoff = await readBoundedJson(request, 800 * 1024, text => {
+          const fields = new URLSearchParams(text);
+          if ([...fields.keys()].join(',') !== 'changeSet') throw Error('invalid fields');
+          return validateOwnerHandoff(JSON.parse(fields.get('changeSet')));
+        }, 'application/x-www-form-urlencoded');
+        const id = handoffs.create(handoff);
+        return response(null, 303, { Location: `/owner/staged/${id}` });
+      } catch (error) { return errorResponse(error?.status ?? (error?.code === 'owner-handoff-capacity' ? 503 : 400), error?.code ?? 'invalid-owner-handoff'); }
+    }
+
     const deviceSession = resolveSession(requestCookie(request));
+    if (deviceSession === null && url.pathname === '/owner/in-place' && ['GET', 'HEAD'].includes(request.method)) {
+      // The shared Edit control: anyone not signed in as owner returns to the
+      // same reader page in visitor mode. Fixed reader origin, so no open redirect.
+      const query = queryObject(url, ['relativePath', 'slug']);
+      if (query && typeof query.slug === 'string' && query.slug.length > 0 && query.slug.length <= 1024 && !query.slug.split('/').some((part) => part === '' || part === '.' || part === '..')) {
+        return response(null, 303, { Location: `${liveUrlForSlug(`${readerOrigin}/cyberbase/`, query.slug)}#edit` });
+      }
+    }
     if (deviceSession === null) {
       return errorResponse(403, 'invalid-session');
     }
@@ -612,18 +1962,334 @@ export function createOwnerAlphaHandler({
 
     if (url.pathname === '/') {
       if (request.method !== 'GET' && request.method !== 'HEAD') return response(null, 405, { Allow: 'GET, HEAD' });
-      return response(null, 302, { Location: `${readerOrigin}/cyberbase/` });
+      return response(null, 302, { Location: config.ownerPublication.enabled ? '/owner/publication' : `${readerOrigin}/cyberbase/` });
     }
 
     const asset = {
       '/owner/assets/editor.js': 'editor.js',
+      '/owner/assets/direct.js': 'direct.js',
       '/owner/assets/job.js': 'job.js',
+      '/owner/assets/review.js': 'review.js',
+      '/owner/assets/apply.js': 'apply.js',
+      '/owner/assets/publication.js': 'publication.js',
       '/owner/assets/owner.css': 'owner.css',
     }[url.pathname];
     if (asset) {
       if (request.method !== 'GET' && request.method !== 'HEAD') return response(null, 405, { Allow: 'GET, HEAD' });
       if (url.search !== '') return errorResponse(400, 'unexpected-query');
       return staticResponse(publicRoot, asset, request, { directoryIndex: false });
+    }
+
+    if (url.pathname === '/owner/publication' || url.pathname.startsWith('/owner/publication/')
+      || url.pathname.startsWith('/api/publication/')) {
+      if (!config.ownerPublication.enabled) return errorResponse(404, 'publication-disabled');
+      if (url.pathname === '/owner/publication') {
+        if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
+        if (url.search) return errorResponse(400, 'invalid-publication-query');
+        return html(request.method === 'HEAD' ? null : publicationLanding(config, csrfToken, readerOrigin));
+      }
+      const current = /^\/owner\/publication\/current\/([0-9a-f]{64})$/u.exec(url.pathname);
+      if (current) {
+        if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
+        if (url.search) return errorResponse(400, 'invalid-publication-query');
+        try {
+          const view = await ownerPublication.loadCurrent({ viewId: current[1] });
+          return html(request.method === 'HEAD' ? null : publicationCurrentPage(view));
+        } catch { return errorResponse(409, 'publication-review-unavailable'); }
+      }
+      const review = /^\/owner\/publication\/([0-9a-f]{64})$/u.exec(url.pathname);
+      if (review) {
+        if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
+        const query = optionalQueryObject(url, ['mode']);
+        if (!query || (query.mode !== undefined && !REVIEW_MODE_KEYS.includes(query.mode))) return errorResponse(400, 'invalid-publication-query');
+        try {
+          const draft = await ownerPublication.load({ draftId: review[1] });
+          const job = await ownerPublication.readJob(draft.jobId);
+          return html(request.method === 'HEAD' ? null : publicationReviewPage(draft, job, query.mode ?? 'changes', csrfToken, ownerPublication.publishAvailable === true));
+        } catch { return errorResponse(409, 'publication-review-unavailable'); }
+      }
+      const action = url.pathname === '/api/publication/prepare' ? 'prepare'
+        : url.pathname === '/api/publication/publish' ? 'publish' : null;
+      if (action === null) return errorResponse(404, 'not-found');
+      if (request.method !== 'POST') return response(null, 405, { Allow: 'POST' });
+      if (action === 'publish' && ownerPublication.publishAvailable !== true) return errorResponse(403, 'publication-read-only');
+      if (url.search) return errorResponse(400, 'invalid-publication-query');
+      let body;
+      try { body = await readBoundedJson(request, Math.min(maximumBodyBytes, 4096)); }
+      catch (error) { return errorResponse(error.status ?? 400, error.code ?? 'invalid-json'); }
+      const key = action === 'prepare' ? 'mappingId' : 'draftId';
+      if (!body || typeof body !== 'object' || Array.isArray(body)
+        || Object.keys(body).sort().join(',') !== `${key},csrf`.split(',').sort().join(',')
+        || typeof body[key] !== 'string'
+        || (key === 'draftId' ? !/^[0-9a-f]{64}$/u.test(body[key]) : !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(body[key]))) {
+        return errorResponse(400, 'invalid-publication-body');
+      }
+      if (!sameSecret(body.csrf, csrfToken)) return errorResponse(403, 'invalid-csrf');
+      try {
+        if (action === 'prepare') {
+          const result = await ownerPublication.prepare({ mappingId: body.mappingId });
+          if (result.outcome === 'unchanged') {
+            if (typeof result.reviewUrl !== 'string' || !/^\/owner\/publication\/current\/[0-9a-f]{64}$/u.test(result.reviewUrl)) {
+              return errorResponse(409, 'publication-prepare-failed');
+            }
+            return json({ outcome: 'unchanged', reviewUrl: result.reviewUrl }, 201);
+          }
+          return json({ draftId: result.summary.draftId, jobId: result.summary.jobId,
+            capturedVersion: result.summary.capturedVersion, candidateDigest: result.summary.candidateDigest,
+            reviewUrl: `/owner/publication/${result.summary.draftId}` }, 201);
+        }
+        const result = await ownerPublication.publish({ draftId: body.draftId });
+        return json({ draftId: result.draftId, jobId: result.jobId, state: result.state,
+          capturedVersion: result.capturedVersion, replayed: result.replayed,
+          statusUrl: `/owner/jobs/${result.jobId}` }, 202);
+      } catch {
+        // Do not project arbitrary dependency codes/messages or private references.
+        return errorResponse(409, action === 'prepare' ? 'publication-prepare-failed' : 'publication-publish-refused');
+      }
+    }
+
+    if (url.pathname === '/owner/review' || url.pathname === '/api/review') {
+      if (!config.proposalReview.enabled) return errorResponse(404, 'proposal-review-disabled');
+      if (request.method !== 'GET' && request.method !== 'HEAD') return response(null, 405, { Allow: 'GET, HEAD' });
+      const query = optionalQueryObject(url, ['cursor']);
+      if (query === null
+        || (query.cursor !== undefined
+          && (query.cursor.length === 0
+            || Buffer.byteLength(query.cursor, 'utf8') > 1024
+            || /\p{Cc}/u.test(query.cursor)))) {
+        return errorResponse(400, 'invalid-review-query');
+      }
+      let review;
+      try {
+        review = await proposalReview.list({ cursor: query.cursor ?? null });
+      } catch (error) {
+        return errorResponse(reviewErrorStatus(error), error instanceof OwnerAlphaError ? error.code : 'review-list-failed');
+      }
+      if (url.pathname === '/api/review') {
+        if (request.method === 'HEAD') return json(null);
+        return json({
+          actionable: review.actionable.map((entry) => ({
+            summary: entry.summary,
+            sourceVerification: entry.sourceVerification,
+          })),
+          history: review.history.map((entry) => ({ summary: entry.summary, application: entry.application ?? null })),
+          historyTruncated: review.historyTruncated,
+          nextCursor: review.nextCursor,
+        });
+      }
+      if (request.method === 'HEAD') return html(null);
+      return html(reviewListPage({ overlay: review, nextCursor: review.nextCursor }));
+    }
+
+    const reviewDecisionMatch = url.pathname.match(/^\/api\/review\/([^/]+)\/decision$/u);
+    if (reviewDecisionMatch) {
+      if (!config.proposalReview.enabled) return errorResponse(404, 'proposal-review-disabled');
+      if (request.method !== 'POST') return response(null, 405, { Allow: 'POST' });
+      if (url.search !== '') return errorResponse(400, 'unexpected-query');
+      const queueId = reviewQueueId(reviewDecisionMatch[1]);
+      if (queueId === null) return errorResponse(400, 'invalid-queue-id');
+      let body;
+      try {
+        body = await readBoundedJson(request, MAX_REVIEW_DECISION_BODY_BYTES);
+      } catch (error) {
+        return errorResponse(error?.status ?? 400, 'invalid-request-body');
+      }
+      const intent = validateDecisionBody(body, queueId);
+      if (intent === null) return errorResponse(400, 'invalid-decision-request');
+      if (!sameSecret(intent.csrf, csrfToken)) return errorResponse(403, 'invalid-csrf');
+      try {
+        const recorded = await proposalReview.record({
+          queueId,
+          reviewEvidenceDigest: intent.reviewEvidenceDigest,
+          action: intent.action,
+          reason: intent.reason,
+        });
+        const summary = recorded.index.decisions.find((entry) => entry.queueId === queueId);
+        if (!summary) throw new OwnerAlphaError('invalid-decision-result', 'decision index omitted its new immutable decision');
+        return json({
+          queueId,
+          action: recorded.decision.action,
+          decidedAt: recorded.decision.decidedAt,
+          replayed: recorded.replayed,
+          summary,
+          statusUrl: `/owner/decisions/${encodeURIComponent(queueId)}`,
+          jsonUrl: `/api/decisions/${encodeURIComponent(queueId)}`,
+        }, recorded.replayed ? 200 : 201);
+      } catch (error) {
+        return errorResponse(reviewErrorStatus(error), error instanceof OwnerAlphaError ? error.code : 'decision-record-failed');
+      }
+    }
+
+    const reviewApplyMatch = url.pathname.match(/^\/api\/review\/([^/]+)\/apply$/u);
+    if (reviewApplyMatch) {
+      if (!config.proposalReview.enabled) return errorResponse(404, 'proposal-review-disabled');
+      if (request.method !== 'POST') return response(null, 405, { Allow: 'POST' });
+      if (url.search !== '') return errorResponse(400, 'unexpected-query');
+      const queueId = reviewQueueId(reviewApplyMatch[1]);
+      if (queueId === null) return errorResponse(400, 'invalid-queue-id');
+      if (typeof proposalReview.apply !== 'function' || proposalReview.applicationAvailable !== true) {
+        return errorResponse(404, 'application-unavailable');
+      }
+      let body;
+      try {
+        body = await readBoundedJson(request, MAX_REVIEW_DECISION_BODY_BYTES);
+      } catch (error) {
+        return errorResponse(error?.status ?? 400, 'invalid-request-body');
+      }
+      const intent = validateApplyBody(body, queueId);
+      if (intent === null) return errorResponse(400, 'invalid-apply-request');
+      if (!sameSecret(intent.csrf, csrfToken)) return errorResponse(403, 'invalid-csrf');
+      try {
+        const result = await proposalReview.apply(queueId);
+        if (!result.applied) {
+          return json({
+            error: { code: `application-${result.status.state}`, reason: result.status.reason },
+            status: result.status,
+            statusUrl: `/owner/decisions/${encodeURIComponent(queueId)}`,
+          }, result.status.state === 'applied' ? 409 : 422);
+        }
+        return json({
+          queueId,
+          attempt: result.event.attempt,
+          jobId: result.job.jobId,
+          state: result.job.state,
+          statusUrl: `/owner/jobs/${encodeURIComponent(result.job.jobId)}`,
+          jsonUrl: `/api/jobs/${encodeURIComponent(result.job.jobId)}`,
+        }, 202);
+      } catch (error) {
+        return errorResponse(reviewErrorStatus(error), error instanceof OwnerAlphaError ? error.code : 'application-failed');
+      }
+    }
+
+    const reviewDetailMatch = url.pathname.match(/^\/(owner\/review|api\/review)\/([^/]+)$/u);
+    if (reviewDetailMatch) {
+      if (!config.proposalReview.enabled) return errorResponse(404, 'proposal-review-disabled');
+      if (request.method !== 'GET' && request.method !== 'HEAD') return response(null, 405, { Allow: 'GET, HEAD' });
+      let reviewMode = REVIEW_MODE_KEYS[0];
+      if (url.search !== '') {
+        const query = queryObject(url, ['mode']);
+        if (!query || !REVIEW_MODE_KEYS.includes(query.mode) || reviewDetailMatch[1] !== 'owner/review') {
+          return errorResponse(400, 'unexpected-query');
+        }
+        reviewMode = query.mode;
+      }
+      const queueId = reviewQueueId(reviewDetailMatch[2]);
+      if (queueId === null) return errorResponse(400, 'invalid-queue-id');
+      let loaded;
+      try {
+        loaded = await proposalReview.load(queueId);
+      } catch (error) {
+        return errorResponse(reviewErrorStatus(error), error instanceof OwnerAlphaError ? error.code : 'review-load-failed');
+      }
+      if (loaded.decision !== null) {
+        if (reviewDetailMatch[1] === 'owner/review') {
+          return response(null, 303, { Location: `/owner/decisions/${encodeURIComponent(queueId)}` });
+        }
+        return json({
+          error: { code: 'decision-already-recorded' },
+          statusUrl: `/owner/decisions/${encodeURIComponent(queueId)}`,
+        }, 409);
+      }
+      if (reviewDetailMatch[1] === 'api/review') {
+        if (request.method === 'HEAD') return json(null);
+        const { document: _reviewDocument, ...apiEntry } = loaded.entry;
+        return json(apiEntry);
+      }
+      if (request.method === 'HEAD') return html(null);
+      return html(reviewDetailPage({ entry: loaded.entry, csrfToken, mode: reviewMode }));
+    }
+
+    const decisionDetailMatch = url.pathname.match(/^\/(owner\/decisions|api\/decisions)\/([^/]+)$/u);
+    if (decisionDetailMatch) {
+      if (!config.proposalReview.enabled) return errorResponse(404, 'proposal-review-disabled');
+      if (request.method !== 'GET' && request.method !== 'HEAD') return response(null, 405, { Allow: 'GET, HEAD' });
+      if (url.search !== '') return errorResponse(400, 'unexpected-query');
+      const queueId = reviewQueueId(decisionDetailMatch[2]);
+      if (queueId === null) return errorResponse(400, 'invalid-queue-id');
+      let history;
+      try {
+        history = await proposalReview.loadDecision(queueId);
+      } catch (error) {
+        return errorResponse(reviewErrorStatus(error), error instanceof OwnerAlphaError ? error.code : 'decision-load-failed');
+      }
+      if (history === null) return errorResponse(404, 'decision-not-found');
+      let application = null;
+      if (history.decision.action === 'approve' && typeof proposalReview.applicationStatus === 'function') {
+        try {
+          application = await proposalReview.applicationStatus(queueId);
+        } catch (error) {
+          application = {
+            queueId,
+            state: 'unknown',
+            reason: error instanceof OwnerAlphaError ? error.code : 'application-status-failed',
+          };
+        }
+      }
+      if (decisionDetailMatch[1] === 'api/decisions') {
+        if (request.method === 'HEAD') return json(null);
+        return json({ ...history, application });
+      }
+      if (request.method === 'HEAD') return html(null);
+      return html(decisionDetailPage({ ...history, application, csrfToken }));
+    }
+
+    if (url.pathname === '/owner/in-place') {
+      if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
+      const query = queryObject(url, ['relativePath', 'slug']);
+      if (!query) return errorResponse(400, 'invalid-edit-query');
+      try {
+        const session = await createEditSession({ config, renderer: query });
+        const target = liveUrlForSlug(`${readerOrigin}/cyberbase/`, session.slug);
+        return response(null, 303, { Location: `${target}#owner-edit` });
+      } catch (error) { return errorResponse(400, error?.code ?? 'edit-session-failed'); }
+    }
+
+    const staged = /^\/owner\/staged\/([A-Za-z0-9_-]{43})$/u.exec(url.pathname);
+    if (staged) {
+      if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
+      if (url.search) return errorResponse(400, 'unexpected-query');
+      const handoff = handoffs.get(staged[1]);
+      if (!handoff) return errorResponse(410, 'owner-handoff-expired');
+      try {
+        const session = await createEditSession({ config, renderer: { relativePath: handoff.source.path, slug: handoff.slug } });
+        const derived = deriveOwnerDirect({ config, session, handoff });
+        const stored = directEdits.create({ ...derived, stageId: staged[1], csrfToken });
+        const back = `${liveUrlForSlug(`${readerOrigin}/cyberbase/`, session.slug)}#owner-edit`;
+        const cards = derived.operation.proposal.changeSet.files[0].operations.map((op, index) => {
+          const base = Buffer.from(session.source.bytesBase64, 'base64');
+          // Escaped text only. No source HTML or reader scripts enter this origin.
+          // Show the change within its own line only, trimmed at word boundaries.
+          const lineBefore = base.subarray(0, op.start).toString('utf8').split('\n').at(-1);
+          const lineAfter = base.subarray(op.end).toString('utf8').split('\n')[0];
+          const before = lineBefore.length > 80 ? `…${lineBefore.slice(-80).replace(/^\S*\s/u, '')}` : lineBefore;
+          const after = lineAfter.length > 80 ? `${lineAfter.slice(0, 80).replace(/\s\S*$/u, '')}…` : lineAfter;
+          return `<section class="direct-change"><p>${escapeHtml(before)}<del>${escapeHtml(op.expected)}</del><ins>${escapeHtml(op.replacement)}</ins>${escapeHtml(after)}</p></section>`;
+        }).join('');
+        return html(request.method === 'HEAD' ? null : pageShell({ title: 'Save your changes', script: '/owner/assets/direct.js', body: `<main class="owner-shell direct-review" id="owner-direct" data-edit-id="${escapeHtml(stored.id)}" data-csrf="${escapeHtml(csrfToken)}"><header class="owner-header"><p class="eyebrow">Save changes to</p><h1>${escapeHtml(session.relativePath.split('/').at(-1).replace(/\.md$/u, ''))}</h1></header>${cards}<p class="direct-raw"><a href="/owner/edit?relativePath=${encodeURIComponent(session.relativePath)}&amp;slug=${encodeURIComponent(session.slug)}">Edit whole file as Markdown</a></p><form id="direct-form"><div class="owner-finish"><a href="${escapeHtml(back)}" aria-label="Back to editing">Back</a><button type="submit">Save · ${handoff.operations.length}</button></div><p id="form-status" role="status"></p></form></main>` }));
+      } catch (error) { return errorResponse(409, error?.code ?? 'owner-handoff-unavailable'); }
+    }
+
+    if (url.pathname === '/api/owner-direct') {
+      if (request.method !== 'POST') return response(null, 405, { Allow: 'POST' });
+      if (url.search) return errorResponse(400, 'unexpected-query');
+      let body;
+      try { body = await readBoundedJson(request, 4096); }
+      catch (error) { return errorResponse(error?.status ?? 400, 'invalid-request-body'); }
+      if (!body || typeof body !== 'object' || Object.keys(body).sort().join(',') !== 'csrf,editId' || !exactToken(body.editId)) return errorResponse(400, 'invalid-owner-save');
+      if (!sameSecret(body.csrf, csrfToken)) return errorResponse(403, 'invalid-csrf');
+      const edit = directEdits.get(body.editId);
+      if (!edit || !sameSecret(edit.csrfToken, csrfToken) || !handoffs.get(edit.stageId)) return errorResponse(410, 'owner-handoff-expired');
+      if (inFlight.has(edit.stageId)) return errorResponse(409, 'save-in-progress');
+      inFlight.add(edit.stageId);
+      try {
+        const jobId = validateJobId(createJobId());
+        const session = await authorizeOwnerDirect({ context: storeContextFromConfig(config, projectRoot), jobId, session: edit.session, operation: edit.operation });
+        const accepted = await saveEdit({ jobId, session, operation: edit.operation });
+        if (accepted?.jobId !== jobId || accepted.state !== 'accepted') throw Error('invalid acceptance');
+        directEdits.delete(body.editId); handoffs.delete(edit.stageId);
+        return json({ jobId, state: 'accepted', statusUrl: `/owner/jobs/${encodeURIComponent(jobId)}` }, 202);
+      } catch (error) { return errorResponse(409, error?.code ?? 'owner-save-failed'); }
+      finally { inFlight.delete(edit.stageId); }
     }
 
     if (url.pathname === '/owner/edit') {
@@ -637,7 +2303,13 @@ export function createOwnerAlphaHandler({
         });
         if (typeof session?.source?.text !== 'string') return errorResponse(500, 'invalid-edit-session');
         const stored = editSessions.create(session);
-        const body = editPage({ editSessionId: stored.id, csrfToken, session });
+        const body = editPage({
+          editSessionId: stored.id,
+          csrfToken,
+          session,
+          reviewEnabled: config.proposalReview.enabled,
+          publicationEnabled: config.ownerPublication.enabled,
+        });
         if (request.method === 'HEAD') return html(null, 200);
         return html(body);
       } catch (error) {
@@ -786,6 +2458,7 @@ async function loadPipelineAdapter(options) {
   if (typeof created === 'function') {
     return {
       saveEdit: created,
+      startEdit: typeof created.startEdit === 'function' ? created.startEdit : null,
       resumeJob: typeof created.resumeJob === 'function' ? created.resumeJob : null,
       getJob: typeof created.getJob === 'function' ? created.getJob : null,
     };
@@ -795,6 +2468,7 @@ async function loadPipelineAdapter(options) {
   }
   return {
     saveEdit: created.saveEdit,
+    startEdit: typeof created.startEdit === 'function' ? created.startEdit : null,
     resumeJob: typeof created.resumeJob === 'function' ? created.resumeJob : null,
     getJob: typeof created.getJob === 'function' ? created.getJob : null,
   };
@@ -833,6 +2507,13 @@ export async function runOwnerAlphaServer({
   startServers = startOwnerAlphaServers,
   listJobs = listDurableJobs,
   recoverJobs = recoverOwnerAlphaJobs,
+  createReviewClient = createProposalReviewClient,
+  createReviewSource = createOwnerProposalReviewSource,
+  createReviewService = createOwnerProposalReviewService,
+  recoverDecisions = recoverProposalDecisions,
+  recordDecision = recordProposalDecision,
+  startSuggestions = startSuggestionIntake,
+  readAuthoringNote,
 } = {}) {
   if (typeof rebuildSite !== 'function'
     || typeof loadPipeline !== 'function'
@@ -840,32 +2521,94 @@ export async function runOwnerAlphaServer({
     || typeof createReader !== 'function'
     || typeof startServers !== 'function'
     || typeof listJobs !== 'function'
-    || typeof recoverJobs !== 'function') {
-    throw new TypeError('rebuildSite, pipeline, handlers, servers, and recovery dependencies are required');
+    || typeof recoverJobs !== 'function'
+    || typeof createReviewClient !== 'function'
+    || typeof createReviewSource !== 'function'
+    || typeof createReviewService !== 'function'
+    || typeof recoverDecisions !== 'function'
+    || typeof recordDecision !== 'function'
+    || typeof startSuggestions !== 'function') {
+    throw new TypeError('site, pipeline, handlers, servers, review, recovery, and suggestion dependencies are required');
   }
   const config = await loadOwnerAlphaConfig(configFile);
   const storeContext = storeContextFromConfig(config, projectRoot);
   await prepareStore(storeContext);
+  // The site build retains the publication binding the form needs, so the
+  // intake starts after it and before anything reads the review socket.
   await rebuildSite({ config, projectRoot });
-  const pipeline = await loadPipeline({ config, projectRoot, context: storeContext });
+  const suggestions = await startSuggestions({ config, projectRoot });
+  let pipeline;
+  try {
+    // Install even when currently disabled: recovered publication jobs must not
+    // silently become ordinary edits if a reader or config is no longer present.
+    const publicationGuard = createPublicationSourceGuard({ config, context: storeContext, readNote: readAuthoringNote });
+    pipeline = await loadPipeline({ config, projectRoot, context: storeContext,
+      dependencies: { revalidateSource: publicationGuard } });
+  } catch (error) {
+    await suggestions?.close().catch(() => {});
+    throw error;
+  }
   const lookupJob = pipeline.getJob ?? ((jobId) => loadDurableJob(storeContext, jobId, {
     maxBytes: config.limits.maxArtifactBytes,
   }));
+  let proposalReview = null;
+  if (config.proposalReview.enabled) {
+    const client = createReviewClient({
+      socketPath: config.proposalReview.socketPath,
+      requestTimeoutMs: config.proposalReview.requestTimeoutMs,
+    });
+    const source = createReviewSource({ config, client });
+    proposalReview = createReviewService({
+      config,
+      context: storeContext,
+      source,
+      recoverDecisions,
+      recordDecision,
+      application: {
+        saveEdit: pipeline.saveEdit,
+        createJobId: () => `OA-${randomUUID()}`,
+        siteRoot: path.resolve(projectRoot, config.workspace.site),
+        ownerOrigin: `http://${config.listen.host}:${config.listen.port}`,
+      },
+    });
+  }
   const ownerFetch = createHandler({
     config,
     projectRoot,
     saveEdit: pipeline.saveEdit,
     lookupJob,
+    proposalReview,
+    ownerPublication: config.ownerPublication.enabled
+      ? createOwnerPublicationRuntime({ config, context: storeContext, readNote: readAuthoringNote, pipeline }) : null,
   });
   const readerFetch = createReader({ config, projectRoot });
-  const runtime = startServers({ config, ownerFetch, readerFetch, serve });
-  const recovery = Promise.resolve().then(() => recoverJobs({
-    config,
-    context: storeContext,
-    pipeline,
-    listJobs,
-  }));
-  return Object.freeze({ ...runtime, recovery });
+  let runtime;
+  try {
+    runtime = startServers({ config, ownerFetch, readerFetch, serve });
+  } catch (error) {
+    await suggestions?.close().catch(() => {});
+    throw error;
+  }
+  const recovery = Promise.resolve().then(async () => {
+    await recoverDecisions(storeContext);
+    return recoverJobs({
+      config,
+      context: storeContext,
+      pipeline,
+      listJobs,
+    });
+  });
+  return Object.freeze({
+    ...runtime,
+    suggestions: suggestions === null
+      ? null
+      : Object.freeze({ formOrigin: suggestions.formOrigin, forge: suggestions.forge }),
+    recovery,
+    stop(closeActiveConnections) {
+      runtime.stop?.(closeActiveConnections);
+      return suggestions?.close() ?? Promise.resolve(null);
+    },
+  });
 }
 
 export const OWNER_ALPHA_READY_CONTENT = 'owner-alpha-ready-v1\n';
@@ -931,7 +2674,7 @@ if (import.meta.main) {
     if (stopping) return;
     stopping = true;
     disposeConsole?.();
-    runtime?.stop(true);
+    await runtime?.stop(true);
     try {
       await removeOwnerAlphaReadyMarker(readyFile);
     } finally {
@@ -951,6 +2694,16 @@ if (import.meta.main) {
     await runtime.recovery;
     if (readyFile) await writeOwnerAlphaReadyMarker(readyFile);
     console.log(`Owner alpha reader: ${runtime.readerOrigin}/cyberbase/`);
+    if (runtime.suggestions === null) {
+      console.log('Suggestions: off (turn them on under "suggestions" in the owner config)');
+    } else {
+      console.log(runtime.suggestions.formOrigin === null
+        ? 'Suggestions: form off'
+        : `Suggestions: form on for pages served from ${runtime.readerOrigin}/cyberbase/`);
+      console.log(runtime.suggestions.forge === null
+        ? 'Suggestions: no forge watched'
+        : `Suggestions: watching ${runtime.suggestions.forge} for pull requests`);
+    }
     console.log(`Owner alpha bootstrap: ${formatBootstrapUrl(runtime.ownerOrigin, runtime.bootstrapToken)}`);
     if (typeof runtime.issueBootstrap === 'function' && process.stdin.readable) {
       console.log("Enter 'b' for a one-time sign-in link for another device.");

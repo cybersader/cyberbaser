@@ -1,0 +1,24 @@
+---
+title: Access tiers and concrete diagrams
+description: "Maintainer direction for account-free abuse protection, optional breach-checked passwords and no homemade authentication, plus concrete logo-based storyboards replacing abstract diagrams."
+status: log
+tags: [governance, identity, contribution, design]
+---
+
+## Concrete diagrams
+
+The maintainer rejected abstract shape diagrams and asked for real icons, platform logos and a useful example. Two standalone storyboards were produced in the private workspace: one correction traced from a reader to the live page, and a no-account suggestion explainer. They use official Simple Icons marks (GitHub, Obsidian, Forgejo, Git, TrueNAS, FIDO, Cloudflare, Have I Been Pwned, Better Auth), interface mockups and per-step status labels (works today, built but off, planned). Page text, suggestion numbers and commit IDs are illustrative.
+
+The maintainer then asked how a reader without a GitHub or Forgejo account can suggest a fix. The answer recorded in the explainer: the **Suggest a correction** form and its separate inbox service are built and proven on a throwaway vault but only run on the owner's private copy of the site. Public cybersader.com has no form. Opening it needs a public HTTPS address, flood/bot protection and a receipt-status path, and Q09 remains open.
+
+## Access-tier direction
+
+The maintainer judged that public suggestions need bot and abuse protection, considered gating with passkey accounts, preferred not to store accounts where avoidable, allowed passwords as an optional setting with Have I Been Pwned refusal, and warned against building authentication in-house.
+
+Recorded in [access tiers](/cyberbaser/design/contribution-trust-and-access/#access-tiers-abuse-protection-without-a-forced-account): an anonymous floor protected by edge limits, an account-free bot check, per-sender/per-page limits and an inbox cap; optional contributor accounts with passkeys preferred and passwords off by default; and an owner-recognized trusted tier. Accounts give continuity and higher limits rather than serving as the primary bot defense. The earlier [proposal hub research](/cyberbaser/research/proposal-hub-bom/) already described the four protection layers; its bot-fork mechanics are superseded.
+
+Better Auth's official Have I Been Pwned plugin documentation was checked: it rejects breached passwords at sign-up and password change and sends only the first five characters of the SHA-1 hash. No integration exists.
+
+## Verification and limits
+
+A new access-tier PNG was rendered from authored HTML with network requests blocked and embedded in the canonical page as an ordinary Markdown image, so it displays in plain Markdown viewers as well as the docs site. The docs build result is recorded in `FOCUS.md`. No authentication, bot check, public form, deployment or account storage was implemented. Exact limits, provider, registration and reset rules, and the account-custody amendment remain open.

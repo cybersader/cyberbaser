@@ -1,0 +1,33 @@
+---
+title: "2026-09-30 · Lane A live check prepared"
+description: "With the maintainer choosing Forgejo as a TrueNAS app holding a vault copy for pull-request suggestions, private network only, prepared the first live read of a real pull request: a read-only instrument around the existing adapter, a hermetic test, and a validation page with pass and fail."
+date: 2026-09-30
+status: implementation
+tags: [setup, testing, governance, contribution]
+---
+
+## Maintainer direction
+
+Asked as a funnel: Forgejo's first job is to hold a copy of the vault so pull requests can become suggestions; only the maintainer reaches it, on the private network; the maintainer installs from the TrueNAS UI using the plan page and the session prepares the live validation.
+
+## What was prepared
+
+- `packages/forgejo-intake/src/live-check.js` and `bin/forgejo-live-check.js`: one read of one real pull request through the unchanged adapter, with the real network and a real local clone in place of the test fakes. Reports in plain words or JSON, exit 0 on reconstruction and 2 on an adapter refusal with the code as data. Reads an optional token file per request, mode 0600 required, never echoed. Writes nothing.
+- `test/live-check.test.js`: hermetic coverage with the package's fake Forgejo and real Git fixture.
+- [Forgejo Lane A live validation](/cyberbaser/development/forgejo-lane-a-live-validation/): what the maintainer does in Forgejo's screens (edit a file, commit as a new branch with a pull request), what the check reads, pass and fail, the record template, and the claim ceiling.
+- The TrueNAS plan now seeds the vault copy through Forgejo's own **New Migration** screen, not a Git push, so no step needs a Git client.
+
+## Honest note on commands
+
+The maintainer has said nobody will run commands. This check is a one-time validation instrument, said so on its page. The product shape that removes it, pull requests appearing in the owner's inbox by themselves, is the design decision this validation unblocks and is the alignment question at the end of this session. It would touch queue-writer ownership: the intake service holds the queue's lifetime lock, so a Forgejo poller would have to feed proposals through that same writer.
+
+## Checks
+
+```text
+bun test packages/forgejo-intake/test
+  32 passed, 0 failed (three new tests: reconstruction report, refusals as data, strict files and arguments)
+```
+
+## Boundaries
+
+No live Forgejo has been read. Nothing installed, linked, offered, merged, deployed, or exposed. GitHub remains authority.

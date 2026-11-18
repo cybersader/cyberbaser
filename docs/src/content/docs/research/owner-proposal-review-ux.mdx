@@ -1,0 +1,115 @@
+---
+title: Owner proposal review UX
+description: "Prior-art research and design synthesis for a content-first owner decision experience that preserves Cyberbaser's exact evidence and no-effect authority boundary."
+status: research
+tags: [research, prior-art, design]
+---
+
+## Research question
+
+How should an owner review an editorial proposal containing one or more exact, source-bound changes without making the experience feel like a Git console, a moderation dashboard, or an enterprise CMS workflow?
+
+This review used current public product documentation. It did not test authenticated product instances, compare pricing tiers, or establish measured usability. The observations below describe documented interaction patterns. The Cyberbaser direction is a synthesis constrained by the product's authority model.
+
+:::caution[Scope corrected after maintainer review]
+The first synthesis assumed one wording-sized splice. Two maintainer reviews showed that the object must instead carry durable editorial intent, realistic paragraph or section scope, and eventually multiple exact operations. The coordinated [proposal operating model](/cyberbaser/research/proposal-operating-model/) now governs the next research and implementation sequence. The prior-art observations below remain useful, but the old changed-word identity and tabbed single-pane comparison are not accepted product direction.
+:::
+
+## Evidence from adjacent products
+
+### Suggestions stay close to the prose
+
+[Notion suggested edits](https://www.notion.com/help/suggested-edits) anchor additions and deletions beside supported page blocks, where a reviewer can accept, reject, reply, or react. [Google Docs Suggesting mode](https://support.google.com/docs/answer/6033474) marks additions and deletions in the document and lets a reviewer inspect the document with or without suggestions.
+
+The useful pattern is not their collaboration model. It is that the reviewer encounters the proposed meaning before workflow metadata.
+
+### Content systems provide context before technical comparison
+
+[GitBook change requests](https://gitbook.com/docs/collaborate/change-requests/change-requests-screen.md) provide a central request list, expanded request details, discussion, approval, and content comparison. A separate [GitBook review flow](https://gitbook.com/docs/collaborate/change-requests/change-requests-in-a-space.md) includes rendered preview and inline or split change views. [Storyblok's Visual Editor](https://www.storyblok.com/docs/manuals/visual-editor.html) places review discussion in rendered context.
+
+These products support a useful progression: find the item, understand it in content context, inspect exact changes when needed, then act. Their merge and publication coupling does not fit Cyberbaser's current decision-only boundary.
+
+### Durable decisions remain explicit
+
+[Confluence approvals](https://support.atlassian.com/confluence-cloud/docs/request-and-manage-approvals-in-confluence/) retain reviewer identities, decisions, timestamps, comments, and earlier review rounds. [WordPress post status](https://wordpress.org/documentation/article/post-status/) demonstrates how little vocabulary may be necessary: a contribution can simply become Pending until someone with authority acts.
+
+Cyberbaser needs the clarity of a durable receipt, but not multi-reviewer rounds, configurable stages, or publishing permissions in the review UI.
+
+### Blockers belong near consequential actions
+
+[Sanity Studio tasks](https://www.sanity.io/docs/user-guides/tasks) surface unresolved work near document publication controls. [Contentful entry tasks](https://www.contentful.com/developers/docs/references/content-management-api/entry-tasks/) can block publication while a required task remains unresolved. Both products also support contextual discussion through [Sanity comments](https://www.sanity.io/docs/studio/comments) and [Contentful comments](https://www.contentful.com/help/content-and-entries/comments/).
+
+The relevant principle is proximity: if integrity or policy prevents an action, explain that beside the action. Do not make the owner search a technical evidence panel to discover why they cannot decide.
+
+### Attention state is not the same as a decision
+
+[Slite document verification](https://slite.com/de/help/F9erHftuXmOHY0/Doc-Verification) distinguishes Verified, Verification Requested, Expired, Outdated, and no status. This is a useful reminder that stale or unverifiable evidence is not an owner rejection.
+
+Cyberbaser should preserve that distinction. A proposal may need attention because its source changed or validation failed. Approved and Rejected remain owner decisions. Those categories must not collapse into one generic status vocabulary.
+
+### Queue mechanics can be efficient without creating pressure
+
+[Linear Triage](https://linear.app/docs/triage) and [Linear Inbox](https://linear.app/docs/inbox) provide focused queue navigation, sequential processing, and preservation of place. Those mechanics are relevant. Its issue density, priority culture, and one-key triage actions are not appropriate for immutable content decisions.
+
+## Cyberbaser synthesis
+
+The owner review should feel like reading a carefully prepared editorial note.
+
+### Primary flow
+
+1. **Proposals:** a quiet one-column inbox leads with an authored title or provenance-marked fallback, concise summary, contributor intent, and actual source scope.
+2. **Review:** wide screens show Current and Proposed simultaneously for each exact comparison unit; mobile stacks the same evidence with repeated labels.
+3. **Decide:** a persistent bar keeps the scope and the Approve or Reject actions visible while the owner reads; neither action records anything by itself.
+4. **Confirm:** the action-specific sheet repeats the scope, asks for the required owner note, and states once that deciding records the decision and changes nothing on the page.
+5. **Receipt:** the immutable record leads with the decision and the owner's note, then states **Source unchanged** and that no application was requested or started.
+6. **Decided:** newest decisions appear first, using the same intent and scope projection as the active inbox.
+
+### Evidence hierarchy
+
+The normal reading path should show:
+
+- the contributor-authored or provenance-marked proposal identity, summary, rationale, and references;
+- declared editorial scope beside the mechanically computed file and operation scope;
+- simultaneous Current and Proposed content for each exact comparison unit on wide screens;
+- bounded surrounding context, with longer text available without pretending to have a rendered full-page preview;
+- expiry and any plain-language integrity or policy advisory beside the decision affordance; and
+- the required owner note, immutable scope, and no-effect boundary.
+
+A closed technical disclosure should retain:
+
+- queue and proposal identifiers;
+- repository, revision, path, and Git object;
+- base, candidate, proposal, policy, and review-evidence digests;
+- intake lane, trust tier, route, verified subject, and reason codes;
+- queue-retention status and exact embedded evidence after a decision.
+
+Progressive disclosure changes presentation, not authority. The server still reloads and validates exact live evidence before recording a decision.
+
+### Visual language
+
+- Content occupies the largest and most readable area.
+- Interface text uses a quiet system sans; proposal text may use an installed reading serif; identifiers use monospace only inside exact evidence.
+- Whitespace, type scale, and rules establish hierarchy. Nested card grids, pill collections, gradients, and ornamental shadows do not.
+- One restrained accent supports navigation and selection. Approval and rejection colors appear only when making or reading a decision.
+- Mobile presentation remains a reading flow. It does not compress two technical columns into an unreadable miniature dashboard.
+
+### Interaction rules
+
+- Approve and Reject are not immediate submit buttons.
+- Both require a bounded decision note and an action-specific confirmation.
+- Keyboard shortcuts may move between comparison views, but no single key records an immutable decision.
+- Raw internal error codes do not lead user-facing recovery text.
+- Approval must always say that it records intent only and does not apply or publish source.
+
+## Deliberate exclusions
+
+This redesign does not add:
+
+- bulk decisions;
+- Later or snooze state;
+- assignments, workflow stages, deadlines, or throughput metrics;
+- comments or contributor reply loops;
+- full Markdown rendering or a published-page preview;
+- source application, commit, push, rebuild, deployment, or publication controls.
+
+A full rendered preview may become useful later, but the current review model provides an exact changed span and bounded quote context, not a complete rendered document. The interface must describe that evidence honestly rather than pretending it has more context than it does.

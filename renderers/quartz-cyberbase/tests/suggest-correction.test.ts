@@ -79,10 +79,28 @@ for (const origin of [
   "https://intake.example/",
   "https://INTAKE.example",
   "https://intake.example:443",
+  "http://8.8.8.8:4319",
+  "http://127.0.0.1",
+  "http://wiki.internal:4319",
+  "http://127.0.0.1:4319/",
 ]) {
   assert.throws(() => resolveIntakeOrigin(origin), /INTAKE_ORIGIN/)
 }
 assert.equal(resolveIntakeOrigin(intakeOrigin), intakeOrigin)
+// The owner's private local site posts to the intake the owner app runs beside it.
+assert.equal(resolveIntakeOrigin("http://127.0.0.1:4319"), "http://127.0.0.1:4319")
+assert.equal(resolveIntakeOrigin("http://100.100.100.100:4319"), "http://100.100.100.100:4319")
+assert.deepEqual(suggestionBindingForPage("docs/first.md", "docs/first", {
+  enabled: true,
+  intakeOrigin: "http://127.0.0.1:4319",
+  bindingDigest,
+  sourceRepository: repository,
+  sourceRevision: revision,
+}), {
+  action: `http://127.0.0.1:4319${ACCOUNT_FREE_INTAKE_PATH}`,
+  bindingDigest,
+  pageId: expectedPageId,
+})
 
 const entropy = Uint8Array.from({ length: 32 }, (_, index) => index)
 const idempotencyKey = idempotencyKeyFromBytes(entropy)
@@ -186,11 +204,15 @@ for (const missing of ["intakeOrigin", "bindingDigest", "sourceRepository", "sou
   assert.throws(() => resolveSuggestCorrectionOptions(environment), /required/)
 }
 
-// The rendered component may expose only the canonical action and opaque binding values.
+// Published provenance identity is permitted only from the opt-in provenance state.
+// Repository/revision/owner/private account values must still never reach the form.
 const componentSource = readFileSync(join(import.meta.dir, "../components/SuggestCorrection.tsx"), "utf8")
-assert.doesNotMatch(componentSource, /data-(?:source|repository|revision|path|owner|identity|contact|account)/iu)
+assert.doesNotMatch(componentSource, /data-(?:repository|revision|path|owner|identity|contact|account)/iu)
+assert.match(componentSource, /sourceProvenance\?\.source \? \{/u)
+assert.match(componentSource, /"data-source-identity": JSON.stringify\(\(fileData as any\).sourceProvenance.source\)/u)
 const formNames = [...componentSource.matchAll(/name="([^"]+)"/gu)].map((match) => match[1])
-assert.deepEqual(formNames, ["quote", "prefix", "suffix", "replacement", "rationale", "evidence"])
+assert.deepEqual(formNames, ["edited", "rationale", "evidence"])
+assert.doesNotMatch(componentSource, /Text to replace|Context immediately (?:before|after)/u)
 
 const acceptedCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = []
 const acceptedFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -204,7 +226,7 @@ const accepted = await submitCorrectionIntent(`${intakeOrigin}${ACCOUNT_FREE_INT
 assert.deepEqual(accepted, {
   accepted: true,
   replayed: false,
-  message: "Correction received. Status: pending-review. Queue ID: Q-test.",
+  message: "Thanks — sent for review. Receipt Q-test. The page stays unchanged until the owner applies the edit.",
 })
 assert.equal(acceptedCalls.length, 1)
 assert.equal(String(acceptedCalls[0].input), `${intakeOrigin}/v1/corrections`)
@@ -225,7 +247,7 @@ const replayed = await submitCorrectionIntent(`${intakeOrigin}${ACCOUNT_FREE_INT
   })) as typeof fetch)
 assert.equal(replayed.accepted, true)
 assert.equal(replayed.replayed, true)
-assert.match(replayed.message, /^Correction already received\./u)
+assert.match(replayed.message, /^Thanks — already sent for review\./u)
 
 const rejected = await submitCorrectionIntent(`${intakeOrigin}${ACCOUNT_FREE_INTAKE_PATH}`, intent, (async () =>
   new Response(JSON.stringify({ error: { code: "queue-full", message: "must not be displayed" } }), {
@@ -256,5 +278,66 @@ assert.equal(await readBoundedJsonResponse(new Response("server text", {
   status: 500,
   headers: { "content-type": "text/plain" },
 })), null)
+
+// Challenge inputs are public and opt-in. An unused key cannot enable the form.
+const challengeEnvironment = {
+  enabled: "enabled", intakeOrigin, bindingDigest,
+  sourceRepository: repository, sourceRevision: revision,
+}
+const challengeSiteKey = "0x4AAAAAAA-test_site-key"
+assert.equal(resolveSuggestCorrectionOptions({ ...challengeEnvironment, challengeSiteKey }).enabled, true)
+const challenged = resolveSuggestCorrectionOptions({ ...challengeEnvironment, challengeSiteKey })
+assert.ok(challenged.enabled)
+assert.equal(challenged.challengeSiteKey, challengeSiteKey)
+// Omitting the provider keeps the previous options/output shape byte-compatible.
+assert.deepEqual(challenged, { ...enabled, challengeSiteKey })
+assert.deepEqual(resolveSuggestCorrectionOptions({
+  ...challengeEnvironment, challengeSiteKey, challengeProvider: "turnstile",
+}), challenged)
+assert.deepEqual(resolveSuggestCorrectionOptions({
+  ...challengeEnvironment, challengeProvider: "turnstile",
+}), enabled)
+for (const challengeProvider of ["", "missing", "Turnstile", "__proto__", "toString", "https://untrusted.example/sdk.js"]) {
+  for (const key of [undefined, challengeSiteKey]) {
+    assert.throws(() => resolveSuggestCorrectionOptions({
+      ...challengeEnvironment, challengeSiteKey: key, challengeProvider,
+    }), /CYBERBASER_SUGGESTION_CHALLENGE_PROVIDER/)
+  }
+}
+assert.deepEqual(resolveSuggestCorrectionOptions({
+  ...challengeEnvironment, enabled: undefined, challengeProvider: "unused-provider",
+}), { enabled: false })
+assert.ok(enabled.enabled)
+assert.equal(Object.hasOwn(enabled, "challengeSiteKey"), false)
+for (const badKey of ["", " ", "bad key", "x".repeat(257), "x\n", "key<script>", "é", "key/", "\u0000"]) {
+  assert.throws(() => resolveSuggestCorrectionOptions({
+    ...challengeEnvironment, challengeSiteKey: badKey,
+  }), /CYBERBASER_SUGGESTION_CHALLENGE_SITE_KEY/)
+}
+assert.deepEqual(resolveSuggestCorrectionOptions({
+  ...challengeEnvironment, enabled: undefined, challengeSiteKey: "unused malformed key",
+}), { enabled: false })
+
+const challengeCalls: RequestInit[] = []
+await submitCorrectionIntent(`${intakeOrigin}${ACCOUNT_FREE_INTAKE_PATH}`, intent, (async (_input, init) => {
+  challengeCalls.push(init!)
+  return new Response("{}", { status: 202, headers: { "content-type": "application/json" } })
+}) as typeof fetch, "test-challenge-token")
+assert.equal(new Headers(challengeCalls[0].headers).get("Cyberbaser-Challenge-Token"), "test-challenge-token")
+assert.equal(challengeCalls[0].body, text)
+assert.equal(String(challengeCalls[0].body).includes("test-challenge-token"), false)
+
+for (const [status, code, message] of [
+  [403, "challenge-failed", "Couldn't confirm you're human. Please try again."],
+  [503, "challenge-unavailable", "Verification is temporarily unavailable. Please try again later."],
+  [429, "rate-limited", "Too many suggestions from here right now. Please try again later."],
+  [503, "queue-capacity", "Suggestions are paused while the owner reviews the backlog."],
+] as const) {
+  const result = await submitCorrectionIntent(`${intakeOrigin}${ACCOUNT_FREE_INTAKE_PATH}`, intent, (async () =>
+    new Response(JSON.stringify({ error: { code, message: "never display server text" } }), {
+      status, headers: { "content-type": "application/json" },
+    })) as typeof fetch)
+  assert.deepEqual(result, { accepted: false, replayed: false, message })
+}
 
 console.log("suggest-correction unit checks passed")

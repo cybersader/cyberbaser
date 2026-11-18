@@ -1,3 +1,9 @@
+import { createHmac, randomBytes } from 'node:crypto';
+import { networkIdentity } from './client-address.js';
+import { createInMemoryLimitStore, MAX_LIMIT_KEYS } from './limit-store/in-memory.js';
+
+const PROCESS_SALT = randomBytes(32);
+
 export function createGlobalAbuseLimiter({
   capacity = 20,
   refillPerSecond = 1,
@@ -35,6 +41,45 @@ export function createGlobalAbuseLimiter({
     snapshot() {
       refill();
       return Object.freeze({ tokens, active });
+    },
+  });
+}
+
+export const MAX_ABUSE_KEYS = MAX_LIMIT_KEYS;
+
+export function createLayeredAbuseLimiter({ limits, now = () => performance.now(), maxKeys = MAX_ABUSE_KEYS, createStore = createInMemoryLimitStore } = {}) {
+  if (!Number.isSafeInteger(maxKeys) || maxKeys < 1 || maxKeys > MAX_ABUSE_KEYS) throw new Error('invalid abuse key bound');
+  const hash = (scope, value) => createHmac('sha256', PROCESS_SALT).update(`${scope}\0${value}`).digest('hex');
+  // Keep independent per-scope capacity/eviction and clock semantics. Stores
+  // receive HMACs only; identity normalization and secret salt remain in core.
+  const bucket = (capacity, refillPerMs) => {
+    const store = createStore({ maxKeys });
+    return (key, cost = 1) => store.take(key, { capacity, refillPerMs, ...(cost === 1 ? {} : { cost }) }, now()) === true;
+  };
+  const sender = bucket(limits.perSenderCapacity, limits.perSenderRefillPerHour / 3_600_000);
+  const network = bucket(limits.perNetworkCapacity, limits.perNetworkRefillPerDay / 86_400_000);
+  const page = bucket(limits.perPageCapacity, limits.perPageRefillPerDay / 86_400_000);
+  const operationBudget = limits.perSenderOperationBudget ?? 50;
+  const byteBudget = limits.perSenderByteBudget ?? 64 * 1024;
+  let operations;
+  let bytes;
+  const senderIdentity = (ip) => ip === null ? 'unknown' : `${ip.family}:${ip.numeric}`;
+  return Object.freeze({
+    trySender(ip) {
+      const identity = senderIdentity(ip);
+      return sender(hash('sender', identity)) && network(hash('network', networkIdentity(ip)));
+    },
+    tryPage(pageId) { return page(hash('page', pageId)); },
+    tryWork(ip, operationCount, changedBytes) {
+      if (!Number.isSafeInteger(operationCount) || operationCount < 1
+        || !Number.isSafeInteger(changedBytes) || changedBytes < 1) return false;
+      operations ??= bucket(operationBudget, operationBudget / 3_600_000);
+      bytes ??= bucket(byteBudget, byteBudget / 3_600_000);
+      const identity = senderIdentity(ip);
+      // Independent stores, no refunds: a downstream refusal or replay must
+      // not turn into free work. The store sees only process-salted HMAC keys.
+      return operations(hash('sender-operations', identity), operationCount)
+        && bytes(hash('sender-bytes', identity), changedBytes);
     },
   });
 }

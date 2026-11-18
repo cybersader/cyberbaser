@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "enabled": true,
+  "publicOrigin": "https://suggest.example.com",
+  "listen": {
+    "host": "0.0.0.0",
+    "port": 8080
+  },
+  "allowedFormOrigins": [
+    "https://www.example.com"
+  ],
+  "repository": "https://forge.example.invalid/owner/wiki.git",
+  "bindingsRoot": "/srv/cyberbaser/source-bindings",
+  "gitDir": "/srv/cyberbaser/source-objects.git",
+  "queue": {
+    "root": "/var/lib/cyberbaser/proposal-queue",
+    "maxPendingEntries": 1000,
+    "maxRetainedBytes": 268435456,
+    "maxPendingPerSource": 25,
+    "pendingRetentionMs": 2592000000,
+    "expiredGraceMs": 604800000
+  },
+  "reviewIpc": {
+    "enabled": false,
+    "socketPath": null,
+    "requestTimeoutMs": 5000,
+    "maxConcurrentRequests": 4,
+    "maxListEntries": 100
+  },
+  "limits": {
+    "maxBodyBytes": 98304,
+    "requestTimeoutMs": 5000,
+    "maxConcurrentRequests": 4,
+    "tokenBucketCapacity": 20,
+    "tokenBucketRefillPerSecond": 1,
+    "perSenderCapacity": 3,
+    "perSenderRefillPerHour": 3,
+    "perNetworkCapacity": 10,
+    "perNetworkRefillPerDay": 10,
+    "perPageCapacity": 2,
+    "perPageRefillPerDay": 2
+  },
+  "botCheck": {
+    "provider": "turnstile",
+    "secretFile": "/run/secrets/turnstile-secret",
+    "expectedHostnames": [
+      "www.example.com"
+    ],
+    "expectedAction": "suggest-correction",
+    "timeoutMs": 3000
+  },
+  "clientAddress": {
+    "source": "header",
+    "header": "cf-connecting-ip",
+    "trustedPeers": [
+      "172.30.93.0/29"
+    ]
+  }
+}

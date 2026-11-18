@@ -91,7 +91,9 @@ describe('WP4 read-only CI structure', () => {
       'packages/ofm',
       'packages/trust',
       'packages/proposal',
+      'packages/forgejo-intake',
       'packages/proposal-queue',
+      'packages/proposal-review',
       'packages/account-free-intake',
       'apps/account-free-intake',
     ]);
@@ -151,7 +153,9 @@ describe('WP4 read-only CI structure', () => {
       'packages/ofm',
       'packages/trust',
       'packages/proposal',
+      'packages/forgejo-intake',
       'packages/proposal-queue',
+      'packages/proposal-review',
       'packages/account-free-intake',
       'apps/account-free-intake',
     ]);

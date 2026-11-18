@@ -1,0 +1,21 @@
+---
+title: Real-content rehearsal, selection prefill and PR #7 update
+description: "Session work pushed to draft PR #7; try:suggestions can copy a real vault folder read-only from Git; selecting text fills the suggestion form; a CI fixture hit the new per-sender limit and was adjusted."
+status: log
+tags: [testing, contribution, setup]
+---
+
+## Pushed
+
+The maintainer approved committing and pushing the session's work. Commit `9475744` (no AI co-author) fast-forwarded `feature/live-proposal-review`, updating draft [PR #7](https://github.com/cybersader/cyberbaser/pull/7). CI then failed one job: the owner-alpha container's opt-in acceptance test submits several proposals from one client and hit the new per-sender limit (429). That fixture now declares larger limits, matching the earlier fixture fixes; product defaults are unchanged. Both opt-in owner acceptance tests that run in that job (`proposal-review-acceptance`, `proposal-review-browser`) passed locally afterwards.
+
+## Real content in the hands-on rehearsal
+
+By maintainer direction to keep moving, two Sol workers ran in parallel.
+
+- **`--from` / `--folder`:** `bun run --cwd docs try:suggestions --from "<vault>" --folder "<folder>"` copies one folder's Markdown plus the attachments its pages reference, read-only from a Git ref (default `origin/main`, overridable with `--ref`). The source's working tree, index, refs and mtimes are verified unchanged. Caps: 400 Markdown files and 50 MiB each for Markdown and attachments. Publication denies still apply; cross-folder links stay unresolved; content is never rewritten. Tests: 17 pass, 2 opt-in skips; opt-in real Quartz 19 pass, both covering submit, limit, approval, apply, local push, rebuild and cleanup. The workers did not run it against the real vault.
+- **Selection prefill:** selecting text in the article fills **Text to replace** when the form opens; **Use selected text** recaptures it explicitly and never silently overwrites typed text. Only whitespace is normalized. Renderer suite passed. Real-browser and mobile selection timing remain unverified.
+
+## Finding: Windows line endings
+
+The existing apply step accepts only LF source (`source-not-lf-only`). Read-only count at the vault's `origin/main`: 4 of 57 notes in `📁 03 - Curations, Stacks` and 14 notes vault-wide contain carriage returns. Those notes can receive suggestions but cannot be applied until normalized in the vault.

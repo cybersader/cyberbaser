@@ -1,0 +1,10 @@
+{
+  "name": "@cyberbaser/suggestion-ledger",
+  "version": "0.1.0",
+  "description": "Pure origin-aware, pinned-byte suggestion ledger for replaceable editors.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": { ".": "./src/index.js" },
+  "scripts": { "test": "bun test test" }
+}

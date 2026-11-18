@@ -23,6 +23,20 @@ command = "bun run dev:host" # Astro Starlight -> http://localhost:4321/cyberbas
 kind = "dev-server"
 
 [[session]]
+name = "owner-review"
+cwd = "docs"
+command = "bun run review:owner-alpha"
+kind = "dev-server"
+description = "launch the disposable authenticated owner proposal review UI; Ctrl-C stops and cleans up"
+
+[[session]]
+name = "proposal-mockup"
+cwd = "docs"
+command = "bun run review:proposal-mockup"
+kind = "dev-server"
+description = "launch the unprivileged static/no-effect proposal review research surface on loopback"
+
+[[session]]
 name = "dogfood"
 cwd = "spikes/human-correction-dry-run"
 command = "bash"

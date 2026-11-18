@@ -1,0 +1,36 @@
+---
+title: "2026-09-27 · Owner application event proposal"
+description: "Wrote the proposal for the owner application-authority event as a canonical design page for the maintainer's decision: a second explicit owner act that re-checks the exact page and starts one ordinary Save job. No code, no decision taken."
+date: 2026-09-27
+status: research
+tags: [design, governance, contribution]
+---
+
+## Why now
+
+The maintainer chose, after the review page redesign, to have the application-authority event designed in writing before any code. It is the one authority question the proposal operating model left open: approval is decision-only by locked rule, and nothing yet says what act may apply an approved suggestion.
+
+## What was written
+
+Canonical page: [Owner application event](/cyberbaser/design/owner-application-event/). The design is the simplest one that reuses what exists:
+
+- Applying is a second, explicit owner act, separate in time from Approve. No durable auto-apply policy.
+- The act re-runs the strict blob-identity eligibility check at that moment, requires a clean checkout at the branch tip, and requires a new `applications.enabled` config gate that is off by default.
+- It records one create-once event artifact per suggestion, attempt-numbered only after a terminal failure with no source effect.
+- It starts one ordinary owner-alpha Save job with a supplied session and operation derived from the prepared input. The existing pipeline supplies every check, effect, and recovery. No second writer.
+- Script-only trigger in the first version, matching the input adapter; a receipt control is a separate later decision.
+
+## Findings surfaced by reading the pipeline against the corpus
+
+- The owner Save path refuses any operation touching YAML frontmatter, so checkpoint proposal 5 could be approved but not applied. Recommended to keep the rule and record the friction.
+- Only pages with a slug in the rendered site have a live witness; a proposal against an unrendered path would fail closed at slug resolution.
+- Owner limits and intake limits differ; the owner limits should govern since the owner pipeline writes.
+- The commit is the owner's; proposal and queue IDs go in a trailer; both notes stay private; visible contributor credit stays open under challenge 07.
+
+## What was not done
+
+No adapter, event artifact, config key, session schema change, or receipt copy was written. The review checkpoint has not run. Nothing merged, deployed, or exposed. The seven decisions at the end of the page are the maintainer's.
+
+## Checks
+
+CI on the preceding review page commit passed on all six workflows. This wave changes docs and orientation only; the docs build and diff check are recorded in the commit.

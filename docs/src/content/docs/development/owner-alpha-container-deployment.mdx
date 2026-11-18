@@ -102,6 +102,12 @@ The container-specific values are:
     "host": "127.0.0.1",
     "port": 4317
   },
+  "proposalReview": {
+    "enabled": false,
+    "socketPath": null,
+    "requestTimeoutMs": 5000,
+    "maxListEntries": 100
+  },
   "repository": {
     "checkout": "/vault"
   },
@@ -114,7 +120,7 @@ The container-specific values are:
 }
 ```
 
-Replace the address, remote, branch, workflow identity, live URL, owner policy, and limits for the deployment. Keep the file credential-free. The read-only bind is immutable input, not the file Bun loads: the entrypoint copies it without following symlinks into private tmpfs, verifies mode, ownership, link count, size, and timestamps, then the application validates that staged copy.
+Replace the address, remote, branch, workflow identity, live URL, owner policy, and limits for the deployment. Keep `proposalReview` disabled in this container profile. The WP2 bundle does not mount the account-free intake review socket and does not claim shared-socket OCI parity or cross-container UID/GID authorization. Keep the file credential-free. The read-only bind is immutable input, not the file Bun loads: the entrypoint copies it without following symlinks into private tmpfs, verifies mode, ownership, link count, size, and timestamps, then the application validates that staged copy.
 
 ### 5. Provide the HTTPS credential socket
 

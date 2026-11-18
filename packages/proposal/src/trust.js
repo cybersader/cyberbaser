@@ -6,6 +6,11 @@ import {
   ProposalError,
   validateProposal,
 } from './proposal.js';
+import {
+  applyChangeSetProposal,
+  changeSetProposalDigest,
+  validateChangeSetProposal,
+} from './change-set.js';
 
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
 const UTF8_BOM = Buffer.from([0xef, 0xbb, 0xbf]);
@@ -120,6 +125,62 @@ export function proposalToTrustChange(baseBytes, value, verifiedSubject) {
         : { ...proposal.submission.identityClaim },
     },
   });
+}
+
+/**
+ * v2 change sets are classified as ONE combined change: the whole verified
+ * candidate against the pinned base, never hunk by hunk. Same receiver-only
+ * subject, leading-BOM guard and strict UTF-8 rules as v1.
+ */
+export function changeSetProposalToTrustChange(baseBytes, value, verifiedSubject) {
+  const base = Buffer.from(baseBytes);
+  const proposal = validateChangeSetProposal(value, base);
+  const candidate = Buffer.from(applyChangeSetProposal(base, proposal));
+  const baseBomCount = countLeadingUtf8Boms(base);
+  if (baseBomCount !== countLeadingUtf8Boms(candidate)) {
+    throw new ProposalError(
+      'leading-bom-change',
+      'trust conversion refuses a change that adds or removes a leading UTF-8 BOM',
+    );
+  }
+  const trustOffset = baseBomCount * UTF8_BOM.length;
+  let before;
+  let after;
+  try {
+    before = UTF8_DECODER.decode(base.subarray(trustOffset));
+    after = UTF8_DECODER.decode(candidate.subarray(trustOffset));
+  } catch {
+    throw new ProposalError(
+      'invalid-utf8',
+      'proposal trust conversion requires valid UTF-8 base and candidate bytes',
+    );
+  }
+  const subject = normalizeVerifiedSubject(verifiedSubject);
+  const set = proposal.changeSet;
+  const file = set.files[0];
+  return freezeChange({
+    author: subject.author,
+    authorType: subject.authorType,
+    files: [{ path: file.path, before, after, status: 'modified' }],
+    meta: {
+      proposalId: proposal.proposalId,
+      proposalDigest: changeSetProposalDigest(proposal),
+      submittedAt: proposal.submission.submittedAt,
+      rationale: proposal.submission.rationale,
+      evidence: [...proposal.submission.evidence],
+      source: { repository: set.repository, revision: set.baseRevision, path: file.path },
+      identityClaim: proposal.submission.identityClaim === null
+        ? null
+        : { ...proposal.submission.identityClaim },
+    },
+  });
+}
+
+export function classifyChangeSetProposal(baseBytes, value, trustConfig, verifiedSubject) {
+  return classify(
+    changeSetProposalToTrustChange(baseBytes, value, verifiedSubject),
+    trustConfig,
+  );
 }
 
 export function classifyProposal(

@@ -26,7 +26,7 @@ queue/
         └── ...the same five files
 ```
 
-Every artifact file is `0600`, singly linked, opened with `O_NOFOLLOW`, bounded before reading, and validated against its exact key set. Metadata uses compact canonical JSON followed by one LF. `proposal.json` is stored byte-for-byte and must pass `parseProposal()` canonical validation.
+Every artifact file is `0600`, singly linked, opened with `O_NOFOLLOW`, bounded before reading, and validated against its exact key set. Metadata uses compact canonical JSON followed by one LF. `proposal.json` is stored byte-for-byte and must pass version-aware `parseVersionedProposal()` canonical validation.
 
 A new entry is written to a private staging directory, each file is `fsync`ed, the staging directory is `fsync`ed, and the complete directory is renamed into `pending/` before that parent is `fsync`ed. State replacement and expiration moves use the same rename and directory-sync discipline.
 
@@ -84,7 +84,7 @@ const queue = await openProposalQueue({
     root: '/absolute/private/proposal-queue',
   },
   resolveEvidence: async (entry) => ({
-    baseBytes: await resolvePinnedSource(entry.proposal.source),
+    baseBytes: await resolvePinnedSource(entry.semantics.source),
     policy: await resolvePinnedTrustPolicy(entry),
   }),
 });
@@ -158,3 +158,11 @@ This is hermetic package evidence. It does not establish a public account-free e
 bun install --frozen-lockfile
 bun test
 ```
+
+## Mixed v1/v2 storage and recovery
+
+The same five-artifact layout, metadata schema versions, receipt fields, lifecycle, locking, atomic staging and capacity limits accept both canonical proposal versions. There is still **one entry per proposal**, including a 50-operation v2 proposal. `proposal.json` is retained unchanged; it is never projected to v1, flattened to a broad splice or reserialized from Markdown. Its receipt digest and byte length bind the original canonical artifact. Request-digest replay binding and proposal-digest conflict checks dispatch by proposal version.
+
+Admission, restart recovery, live read snapshots and offline inspection parse the artifact version, validate/apply it against independently resolved exact base bytes, and recompute classification from the same bound policy. V2 validation checks all exact expected slices and the complete candidate digest; the shared v2 trust bridge classifies the combined before/after file. A missing base, contradicted source/policy, tampered artifact or classification still fails closed. No acknowledged entry is dropped merely because its version differs from its neighbors.
+
+`proposalSemantics(v1)` is unchanged. For v2 it returns `{source,baseByteLength,baseDigest,operations,candidateByteLength,candidateDigest}`. The source is derived from the single-file change set; operations retain their IDs, exact UTF-8 ranges, expected and replacement text. Evidence resolvers should use `entry.semantics.source` for either version rather than assuming `entry.proposal.source` exists. No new lifecycle, application authority or owner decision is introduced.

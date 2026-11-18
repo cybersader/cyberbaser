@@ -1,0 +1,2 @@
+- [[Feature]: Multiple Repository · Issue #703 · Vinzent03/obsidian-git](https://github.com/Vinzent03/obsidian-git/issues/703)
+- [[Feature]: git-lfs support on mobile version · Issue #608 · Vinzent03/obsidian-git](https://github.com/Vinzent03/obsidian-git/issues/608)
