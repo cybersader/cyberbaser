@@ -12,6 +12,8 @@ import NoteDates from "./quartz/components/NoteDates"
 import { githubSourceHost } from "./quartz/components/sourceLinks"
 import Analytics from "./quartz/components/Analytics"
 import { posthogProvider } from "./quartz/components/analyticsProviders"
+import LegacyUrlFallback from "./quartz/components/LegacyUrlFallback"
+import { resolveSiteBaseUrl, siteBasePath } from "./quartz/cyberbase/siteBase"
 
 // Source of truth for the vault repo. The footer always links to the source;
 // public edit mode also uses it for the existing GitHub web-editor URL.
@@ -69,11 +71,16 @@ const ANALYTICS_COMPONENTS = ANALYTICS_ENABLED
     }))]
   : []
 
+// 404-page forwarding for old-host URLs; only with a legacy URL snapshot.
+const LEGACY_URL_COMPONENTS = process.env.CYBERBASER_LEGACY_URLS
+  ? [LegacyUrlFallback({ basePath: siteBasePath(resolveSiteBaseUrl(process.env)) })]
+  : []
+
 // components shared across all pages
 export const sharedPageComponents: SharedLayout = {
   head: Component.Head(),
   header: [],
-  afterBody: [NoteActions({ host: SOURCE_HOST, placement: "footer" }), ...ANALYTICS_COMPONENTS],
+  afterBody: [NoteActions({ host: SOURCE_HOST, placement: "footer" }), ...ANALYTICS_COMPONENTS, ...LEGACY_URL_COMPONENTS],
   footer: Component.Footer({
     links: {
       Vault: VAULT_REPO_URL,

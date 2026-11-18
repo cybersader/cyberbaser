@@ -264,3 +264,17 @@ test('CLI returns 0 for continuity, 1 for uncovered removal, and 2 for invalid i
   const invalid = spawnSync('bun', [CLI, join(site, 'absent.xml'), site]);
   expect(invalid.status).toBe(2);
 });
+
+test('a rebased previous sitemap demands every old path at the new address', () => {
+  const { rebaseSitemap } = require('../src/index.js');
+  const previous = sitemap(['/cyberbase/a', '/cyberbase/b'], 'https://old.example');
+  const moved = rebaseSitemap(previous, 'https://old.example/cyberbase', 'https://new.example');
+  expect(moved).toContain('<loc>https://new.example/a</loc>');
+  expect(moved).toContain('<loc>https://new.example/b</loc>');
+  expect(moved).not.toContain('old.example');
+  expect(() => rebaseSitemap(sitemap(['/other/a'], 'https://old.example'), 'https://old.example/cyberbase', 'https://new.example')).toThrow(UrlContinuityError);
+  expect(() => rebaseSitemap(previous, 'https://old.example/cyberbase/', 'https://new.example')).toThrow(UrlContinuityError);
+  expect(() => rebaseSitemap(previous, 'http://old.example/cyberbase', 'https://new.example')).toThrow(UrlContinuityError);
+  // Prefix must match a whole path segment.
+  expect(() => rebaseSitemap(sitemap(['/cyberbase-x/a'], 'https://old.example'), 'https://old.example/cyberbase', 'https://new.example')).toThrow(UrlContinuityError);
+});

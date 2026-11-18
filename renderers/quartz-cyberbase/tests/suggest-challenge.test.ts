@@ -46,6 +46,7 @@ function disabledLayoutBytes(layoutSource: string): Buffer {
     NoteActions: (opts: { placement: string }) => ({ component: "NoteActions", placement: opts.placement }),
     NoteDates: () => ({ component: "NoteDates" }), githubSourceHost: () => ({ id: "github" }),
     Analytics: () => { throw new Error("analytics must stay off in an unconfigured build") }, posthogProvider: () => ({}),
+    LegacyUrlFallback: () => { throw new Error("legacy fallback must stay off without a snapshot") }, resolveSiteBaseUrl: () => "example.org", siteBasePath: () => "",
     resolveEditEntry: () => "auto", resolveEditLinkMode: () => "public", resolveOwnerOrigin: () => { throw new Error("unexpected owner origin") },
     resolveSuggestCorrectionOptions: () => ({ enabled: false }),
     SuggestCorrection: () => { throw new Error("a disabled layout must not collect suggestion CSS/scripts") },

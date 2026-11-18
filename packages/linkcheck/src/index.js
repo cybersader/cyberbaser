@@ -11,5 +11,6 @@ export {
 export {
   checkUrlContinuity,
   parseSitemap,
+  rebaseSitemap,
   UrlContinuityError,
 } from './url-continuity.js';
