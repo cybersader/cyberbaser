@@ -1,0 +1,9 @@
+{
+  "name": "cyberbaser",
+  "private": true,
+  "description": "Repository-level commands. Each package keeps its own package.json and lockfile.",
+  "scripts": {
+    "check": "bash scripts/check.sh",
+    "test": "bash scripts/check.sh"
+  }
+}

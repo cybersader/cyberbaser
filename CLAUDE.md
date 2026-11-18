@@ -86,14 +86,16 @@ The deciding measurement showed that whole-file Markdown re-serialization preser
 - **cybersader/crosswalker** — most mature `.claude/` layout; the numbered-file convention here was copied from it
 - **cybersader/cyberchaste** — source of `KNOWLEDGE_BASE_PHILOSOPHY.md` and `DOCUMENTATION_STYLE.md` (identical across both)
 - **cybersader/agentic-workflow-and-tech-stack** — meta scaffold for agent workflows
-- **A private browser-Obsidian sibling** — strategically adjacent (a potential trusted-contributor authoring surface, and the owner of mixed-privacy/RBAC/real-time scope). Tracked privately; details in `.workspace/sibling-boundary-analysis.md` (gitignored). An earlier version of this file misattributed this role to Retake Forge, which is unrelated.
 - **Sinario** — cyber scenarios tooling (content-adjacent)
 
 ## External Context
 
 - **Live vault**: https://github.com/cybersader/cyberbase
-- **Local research vault**: Obsidian vault, local research vault (local path varies by machine)
 - **MCP / agent patterns**: `cybersader/agentic-workflow-and-tech-stack` sibling project
+
+## Local notes
+
+Anything about one person's machine, accounts or private projects goes in `CLAUDE.local.md` at the repo root. It is gitignored and loads alongside this file. Keep this file to project rules a contributor can use.
 
 ## Conventions
 

@@ -99,6 +99,10 @@ bun run preview --host   # serve built output
 bun run test:local       # Playwright smoke tests
 ```
 
+## Contributing
+
+Run `bun run check` (Bun version in `.bun-version`); see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Repo layout
 
 ```text
@@ -109,7 +113,9 @@ cyberbaser/
 ├── renderers/            # Swappable renderer adapters; Quartz is current dogfood
 ├── spikes/               # Bounded experiments, including federation evidence
 ├── .workspace/           # Personal scratch; contents ignored
+├── scripts/check.sh      # `bun run check`: what CI runs, locally
 ├── CLAUDE.md             # Agent entry point
+├── CONTRIBUTING.md       # Prerequisites and the one check command
 ├── LICENSE               # AGPL-3.0 for the tooling
 └── CLA.md                # Contributor License Agreement
 ```

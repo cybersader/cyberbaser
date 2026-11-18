@@ -154,9 +154,9 @@ Last updated: 2026-11-17 (unified owner in-place editing and explicit owner-dire
 ```bash
 cd docs
 bun run dev          # http://localhost:4321/cyberbaser/ (dev, HMR — may be flaky on mobile)
-bun run dev:host     # bind to 0.0.0.0 (Tailscale / LAN)
+bun run dev:host     # bind to 0.0.0.0 (LAN or private network)
 bun run build        # production build
-bun run preview --host 0.0.0.0  # serve built output (use this for mobile testing via Tailscale)
+bun run preview --host 0.0.0.0  # serve built output (use this for mobile testing over a private network)
 bun run test:local   # headless Playwright suites (layout + smoke; test:e2e is --headed)
 ```
 

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import os from 'node:os';
 import path from 'node:path';
 import {
   assertRunnerIsolation,
@@ -14,6 +15,7 @@ import {
   runnerExecutionContract,
   stageRunnerBinary,
   validateGateEnvironment,
+  WP3_RUN_PARENT,
   WP3_STORAGE_LIMIT_BYTES,
   WP3_STORAGE_STOP_BYTES,
   writeManifestAtomic,
@@ -26,10 +28,10 @@ function sampleContract(overrides = {}) {
     runUuid: SAMPLE_UUID,
     jobImageTag: `wp3-job-${SAMPLE_UUID}`,
     composeProject: `cyberbaser-wp3-${SAMPLE_UUID}`,
-    toolRoot: `/home/cybersader/.cache/cyberbaser/wp3/${SAMPLE_UUID}/tools`,
-    publicationRoot: `/home/cybersader/.cache/cyberbaser/wp3/${SAMPLE_UUID}/publication`,
+    toolRoot: `${WP3_RUN_PARENT}/${SAMPLE_UUID}/tools`,
+    publicationRoot: `${WP3_RUN_PARENT}/${SAMPLE_UUID}/publication`,
     forgeInternalOrigin: 'https://forgejo-wp3:3000',
-    hostHome: '/home/cybersader',
+    hostHome: os.homedir(),
     ...overrides,
   });
 }
@@ -262,8 +264,8 @@ describe('harness preflight, storage, evidence, and cleanup guards', () => {
     expect(contract.options).toContain('/tools:/wp3/tools:ro');
     expect(contract.options).toContain('io.cyberbaser.wp3.role=job');
     expect(contract.validVolumes).toEqual([
-      `/home/cybersader/.cache/cyberbaser/wp3/${SAMPLE_UUID}/tools`,
-      `/home/cybersader/.cache/cyberbaser/wp3/${SAMPLE_UUID}/publication`,
+      `${WP3_RUN_PARENT}/${SAMPLE_UUID}/tools`,
+      `${WP3_RUN_PARENT}/${SAMPLE_UUID}/publication`,
     ]);
     expect(contract.privileged).toBe(false);
 
