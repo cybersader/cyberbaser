@@ -36,6 +36,14 @@ The way to avoid ripping work up later is to fix the seams before choosing any o
 
 **What would cause rework, so avoid it:** identity at a proxy or Cloudflare Access; grants stored as roles in the sign-in library; invites built on Better Auth's organization plugin (it redeems after sign-in); editor code that assumes same-origin HTTP; one process holding both the push credential and the web listener.
 
+### Command core (implemented)
+
+- Editing: `readPageSource`, `openRawEdit`, `saveRawEdit`, `stageOwnerDirect`, `inspectOwnerDirect`, `saveOwnerDirect`.
+- Review: `listProposals`, `readProposal`, `recordDecision`, `readDecision`, `applyProposal`.
+- Publication: `preparePublication`, `readPublicationCurrent`, `readPublicationReview`, `publish`; job status: `readJob`.
+- The bootstrap adapter attests `{ id, method: 'bootstrap-session', sessionId, authenticatedAt }`. The session ID is not the cookie; the timestamp is epoch milliseconds. The core checks the configured owner and feature grants.
+- Only inert, expiring staging is anonymous. HTTP still owns session cookies, Origin, CSRF and response rendering.
+
 ## Tiers
 
 | Tier | How you get there | On the page | Review | Never |

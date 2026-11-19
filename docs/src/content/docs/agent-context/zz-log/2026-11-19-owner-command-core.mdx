@@ -1,0 +1,10 @@
+---
+title: Owner command core extraction
+description: The owner app now uses transport-neutral commands and a verified bootstrap-session principal without changing the HTTP routes or owner authority.
+status: log
+tags: [architecture, implementation, security]
+---
+
+Step 1 of the [editing and trust roadmap](/cyberbaser/design/editing-and-trust-roadmap/#command-core-implemented) moves owner source reads and Save, proposal review and Apply, publication, and job status behind a command core. The existing bootstrap session supplies a verified owner principal; runtime and policy checks stay in the core. HTTP retains cookies, Origin, CSRF, and response rendering. Anonymous cross-origin staging still retains only an inert draft, and only the inspecting owner device can Save it. Visitor proposals still require their separate approval and application path.
+
+Direct-command tests check both the allowed owner paths and refusal of missing, forged, foreign, or wrong-owner principals. The existing HTTP, recovery, and deployment test suites remain in place. No publisher isolation, new identity provider, carrier, deployment, or real-vault effect was performed.

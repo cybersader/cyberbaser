@@ -1,4 +1,4 @@
-import { authorizeOwnerDirect, createOwnerHandoffStore, deriveOwnerDirect, validateOwnerHandoff } from './owner-direct.js';
+import { createOwnerHandoffStore } from './owner-direct.js';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { constants } from 'node:fs';
 import { lstat, open, realpath, rename, rm, stat } from 'node:fs/promises';
@@ -7,14 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { reviewProposalBinding, OWNER_DECISION_REASON_MAX_BYTES } from '@cyberbaser/proposal-review';
 import { validateDigest, validateQueueId } from '@cyberbaser/proposal-queue';
 import { loadOwnerAlphaConfig, validateOwnerAlphaConfig } from './config.js';
-import {
-  createProposalDecisionOverlay,
-  recordProposalDecision,
-  recoverProposalDecisions,
-} from './proposal-decisions.js';
+import { recordProposalDecision, recoverProposalDecisions } from './proposal-decisions.js';
+import { createOwnerProposalReviewService } from './proposal-review-service.js';
 import { createProposalReviewClient } from './proposal-review-client.js';
 import { createOwnerProposalReviewSource } from './proposal-review.js';
-import { applyApprovedProposal, assessProposalApplication, listProposalApplicationProgress } from './proposal-application.js';
 import { documentProjection, segmentsWithinSpan } from '@cyberbaser/review-projection';
 import { fail, OwnerAlphaError } from './errors.js';
 import { listDurableJobs, loadDurableJob, validateJobId } from './job-state.js';
@@ -25,10 +21,14 @@ import { startSuggestionIntake, suggestionFormOrigin, suggestionChallengeOrigin 
 import { createOwnerPublicationRuntime, createPublicationSourceGuard } from './owner-publication-runtime.js';
 import { publicationDisplay } from './publication-display.js';
 
+import { createOwnerCommands, OwnerCommandPrecondition } from './core/commands.js';
+import { createBootstrapPrincipalAdapter } from './core/principal.js';
+import { createMemoryEditSessionStore } from './core/edit-sessions.js';
+
+export { createOwnerProposalReviewService, createMemoryEditSessionStore };
+
 const COOKIE_NAME = 'owner_alpha_session';
 export const MAX_OWNER_SESSIONS = 64;
-const DEFAULT_EDIT_SESSION_TTL_MS = 10 * 60 * 1000;
-const DEFAULT_MAX_EDIT_SESSIONS = 64;
 const MAX_REVIEW_DECISION_BODY_BYTES = OWNER_DECISION_REASON_MAX_BYTES + 16 * 1024;
 const MAX_STATIC_BYTES = 64 * 1024 * 1024;
 const PUBLIC_ROOT = fileURLToPath(new URL('../public/', import.meta.url));
@@ -1370,180 +1370,6 @@ function reviewErrorStatus(error) {
   return 500;
 }
 
-export function createOwnerProposalReviewService({
-  config: configInput,
-  context,
-  source,
-  decisionClock = () => new Date(),
-  recoverDecisions = recoverProposalDecisions,
-  recordDecision = recordProposalDecision,
-  application = null,
-  assessApplication = assessProposalApplication,
-  applyApplication = applyApprovedProposal,
-  listProgress = listProposalApplicationProgress,
-} = {}) {
-  const config = validateOwnerAlphaConfig(configInput);
-  if (!config.proposalReview.enabled) return null;
-  // Applying an approved suggestion needs the owner pipeline's Save entry, a
-  // way to find the rendered page, and a job ID factory. Without them the
-  // service still reviews and decides, and the receipt says applying is not
-  // available here.
-  if (application !== null
-    && (typeof application.saveEdit !== 'function'
-      || typeof application.createJobId !== 'function'
-      || (typeof application.resolveSlug !== 'function'
-        && (typeof application.siteRoot !== 'string' || typeof application.ownerOrigin !== 'string')))) {
-    throw new TypeError('proposal application requires saveEdit, createJobId, and a slug resolver or siteRoot plus ownerOrigin');
-  }
-  if (!context
-    || !source
-    || typeof source.list !== 'function'
-    || typeof source.load !== 'function'
-    || typeof decisionClock !== 'function'
-    || typeof recoverDecisions !== 'function'
-    || typeof recordDecision !== 'function') {
-    throw new TypeError('enabled proposal review requires context, source, clock, recovery, and decision dependencies');
-  }
-
-  let cachedDecisions = null;
-  let recoveryInFlight = null;
-
-  async function recovered({ refresh = false } = {}) {
-    if (refresh && recoveryInFlight !== null) await recoveryInFlight;
-    if (!refresh && cachedDecisions !== null) return cachedDecisions;
-    if (recoveryInFlight !== null) return recoveryInFlight;
-    recoveryInFlight = Promise.resolve(recoverDecisions(context)).then((value) => {
-      cachedDecisions = value;
-      return value;
-    });
-    try {
-      return await recoveryInFlight;
-    } finally {
-      recoveryInFlight = null;
-    }
-  }
-
-  return Object.freeze({
-    async list({ cursor = null } = {}) {
-      const local = await recovered();
-      const seenCursors = new Set();
-      let filteredEntries = 0;
-      let pageCursor = cursor;
-      let page;
-      let complete;
-
-      while (true) {
-        const cursorKey = pageCursor ?? '<first-page>';
-        if (seenCursors.has(cursorKey)) {
-          throw new OwnerAlphaError('review-ipc-invalid-cursor', 'proposal review pagination repeated a cursor');
-        }
-        seenCursors.add(cursorKey);
-        page = await source.list({
-          state: 'pending-review',
-          cursor: pageCursor,
-          limit: config.proposalReview.maxListEntries,
-        });
-        complete = createProposalDecisionOverlay({
-          entries: page.entries,
-          decisions: local.decisions,
-        });
-        if (complete.actionable.length > 0 || page.nextCursor === null) break;
-        if (page.entries.length === 0 || page.nextCursor === pageCursor) {
-          throw new OwnerAlphaError('review-ipc-invalid-cursor', 'proposal review pagination made no forward progress');
-        }
-        filteredEntries += page.entries.length;
-        if (filteredEntries > local.decisions.length) {
-          throw new OwnerAlphaError('review-ipc-invalid-cursor', 'proposal review pagination exceeded the local decision bound');
-        }
-        pageCursor = page.nextCursor;
-      }
-
-      let history = complete.history.slice(0, config.proposalReview.maxListEntries);
-      if (application !== null && history.length > 0) {
-        // Applied and Live come from events and job state only; no Git here.
-        const progress = await listProgress(context, config);
-        history = history.map((entry) => Object.freeze({ ...entry, application: progress.get(entry.summary.queueId) ?? null }));
-      }
-      return Object.freeze({
-        actionable: complete.actionable,
-        history: Object.freeze(history),
-        historyTruncated: complete.history.length > history.length,
-        nextCursor: page.nextCursor,
-      });
-    },
-    async load(queueId) {
-      const local = await recovered();
-      const decision = local.decisions.find((entry) => entry.queueId === queueId) ?? null;
-      if (decision !== null) return Object.freeze({ entry: null, decision });
-      return Object.freeze({ entry: await source.load(queueId), decision: null });
-    },
-    async loadDecision(queueId) {
-      const local = await recovered();
-      const decision = local.decisions.find((entry) => entry.queueId === queueId) ?? null;
-      if (decision === null) return null;
-      let queueRetained = null;
-      try {
-        const current = await source.load(queueId);
-        createProposalDecisionOverlay({ entries: [current], decisions: [decision] });
-        queueRetained = true;
-      } catch (error) {
-        if (error instanceof OwnerAlphaError
-          && ['review-ipc-not-found', 'review-ipc-queue-entry-not-found'].includes(error.code)) {
-          queueRetained = false;
-        } else if (error instanceof OwnerAlphaError
-          && ['review-not-actionable', 'review-expired'].includes(error.code)) {
-          queueRetained = true;
-        } else if (!(error instanceof OwnerAlphaError)
-          || !['review-source-unavailable', 'review-source-timeout'].includes(error.code)) {
-          throw error;
-        }
-      }
-      const overlay = createProposalDecisionOverlay({ entries: [], decisions: [decision] });
-      return Object.freeze({ ...overlay.history[0], queueRetained });
-    },
-    async record(intent) {
-      const result = await recordDecision({
-        context,
-        source,
-        ownerIdentity: config.owner.identity,
-        intent,
-        clock: decisionClock,
-      });
-      await recovered({ refresh: true });
-      return result;
-    },
-    applicationAvailable: application !== null,
-    async applicationStatus(queueId) {
-      if (application === null) return null;
-      return assessApplication({
-        context,
-        config,
-        queueId,
-        git: application.git,
-        resolveSlug: application.resolveSlug ?? null,
-        siteRoot: application.siteRoot ?? null,
-        ownerOrigin: application.ownerOrigin ?? null,
-      });
-    },
-    async apply(queueId) {
-      if (application === null) fail('application-unavailable', 'applying suggestions is not available in this runtime');
-      return applyApplication({
-        context,
-        config,
-        queueId,
-        saveEdit: application.saveEdit,
-        createJobId: application.createJobId,
-        checkoutReady: application.checkoutReady,
-        git: application.git,
-        resolveSlug: application.resolveSlug ?? null,
-        siteRoot: application.siteRoot ?? null,
-        ownerOrigin: application.ownerOrigin ?? null,
-        clock: application.clock,
-      });
-    },
-  });
-}
-
 function safePathSegments(encodedPath, { directoryIndex = true } = {}) {
   let candidate = encodedPath;
   let wantsIndex = false;
@@ -1733,41 +1559,34 @@ export function createReaderHandler({
   };
 }
 
-export function createMemoryEditSessionStore({
-  ttlMs = DEFAULT_EDIT_SESSION_TTL_MS,
-  maxEntries = DEFAULT_MAX_EDIT_SESSIONS,
-  now = () => Date.now(),
-  createToken = token,
-} = {}) {
-  if (!Number.isSafeInteger(ttlMs) || ttlMs < 1 || !Number.isSafeInteger(maxEntries) || maxEntries < 1) {
-    throw new TypeError('edit session store limits must be positive integers');
-  }
-  const entries = new Map();
+// The publication runtime predates the command seam and returns an owner
+// route for unchanged captures. Translate it here, not in the command core.
+function bindPublication(runtime) {
+  if (runtime === null) return null;
+  return {
+    get publishAvailable() { return runtime.publishAvailable; },
+    async prepare(input) {
+      const result = await runtime.prepare(input);
+      if (result.outcome !== 'unchanged') return result;
+      const match = typeof result.reviewUrl === 'string' && /^\/owner\/publication\/current\/([0-9a-f]{64})$/u.exec(result.reviewUrl);
+      if (!match) fail('publication-prepare-failed', 'invalid unchanged publication review');
+      return { outcome: 'unchanged', viewId: match[1] };
+    },
+    publish: (input) => runtime.publish(input),
+    load: (input) => runtime.load(input),
+    loadCurrent: (input) => runtime.loadCurrent(input),
+    readJob: (jobId) => runtime.readJob(jobId),
+  };
+}
 
-  function prune() {
-    const current = now();
-    for (const [id, entry] of entries) if (entry.expiresAt <= current) entries.delete(id);
+function commandGate(commands, grant, principal) {
+  try {
+    commands.requireGrant(grant, principal);
+    return null;
+  } catch (error) {
+    if (!(error instanceof OwnerAlphaError)) throw error;
+    return errorResponse(['invalid-session', 'publication-read-only'].includes(error.code) ? 403 : 404, error.code);
   }
-
-  return Object.freeze({
-    create(value) {
-      prune();
-      if (entries.size >= maxEntries) throw new OwnerAlphaError('edit-session-capacity', 'too many active edit sessions');
-      let id;
-      do id = createToken(); while (entries.has(id));
-      if (!exactToken(id)) throw new TypeError('edit session token factory returned an invalid token');
-      const expiresAt = now() + ttlMs;
-      entries.set(id, { value, expiresAt });
-      return Object.freeze({ id, expiresAt });
-    },
-    get(id) {
-      prune();
-      return entries.get(id)?.value ?? null;
-    },
-    delete(id) {
-      return entries.delete(id);
-    },
-  });
 }
 
 export function createOwnerAlphaHandler({
@@ -1808,6 +1627,11 @@ export function createOwnerAlphaHandler({
     && ['prepare', 'load', 'loadCurrent', 'publish', 'readJob'].some((key) => typeof ownerPublication?.[key] !== 'function')) {
     throw new TypeError('enabled owner publication requires prepare, load, loadCurrent, publish, and readJob dependencies');
   }
+  const principalAdapter = createBootstrapPrincipalAdapter();
+  const commands = createOwnerCommands({
+    config, projectRoot, principalAdapter, createEditSession, editSessions, handoffs, directEdits,
+    saveEdit, lookupJob, createJobId, proposalReview, publication: bindPublication(ownerPublication),
+  });
   // Each consumed bootstrap capability becomes one device session with its own
   // cookie and CSRF token, so one captured device secret is not every device's
   // secret. Only local console authority can mint a new capability.
@@ -1846,7 +1670,10 @@ export function createOwnerAlphaHandler({
     if (outstanding === null || !sameSecret(value, outstanding.bootstrapToken)) return null;
     const consumed = outstanding;
     outstanding = null;
-    sessions.set(consumed.sessionToken, { csrfToken: consumed.csrfToken });
+    const principal = principalAdapter.fromSession({
+      id: config.owner.identity, sessionId: randomUUID(), authenticatedAt: Date.now(),
+    });
+    sessions.set(consumed.sessionToken, { csrfToken: consumed.csrfToken, principal });
     return consumed.sessionToken;
   }
 
@@ -1865,7 +1692,6 @@ export function createOwnerAlphaHandler({
   const expectedHost = `${config.listen.host}:${config.listen.port}`;
   const expectedOrigin = `http://${expectedHost}`;
   const readerOrigin = `http://${config.listen.host}:${config.listen.readerPort}`;
-  const inFlight = new Set();
   const maximumBodyBytes = Math.min(
     config.limits.maxArtifactBytes,
     config.limits.maxSourceBytes + 16 * 1024,
@@ -1936,10 +1762,10 @@ export function createOwnerAlphaHandler({
         const handoff = await readBoundedJson(request, 800 * 1024, text => {
           const fields = new URLSearchParams(text);
           if ([...fields.keys()].join(',') !== 'changeSet') throw Error('invalid fields');
-          return validateOwnerHandoff(JSON.parse(fields.get('changeSet')));
+          return JSON.parse(fields.get('changeSet'));
         }, 'application/x-www-form-urlencoded');
-        const id = handoffs.create(handoff);
-        return response(null, 303, { Location: `/owner/staged/${id}` });
+        const { stageId } = await commands.stageOwnerDirect({ handoff });
+        return response(null, 303, { Location: `/owner/staged/${stageId}` });
       } catch (error) { return errorResponse(error?.status ?? (error?.code === 'owner-handoff-capacity' ? 503 : 400), error?.code ?? 'invalid-owner-handoff'); }
     }
 
@@ -1955,7 +1781,7 @@ export function createOwnerAlphaHandler({
     if (deviceSession === null) {
       return errorResponse(403, 'invalid-session');
     }
-    const csrfToken = deviceSession.csrfToken;
+    const { csrfToken, principal } = deviceSession;
     if (request.method === 'POST' && request.headers.get('origin') !== expectedOrigin) {
       return errorResponse(403, 'invalid-origin');
     }
@@ -1982,7 +1808,8 @@ export function createOwnerAlphaHandler({
 
     if (url.pathname === '/owner/publication' || url.pathname.startsWith('/owner/publication/')
       || url.pathname.startsWith('/api/publication/')) {
-      if (!config.ownerPublication.enabled) return errorResponse(404, 'publication-disabled');
+      const denied = commandGate(commands, 'publication', principal);
+      if (denied) return denied;
       if (url.pathname === '/owner/publication') {
         if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
         if (url.search) return errorResponse(400, 'invalid-publication-query');
@@ -1993,7 +1820,7 @@ export function createOwnerAlphaHandler({
         if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
         if (url.search) return errorResponse(400, 'invalid-publication-query');
         try {
-          const view = await ownerPublication.loadCurrent({ viewId: current[1] });
+          const view = await commands.readPublicationCurrent({ viewId: current[1] }, principal);
           return html(request.method === 'HEAD' ? null : publicationCurrentPage(view));
         } catch { return errorResponse(409, 'publication-review-unavailable'); }
       }
@@ -2003,16 +1830,18 @@ export function createOwnerAlphaHandler({
         const query = optionalQueryObject(url, ['mode']);
         if (!query || (query.mode !== undefined && !REVIEW_MODE_KEYS.includes(query.mode))) return errorResponse(400, 'invalid-publication-query');
         try {
-          const draft = await ownerPublication.load({ draftId: review[1] });
-          const job = await ownerPublication.readJob(draft.jobId);
-          return html(request.method === 'HEAD' ? null : publicationReviewPage(draft, job, query.mode ?? 'changes', csrfToken, ownerPublication.publishAvailable === true));
+          const { draft, job, publishAvailable } = await commands.readPublicationReview({ draftId: review[1] }, principal);
+          return html(request.method === 'HEAD' ? null : publicationReviewPage(draft, job, query.mode ?? 'changes', csrfToken, publishAvailable));
         } catch { return errorResponse(409, 'publication-review-unavailable'); }
       }
       const action = url.pathname === '/api/publication/prepare' ? 'prepare'
         : url.pathname === '/api/publication/publish' ? 'publish' : null;
       if (action === null) return errorResponse(404, 'not-found');
       if (request.method !== 'POST') return response(null, 405, { Allow: 'POST' });
-      if (action === 'publish' && ownerPublication.publishAvailable !== true) return errorResponse(403, 'publication-read-only');
+      if (action === 'publish') {
+        const publishDenied = commandGate(commands, 'publish', principal);
+        if (publishDenied) return publishDenied;
+      }
       if (url.search) return errorResponse(400, 'invalid-publication-query');
       let body;
       try { body = await readBoundedJson(request, Math.min(maximumBodyBytes, 4096)); }
@@ -2027,18 +1856,15 @@ export function createOwnerAlphaHandler({
       if (!sameSecret(body.csrf, csrfToken)) return errorResponse(403, 'invalid-csrf');
       try {
         if (action === 'prepare') {
-          const result = await ownerPublication.prepare({ mappingId: body.mappingId });
+          const result = await commands.preparePublication({ mappingId: body.mappingId }, principal);
           if (result.outcome === 'unchanged') {
-            if (typeof result.reviewUrl !== 'string' || !/^\/owner\/publication\/current\/[0-9a-f]{64}$/u.test(result.reviewUrl)) {
-              return errorResponse(409, 'publication-prepare-failed');
-            }
-            return json({ outcome: 'unchanged', reviewUrl: result.reviewUrl }, 201);
+            return json({ outcome: 'unchanged', reviewUrl: `/owner/publication/current/${result.viewId}` }, 201);
           }
           return json({ draftId: result.summary.draftId, jobId: result.summary.jobId,
             capturedVersion: result.summary.capturedVersion, candidateDigest: result.summary.candidateDigest,
             reviewUrl: `/owner/publication/${result.summary.draftId}` }, 201);
         }
-        const result = await ownerPublication.publish({ draftId: body.draftId });
+        const result = await commands.publish({ draftId: body.draftId }, principal);
         return json({ draftId: result.draftId, jobId: result.jobId, state: result.state,
           capturedVersion: result.capturedVersion, replayed: result.replayed,
           statusUrl: `/owner/jobs/${result.jobId}` }, 202);
@@ -2049,7 +1875,8 @@ export function createOwnerAlphaHandler({
     }
 
     if (url.pathname === '/owner/review' || url.pathname === '/api/review') {
-      if (!config.proposalReview.enabled) return errorResponse(404, 'proposal-review-disabled');
+      const denied = commandGate(commands, 'review', principal);
+      if (denied) return denied;
       if (request.method !== 'GET' && request.method !== 'HEAD') return response(null, 405, { Allow: 'GET, HEAD' });
       const query = optionalQueryObject(url, ['cursor']);
       if (query === null
@@ -2061,7 +1888,7 @@ export function createOwnerAlphaHandler({
       }
       let review;
       try {
-        review = await proposalReview.list({ cursor: query.cursor ?? null });
+        review = await commands.listProposals({ cursor: query.cursor ?? null }, principal);
       } catch (error) {
         return errorResponse(reviewErrorStatus(error), error instanceof OwnerAlphaError ? error.code : 'review-list-failed');
       }
@@ -2083,7 +1910,8 @@ export function createOwnerAlphaHandler({
 
     const reviewDecisionMatch = url.pathname.match(/^\/api\/review\/([^/]+)\/decision$/u);
     if (reviewDecisionMatch) {
-      if (!config.proposalReview.enabled) return errorResponse(404, 'proposal-review-disabled');
+      const denied = commandGate(commands, 'review', principal);
+      if (denied) return denied;
       if (request.method !== 'POST') return response(null, 405, { Allow: 'POST' });
       if (url.search !== '') return errorResponse(400, 'unexpected-query');
       const queueId = reviewQueueId(reviewDecisionMatch[1]);
@@ -2098,20 +1926,18 @@ export function createOwnerAlphaHandler({
       if (intent === null) return errorResponse(400, 'invalid-decision-request');
       if (!sameSecret(intent.csrf, csrfToken)) return errorResponse(403, 'invalid-csrf');
       try {
-        const recorded = await proposalReview.record({
+        const recorded = await commands.recordDecision({
           queueId,
           reviewEvidenceDigest: intent.reviewEvidenceDigest,
           action: intent.action,
           reason: intent.reason,
-        });
-        const summary = recorded.index.decisions.find((entry) => entry.queueId === queueId);
-        if (!summary) throw new OwnerAlphaError('invalid-decision-result', 'decision index omitted its new immutable decision');
+        }, principal);
         return json({
           queueId,
-          action: recorded.decision.action,
-          decidedAt: recorded.decision.decidedAt,
+          action: recorded.action,
+          decidedAt: recorded.decidedAt,
           replayed: recorded.replayed,
-          summary,
+          summary: recorded.summary,
           statusUrl: `/owner/decisions/${encodeURIComponent(queueId)}`,
           jsonUrl: `/api/decisions/${encodeURIComponent(queueId)}`,
         }, recorded.replayed ? 200 : 201);
@@ -2122,14 +1948,14 @@ export function createOwnerAlphaHandler({
 
     const reviewApplyMatch = url.pathname.match(/^\/api\/review\/([^/]+)\/apply$/u);
     if (reviewApplyMatch) {
-      if (!config.proposalReview.enabled) return errorResponse(404, 'proposal-review-disabled');
+      const denied = commandGate(commands, 'review', principal);
+      if (denied) return denied;
       if (request.method !== 'POST') return response(null, 405, { Allow: 'POST' });
       if (url.search !== '') return errorResponse(400, 'unexpected-query');
       const queueId = reviewQueueId(reviewApplyMatch[1]);
       if (queueId === null) return errorResponse(400, 'invalid-queue-id');
-      if (typeof proposalReview.apply !== 'function' || proposalReview.applicationAvailable !== true) {
-        return errorResponse(404, 'application-unavailable');
-      }
+      const applyDenied = commandGate(commands, 'apply', principal);
+      if (applyDenied) return applyDenied;
       let body;
       try {
         body = await readBoundedJson(request, MAX_REVIEW_DECISION_BODY_BYTES);
@@ -2140,7 +1966,7 @@ export function createOwnerAlphaHandler({
       if (intent === null) return errorResponse(400, 'invalid-apply-request');
       if (!sameSecret(intent.csrf, csrfToken)) return errorResponse(403, 'invalid-csrf');
       try {
-        const result = await proposalReview.apply(queueId);
+        const result = await commands.applyProposal({ queueId }, principal);
         if (!result.applied) {
           return json({
             error: { code: `application-${result.status.state}`, reason: result.status.reason },
@@ -2163,7 +1989,8 @@ export function createOwnerAlphaHandler({
 
     const reviewDetailMatch = url.pathname.match(/^\/(owner\/review|api\/review)\/([^/]+)$/u);
     if (reviewDetailMatch) {
-      if (!config.proposalReview.enabled) return errorResponse(404, 'proposal-review-disabled');
+      const denied = commandGate(commands, 'review', principal);
+      if (denied) return denied;
       if (request.method !== 'GET' && request.method !== 'HEAD') return response(null, 405, { Allow: 'GET, HEAD' });
       let reviewMode = REVIEW_MODE_KEYS[0];
       if (url.search !== '') {
@@ -2177,7 +2004,7 @@ export function createOwnerAlphaHandler({
       if (queueId === null) return errorResponse(400, 'invalid-queue-id');
       let loaded;
       try {
-        loaded = await proposalReview.load(queueId);
+        loaded = await commands.readProposal({ queueId }, principal);
       } catch (error) {
         return errorResponse(reviewErrorStatus(error), error instanceof OwnerAlphaError ? error.code : 'review-load-failed');
       }
@@ -2201,36 +2028,25 @@ export function createOwnerAlphaHandler({
 
     const decisionDetailMatch = url.pathname.match(/^\/(owner\/decisions|api\/decisions)\/([^/]+)$/u);
     if (decisionDetailMatch) {
-      if (!config.proposalReview.enabled) return errorResponse(404, 'proposal-review-disabled');
+      const denied = commandGate(commands, 'review', principal);
+      if (denied) return denied;
       if (request.method !== 'GET' && request.method !== 'HEAD') return response(null, 405, { Allow: 'GET, HEAD' });
       if (url.search !== '') return errorResponse(400, 'unexpected-query');
       const queueId = reviewQueueId(decisionDetailMatch[2]);
       if (queueId === null) return errorResponse(400, 'invalid-queue-id');
       let history;
       try {
-        history = await proposalReview.loadDecision(queueId);
+        history = await commands.readDecision({ queueId }, principal);
       } catch (error) {
+        if (error instanceof OwnerCommandPrecondition && error.code === 'decision-not-found') return errorResponse(404, error.code);
         return errorResponse(reviewErrorStatus(error), error instanceof OwnerAlphaError ? error.code : 'decision-load-failed');
-      }
-      if (history === null) return errorResponse(404, 'decision-not-found');
-      let application = null;
-      if (history.decision.action === 'approve' && typeof proposalReview.applicationStatus === 'function') {
-        try {
-          application = await proposalReview.applicationStatus(queueId);
-        } catch (error) {
-          application = {
-            queueId,
-            state: 'unknown',
-            reason: error instanceof OwnerAlphaError ? error.code : 'application-status-failed',
-          };
-        }
       }
       if (decisionDetailMatch[1] === 'api/decisions') {
         if (request.method === 'HEAD') return json(null);
-        return json({ ...history, application });
+        return json(history);
       }
       if (request.method === 'HEAD') return html(null);
-      return html(decisionDetailPage({ ...history, application, csrfToken }));
+      return html(decisionDetailPage({ ...history, csrfToken }));
     }
 
     if (url.pathname === '/owner/in-place') {
@@ -2238,7 +2054,7 @@ export function createOwnerAlphaHandler({
       const query = queryObject(url, ['relativePath', 'slug']);
       if (!query) return errorResponse(400, 'invalid-edit-query');
       try {
-        const session = await createEditSession({ config, renderer: query });
+        const session = await commands.readPageSource(query, principal);
         const target = liveUrlForSlug(`${readerOrigin}/cyberbase/`, session.slug);
         return response(null, 303, { Location: `${target}#owner-edit` });
       } catch (error) { return errorResponse(400, error?.code ?? 'edit-session-failed'); }
@@ -2248,14 +2064,10 @@ export function createOwnerAlphaHandler({
     if (staged) {
       if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
       if (url.search) return errorResponse(400, 'unexpected-query');
-      const handoff = handoffs.get(staged[1]);
-      if (!handoff) return errorResponse(410, 'owner-handoff-expired');
       try {
-        const session = await createEditSession({ config, renderer: { relativePath: handoff.source.path, slug: handoff.slug } });
-        const derived = deriveOwnerDirect({ config, session, handoff });
-        const stored = directEdits.create({ ...derived, stageId: staged[1], csrfToken });
+        const { session, operation, editId, operationCount } = await commands.inspectOwnerDirect({ stageId: staged[1] }, principal);
         const back = `${liveUrlForSlug(`${readerOrigin}/cyberbase/`, session.slug)}#owner-edit`;
-        const cards = derived.operation.proposal.changeSet.files[0].operations.map((op, index) => {
+        const cards = operation.proposal.changeSet.files[0].operations.map((op, index) => {
           const base = Buffer.from(session.source.bytesBase64, 'base64');
           // Escaped text only. No source HTML or reader scripts enter this origin.
           // Show the change within its own line only, trimmed at word boundaries.
@@ -2265,8 +2077,11 @@ export function createOwnerAlphaHandler({
           const after = lineAfter.length > 80 ? `${lineAfter.slice(0, 80).replace(/\s\S*$/u, '')}…` : lineAfter;
           return `<section class="direct-change"><p>${escapeHtml(before)}<del>${escapeHtml(op.expected)}</del><ins>${escapeHtml(op.replacement)}</ins>${escapeHtml(after)}</p></section>`;
         }).join('');
-        return html(request.method === 'HEAD' ? null : pageShell({ title: 'Save your changes', script: '/owner/assets/direct.js', body: `<main class="owner-shell direct-review" id="owner-direct" data-edit-id="${escapeHtml(stored.id)}" data-csrf="${escapeHtml(csrfToken)}"><header class="owner-header"><p class="eyebrow">Save changes to</p><h1>${escapeHtml(session.relativePath.split('/').at(-1).replace(/\.md$/u, ''))}</h1></header>${cards}<p class="direct-raw"><a href="/owner/edit?relativePath=${encodeURIComponent(session.relativePath)}&amp;slug=${encodeURIComponent(session.slug)}">Edit whole file as Markdown</a></p><form id="direct-form"><div class="owner-finish"><a href="${escapeHtml(back)}" aria-label="Back to editing">Back</a><button type="submit">Save · ${handoff.operations.length}</button></div><p id="form-status" role="status"></p></form></main>` }));
-      } catch (error) { return errorResponse(409, error?.code ?? 'owner-handoff-unavailable'); }
+        return html(request.method === 'HEAD' ? null : pageShell({ title: 'Save your changes', script: '/owner/assets/direct.js', body: `<main class="owner-shell direct-review" id="owner-direct" data-edit-id="${escapeHtml(editId)}" data-csrf="${escapeHtml(csrfToken)}"><header class="owner-header"><p class="eyebrow">Save changes to</p><h1>${escapeHtml(session.relativePath.split('/').at(-1).replace(/\.md$/u, ''))}</h1></header>${cards}<p class="direct-raw"><a href="/owner/edit?relativePath=${encodeURIComponent(session.relativePath)}&amp;slug=${encodeURIComponent(session.slug)}">Edit whole file as Markdown</a></p><form id="direct-form"><div class="owner-finish"><a href="${escapeHtml(back)}" aria-label="Back to editing">Back</a><button type="submit">Save · ${operationCount}</button></div><p id="form-status" role="status"></p></form></main>` }));
+      } catch (error) {
+        if (error instanceof OwnerCommandPrecondition && error.code === 'owner-handoff-expired') return errorResponse(410, error.code);
+        return errorResponse(409, error?.code ?? 'owner-handoff-unavailable');
+      }
     }
 
     if (url.pathname === '/api/owner-direct') {
@@ -2277,19 +2092,13 @@ export function createOwnerAlphaHandler({
       catch (error) { return errorResponse(error?.status ?? 400, 'invalid-request-body'); }
       if (!body || typeof body !== 'object' || Object.keys(body).sort().join(',') !== 'csrf,editId' || !exactToken(body.editId)) return errorResponse(400, 'invalid-owner-save');
       if (!sameSecret(body.csrf, csrfToken)) return errorResponse(403, 'invalid-csrf');
-      const edit = directEdits.get(body.editId);
-      if (!edit || !sameSecret(edit.csrfToken, csrfToken) || !handoffs.get(edit.stageId)) return errorResponse(410, 'owner-handoff-expired');
-      if (inFlight.has(edit.stageId)) return errorResponse(409, 'save-in-progress');
-      inFlight.add(edit.stageId);
       try {
-        const jobId = validateJobId(createJobId());
-        const session = await authorizeOwnerDirect({ context: storeContextFromConfig(config, projectRoot), jobId, session: edit.session, operation: edit.operation });
-        const accepted = await saveEdit({ jobId, session, operation: edit.operation });
-        if (accepted?.jobId !== jobId || accepted.state !== 'accepted') throw Error('invalid acceptance');
-        directEdits.delete(body.editId); handoffs.delete(edit.stageId);
+        const { jobId } = await commands.saveOwnerDirect({ editId: body.editId }, principal);
         return json({ jobId, state: 'accepted', statusUrl: `/owner/jobs/${encodeURIComponent(jobId)}` }, 202);
-      } catch (error) { return errorResponse(409, error?.code ?? 'owner-save-failed'); }
-      finally { inFlight.delete(edit.stageId); }
+      } catch (error) {
+        if (error instanceof OwnerCommandPrecondition && error.code === 'owner-handoff-expired') return errorResponse(410, error.code);
+        return errorResponse(409, error?.code ?? 'owner-save-failed');
+      }
     }
 
     if (url.pathname === '/owner/edit') {
@@ -2297,14 +2106,9 @@ export function createOwnerAlphaHandler({
       const query = queryObject(url, ['relativePath', 'slug']);
       if (!query) return errorResponse(400, 'invalid-edit-query');
       try {
-        const session = await createEditSession({
-          config,
-          renderer: { relativePath: query.relativePath, slug: query.slug },
-        });
-        if (typeof session?.source?.text !== 'string') return errorResponse(500, 'invalid-edit-session');
-        const stored = editSessions.create(session);
+        const { session, editSessionId } = await commands.openRawEdit({ relativePath: query.relativePath, slug: query.slug }, principal);
         const body = editPage({
-          editSessionId: stored.id,
+          editSessionId,
           csrfToken,
           session,
           reviewEnabled: config.proposalReview.enabled,
@@ -2313,6 +2117,7 @@ export function createOwnerAlphaHandler({
         if (request.method === 'HEAD') return html(null, 200);
         return html(body);
       } catch (error) {
+        if (error instanceof OwnerCommandPrecondition && error.code === 'invalid-edit-session') return errorResponse(500, error.code);
         const code = error instanceof OwnerAlphaError ? error.code : 'edit-session-failed';
         return errorResponse(code === 'edit-session-capacity' ? 503 : 400, code);
       }
@@ -2329,31 +2134,24 @@ export function createOwnerAlphaHandler({
       const save = validateSaveBody(body, config.limits.maxSourceBytes);
       if (!save) return errorResponse(400, 'invalid-save-request');
       if (!sameSecret(save.csrf, csrfToken)) return errorResponse(403, 'invalid-csrf');
-      const session = editSessions.get(save.editSessionId);
-      if (session === null) return errorResponse(410, 'edit-session-expired');
-      if (inFlight.has(save.editSessionId)) return errorResponse(409, 'save-in-progress');
-
-      inFlight.add(save.editSessionId);
-      let jobId;
-      let started;
+      let accepted;
       try {
-        jobId = validateJobId(createJobId());
-        started = await saveEdit({ jobId, session, editedText: save.editedText });
-        if (!started || started.jobId !== jobId || started.state !== 'accepted') {
-          throw new OwnerAlphaError('invalid-save-acceptance', 'Save did not return exact durable acceptance');
-        }
+        accepted = await commands.saveRawEdit({ editSessionId: save.editSessionId, editedText: save.editedText }, principal);
       } catch (error) {
-        inFlight.delete(save.editSessionId);
+        if (error instanceof OwnerCommandPrecondition) {
+          if (error.code === 'edit-session-expired') return errorResponse(410, error.code);
+          if (error.code === 'save-in-progress') return errorResponse(409, error.code);
+          if (error.code === 'save-failed') return errorResponse(500, error.code);
+        }
         if (error instanceof OwnerAlphaError) {
           return errorResponse(error.code === 'lock-busy' ? 409 : 400, error.code);
         }
         return errorResponse(500, 'save-failed');
       }
-      editSessions.delete(save.editSessionId);
-      inFlight.delete(save.editSessionId);
+      const { jobId, state } = accepted;
       return json({
         jobId,
-        state: started.state ?? 'accepted',
+        state,
         statusUrl: `/owner/jobs/${encodeURIComponent(jobId)}`,
         jsonUrl: `/api/jobs/${encodeURIComponent(jobId)}`,
       }, 202);
@@ -2371,14 +2169,13 @@ export function createOwnerAlphaHandler({
       }
       let job;
       try {
-        job = await lookupJob(jobId);
+        job = await commands.readJob({ jobId }, principal);
       } catch (error) {
-        if (error instanceof OwnerAlphaError && ['artifact-not-found', 'job-not-found'].includes(error.code)) {
+        if (error instanceof OwnerAlphaError && error.code === 'job-not-found') {
           return errorResponse(404, 'job-not-found');
         }
         return errorResponse(500, 'job-lookup-failed');
       }
-      if (!job || job.jobId !== jobId) return errorResponse(404, 'job-not-found');
       if (jobMatch[1] === 'api/jobs') {
         if (request.method === 'HEAD') return json(null, 200);
         return json(publicJob(job));
