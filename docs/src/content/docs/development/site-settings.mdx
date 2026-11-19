@@ -31,6 +31,7 @@ editing:
 
 appearance:
   stylesheet: site.css              # the vault's own CSS, next to this file
+  favicon: favicon.png              # site icon (PNG), next to this file
   colorScheme: dark                 # system (default) | dark | light
 ```
 
@@ -54,6 +55,8 @@ Older workflows pass the address as `CB_BASE_URL`; it is still accepted, but if 
 ## The site's look
 
 `appearance.stylesheet` works like `publish.css` on Obsidian Publish: the file is published under a content-addressed name and loads after the renderer's own styles, so it wins ties. It can set the renderer's color variables (`--light`, `--dark`, `--secondary` and the rest, under `:root[saved-theme="dark"]` and `"light"`), fonts (`--bodyFont`, `--headerFont`), and style `cssclasses` from a note's frontmatter, which land on the page's `article` element. The home page is `body[data-slug="index"]`.
+
+`appearance.favicon` is the site icon: a PNG in the settings folder, published under a content-addressed name and as `/favicon.ico`, replacing the renderer's default. 64 to 512 pixels square works well; it is shown at 16 and 32.
 
 `appearance.colorScheme` is what a first-time visitor sees. A reader who uses the theme toggle keeps their choice. `system` follows the device.
 

@@ -19,11 +19,11 @@ export interface SiteConfig {
   legacyUrls?: string
   editEntry?: "auto" | "floating" | "inline"
   /** The vault's own look: a stylesheet loaded after the renderer's, and the default color scheme. */
-  appearance?: { stylesheet?: string; colorScheme: "system" | "dark" | "light" }
+  appearance?: { stylesheet?: string; favicon?: string; colorScheme: "system" | "dark" | "light" }
 }
 
 export const NEUTRAL_BASE_URL = "example.com"
-const KNOWN = { site: ["title", "baseUrl"], source: ["provider", "repository", "branch"], analytics: ["provider", "apiKey", "apiHost", "personProfiles"], editing: ["entry"], appearance: ["stylesheet", "colorScheme"] }
+const KNOWN = { site: ["title", "baseUrl"], source: ["provider", "repository", "branch"], analytics: ["provider", "apiKey", "apiHost", "personProfiles"], editing: ["entry"], appearance: ["stylesheet", "favicon", "colorScheme"] }
 
 function fail(message: string): never {
   throw new Error(`site settings: ${message}`)
@@ -105,6 +105,9 @@ export function parseSiteConfig(parsed: unknown, dir: string, env: Record<string
     if (sheet && !sheet.toLowerCase().endsWith(".css")) fail("appearance.stylesheet must be a .css file")
     config.appearance = { colorScheme: scheme as "system" | "dark" | "light" }
     if (sheet) config.appearance.stylesheet = insideSettings(sheet, dir, "appearance.stylesheet")
+    const icon = text(appearance.favicon, "appearance.favicon")
+    if (icon && !icon.toLowerCase().endsWith(".png")) fail("appearance.favicon must be a .png file")
+    if (icon) config.appearance.favicon = insideSettings(icon, dir, "appearance.favicon")
   }
   return config
 }

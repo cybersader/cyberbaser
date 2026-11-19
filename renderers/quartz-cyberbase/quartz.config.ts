@@ -148,4 +148,9 @@ if (provenanceMode(process.env.CYBERBASER_SOURCE_PROVENANCE)) {
   config.plugins.transformers = withSourceProvenance(config.plugins.transformers)
 }
 
+// A vault icon replaces Quartz's generated favicon.ico (VaultAppearance writes it).
+if (SITE.appearance?.favicon) {
+  config.plugins.emitters = config.plugins.emitters.filter((emitter) => emitter.name !== "Favicon")
+}
+
 export default config

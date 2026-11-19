@@ -12,6 +12,17 @@ export function stylesheetSlug(cssText: string): string {
   return `static/site-${createHash("sha256").update(cssText).digest("hex").slice(0, 12)}`
 }
 
+/** Content-addressed name for the site icon. */
+export function faviconSlug(bytes: Uint8Array): string {
+  return `static/site-icon-${createHash("sha256").update(bytes).digest("hex").slice(0, 12)}`
+}
+
+/** PNG signature check, so a renamed file of another type fails the build. */
+export function isPng(bytes: Uint8Array): boolean {
+  const sig = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+  return bytes.length > sig.length && sig.every((b, i) => bytes[i] === b)
+}
+
 /**
  * Runs in <head> right after Quartz's prescript, which has already applied the
  * reader's saved choice or the device preference. Without a saved choice, the
