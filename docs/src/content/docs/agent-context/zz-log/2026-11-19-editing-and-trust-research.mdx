@@ -1,0 +1,12 @@
+---
+title: Editing the live site and trust tiers, research wave
+description: "Owner pushback that in-browser editing of the live site was the point of Cyberbaser led to a recheck of prior research and five Sol research passes (invites, identity, hosting, tiers, red-team), synthesized into the editing-and-trust roadmap with five phases and four decisions."
+status: log
+tags: [planning, security, architecture]
+---
+
+After the cybersader.com switch, the owner noted that in-browser editing on the live site was missing and that this was the purpose of Cyberbaser. An earlier reply had wrongly framed it as unbuilt and off the roadmap. Three Sonnet readers rechecked the existing docs: the editing core, exact proposals, owner Save pipeline and suggesting mode are built; the open piece is reaching the editor from the live site and identity for anyone beyond the owner's private network. Quotes were spot-checked against the source pages.
+
+The owner then asked for deeper research and a tiered plan including invitations by trusted users. Five Sol workers covered invites and vouching, identity, hosting, contributor tiers and a red-team. Two stopped external retrieval after HTTP 403 responses (Discourse Meta, a Forgejo guide), so those surveys are partial. Repository facts the red-team relied on were confirmed: the owner session cookie has no `Secure` attribute, the container restart policy is `on-failure:3`, and the public intake bundle uses `cloudflared`.
+
+Synthesis: [editing the live site and the trust tiers](/cyberbaser/design/editing-and-trust-roadmap/). The lenses agreed that trust buys less friction, never write authority, and that Cloudflare Tunnel or Access cannot front the owner editor because it terminates browser TLS. They differed on invites (capped sponsor invites versus owner-issued first); the plan starts owner-issued and adds sponsor invites after a cohort. A new conflict surfaced: the built public suggestion bundle's tunnel conflicts with the edge-only rule. Private research notes are in the workspace; nothing live changed.

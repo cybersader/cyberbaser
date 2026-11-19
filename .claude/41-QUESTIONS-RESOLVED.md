@@ -4,6 +4,13 @@
 
 ## Log
 
+### Editing the live site: custody, transport and invites (2026-11-19, no R-number)
+- **Custody amendment approved (narrow):** an owner-operated, replaceable account adapter may, only in explicitly enabled local account mode, be the record of authority for its own deployment-local principals and persist only what verifies, admits, revokes and recovers them (account IDs and minimal contact data, WebAuthn public-credential bindings, expiring enrollment, invitation and recovery verifiers, revocable server-side sessions and their keys). No passwords, external identity tokens, federation, SSO or shared directory. No other component holds account credentials or browser-session authority. Account state grants no source, review, application or publication authority.
+- **Public suggestion transport:** TLS stays on owner-controlled hardware; Cloudflare stays edge-only and does not terminate submission TLS. The built Cloudflare Tunnel overlay is not the Phase 2 path.
+- **Invites:** owner-issued only at first; trusted-sponsor invites only after a first cohort shows the need.
+- **Editor reach:** not selected. The maintainer asked whether Iroh or similar protocols can avoid exposing the home network, and asked for an architecture that does not need rework later. Answered by the layered architecture in `design/editing-and-trust-roadmap.mdx`: reach is a replaceable carrier under one transport-neutral command protocol.
+- **Chronology:** `docs/src/content/docs/agent-context/zz-log/2026-11-19-editing-and-trust-research.mdx`.
+
 ### Owner direct in-place Save is not a visitor approval (2026-11-17, no R-number)
 - **Direction:** the maintainer requested the rendered-page editing experience for owners as well as visitors. The coordinator selected a distinct durable owner-direct authorization and recovery guard, with existing visitor approval requirements unchanged.
 - **Boundary:** reader-origin editing uses the shared exact-change ledger. A native top-level POST stages an inert draft; a strict owner-origin escaped-text confirmation and authenticated CSRF Save authorize one ordinary job. No credentialed cross-origin fetch, reader script on the owner origin, intake-rate-limit bypass for visitors, or whole-file serializer is introduced.
