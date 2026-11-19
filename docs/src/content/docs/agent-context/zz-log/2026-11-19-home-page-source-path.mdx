@@ -1,0 +1,18 @@
+---
+title: Home page Edit link and README styling fixes
+description: "After the cybersader.com switch, the README home page's Edit button and source links pointed at index.md because the projection had moved README.md there. Slugs now change only the page URL (renderer FrontmatterSlug plugin); files keep their path and bytes. Also fixed table-of-contents anchors for icon headings and three stylesheet issues."
+status: log
+tags: [setup]
+---
+
+The owner reported that the Edit button did not work on the new cybersader.com home page and that some README styling looked wrong.
+
+**Cause of the Edit link.** The 2026-11-18 change applied `slug: index` by projecting `README.md` to `index.md`. Every source link derives from the file path, so Edit, View source, Copy Markdown and Show raw pointed at a file that does not exist. The same move would also have failed the owner app's private build, which checks that every published file keeps its path and bytes, and it injected an alias into the file, which breaks exact owner editing.
+
+**Fix.** The projection now only validates slugs (malformed, taken, or a cross-folder address for a note with relative references still fail) and never moves or edits files. A renderer transformer, `FrontmatterSlug`, runs right after FrontMatter and changes only the page's URL, keeping the old URL as an alias redirect. Source links, the Edit button and owner editing see the real path.
+
+**Table of contents.** Heading ids for headings that start with an icon or emoji keep the leading space (`-cyberbase`); the earlier TOC fix trimmed it and produced anchors that did not exist. Anchors are now slugged from the text as written; labels stay trimmed.
+
+**Styling, in the vault stylesheet.** Internal links were Quartz chips (background boxes) rather than plain links; image links carried a stray external-link arrow; callouts inherited the renderer's gray italic blockquote style. All three now match the old site.
+
+Trial build from a fresh vault clone: edit and source links point at `README.md`, every TOC anchor matches a heading id, `/README` redirects home, URL continuity 932/932 with 0 failures.

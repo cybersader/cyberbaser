@@ -5,7 +5,8 @@ import path from 'node:path';
 import { project, slugTarget } from '../src/index.js';
 
 // Publish rule 2 requires an explicit `slug:` for a page granted outside the
-// allowlist; the projection applies it by projecting the page to `<slug>.md`.
+// allowlist. The projection validates slugs and never moves files; the renderer
+// serves the page at its slug URL.
 
 const roots = [];
 const mkroot = (name) => { const d = fs.mkdtempSync(path.join(os.tmpdir(), `cb-slug-${name}-`)); roots.push(d); return d; };
@@ -23,7 +24,7 @@ test('slugTarget accepts plain relative paths only', () => {
   for (const bad of ['', '  ', '../up', 'a/../b', 'a//b', 'a\\b', 'x\u0001', 42, null]) expect(slugTarget(bad)).toBeNull();
 });
 
-test('slug: index makes a root note the home page and keeps its old path as an alias', () => {
+test('slug: index publishes a root note unchanged, at its own path, byte for byte', () => {
   const v = mkroot('home');
   write(v, 'publish.yml', 'allow:\n  - pub/**\n');
   write(v, 'README.md', '---\ncb-publish: true\nslug: index\ntitle: Home\n---\n\n<img src="_attachments/art.png">\n');
@@ -32,11 +33,8 @@ test('slug: index makes a root note the home page and keeps its old path as an a
   const out = path.join(mkroot('home-out'), 'content');
   const r = project(v, out, { writeReport: false });
   expect(r.failures).toEqual([]);
-  expect(r.counts.relocatedPages).toBe(1);
-  expect(fs.existsSync(path.join(out, 'README.md'))).toBe(false);
-  const home = fs.readFileSync(path.join(out, 'index.md'), 'utf8');
-  expect(home).toContain('README');
-  expect(home).toContain('<img src="_attachments/art.png">');
+  expect(fs.existsSync(path.join(out, 'index.md'))).toBe(false);
+  expect(fs.readFileSync(path.join(out, 'README.md')).equals(fs.readFileSync(path.join(v, 'README.md')))).toBe(true);
   expect(fs.existsSync(path.join(out, '_attachments/art.png'))).toBe(true);
   expect(r.leakTest.ok).toBe(true);
 });
@@ -53,7 +51,7 @@ test('a slug onto a path another page uses fails before anything is written', ()
   expect(fs.existsSync(out)).toBe(false);
 });
 
-test('a slug that moves a note to another folder fails when it has relative references', () => {
+test('a slug URL in another folder fails when the note has relative references', () => {
   const v = mkroot('move');
   write(v, 'publish.yml', 'allow: []\n');
   write(v, 'private/Start.md', '---\ncb-publish: true\nslug: start\n---\n\n![x](pic.png)\n');
@@ -66,5 +64,6 @@ test('a slug that moves a note to another folder fails when it has relative refe
   const out = path.join(mkroot('move-out2'), 'content');
   const ok = project(v, out, { writeReport: false });
   expect(ok.failures).toEqual([]);
-  expect(fs.existsSync(path.join(out, 'start.md'))).toBe(true);
+  expect(fs.existsSync(path.join(out, 'private/Start.md'))).toBe(true);
+  expect(fs.existsSync(path.join(out, 'start.md'))).toBe(false);
 });

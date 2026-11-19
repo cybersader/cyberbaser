@@ -59,6 +59,6 @@ Older workflows pass the address as `CB_BASE_URL`; it is still accepted, but if 
 
 ## The home page
 
-A note becomes the home page with `slug: index` in its frontmatter (with `cb-publish: true` if it sits outside the publish allowlist, as a vault-root `README.md` does). The projection publishes it as `index.md` and keeps its old name as an alias, so links and URLs to `/README` still reach it. A `slug:` that would move a note to another folder fails the build if the note uses relative links or images, since those would stop resolving. Any other note with an explicit `slug:` is published at that address too.
+A note becomes the home page with `slug: index` in its frontmatter (with `cb-publish: true` if it sits outside the publish allowlist, as a vault-root `README.md` does). The renderer serves it at the slug's address and keeps its old address as a redirect, so links and URLs to `/README` still reach it. The file itself is not moved or changed, so the Edit button, source links and owner editing still point at `README.md`. A `slug:` that puts a note's address in another folder fails the build if the note uses relative links or images, since those resolve against the address. Any other note with an explicit `slug:` is served at that address too.
 
 Related: [moving a site off Obsidian Publish](/cyberbaser/development/moving-off-obsidian-publish/) uses `legacyUrls`.
