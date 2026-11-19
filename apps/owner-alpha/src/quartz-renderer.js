@@ -129,8 +129,11 @@ export function suggestionEnvironment(suggestions) {
   };
 }
 
-export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, ownerOrigin, suggestions = null, siteConfigPath = null }) {
+export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, ownerOrigin, suggestions = null, siteConfigPath = null, sourceCheckout = null }) {
   // The vault's own site settings (.cyberbaser/site.yml), when it has one.
+  if (sourceCheckout !== null && (typeof sourceCheckout !== 'string' || !path.isAbsolute(sourceCheckout) || path.normalize(sourceCheckout) !== sourceCheckout)) {
+    fail('invalid-render-path', 'sourceCheckout must be null or one normalized absolute path');
+  }
   if (siteConfigPath !== null && (typeof siteConfigPath !== 'string' || !path.isAbsolute(siteConfigPath) || path.normalize(siteConfigPath) !== siteConfigPath)) {
     fail('invalid-render-path', 'siteConfigPath must be null or one normalized absolute path');
   }
@@ -171,6 +174,8 @@ export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, 
         CYBERBASER_EDIT_LINK_MODE: 'owner',
         CYBERBASER_OWNER_ORIGIN: ownerOrigin,
         ...(siteConfigPath ? { CYBERBASER_SITE_CONFIG: siteConfigPath } : {}),
+        // Read-only: dates for notes without frontmatter dates come from its git history.
+        ...(sourceCheckout ? { CYBERBASER_SOURCE_CHECKOUT: sourceCheckout } : {}),
         ...formEnvironment,
       }),
     },

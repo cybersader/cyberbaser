@@ -50,6 +50,7 @@ Older workflows pass the address as `CB_BASE_URL`; it is still accepted, but if 
 
 - **Analytics** load only on public builds that run in the site's own `source.repository` (or with `CYBERBASER_ANALYTICS=on`), never on the private owner site, and `CYBERBASER_ANALYTICS=off` always wins. Forks and test builds therefore do not count page views.
 - **Source links** pin View source, Show raw and Copy Markdown to the commit being published when the build runs in the site's own repository, so copied Markdown matches the page.
+- **Note dates** come from a note's frontmatter (`date created`, `date modified` and the usual Quartz keys). A note without them gets its first and last commit dates when the build sets `CYBERBASER_SOURCE_CHECKOUT` to the vault checkout with full history (`actions/checkout` with `fetch-depth: 0`); the owner app passes its checkout automatically. A shallow checkout is skipped with a warning.
 - **Providers** sit behind small interfaces (`SourceHost`, `AnalyticsProvider`). GitHub and PostHog are the only ones today; another forge or analytics service is a new provider, not a change to existing ones.
 
 ## The site's look

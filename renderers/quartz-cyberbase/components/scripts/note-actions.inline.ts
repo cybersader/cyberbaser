@@ -8,9 +8,11 @@ async function copyMarkdown(button: HTMLButtonElement) {
   const label = button.querySelector<HTMLElement>(".cb-note-action-label") ?? button
   const original = button.dataset.cbLabel ?? label.textContent ?? "Copy Markdown"
   button.dataset.cbLabel = original
+  // The label is visually hidden in the icon row; data-cb-state shows it briefly.
   const done = (text: string) => {
     label.textContent = text
-    setTimeout(() => { label.textContent = original }, 2000)
+    button.dataset.cbState = text
+    setTimeout(() => { label.textContent = original; delete button.dataset.cbState }, 2000)
   }
   const text = () => fetch(url, { credentials: "omit" }).then(response => {
     if (!response.ok) throw new Error(String(response.status))
