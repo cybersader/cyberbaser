@@ -141,7 +141,7 @@ WP3_FORGEJO_RUNNER_SHA256=<expected lowercase SHA-256>
 
 Provisioning those inputs is separate. The gate uses `pull_policy: never` for Forgejo and does not publish anything.
 
-The run root is one mode-`0700` UUID directory below `/home/cybersader/.cache/cyberbaser/wp3/`. The harness rejects mounted Windows/WSL paths, unsupported filesystems, aliases, symlink components, wrong ownership, occupied fixture bindings, non-rootless engines, and concurrent runs. Native ext4 and btrfs are accepted.
+The run root is one mode-`0700` UUID directory below `~/.cache/cyberbaser/wp3/` (or `$XDG_CACHE_HOME/cyberbaser/wp3/`, or `$CYBERBASER_WP3_RUN_PARENT`). The harness rejects mounted Windows/WSL paths, unsupported filesystems, aliases, symlink components, wrong ownership, occupied fixture bindings, non-rootless engines, and concurrent runs. Native ext4 and btrfs are accepted.
 
 Forgejo listens at `https://127.0.0.1:8443`; job containers reach the same instance at `https://forgejo-wp3:3000`; the published witness listens at `https://127.0.0.3:8443`. A per-run ECDSA P-256 CA and certificates stay below the run root. The Forgejo container uses SQLite, no SSH, disabled registration and unrelated units, dropped capabilities, `no-new-privileges`, bounded tmpfs/logging, and exact run labels. The runner bytes are copied into the run root, rehashed, and executed only from that checksum-bound copy.
 

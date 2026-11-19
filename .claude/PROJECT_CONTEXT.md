@@ -59,7 +59,6 @@ Replaceable external authoring spokes emit canonical `@cyberbaser/proposal` obje
 - **Readers** who spot a wrong fact but will not use a CLI or create a forge account. Their product path is not shipped; `OD-01` exercised the boundary once with the maintainer switching roles, while unfamiliar-reader usability remains unvalidated.
 - **Developers** who can use the current GitHub dogfood path by editing a `.md` and opening a PR.
 - **AI agents** maintaining content through the same reviewed pipeline as humans — the tool is deliberately agent-friendly.
-- **User (Cybersader)**: cybersecurity professional, Obsidian power user, now working natively on Fedora after a WSL/Windows migration, and collaborates heavily with Claude Code across sibling projects.
 
 ## Where Knowledge Lives (knowledge-ops map)
 

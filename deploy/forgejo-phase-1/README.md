@@ -8,7 +8,7 @@ See the canonical [Forgejo phase-one guide](../../docs/src/content/docs/developm
 
 ## What the fixture does
 
-1. Creates one mode-`0700` UUID run root below `/home/cybersader/.cache/cyberbaser/wp3/` on native ext4 or btrfs storage.
+1. Creates one mode-`0700` UUID run root below `~/.cache/cyberbaser/wp3/` (or `$XDG_CACHE_HOME/cyberbaser/wp3/`, or `$CYBERBASER_WP3_RUN_PARENT`) on native ext4 or btrfs storage.
 2. Reserves `127.0.0.1:8443` for Forgejo and `127.0.0.3:8443` for the published witness.
 3. Creates a run-local CA and ECDSA P-256 TLS certificates.
 4. Starts one immutable-image Forgejo container and requires the explicitly reviewed 16.0.2 release at runtime, with `pull_policy: never`, read-only root, dropped capabilities, bounded logs, SQLite, no SSH, and double-labelled resources.

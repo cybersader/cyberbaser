@@ -12,9 +12,24 @@ import {
   statfs,
   writeFile,
 } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 
-export const WP3_RUN_PARENT = '/home/cybersader/.cache/cyberbaser/wp3';
+/**
+ * Parent of every run root: $CYBERBASER_WP3_RUN_PARENT if set (absolute), else
+ * $XDG_CACHE_HOME/cyberbaser/wp3, else ~/.cache/cyberbaser/wp3.
+ */
+export function wp3RunParent(env = process.env, home = os.homedir()) {
+  const explicit = env.CYBERBASER_WP3_RUN_PARENT;
+  if (explicit) {
+    if (!path.isAbsolute(explicit)) throw new Error('CYBERBASER_WP3_RUN_PARENT must be an absolute path');
+    return path.resolve(explicit);
+  }
+  const cache = env.XDG_CACHE_HOME && path.isAbsolute(env.XDG_CACHE_HOME) ? env.XDG_CACHE_HOME : path.join(home, '.cache');
+  return path.resolve(cache, 'cyberbaser', 'wp3');
+}
+
+export const WP3_RUN_PARENT = wp3RunParent();
 export const WP3_STORAGE_LIMIT_BYTES = 4_294_967_296;
 export const WP3_STORAGE_STOP_BYTES = 3_758_096_384;
 export const WP3_RESULT_MAX_BYTES = 8 * 1024 * 1024;

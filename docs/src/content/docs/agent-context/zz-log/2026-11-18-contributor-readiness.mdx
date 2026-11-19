@@ -1,0 +1,16 @@
+---
+title: Contributor readiness
+description: "One documented command (bun run check) runs locally what the pull-request workflows run; Bun pinned in .bun-version and in every workflow; the Forgejo phase-1 harness derives its run directory from the environment instead of a maintainer home path; owner-machine notes moved to an untracked CLAUDE.local.md; CI guard for home-directory paths."
+status: log
+tags: [setup]
+---
+
+The owner approved a DevOps audit standard for public repositories: a stranger can fork, run one documented command, and get a green pull request on GitHub-hosted runners with nothing from the owner's machine. The audit found no contributor guide, about ten per-package workflows with no local equivalent, Bun pinned to 1.3.11 everywhere except `deploy.yml` (`latest`), a maintainer home path hardcoded in the Forgejo phase-1 harness and its tests, and owner-specific notes in tracked agent docs.
+
+Changes, with no behavior change for existing builds:
+
+- `CONTRIBUTING.md` and a root `package.json` whose `check` (and `test`) script runs `scripts/check.sh`: the CI install order, every pull-request test suite, and, with `--full`, the Rust, browser-acceptance and container steps.
+- `.bun-version` (1.3.11); `deploy.yml` now pins it too.
+- `scripts/check-tracked-files.sh` fails on machine-specific home paths in tracked files (placeholders like `/home/owner` pass) and on workflows whose Bun version differs from `.bun-version`. A new **Contributor check** workflow runs it and `bun run check` on every pull request.
+- The Forgejo phase-1 run parent is `$CYBERBASER_WP3_RUN_PARENT`, else `$XDG_CACHE_HOME/cyberbaser/wp3`, else `~/.cache/cyberbaser/wp3`; on the maintainer machine it resolves to the same directory as before. Its tests pass under an unrelated `HOME`.
+- The owner profile line, a private sibling project note and the local research vault note moved from `CLAUDE.md` and `.claude/PROJECT_CONTEXT.md` to a gitignored `CLAUDE.local.md`; `CLAUDE.md` now says where such notes belong.
