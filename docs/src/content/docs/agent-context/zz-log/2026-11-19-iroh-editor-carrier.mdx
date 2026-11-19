@@ -1,0 +1,10 @@
+---
+title: Iroh owner editor carrier, local browser spike
+description: "Actual Chromium WASM and a loopback self-hosted relay carried owner-authenticated synthetic commands; editor reach remains unselected."
+status: log
+tags: [architecture, research, security]
+---
+
+The [Iroh owner editor carrier research](/cyberbaser/research/iroh-editor-carrier/) follows the earlier proposal-transfer fixture with a real Chromium WebAssembly client, the Iroh 1.0.3 relay server on loopback, and a native owner stub with direct IP transports and discovery disabled. An enrolled virtual Chromium authenticator signed a WebAuthn challenge that both ends derived independently from the QUIC TLS exporter, the endpoint IDs, session ID and nonce. The test accepted both fake commands only after authentication and rejected missing principal, cross-channel and same-channel replay, invalid signature, wrong exact origin at the same RP ID, duplicate request ID and oversize frames. Dialing failed when the relay was stopped while the owner process was still running.
+
+This tested a replaceable carrier and a possible layer 3 handshake, not production identity, deployment, owner onboarding or reach. The separate trusted editor origin, hosted HTTPS/WSS, maintained account adapter, revocation, shared command conformance and publisher isolation remain deployment gates. No real vault, passkey, relay account or publisher was used. Private HTTPS stays first in the roadmap, editor reach remains unselected, and no locked decision changed.
