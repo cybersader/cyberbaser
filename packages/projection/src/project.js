@@ -74,10 +74,10 @@ export function projectedPath(vaultPath, lowercase = true) {
 }
 
 /**
- * Where a page with an explicit `slug:` is projected: `<slug>.md`, so the renderer
- * gives it that URL (`slug: index` makes a note the home page). Returns null for a
- * slug that is not a plain relative path. Publish rule 2 requires a slug for pages
- * granted outside the allowlist; before this, nothing applied it.
+ * The page path an explicit `slug:` addresses: `<slug>.md` (`slug: index` is the home
+ * page). Returns null for a slug that is not a plain relative path. The projection
+ * only validates slugs; files keep their source path and bytes, and the renderer
+ * serves the page at the slug URL (renderers/quartz-cyberbase/plugins/FrontmatterSlug.ts).
  */
 export function slugTarget(slug) {
   if (typeof slug !== 'string') return null;
@@ -88,7 +88,7 @@ export function slugTarget(slug) {
   return `${s}.md`;
 }
 
-/** Projected path for every published page: its slug target, else its (case-)projected path. */
+/** URL path for every published page: its slug target, else its (case-)projected path. */
 export function pageTargets(pages, slugs = {}, lowercase = false) {
   const targets = new Map();
   for (const p of pages) {
@@ -450,8 +450,7 @@ export function verifyProjection(vaultDir, outDir, selectResult, opts = {}) {
   const lowercase = opts.lowercase ?? false;
   const pages = selectResult.report.published.pages;
   const assets = selectResult.report.published.assets;
-  const targets = pageTargets(pages, selectResult.report.slugs ?? {}, lowercase);
-  const expected = new Set([...pages.map((p) => targets.get(p)), ...assets.map((p) => projectedPath(p, lowercase))]);
+  const expected = new Set([...pages, ...assets].map((p) => projectedPath(p, lowercase)));
   const actual = new Set(walkFiles(outDir));
 
   const unexpected = [...actual].filter((p) => !expected.has(p)).sort();
@@ -541,7 +540,7 @@ export function project(vaultDir, outDir, opts = {}) {
   const aliases = [];
   let leakTest = null;
   let pathLint = null;
-  let counts = { pages: 0, assets: 0, aliasesInjected: 0, aliasesSkipped: 0, caseChangedPages: 0, caseChangedAssets: 0, relocatedPages: 0, warnings: 0 };
+  let counts = { pages: 0, assets: 0, aliasesInjected: 0, aliasesSkipped: 0, caseChangedPages: 0, caseChangedAssets: 0, warnings: 0 };
 
   const finish = () => {
     counts.warnings = warnings.length;
@@ -616,9 +615,10 @@ export function project(vaultDir, outDir, opts = {}) {
   warnings.push(...safety.warnings);
   failures.push(...safety.failures);
 
-  // 6b. Explicit slugs move a page to `<slug>.md`. Fail on a malformed slug, on a
-  //     target another published file already projects to, and on a move to another
-  //     folder when the note uses relative references that would stop resolving.
+  // 6b. Explicit slugs give a page another URL (the renderer applies them; files are
+  //     not moved). Fail on a malformed slug, on a URL another published page already
+  //     has, and on a URL in another folder when the note uses relative references,
+  //     which resolve against the page URL and would stop working.
   const slugs = selectResult.report.slugs ?? {};
   const targets = pageTargets(pages, slugs, lowercase);
   const occupied = new Map();
@@ -637,7 +637,7 @@ export function project(vaultDir, outDir, opts = {}) {
     const holder = occupied.get(target);
     const otherTarget = pages.find((q) => q !== p && targets.get(q) === target);
     if ((holder && holder !== p) || otherTarget) {
-      failures.push({ kind: 'slug', path: p, message: `slug ${JSON.stringify(slugs[p])} projects to "${target}", which ${otherTarget ?? holder} already uses` });
+      failures.push({ kind: 'slug', path: p, message: `slug ${JSON.stringify(slugs[p])} addresses "${target}", which ${otherTarget ?? holder} already uses` });
       continue;
     }
     const dirOf = (x) => (x.includes('/') ? x.slice(0, x.lastIndexOf('/')) : '');
@@ -646,7 +646,7 @@ export function project(vaultDir, outDir, opts = {}) {
       const relative = [...refs.mdLinks, ...refs.mdImages, ...refs.htmlSrcs]
         .filter((r) => r.target && !/^([a-z][a-z0-9+.-]*:|#|\/)/i.test(r.target));
       if (relative.length) {
-        failures.push({ kind: 'slug', path: p, message: `slug moves this note to another folder, but line ${relative[0].line} uses the relative reference ${JSON.stringify(relative[0].target)}` });
+        failures.push({ kind: 'slug', path: p, message: `slug puts this note's URL in another folder, but line ${relative[0].line} uses the relative reference ${JSON.stringify(relative[0].target)}` });
       }
     }
   }
@@ -659,17 +659,14 @@ export function project(vaultDir, outDir, opts = {}) {
   ensureDir(outDir);
 
   for (const p of pages) {
-    const target = targets.get(p);
+    const target = projectedPath(p, lowercase);
     const dst = path.join(outDir, target);
     ensureDir(path.dirname(dst));
     if (target === p) {
       fs.copyFileSync(path.join(vaultDir, p), dst);
       continue;
     }
-    // A moved or case-changed page keeps its natural path as an alias, so old links
-    // and URLs still reach it.
-    if (target === projectedPath(p, lowercase)) counts.caseChangedPages += 1;
-    else counts.relocatedPages += 1;
+    counts.caseChangedPages += 1;
     const alias = naturalCaseAlias(p);
     const result = injectAlias(fs.readFileSync(path.join(vaultDir, p)), alias);
     fs.writeFileSync(dst, result.buffer);

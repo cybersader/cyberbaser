@@ -5,6 +5,7 @@ import { provenanceMode, withSourceProvenance } from "./quartz/cyberbase/SourceP
 import { LegacyRedirects } from "./quartz/cyberbase/LegacyRedirects"
 import { VaultAppearance } from "./quartz/cyberbase/VaultAppearance"
 import { TocPlainText } from "./quartz/cyberbase/TocPlainText"
+import { FrontmatterSlug } from "./quartz/cyberbase/FrontmatterSlug"
 import { siteBasePath } from "./quartz/cyberbase/siteBase"
 import { loadSiteConfig } from "./quartz/cyberbase/siteConfigFile"
 
@@ -89,6 +90,8 @@ const config: QuartzConfig = {
   plugins: {
     transformers: [
       Plugin.FrontMatter(),
+      // A note's `slug:` sets its URL (slug: index = home page); the file keeps its path.
+      FrontmatterSlug(),
       Plugin.CreatedModifiedDate({
         // The projection is a fresh copy with no git history, so filesystem
         // mtimes are copy times. Frontmatter dates win where present.
