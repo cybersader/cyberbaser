@@ -16,3 +16,7 @@ The owner reported that the Edit button did not work on the new cybersader.com h
 **Styling, in the vault stylesheet.** Internal links were Quartz chips (background boxes) rather than plain links; image links carried a stray external-link arrow; callouts inherited the renderer's gray italic blockquote style. All three now match the old site.
 
 Trial build from a fresh vault clone: edit and source links point at `README.md`, every TOC anchor matches a heading id, `/README` redirects home, URL continuity 932/932 with 0 failures.
+
+## Site icon
+
+The owner asked for a favicon. The old Publish site named \ in its options but never published the file, so it showed Obsidian's default. Added \ (a PNG in the settings folder): published under a content-addressed name, declared after Quartz's own icon link, and written as \ with Quartz's Favicon emitter dropped, since emitters run concurrently and overwriting \ would race. Cyberbase uses a 192px crop of the knight's helmet from the README hero art, chosen because the red visor still reads at 16px on dark and light tabs.

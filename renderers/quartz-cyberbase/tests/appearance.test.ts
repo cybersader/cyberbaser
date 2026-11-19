@@ -1,4 +1,4 @@
-import { colorSchemeScript, stylesheetSlug } from "../plugins/appearanceCore"
+import { colorSchemeScript, faviconSlug, isPng, stylesheetSlug } from "../plugins/appearanceCore"
 import { parseSiteConfig } from "../plugins/siteConfig"
 const assert = (ok: unknown, message: string) => { if (!ok) throw new Error(message) }
 const throws = (fn: () => unknown, message: string) => { let threw = false; try { fn() } catch { threw = true }; assert(threw, message) }
@@ -30,4 +30,11 @@ function runScheme(saved: string | null) {
 }
 assert(runScheme(null) === "dark", "default applied")
 assert(runScheme("light") === "light", "reader choice kept")
-console.log("appearance: settings validation, content-addressed stylesheet and default color scheme passed")
+// Site icon: PNG only, inside the settings folder, content-addressed.
+assert(parseSiteConfig({ appearance: { favicon: "icon.png" } }, "/v/.cyberbaser").appearance?.favicon === "/v/.cyberbaser/icon.png", "favicon path")
+throws(() => parseSiteConfig({ appearance: { favicon: "icon.svg" } }, "/s"), "non-png favicon")
+throws(() => parseSiteConfig({ appearance: { favicon: "../icon.png" } }, "/s"), "favicon outside settings folder")
+const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0])
+assert(isPng(png) && !isPng(new Uint8Array([0x3c, 0x73, 0x76, 0x67, 0, 0, 0, 0, 0])), "png signature")
+assert(/^static\/site-icon-[0-9a-f]{12}$/.test(faviconSlug(png)), faviconSlug(png))
+console.log("appearance: settings validation, content-addressed stylesheet and default color scheme, site icon passed")
