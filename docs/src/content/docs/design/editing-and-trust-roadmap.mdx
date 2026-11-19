@@ -1,0 +1,66 @@
+---
+title: Editing the live site and the trust tiers (roadmap)
+description: "Tiered plan for in-browser editing of a live Cyberbaser site: owner editing on owner hardware at an HTTPS editor origin with passkey sign-in, then account-free suggestions, invited contributor accounts, and scoped reviewers. Per-tier capabilities and limits, release gates from a red-team, hosting topologies that keep TLS off third-party compute, the proposed credential-custody amendment, and the locked rules that stay locked."
+status: planning
+tags: [architecture, planning, security]
+---
+
+**Status: proposal, 2026-11-19.** Synthesized from five research passes (invites and vouching, identity, hosting, contributor tiers, red-team) over the existing design pages and outside prior art. Nothing here is selected until the maintainer decides; each phase names its decisions. It extends [contribution trust and access](/cyberbaser/design/contribution-trust-and-access/) and [community system design](/cyberbaser/design/community-system-design/) rather than replacing them.
+
+## The short version
+
+The editing core is built: an edit on the rendered page becomes an exact, byte-bound change, and the owner's Save turns it into one commit and a verified live page. What has never been chosen is how the live site reaches the editor from anywhere, and how people other than the owner earn the right to submit more with less friction. The plan answers both in five phases. One rule holds through all of them: **trust changes how much someone can submit and how much review a change needs, never who writes to the vault.** Approve and Apply stay owner acts.
+
+## Tiers
+
+| Tier | How you get there | On the page | Review | Never |
+|---|---|---|---|---|
+| **T0 Anonymous** | Nothing. Open a page and suggest. | Suggest on published text with tracked changes; Markdown fallback for safe blocks. | Full owner review. Bot check, layered limits, capped inbox. | Private source, other people's receipts, any write. |
+| **T1 Account** | Optional passkey enrollment, by invite or a sponsor-free request the owner accepts. | Same editor, plus your own history, feedback, revisions and credit. | Full review by default; finite higher quotas. | Automatic trust, invites, private access. |
+| **T2 Trusted** | Owner grants trust for a collection, from accepted work over time. Separately, an owner-granted, revocable *can invite* right. | Same editor; larger scoped budgets. | Quick review for low-risk in-scope changes; full review for sensitive ones. | Inherited trust, self-promotion, skipped checks, Approve, Apply, Publish. |
+| **T3 Reviewer** | Explicit, expiring owner grant for a collection. A responsibility, not a promotion. | Claim items, record a recommendation on an exact revision, request changes. | Owner decides on the recommendation. | Canonical approval, self- or sponsor-review, source write. |
+| **Owner** | Passkey at the editor origin. | Direct Save, or Approve, then separately Apply. | Policy, source and publication checks always run. | Silent rebase, whole-file rewrite, auto-apply. |
+
+**Invites.** An invite admits someone to T1, never to trusted status, and records who introduced whom privately. Start with owner-issued invites only; consider capped sponsor invites (for example one per sponsor per 30 days, single-use, 7-day expiry) after the first cohort shows the need. No recursive or inherited trust. Abuse costs the sponsor their invite right after case review; it does not automatically punish the people they invited. Keep a sponsor-free route so a contributor history never depends on knowing someone. Prior art: Lobsters' invitation tree and inviter accountability, Wikimedia's separation of standing from review controls; invite trees do not inherit the guarantees of graph-based sybil defenses.
+
+## Phases
+
+### Phase 0: owner editing from the owner's devices (days)
+
+Update the owner app to current, serve it at `edit.cybersader.com` over **private HTTPS** (split DNS to a local Caddy, certificate by ACME DNS-01, no inbound port), and point the public Edit icon there for the owner. Works on the owner's devices over the private network. No exposure, no new identity.
+
+### Phase 1: always-on owner editor with passkey sign-in
+
+- **Custody amendment** (decision, below) so a local account adapter may hold passkey bindings and sessions for its own deployment.
+- **Embedded Better Auth**, one owner principal enrolled from the host console, no public signup, no email reset. Better Auth verifies the person; Cyberbaser separately authorizes each Save, Apply and Publish against current policy and pinned source.
+- **External-origin contract** in the owner app: one canonical HTTPS origin and narrow passkey RP ID (`edit.cybersader.com`); TLS ends on owner hardware; exact SNI and authority; client forwarding headers stripped; host-only `__Host-`, `Secure`, `HttpOnly` cookies; exact Origin and CSRF on every mutation; legacy network bootstrap retired.
+- **Publisher isolation:** the web app and renderer cannot retrieve a reusable push credential; a separate publisher accepts only the bound effect.
+- **Operations:** always-on host (TrueNAS Custom App first, or a Linux guest or box), off-machine backups with rehearsed restore, restart after reboot (the current compose stops after three failures), monitoring of renewal, reachability, stuck jobs and backups.
+- **Recovery:** two independent authenticators including an offline key; console path that pauses publishing, revokes sessions and re-enrolls only the same owner.
+
+### Phase 2: account-free suggestions on the live site (T0)
+
+Lane B goes public at `suggest.cybersader.com` once Q09 is decided. Before then: server-side bot verification and limits; review budgeted in owner minutes with reserved capacity and a pause switch; unsafe rendered output blocked (raw HTML, SVG, CSS, links and embeds in proposals checked both as source and as built output; active vault content never rendered on the owner origin); the intake process cannot read unpublished history even from its filesystem; contribution terms set. **Transport conflict:** the built public bundle uses a Cloudflare Tunnel, which terminates TLS at Cloudflare and so sees submissions in the clear, against the edge-only rule. Either accept that for public-page suggestions explicitly, or use DNS-only direct HTTPS or a raw-TCP relay.
+
+### Phase 3: invited contributor accounts (T1, T2)
+
+`contribute.cybersader.com` with its own passkey realm and session store. Invite-only enrollment enforced before account creation (Better Auth's organization invitations are redeemed after sign-in, so they do not enforce this alone). Owner-issued invites first. Gates: invite replay, cross-account reads and revoked grants fail closed; a small cohort fits the review budget.
+
+### Phase 4: scoped reviewers (T3)
+
+Advisory review on exact revisions, routed by collection with conflict exclusion and workload caps; recommendations are distinct from the owner's decision receipt.
+
+## Hosting topologies
+
+Ranked: (1) private HTTPS over the owner's network; (2) direct public HTTPS with a DNS-only record to owner Caddy when browser-only access is needed and inbound works (exposes the home IP); (3) a raw-TCP reverse relay on a small non-hyperscaler server behind CGNAT, which sees connection metadata, never content or keys; (4) Tailscale Funnel only if a `*.ts.net` hostname is acceptable. Ordinary Cloudflare Tunnel or Access for the editor is out: it terminates browser TLS at Cloudflare.
+
+## Decisions
+
+1. **Custody amendment** (gates Phase 1). Proposed wording: an owner-operated, replaceable account adapter may, only in explicitly enabled local account mode, be the record of authority for its own deployment-local principals and persist only what is needed to verify, admit, revoke and recover them (account IDs and minimal contact data, WebAuthn public-credential bindings, expiring enrollment, invitation and recovery verifiers, revocable server-side sessions and their keys). No passwords, external tokens, federation, SSO or shared directory. No other component holds account credentials or session authority. Account state grants no source, review, application or publication authority.
+2. **Editor reach** (Phase 0/1): private network only, direct public HTTPS, or relay.
+3. **Public-suggestion transport** (Phase 2): Cloudflare Tunnel accepted for public-page suggestions, or TLS kept off Cloudflare.
+4. **Invite policy** (Phase 3): owner-issued only at first, or sponsor invites from the start.
+
+## Rules that stay locked
+
+A reviewer's recommendation never replaces the owner's approval; nobody but the owner runs Apply and publish; nothing applies from trust, quorum or a timer; no shared privileged origin; no active previews on the owner origin; no email-only owner recovery; no broad Git credentials in the web app. Changing any of these would be an explicit change to a locked rule, and none is recommended.
