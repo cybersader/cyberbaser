@@ -869,6 +869,7 @@ export async function rebuildOwnerSite({
     try {
       rendererResult = await render({
         siteConfigPath: await vaultSiteSettings(before.root),
+        sourceCheckout: before.root,
         contentDir: projectionRoot,
         outputDir: candidateSite,
         workspaceDir: rendererWorkspace,

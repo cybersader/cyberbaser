@@ -6,6 +6,7 @@ import { LegacyRedirects } from "./quartz/cyberbase/LegacyRedirects"
 import { VaultAppearance } from "./quartz/cyberbase/VaultAppearance"
 import { TocPlainText } from "./quartz/cyberbase/TocPlainText"
 import { FrontmatterSlug } from "./quartz/cyberbase/FrontmatterSlug"
+import { GitDates } from "./quartz/cyberbase/GitDates"
 import { siteBasePath } from "./quartz/cyberbase/siteBase"
 import { loadSiteConfig } from "./quartz/cyberbase/siteConfigFile"
 
@@ -97,6 +98,9 @@ const config: QuartzConfig = {
         // mtimes are copy times. Frontmatter dates win where present.
         priority: ["frontmatter", "git", "filesystem"],
       }),
+      // Notes without frontmatter dates get their first/last commit dates from
+      // the vault checkout instead of the copy time.
+      GitDates({ checkout: process.env.CYBERBASER_SOURCE_CHECKOUT }),
       Plugin.SyntaxHighlighting({
         theme: {
           light: "github-light",

@@ -35,7 +35,10 @@ const SOURCE_HOST = SITE.source
       revision: process.env.CYBERBASER_SOURCE_REVISION || (OWN_REPOSITORY_BUILD ? process.env.GITHUB_SHA : undefined),
     })
   : undefined
-const NOTE_ACTIONS_HEADER = SOURCE_HOST ? [NoteActions({ host: SOURCE_HOST, placement: "header" })] : []
+// Public builds put Edit in the icon row; owner builds keep their own in-place Edit entry.
+const NOTE_ACTIONS_HEADER = SOURCE_HOST
+  ? [NoteActions({ host: SOURCE_HOST, placement: "header", withEdit: process.env.CYBERBASER_EDIT_LINK_MODE !== "owner" })]
+  : []
 const NOTE_ACTIONS_FOOTER = SOURCE_HOST ? [NoteActions({ host: SOURCE_HOST, placement: "footer" })] : []
 
 // Build-time only. Public is the fail-closed default; owner mode is an explicit
@@ -60,7 +63,10 @@ const EDIT_THIS_PAGE_OPTIONS: EditThisPageOptions | undefined =
   EDIT_LINK_MODE === "owner"
     ? { mode: "owner", ownerOrigin: resolveOwnerOrigin(process.env.CYBERBASER_OWNER_ORIGIN), inPlace: SUGGEST_CORRECTION_OPTIONS.enabled, editEntry: EDIT_ENTRY }
     : SITE.source ? { mode: "public", repoUrl: SOURCE_REPO_URL!, branch: SITE.source.branch } : undefined
-const EDIT_THIS_PAGE = EDIT_THIS_PAGE_OPTIONS ? [EditThisPage(EDIT_THIS_PAGE_OPTIONS)] : []
+// In a public build with source links, the icon row carries Edit, so the separate link is dropped.
+const EDIT_THIS_PAGE = EDIT_THIS_PAGE_OPTIONS && !(EDIT_THIS_PAGE_OPTIONS.mode === "public" && SOURCE_HOST)
+  ? [EditThisPage(EDIT_THIS_PAGE_OPTIONS)]
+  : []
 
 const SUGGEST_CORRECTION_COMPONENTS = SUGGEST_CORRECTION_OPTIONS.enabled
   ? [SuggestCorrection({ ...SUGGEST_CORRECTION_OPTIONS, editEntry: EDIT_ENTRY })]

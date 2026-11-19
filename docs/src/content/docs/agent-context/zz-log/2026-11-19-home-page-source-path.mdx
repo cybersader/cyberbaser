@@ -20,3 +20,11 @@ Trial build from a fresh vault clone: edit and source links point at `README.md`
 ## Site icon
 
 The owner asked for a favicon. The old Publish site named `favicon.ico` in its options but never published the file, so it showed Obsidian's default. Added `appearance.favicon` (a PNG in the settings folder): published under a content-addressed name, declared after Quartz's own icon link, and written as `/favicon.ico` with Quartz's Favicon emitter dropped, since emitters run concurrently and overwriting `static/icon.png` would race. Cyberbase uses a 192px crop of the knight's helmet from the README hero art, chosen because the red visor still reads at 16px on dark and light tabs.
+
+## Quieter note actions and real dates
+
+Owner feedback relayed by the vault agent: the Edit / View source / Copy Markdown / Show raw row at the top of every note was annoying, since the footer repeats it. Three placements were mocked on a live note (small icons, Edit only, footer only) and shown to the owner, who chose small icons. The header is now four icon buttons (edit, view source, copy, raw) with names on hover and for screen readers; "Copied" still shows beside the copy icon. Public builds carry Edit in that row; owner builds keep their in-place Edit entry. The footer is unchanged.
+
+The mock also showed 204 of 934 published notes dated with the build time, because they have no frontmatter dates and the renderer builds a copy with no history. The owner chose git history over hiding them: a `GitDates` transformer reads one `git log` pass from `CYBERBASER_SOURCE_CHECKOUT` and fills first and last commit dates where frontmatter has none. The vault workflow fetches full history for it. A shallow checkout is skipped with a warning. Commit dates survived the 2026-11-18 history rewrite, which preserves author dates.
+
+Also confirmed to the owner: in-browser (WYSIWYG) editing is available only through the private owner app today. The public site is static, so its Edit opens GitHub's editor; editing in place on the public site would need owner sign-in plus an always-on save service, which is not built or committed on the roadmap.
