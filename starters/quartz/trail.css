@@ -1,0 +1,4 @@
+/* Replace this file to make the Quartz reader your own. */
+:root[saved-theme="light"] { --secondary: #295c49; }
+:root[saved-theme="dark"] { --secondary: #a8d8bc; }
+.page article img { border-radius: .4rem; }

@@ -1,0 +1,5 @@
+# Quartz knowledge-base starter
+
+From the Cyberbaser checkout, run `bash starters/build.sh quartz`. This applies `starters/example-vault/publish.yml`, then uses the existing pinned Quartz v4.5.2 adapter. It writes a read-only static site to `starter-output/quartz/`. The build must start with a new output directory. See the [shared quickstart](../README.md) for prerequisites and preview instructions.
+
+Make the site yours: edit `site.yml` for the site name/address and `trail.css` for theme overrides. Edit the sample vault’s `README.md` for homepage content and `field-notes/tide-pools.md` for a note. Layout and controls come from `renderers/quartz-cyberbase/quartz.layout.ts`; this starter is not a second copy of Quartz. No analytics, accounts or submission service are enabled. To use different trusted Quartz settings, point `STARTER_QUARTZ_SETTINGS` at an absolute path to `site.yml` with its companion files beside it. Those are explicit build inputs, not entries copied from the full vault.

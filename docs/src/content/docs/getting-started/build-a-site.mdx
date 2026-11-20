@@ -1,0 +1,32 @@
+---
+title: What can I swap on my site?
+description: A site builder’s guide to configuring the existing Quartz site, replacing a component, or bringing a different frontend, with templates and starters clearly separated from what ships today.
+sidebar:
+  order: 2
+status: active
+tags: [setup, architecture]
+---
+
+**Start with the smallest change that gets you the site you want.** A different homepage doesn’t require a new renderer. A different renderer doesn’t require a new editing system. And a read-only site doesn’t need to run an editor at all.
+
+| What you want | Where to change it | What you can use today |
+|---|---|---|
+| My colors, type, logo and homepage | Vault settings and Markdown | **Configure.** Supply a stylesheet and PNG favicon in `.cyberbaser/site.yml`. Give a published note `slug: index` to make it the homepage. [Site settings and examples](/cyberbaser/development/site-settings/) |
+| A different toolbar or note layout | The renderer’s UI components | **Customize in code.** The current Quartz adapter composes its note controls in `quartz.layout.ts`. Keep the generator and replace the controls; there is no component picker to install them from. [Quartz adapter source](https://github.com/cybersader/cyberbaser/tree/main/renderers/quartz-cyberbase) |
+| An existing site built with SolidJS or another framework | Your site’s build | **Integrate.** The publication pipeline produces selected Markdown and assets. Your build can consume those files instead of using Quartz; it must implement the link, embed and URL behavior you want to preserve. The read-only Solid starter below is a minimal example, not a Quartz compatibility layer. |
+| My own “suggest a correction” experience | A client and its proposal adapter | **Design goal for custom clients.** Cyberbaser has exact-change checks and an opt-in [private suggestion flow](/cyberbaser/development/suggestions-on-the-private-site/), not a supported drop-in widget for arbitrary frameworks. A new client must identify the exact source revision and text. It doesn't get a vault write credential. |
+
+## What would a template or starter give me?
+
+A **component** is one piece, like a note toolbar. A **template** arranges pieces for a particular page: an index of field notes might show topic cards and recent entries instead of the latest note. A **starter** is a working site project you can copy, run, and then change. A starter can include several templates; adopting one should not lock you into its appearance or editor.
+
+## Try the two read-only starters
+
+From a Cyberbaser checkout on Linux with Bun 1.3.11, Node 22+, npm, Git and Bash, run `bash starters/build.sh both`. The sample vault and publication policy are shared. The command builds into a **new** `starter-output/` directory and does not deploy anything. Use `solid` or `quartz` instead of `both` if you only want one.
+
+- **Quartz knowledge base:** customize `starters/quartz/site.yml` and `trail.css`; edit the shared homepage and field note in `starters/example-vault/`. This is the reader used for Cyberbase URL and Markdown compatibility.
+- **SolidJS reader:** customize the Solid components in `starters/solid/`. It builds a static site from the same projected files without installing Quartz. It is a reading example, not an editing client or a drop-in migration for an existing Quartz site.
+
+[Starter source, preview and test instructions](https://github.com/cybersader/cyberbaser/tree/main/starters). Serve only one renderer’s output folder. To try your own trusted vault, give the command its path and a fresh output destination. Review `publish.yml` first: the source files, private projection report and working directory are **not** a public artifact.
+
+Whichever starting point you choose, the Markdown remains yours. The public build receives only selected content, and a contributor’s interface can propose a change but cannot apply it on its own. See [who maintains each part](/cyberbaser/getting-started/#who-maintains-what).

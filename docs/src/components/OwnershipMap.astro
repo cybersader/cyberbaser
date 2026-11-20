@@ -1,0 +1,37 @@
+---
+import './community-diagrams/diagrams.css';
+// Two paths through the same deployment. Coordinates are in diagram space, not CSS pixels.
+const bands = [
+  {x: 8, label: 'Site owner', sub: 'Controls this deployment'},
+  {x: 251, label: 'Cyberbaser', sub: 'Maintains the integration'},
+  {x: 494, label: 'Upstream', sub: 'Builds tools or runs services'},
+];
+const nodes = [
+  [18,87,'Markdown vault','Version-controlled files'], [261,87,'Publication filter','Selects pages and assets'],
+  [261,167,'Quartz adapter','Our plugins and controls'], [504,167,'Quartz','Static site generator'],
+  [504,247,'GitHub Pages','Hosts generated files'], [18,327,'Custom editor','Site-owned UI · example'],
+  [504,327,'SolidJS','UI framework · example'], [261,395,'Proposal checks','Bind edit to exact source'],
+  [18,395,'Owner review','Decision, then Apply'],
+] as const;
+const edges = [
+  ['M225 115H255',false], ['M365 143V161',false], ['M468 195H498',false], ['M607 223V241',false],
+  ['M504 352H232',true], ['M122 381V385Q122 388 128 388H357Q365 388 365 393',true],
+  ['M261 422H231',false], ['M18 423H13Q4 423 4 414V124Q4 116 12 116',false],
+] as const;
+---
+<figure class="cb-map not-content">
+  <figcaption class="cb-map-caption"><strong>Who owns the parts of a contributable site?</strong><span>Follow the top path to publish a page. The lower path shows how a different frontend could submit a correction to the same vault.</span></figcaption>
+  <p class="cb-map-scroll-hint">Swipe across the three columns, or open the text version below.</p>
+  <div class="cb-map-scroll" role="region" tabindex="0" aria-label="Component ownership map">
+    <svg class="cb-map-drawing" viewBox="0 0 730 465" aria-hidden="true">
+      <defs><marker id="owner-map-tip" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M1 1 7 4 1 7" class="cb-map-arrowhead"/></marker></defs>
+      {bands.map(({x,label,sub}) => <g><rect x={x} y="6" width="226" height="454" rx="8" class="lane"/><text x={x+10} y="36" class="cb-map-label">{label}</text><text x={x+10} y="59" class="cb-map-note">{sub}</text></g>)}
+      {edges.map(([d, proposed]) => <path d={d} class:list={['cb-map-effect', {'cb-map-dashed': proposed}]} marker-end="url(#owner-map-tip)"/>)}
+      {nodes.map(([x,y,title,kind]) => <g><rect x={x} y={y} width="207" height="54" rx="5" class="cb-map-render-mark"/><text x={x+12} y={y+22} class="cb-map-label">{title}</text><text x={x+12} y={y+42} class="cb-map-micro">{kind}</text></g>)}
+      <text x="271" y="337" class="cb-map-micro">could power</text>
+    </svg>
+  </div>
+  <div class="cb-map-legend"><span><i class="cb-map-line-sample"></i>Current path</span><span><i class="cb-map-line-sample cb-map-line-dashed"></i>Illustrative integration, not shipped</span></div>
+  <details class="cb-map-description"><summary>Read the two paths as text</summary><p><strong>Publish:</strong> the owner supplies Markdown and chooses what is public. Cyberbaser enforces that selection and maintains the Quartz adapter. Quartz builds the site. GitHub Pages serves the result.</p><p><strong>Contribute:</strong> a site developer could build an editor with SolidJS. That editor would send a proposal, not write files. Cyberbaser maintains the checks and review software; the owner decides whether to approve and separately apply the exact edit. The Solid starter reads pages; it is not an editing client.</p></details>
+</figure>
+<style>.lane{fill:var(--map-ground);stroke:var(--map-line);stroke-width:.75}</style>

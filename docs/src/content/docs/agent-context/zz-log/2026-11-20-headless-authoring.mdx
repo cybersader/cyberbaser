@@ -1,0 +1,12 @@
+---
+title: Explain Cyberbaser to frontend developers
+description: The README and Getting Started use a SolidJS site to illustrate the goal of a framework-neutral contribution backend without claiming a shipped SolidJS integration.
+status: log
+tags: [architecture]
+---
+
+A discussion about the Cyberbase toolbar surfaced a more useful question: could a site use its own framework and controls without implementing Markdown change checks again? The owner asked that the README and [Getting Started](/cyberbaser/getting-started/#bring-your-own-frontend) explain that goal. “Headless authoring and contribution layer” is one way to describe it, not a replacement for the project's broader interoperability goal. SolidJS is an example, not a newly selected dependency or a working adapter. No runtime behavior changed.
+
+The owner asked for the responsibility map to live on the knowledge base, not only in chat. The homepage and Getting Started now share one source for the ownership diagram. Getting Started pairs it with a capability progression that distinguishes live evidence, private tests and design goals. Both explain each tool by its job. The roadmap links to the progression rather than keeping a second status diagram.
+
+The [site-builder guide](/cyberbaser/getting-started/build-a-site/) answers the practical follow-up: which changes are settings, which require renderer code, and which would need a new integration? It separates components, page templates and runnable starters. The Quartz and SolidJS starter examples are candidates, not released packages or implementation commitments.

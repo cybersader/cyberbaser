@@ -1,0 +1,14 @@
+---
+title: Two read-only starters against one publication boundary
+description: Synthetic CI and a non-deploying Cyberbase rehearsal for a Quartz notebook and an independent SolidJS reader, with separate claims for publication selection, reader behavior and URL compatibility.
+status: log
+tags: [architecture, setup]
+---
+
+The owner asked for runnable versions of the two examples in the [site-builder guide](/cyberbaser/getting-started/build-a-site/). The public CI fixture contains two selected notes, a referenced picture, an explicit deny inside the allowed folder, and an unlisted note and asset. The contract is a single passing projection passed to both builds, not two independent interpretations of `publish.yml`. Choosing Solid alone does not require a Quartz checkout. Nothing in this rehearsal enables public editing or changes the live reader.
+
+**Cyberbase rehearsal.** The vault maintainer thread supplied the public main revision `6aa001dc73b0e4cbacf4ace940f83dd4952389d2`, its existing production tool pin, representative public URLs, and isolation requirements. A disposable single-branch checkout at that SHA supplied the source; the everyday vault was not used. The production pin and the tested tree had identical projection, publication and Quartz renderer sources. The verified projection contained 934 Markdown files and 374 assets. Its six reported warnings were not silently reclassified as failures or clean results. The original checkout, generated sites, reports and any excluded paths stayed out of CI artifacts. No source, Pages, DNS or deploy changes were made in Cyberbase.
+
+**Quartz.** The generated site retained all 932 baseline URLs. Chromium on a mobile viewport followed the README and sample legacy redirects, decoded the homepage art, and found the favicon and public Edit link. Copy Markdown matched the projected README bytes using a local response for the pinned raw URL. The retired-page probe showed the generic notice and the published lookup contained hash keys, not a list of retired paths. These are checks of the built artifact, not a new live publication.
+
+**Solid.** All 934 selected notes received source-to-page mappings. The reader copied 363 raster images byte-for-byte and skipped 11 unsupported assets. A mobile and desktop Chromium reader opened the homepage and navigated through the catalog to a representative public article. The Solid build is a new reader, not a compatible replacement for cybersader.com: the existing production continuity checker exits 2 because this starter does not emit `sitemap.xml`. Its `/notes/` routes, deliberately inert raw HTML, starter styling and lack of source controls do not preserve the production home artwork, aliases or toolbars. No cutover is recommended. The vault thread received both sets of results.

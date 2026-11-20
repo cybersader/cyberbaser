@@ -1,0 +1,6 @@
+site:
+  title: Trail notebook
+  baseUrl: notes.example.org
+appearance:
+  stylesheet: trail.css
+  colorScheme: system
