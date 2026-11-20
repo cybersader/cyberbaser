@@ -74,3 +74,7 @@ docs/.playwright-mcp/
 # Claude Code internal state
 .claude/scheduled_tasks.lock
 .claude/*.lock
+
+# Local starter preview output
+/starter-output/
+/.starter-work.*/

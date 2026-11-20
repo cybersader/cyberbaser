@@ -6,6 +6,9 @@ sidebar:
 status: research
 ---
 
+import OwnershipMap from '../../../components/OwnershipMap.astro';
+import ContributionEvolution from '../../../components/ContributionEvolution.astro';
+
 ## What cyberbaser is
 
 Cyberbaser is **an interoperability layer for contributable, version-controlled knowledge bases.** It sits between the surfaces people author from, the systems that publish their work, and eventually other independently owned knowledge bases. It is general-purpose, not tied to one domain or one authoring tool. Obsidian is first-class, and [`cybersader/cyberbase`](https://github.com/cybersader/cyberbase) is the first dogfood vault rather than the scope.
@@ -20,6 +23,31 @@ Two repos, easy to confuse:
 |---|---|
 | [`cybersader/cyberbaser`](https://github.com/cybersader/cyberbaser) (this repo) | The change-boundary packages, renderer adapters, research, and canonical project knowledge base |
 | [`cybersader/cyberbase`](https://github.com/cybersader/cyberbase) | The dogfood content vault: plain Markdown, one example, not the scope |
+
+## Who maintains what?
+
+<OwnershipMap />
+
+The owner can also edit the Markdown directly in a local editor. Taking the site offline does not take the notes away.
+
+## Bring your own frontend
+
+**Building a website?** [See what you can swap](/cyberbaser/getting-started/build-a-site/), from a homepage or toolbar to the entire reader, and try two read-only starters.
+
+Think of Cyberbaser as the contribution side of a headless CMS: your site decides what readers see, while Cyberbaser checks proposed edits against the Markdown you own. A static site generator does a different job: it builds pages. You can use both without adopting a particular toolbar or moving your notes into a CMS database.
+
+The goal is for switching frontend frameworks to change how you render pages and collect input, not how permissions or source edits work. Consider a site built with **SolidJS**:
+
+- **For reading**, the Solid starter takes only the Markdown and assets selected for publication and renders them with Solid components. Serving those static pages would not require a running editor.
+- **For contributing**, the site might let a reader select a sentence and choose “Suggest a correction.” Its adapter would identify the source revision and the exact text to replace. Cyberbaser would check that the proposal still matches, leave unrelated bytes untouched, and let the owner decide whether to apply it. The browser would not need write access to the repo.
+
+Quartz remains the Cyberbase renderer; the Solid starter demonstrates the reading half independently. The proposal checks and owner command core exist, but a supported framework-neutral editing client interface has not shipped. See the [editing roadmap](/cyberbaser/design/editing-and-trust-roadmap/) for where clients fit.
+
+## What can change without breaking the vault?
+
+<ContributionEvolution />
+
+The [principles](/cyberbaser/getting-started/principles/) explain why these rules hold; the [architecture](/cyberbaser/design/architecture/) follows a change through the actual software.
 
 ## Current phase: v1 Build
 

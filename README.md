@@ -19,6 +19,8 @@
 
 Cyberbaser sits between the tools people author in, the systems that publish their knowledge, and eventually other independently owned knowledge bases. It is general-purpose: the [`cybersader/cyberbase`](https://github.com/cybersader/cyberbase) cybersecurity vault is the first dogfood content, not the scope.
 
+If you build websites, one way to think of Cyberbaser is as a **headless authoring and contribution layer** for Git-backed Markdown. Like a headless CMS, it leaves the interface to you; unlike a static site generator, its job is not to turn Markdown into HTML. Your repo stays the source of truth. **The goal is to use the same contribution backend with whatever frontend framework you choose**, including SolidJS. Quartz renders the current site. [Try the Quartz and SolidJS read-only starters](starters/) on the same sample vault with `bash starters/build.sh both`. A Solid editing client is not included. [See what site builders can configure, replace, or build.](https://cybersader.github.io/cyberbaser/getting-started/build-a-site/)
+
 The current v1 product interpretation is an **owner-controlled change boundary** around a version-controlled knowledge base. Reader controls, trusted rich browser/WYSIWYG/CMS-like tools, forge editors, local Markdown tools, and agents may all be replaceable authoring spokes. External spokes submit bounded proposals against pinned source; the owner keeps direct local authoring, the authoritative Markdown, and the final decision.
 
 GitHub, GitHub Actions, Pages, and pinned Quartz implement the current dogfood path. They prove one working arrangement; they are not Cyberbaser's product essence.
