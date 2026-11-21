@@ -1,6 +1,6 @@
 ---
 title: Property changes
-description: "How a change to a note's YAML frontmatter properties is judged on every path: by its effect, decided by asking the component that owns that effect, with no list of property names in the core. Adopted by the owner on 2026-11-21 as R25 after an independent review; the shared block finder is the first build step, the rest is not built."
+description: "How a change to a note's YAML frontmatter properties is judged: two computed checks (does it change what is public, does it change an address) and an intact block; everything else is ordinary text, with no property names anywhere. Adopted by the owner on 2026-11-21 as R25 after an independent review; the shared block finder is the first build step, the rest is not built."
 status: planning
 tags: [architecture, planning, governance]
 ---
@@ -23,35 +23,37 @@ The same block of properties means something different at each stage, and a diff
 
 ## The model
 
-**The core knows a small fixed set of effects and no property names.** A change is judged by its strictest effect.
+**Simplified on 2026-11-21 at the owner's direction: first principles, no more machinery than the guarantees need.** Plugins and tools write properties constantly and unpredictably, so any scheme that depends on knowing what each key means will be wrong for the next plugin. The rule therefore knows no key names and asks nobody to declare any.
 
-| Effect | How it is detected | What it needs |
-|---|---|---|
-| **Changes what is public** | Ask the selector: run publication selection on the source before and after, and compare the public set, including assets. | A separate owner selection decision with a preview. Never part of an edit or proposal, for any tier, tool or agent. |
-| **Changes or removes an address** | Ask the address map the same way, before and after. | The owner only, as its own reviewed step showing old and new addresses and the redirect that results. |
-| **Changes something the renderer uses** | The renderer adapter declares which keys it reads and what each affects. | An ordinary exact change, shown in review. Lighter review by tier only where the vault's policy says so. |
-| **Changes a property nobody claims** | No component declares it. | Full owner review, until the vault's policy names it as harmless. |
-| **Breaks the block's structure** | One shared finder and parser: duplicate key, second block, unclosed block, unparseable YAML. | Refused with a readable reason. |
+Only two things about a property can hurt, and both are already computed for every change, body or properties alike:
 
-The first two are computed, not looked up, so they also catch what a list of names cannot: a note that becomes public because it gained an address while already marked for publication, or a body edit that pulls a private image into the public set. They apply to body edits as much as to property edits. The owner pipeline already compares the selected set before and after every Save; this model makes that the stated rule on every path and adds addresses.
+1. **Does it change what is public?** Publication selection is run before and after and the public set compared, assets included.
+2. **Does it change or remove an address?** The address map is compared the same way.
+
+Either one is refused as part of an edit. It needs the owner's own separate decision, with a preview. No tier, tool or agent can carry it.
+
+**Everything else in the properties block is just text in the note.** A property edit that passes both checks is an ordinary exact change, reviewed like a change to the body. It does not matter which key changed or which plugin changed it.
+
+One structural condition keeps the two checks trustworthy: the block must be there, closed and readable both before and after. A block that is added, removed, duplicated, left unclosed or made unparseable is refused with a readable reason.
 
 ## Rules
 
-- **Parse to judge, never to write.** The change applied to the vault is still an exact byte operation. Cyberbaser never re-serializes the block.
-- **Cyberbaser never authors a field.** When the owner decides a note becomes public, the change to the note is the owner's own exact edit, shown in the selection preview. Nothing writes a field on the owner's behalf.
-- **One finder, everywhere.** A single shared routine decides where the block starts and ends, used by selection, trust classification, every owner path, proposals and review. A test on 2026-11-21 showed today's routines disagree on a block preceded by a byte-order mark, or whose opening fence ends in a carriage return, space or tab. The publication check still stopped a public-set change in those cases, so nothing was exposed, but the disagreement goes first.
-- **The serious effects cannot be made lighter.** Vault policy may make any effect stricter, and may name unclaimed properties as harmless. It cannot lighten a public-set or address change.
-- **Declared, versioned, conformance-tested.** Renderer declarations and vault policy are part of the pinned policy revision. A shared conformance test checks that any renderer adapter's declaration matches what it actually does.
-- **Fail closed.** If before or after cannot be read, or selection cannot be run on the candidate, the change is refused.
+- **Parse to judge, never to write.** The change applied to the vault is still an exact byte operation. Cyberbaser never re-serializes the block and never authors a field. When the owner makes a note public, the change is the owner's own exact edit.
+- **One finder, everywhere.** A single shared routine decides where the block is, used by selection, projection, trust classification, review and every guard.
+- **The two checks cannot be turned off or lightened** by any policy, tier or grant.
+- **Fail closed.** If before or after cannot be read, or the checks cannot be run, the change is refused.
 - **Scope.** This governs changes that pass through Cyberbaser. The owner editing the vault directly with their own editor and Git is outside it, as always.
+
+## What was dropped, and why
+
+An earlier version had renderer adapters declare the keys they use, a separate "unclaimed property" class held for full review, a vault policy mapping keys to effects, and a conformance test tying it together. None of it protected anything the two checks do not already protect. It would have held up every plugin-written key until someone classified it. The existing trust classifier's allowlist for agent-written keys is untouched and remains the one place a vault can ask for stricter review of property edits from others.
 
 ## Build order
 
-1. The single shared finder, adopted by every reader without changing what the selector selects today. *(Built 2026-11-21; not yet checked against the real vault.)*
-2. Address-map comparison beside the existing selected-set comparison, on every path. *(Built 2026-11-21 on the owner Save checks.)*
-3. Renderer adapter declaration and vault policy, with the conformance test.
-4. Only then, lift the blanket refusal for renderer-used and harmless properties on the owner's own paths; proposals follow.
-5. Review display that shows list and nested values honestly.
+1. The single shared finder. *(Built 2026-11-21; not yet checked against the real vault.)*
+2. Address-map comparison beside the selected-set comparison. *(Built 2026-11-21.)*
+3. Let a property edit through on the owner's own paths when the block stays intact and both checks pass. Off unless the owner turns it on. Proposals from others keep today's refusal until the owner has used this.
+4. Review display that shows the old and new property text plainly.
 
 ## Evidence still to gather
 

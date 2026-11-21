@@ -9,6 +9,7 @@
 - **Decided (owner, question dialog, after an independent Fable 5.2 review):** adopt effect-based handling with **no property names in the core**. "Changes what is public" and "changes an address" are computed by running selection and the address map before and after, for body edits too; the renderer adapter declares the keys it uses; unclaimed keys get full review until vault policy names them harmless; structural breakage is refused. Serious effects cannot be lightened by policy. Cyberbaser never authors a field.
 - **Amends:** the "no frontmatter" rule of the owner lane and the September apply decision. The blanket refusal stays until build steps 1 to 3 land.
 - **Rejected:** a built-in table of key names (conflicts with renderer-agnostic and pluggable-control constraints; R23 says `slug`/`aliases`/`permalink` are not canonical route authority).
+- **Simplified the same day (owner: "first principles, don't over-engineer, we need elegance"):** only the two computed checks (public set, addresses) and an intact, readable block. Everything else in properties is ordinary text, whichever key or plugin changed it. Dropped: renderer key declarations, the unclaimed-property class, key-to-effect vault policy and the conformance test.
 - **Canonical:** `docs/src/content/docs/design/property-policy.mdx`.
 
 ### The Git vault is the authoritative copy (2026-11-21, owner decision)
