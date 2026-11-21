@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { cp, lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -80,11 +81,17 @@ export async function assertPrerequisites({ seed = RENDERER_SEED } = {}) {
 }
 
 /** Only fresh fixture-owned files are written. The real owner config is never read. */
-export async function createSuggestionsFixture({ port = 46437, host = '127.0.0.1', keep = false, challenge = null, from = null, folder = null, ref = 'origin/main', maxPages = DEFAULT_MAX_PAGES } = {}) {
+export const AGENT_REHEARSAL_DELIVERY_PATH = 'workspace-note.md';
+
+export async function createSuggestionsFixture({ port = 46437, host = '127.0.0.1', keep = false, challenge = null, from = null, folder = null, ref = 'origin/main', maxPages = DEFAULT_MAX_PAGES, agentBase = null } = {}) {
   optionsFromArgs(['--port', String(port), '--host', host, ...(challenge === null ? [] : ['--challenge', challenge])]);
   validateCopyOptions({ from, folder, ref, maxPages });
-  await mkdir(path.join(PROJECT_ROOT, '.workspace'), { recursive: true, mode: 0o700 });
-  const root = await mkdtemp(path.join(PROJECT_ROOT, '.workspace/try-suggestions-'));
+  if (agentBase !== null && (host !== '127.0.0.1' || from !== null || keep || challenge !== null || typeof agentBase !== 'string')) {
+    throw new Error('The agent rehearsal uses only disposable loopback state.');
+  }
+  const parent = agentBase === null ? path.join(PROJECT_ROOT, '.workspace') : await realpath(os.tmpdir());
+  await mkdir(parent, { recursive: true, mode: 0o700 });
+  const root = await mkdtemp(path.join(parent, agentBase === null ? 'try-suggestions-' : 'agent-proposal-'));
   const checkout = path.join(root, 'vault');
   const remote = path.join(root, 'local-only.git');
   const configFile = path.join(root, 'owner.json');
@@ -122,7 +129,10 @@ export async function createSuggestionsFixture({ port = 46437, host = '127.0.0.1
     await mkdir(checkout, { mode: 0o700 });
     await mkdir(path.join(checkout, '.cyberbaser'), { mode: 0o700 });
     const copied = from === null ? null : await copyCommittedFolder({ from, folder, ref, maxPages, checkout, root, projectRoot: PROJECT_ROOT, command });
-    if (copied === null) for (const [name, text] of Object.entries(PAGES)) await writeFile(path.join(checkout, name), text, { mode: 0o600 });
+    if (agentBase !== null) {
+      await writeFile(path.join(checkout, AGENT_REHEARSAL_DELIVERY_PATH), agentBase, { mode: 0o600 });
+      await writeFile(path.join(checkout, 'index.md'), '# Agent proposal rehearsal\n', { mode: 0o600 });
+    } else if (copied === null) for (const [name, text] of Object.entries(PAGES)) await writeFile(path.join(checkout, name), text, { mode: 0o600 });
     const allow = copied === null ? ['*.md'] : ['index.md', folder];
     await writeFile(path.join(checkout, 'publish.yml'), copied === null ? 'allow:\n  - "*.md"\n' : `${JSON.stringify({ allow })}\n`, { mode: 0o600 });
     await writeFile(path.join(checkout, '.cyberbaser/trust.yml'), 'trusted: [rehearsal]\nagents: []\n', { mode: 0o600 });
@@ -183,7 +193,26 @@ export function createRehearsalRenderer({ seed = RENDERER_SEED } = {}) {
   };
 }
 
-export async function startSuggestionsRehearsal(fixture, { renderer = createRehearsalRenderer() } = {}) {
+async function assertLocalAgentConfiguration(fixture) {
+  const { root, remote, checkout, git } = fixture;
+  const config = JSON.parse(await readFile(fixture.configFile, 'utf8'));
+  const inside = (value) => typeof value === 'string' && path.normalize(value) === value && value.startsWith(`${root}${path.sep}`);
+  if (!inside(remote) || await realpath(remote) !== remote || config.repository.checkout !== checkout
+    || config.repository.remote.url !== REPOSITORY || config.repository.remote.name !== 'origin' || config.publisher !== undefined
+    || config.listen.host !== '127.0.0.1' || config.suggestions.forge.enabled || config.suggestions.form.challenge
+    || await git(checkout, ['remote']) !== 'origin') throw new Error('Agent rehearsal remote containment refused.');
+  for (const option of [['origin'], ['--push', 'origin']]) {
+    if (await git(checkout, ['remote', 'get-url', '--all', ...option]) !== remote) throw new Error('Agent rehearsal remote containment refused.');
+  }
+  for (const socketPath of [config.proposalReview.socketPath, config.signedRequestSocket]) {
+    if (!inside(socketPath) || await realpath(path.dirname(socketPath)) !== path.dirname(socketPath)) {
+      throw new Error('Agent rehearsal socket containment refused.');
+    }
+  }
+}
+
+export async function startSuggestionsRehearsal(fixture, { renderer = createRehearsalRenderer(), simulatedRender = false } = {}) {
+  if (simulatedRender) await assertLocalAgentConfiguration(fixture);
   // The site manifest hashes actual runtime resources. Copy, never symlink,
   // this small code/resource closure into the owned runtime project.
   for (const relative of ['apps/owner-alpha/src', 'apps/owner-alpha/public', 'renderers/quartz-cyberbase',
@@ -226,7 +255,9 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
       const pipeline = createSaveHandler({ config, context, projectRoot: fixture.projectRoot, dependencies: {
         ...dependencies, assertCheckoutReady: ready,
         createEditSession: (input) => createEditSession({ ...input, git: policyGit }),
-        runPreApplyChecks: (input) => runPreApplyChecks({ ...input, renderer }),
+        runPreApplyChecks: (input) => runPreApplyChecks({ ...input, renderer }, simulatedRender ? {
+          createTemporaryRoot: () => mkdtemp(path.join(fixture.root, 'checks-')),
+        } : undefined),
         applyAcceptedOperation: (input) => applyAcceptedOperation(input, { git: effectGit }),
         commitAppliedCandidate: (input) => commitAppliedCandidate(input, gitDependencies),
         verifyExactCommit: (input) => verifyExactCommit(input, gitDependencies),
@@ -260,11 +291,14 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
           ['Published and confirmed.', 'Local rehearsal complete'],
           ['Live on the page.', 'Local rehearsal complete'],
           ['Pushing to your repository', 'Pushing to the disposable local remote'],
-          ['Refreshing your local copy', 'Rebuilding the private rehearsal site'],
+          ['Refreshing your local copy', simulatedRender ? 'Simulating the private site rebuild' : 'Rebuilding the private rehearsal site'],
+          ...(simulatedRender ? [['Checking the page', 'Checking the page (render simulated)']] : []),
           ['Waiting for the site to build', 'Simulating deployment (local rehearsal)'],
           ['Checking the live page', 'Simulating live confirmation (local rehearsal)'],
         ]) body = body.replaceAll(before, after);
-        const notice = '<aside class="owner-shell rehearsal-notice"><strong>Disposable suggestions rehearsal.</strong> Real local render, review, exact change, commit and push to a local bare remote. Deployment and live confirmation are simulated. No public site changes.</aside>';
+        const notice = simulatedRender
+          ? '<aside class="owner-shell rehearsal-notice"><strong>Disposable agent proposal rehearsal.</strong> Real signed submission, review, exact change, commit and push to a local bare remote. Build, deployment, live confirmation and rebuild are simulated. No public site changes.</aside>'
+          : '<aside class="owner-shell rehearsal-notice"><strong>Disposable suggestions rehearsal.</strong> Real local render, review, exact change, commit and push to a local bare remote. Deployment and live confirmation are simulated. No public site changes.</aside>';
         const headers = new Headers(result.headers); headers.delete('content-length');
         const labelledBody = body.includes('id="job-rehearsal-details"')
           ? body.replace('<div id="job-rehearsal-details"></div>', `<div id="job-rehearsal-details">${notice}</div>`)

@@ -162,11 +162,17 @@ function intactProperties(bytes) {
     && !parseFrontmatter(text, { requireMapping: true }).error;
 }
 
-function assertFrontmatterEdit(base, candidate, spans, frontmatter, allowProperties) {
+export function frontmatterEditFacts(base, candidate, spans, frontmatter = detectYamlFrontmatterRange(base)) {
   const next = detectYamlFrontmatterRange(candidate);
-  const intersects = frontmatter && spans.some(({ start }) => start < frontmatter.end);
-  const resized = next?.end !== frontmatter?.end;
-  const changed = frontmatter && !candidate.subarray(0, frontmatter.end).equals(base.subarray(0, frontmatter.end));
+  return {
+    intersects: frontmatter !== null && spans.some(({ start }) => start < frontmatter.end),
+    resized: next?.end !== frontmatter?.end,
+    changed: frontmatter !== null && !candidate.subarray(0, frontmatter.end).equals(base.subarray(0, frontmatter.end)),
+  };
+}
+
+function assertFrontmatterEdit(base, candidate, spans, frontmatter, allowProperties) {
+  const { intersects, resized, changed } = frontmatterEditFacts(base, candidate, spans, frontmatter);
   if (!intersects && !resized && !changed) {
     if (allowProperties && frontmatter) {
       const candidateText = candidate.toString('utf8');

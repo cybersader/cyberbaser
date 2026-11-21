@@ -4,29 +4,13 @@ import { createOwnerCommands } from '../src/core/commands.js';
 import { createBootstrapPrincipalAdapter } from '../src/core/principal.js';
 import { OwnerAlphaError } from '../src/errors.js';
 import { foldedWorkspaceDigest, spellWorkspaceCandidate } from '../src/owner-publication.js';
+import { readWorkspaceCapture as readCapture } from '../src/workspace-capture.js';
 import { MAPPING, publicationFixture } from './publication-fixture.js';
-
-const MAX_CAPTURE_BYTES = 1024 * 1024;
 const usage = 'bun apps/owner-alpha/test/workspace-capture-rehearsal.js <before.json> <after.json>';
 const mapping = { mappingId: MAPPING.id };
 
 function refuse(code) {
   throw new OwnerAlphaError(code, 'workspace capture rehearsal refused');
-}
-
-async function readCapture(file) {
-  try {
-    const input = Bun.file(file);
-    if (input.size > MAX_CAPTURE_BYTES) refuse('invalid-capture');
-    const bytes = await input.slice(0, MAX_CAPTURE_BYTES + 1).arrayBuffer();
-    if (bytes.byteLength > MAX_CAPTURE_BYTES) refuse('invalid-capture');
-    const value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
-    if (!value || Object.keys(value).sort().join(',') !== 'path,source,text'
-      || ![value.source, value.path, value.text].every((field) => typeof field === 'string')) refuse('invalid-capture');
-    return value;
-  } catch {
-    refuse('invalid-capture');
-  }
 }
 
 function byteFacts(bytes) {

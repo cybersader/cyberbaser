@@ -1,0 +1,30 @@
+---
+title: Try an agent proposal on a throwaway vault
+description: Review and apply a signed workspace edit in the real owner inbox without touching a real vault.
+sidebar:
+  order: 11
+status: research
+tags: [setup, governance, testing]
+---
+
+An agent can propose an exact edit. Only the owner can approve it and apply it. Try both sides on disposable local state, without deploying or giving the agent an owner session, a queue path, or a push credential.
+
+From the repository root, with Bun, Git, Linux `flock`, and the installed project dependencies and Playwright Chromium:
+
+```bash
+bun run --cwd docs review:agent-proposal
+```
+
+1. The launcher seeds a disposable vault and starts an isolated browser signed into **Proposals**. Open the item submitted by **Workspace Draft Agent**.
+2. Review the change from “blue folder” to “green binder.” Choose **Approve** and supply a reason. That records your decision; it does not edit the page.
+3. On the approval receipt, choose **Apply to page** and follow the job. The exact edit, commit and push are real and confined to the disposable vault and its local bare remote. Build, deployment, live confirmation and site rebuild are simulated and labelled on screen.
+
+Press **Ctrl-C** or **q** then Enter in the launcher terminal to remove its browser, listeners and temporary repositories. Nothing is installed or downloaded. Add `--headless` to verify the proposal in the authenticated inbox and clean up without a browser or an approval. If a port is occupied, add `--port NUMBER` to choose the first of three loopback ports.
+
+To try a different synthetic note, append the absolute paths to two capture JSON files: the before version and the after version. Each contains `source`, `path`, and `text` strings. Both must identify the same note. A different newline spelling alone does not submit a proposal. An edit to the leading properties block can be reviewed and approved but cannot be applied through Proposals.
+
+## What the rehearsal does not configure
+
+The owner node's optional `deviceRegistryFile` names an absolute, private, owner-owned regular JSON file outside the vault. Its shape is `{ ownerId, entries }`. The owner can generate a key with `bun apps/owner-alpha/bin/owner-alpha-keys.js generate 'Draft Agent' --agent --grant propose --out /private/new-key.json`. Add the single public entry printed on stdout to the registry yourself. `list <registry-file>` shows public entries. Only the submitting agent should receive its private key. Restart the node after changing enrollment.
+
+The optional `signedRequestSocket` names a Unix socket in a real, owner-only directory. It exposes only signed proposal submission and requires the registry and proposal review. The agent tool uses the capture, delivery-relative path, local checkout pinned to the published commit, its private key file, and the socket path. The publication identity comes from `remote.origin.url` or the snapshot's local `cyberbaser.repository` setting; the agent reads Git objects without contacting a remote. The current intake also needs a retained private-site suggestion publication binding. The rehearsal does not enable these settings for a real vault, set up separate OS identities, or establish human acceptance.

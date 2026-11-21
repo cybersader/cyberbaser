@@ -19,13 +19,13 @@ export function validSocketPath(value) {
 }
 
 // One line with no buffered tail. This reader never retains an oversize chunk.
-export function readFrame(socket, onFrame, onInvalid) {
+export function readFrame(socket, onFrame, onInvalid, { maxBytes = MAX_FRAME_BYTES } = {}) {
   const chunks = [];
   let size = 0;
   function data(chunk) {
     size += chunk.length;
     const newline = chunk.indexOf(0x0a);
-    if (size > MAX_FRAME_BYTES || (newline < 0 && size === MAX_FRAME_BYTES)
+    if (size > maxBytes || (newline < 0 && size === maxBytes)
       || (newline >= 0 && newline !== chunk.length - 1)) {
       stop();
       onInvalid();

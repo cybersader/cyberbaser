@@ -778,6 +778,8 @@ export function validateOwnerAlphaConfig(value) {
     ...(isPlainObject(value) && Object.hasOwn(value, 'suggestions') ? ['suggestions'] : []),
     ...(isPlainObject(value) && Object.hasOwn(value, 'ownerPublication') ? ['ownerPublication'] : []),
     ...(isPlainObject(value) && Object.hasOwn(value, 'publisher') ? ['publisher'] : []),
+    ...(isPlainObject(value) && Object.hasOwn(value, 'deviceRegistryFile') ? ['deviceRegistryFile'] : []),
+    ...(isPlainObject(value) && Object.hasOwn(value, 'signedRequestSocket') ? ['signedRequestSocket'] : []),
   ]);
   if (input.schemaVersion !== CONFIG_SCHEMA_VERSION) {
     fail('unsupported-config-version', `schemaVersion must be ${CONFIG_SCHEMA_VERSION}`);
@@ -792,6 +794,19 @@ export function validateOwnerAlphaConfig(value) {
   };
   const listen = validateListen(input.listen);
   const proposalReview = validateProposalReview(input.proposalReview);
+  const deviceRegistryFile = Object.hasOwn(input, 'deviceRegistryFile')
+    ? absoluteCheckout(input.deviceRegistryFile, '$.deviceRegistryFile') : undefined;
+  if (Object.hasOwn(input, 'signedRequestSocket')) {
+    if (!validSocketPath(input.signedRequestSocket)) {
+      fail('invalid-config-path', '$.signedRequestSocket must be one normalized absolute Unix socket path');
+    }
+    if (deviceRegistryFile === undefined || !proposalReview.enabled) {
+      fail('signed-socket-requires-review-and-keys', '$.signedRequestSocket requires a device registry and proposal review');
+    }
+    if ([proposalReview.socketPath, input.publisher?.socketPath].includes(input.signedRequestSocket)) {
+      fail('signed-socket-path-conflict', '$.signedRequestSocket must not share another socket path');
+    }
+  }
   const normalized = {
     schemaVersion: CONFIG_SCHEMA_VERSION,
     listen,
@@ -813,6 +828,8 @@ export function validateOwnerAlphaConfig(value) {
     ownerPublication: validateOwnerPublication(input.ownerPublication),
     // Local execution routing, not a change to the approved publication policy.
     ...(Object.hasOwn(input, 'publisher') ? { publisher: validatePublisher(input.publisher) } : {}),
+    ...(deviceRegistryFile === undefined ? {} : { deviceRegistryFile }),
+    ...(Object.hasOwn(input, 'signedRequestSocket') ? { signedRequestSocket: input.signedRequestSocket } : {}),
   };
   return deepFreeze(normalized);
 }

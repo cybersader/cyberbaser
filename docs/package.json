@@ -9,6 +9,7 @@
     "dev:host": "bun run preflight && astro dev --host 0.0.0.0",
     "review:owner-alpha": "bun ../apps/owner-alpha/bin/review-fixture.js",
     "review:owner-publication": "bun ../apps/owner-alpha/bin/publication-rehearsal.js",
+    "review:agent-proposal": "bun ../apps/owner-alpha/bin/agent-proposal-rehearsal.js",
     "try:suggestions": "bun ../apps/owner-alpha/bin/suggestions-rehearsal.js",
     "review:proposal-mockup": "bun ../spikes/proposal-review-mockup/bin/launch.js",
     "test:proposal-mockup": "bun test --cwd ../packages/proposal-fixtures && bun test --cwd ../spikes/proposal-review-mockup",

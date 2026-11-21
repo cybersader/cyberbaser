@@ -22,8 +22,10 @@ import { createOwnerPublicationRuntime, createPublicationSourceGuard } from './o
 import { publicationDisplay } from './publication-display.js';
 
 import { createOwnerCommands, OwnerCommandPrecondition } from './core/commands.js';
-import { createBootstrapPrincipalAdapter } from './core/principal.js';
+import { createBootstrapPrincipalAdapter, createDevicePrincipalAdapter } from './core/principal.js';
+import { loadDeviceKeyRegistry } from './core/device-key-files.js';
 import { createMemoryEditSessionStore } from './core/edit-sessions.js';
+import { signedSocketAudience, startSignedRequestSocket } from './signed-request-socket.js';
 
 export { createOwnerProposalReviewService, createMemoryEditSessionStore };
 
@@ -2341,6 +2343,7 @@ export async function runOwnerAlphaServer({
     throw new TypeError('site, pipeline, handlers, servers, review, recovery, and suggestion dependencies are required');
   }
   const config = await loadOwnerAlphaConfig(configFile);
+  const registry = await loadDeviceKeyRegistry(config);
   const storeContext = storeContextFromConfig(config, projectRoot);
   await prepareStore(storeContext);
   // The site build retains the publication binding the form needs, so the
@@ -2393,9 +2396,17 @@ export async function runOwnerAlphaServer({
   });
   const readerFetch = createReader({ config, projectRoot });
   let runtime;
+  let signed;
   try {
     runtime = startServers({ config, ownerFetch, readerFetch, serve });
+    if (config.signedRequestSocket !== undefined) {
+      const socketPath = config.signedRequestSocket;
+      const verifier = createDevicePrincipalAdapter({ registry, audience: signedSocketAudience(socketPath) });
+      const commands = createOwnerCommands({ config, projectRoot, devicePrincipalAdapter: verifier, proposalReview });
+      signed = await startSignedRequestSocket({ socketPath, commands, verifier });
+    }
   } catch (error) {
+    runtime?.stop(true);
     await suggestions?.close().catch(() => {});
     throw error;
   }
@@ -2416,7 +2427,9 @@ export async function runOwnerAlphaServer({
     recovery,
     stop(closeActiveConnections) {
       runtime.stop?.(closeActiveConnections);
-      return suggestions?.close() ?? Promise.resolve(null);
+      return signed === undefined
+        ? suggestions?.close() ?? Promise.resolve(null)
+        : signed.close().finally(() => suggestions?.close());
     },
   });
 }
@@ -2526,6 +2539,9 @@ if (import.meta.main) {
     }
   } catch (error) {
     await stop(1);
-    console.error(`Owner alpha startup failed: ${error instanceof OwnerAlphaError ? error.code : 'unexpected-error'}`);
+    const reason = error instanceof OwnerAlphaError ? error.code : 'unexpected-error';
+    const detail = ['device-registry-invalid', 'signed-socket-unsafe', 'signed-socket-requires-review-and-keys',
+      'signed-socket-path-conflict'].includes(reason) ? `: ${error.message}` : '';
+    console.error(`Owner alpha startup failed: ${reason}${detail}`);
   }
 }
