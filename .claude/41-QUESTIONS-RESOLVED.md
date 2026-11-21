@@ -4,6 +4,13 @@
 
 ## Log
 
+### [R25] Property changes are judged by effect, asked of the component that owns it (2026-11-21)
+- **Asked:** after the first live workspace rehearsal refused a property edit, whether publishing from a writing tool may change properties. The owner asked for a principled structure, not a thin special case, then for an independent check against the architecture.
+- **Decided (owner, question dialog, after an independent Fable 5.2 review):** adopt effect-based handling with **no property names in the core**. "Changes what is public" and "changes an address" are computed by running selection and the address map before and after, for body edits too; the renderer adapter declares the keys it uses; unclaimed keys get full review until vault policy names them harmless; structural breakage is refused. Serious effects cannot be lightened by policy. Cyberbaser never authors a field.
+- **Amends:** the "no frontmatter" rule of the owner lane and the September apply decision. The blanket refusal stays until build steps 1 to 3 land.
+- **Rejected:** a built-in table of key names (conflicts with renderer-agnostic and pluggable-control constraints; R23 says `slug`/`aliases`/`permalink` are not canonical route authority).
+- **Canonical:** `docs/src/content/docs/design/property-policy.mdx`.
+
 ### The Git vault is the authoritative copy (2026-11-21, owner decision)
 
 Asked in a question dialog after a counts-only check showed the owner's sync workspace was an older, partial, unlinked copy. The owner chose the Git vault. A workspace is a writing surface refreshed from the vault at a known commit; publication from it is checked against the vault, bound by text digest plus Git base, and refused when unbound, diverged, non-round-trippable or matching the retired list (private owner-node policy, never committed to a public repository even as plain hashes). The owner's clients are agents and Obsidian mobile, both through the sync workspace. Draft source-snapshot contract: `design/editing-and-trust-roadmap.mdx`. No seam selected, nothing connected.

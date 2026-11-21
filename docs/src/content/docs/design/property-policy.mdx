@@ -1,62 +1,58 @@
 ---
-title: Property changes (proposal)
-description: "A proposed single model for how changes to a note's YAML frontmatter properties are classified and authorized on every path, replacing today's blanket refusal on owner paths and five separate ad hoc readings. Classes by effect: authority, route, descriptive, unknown, structural. Proposal from a code survey on 2026-11-21; not decided, not built."
+title: Property changes
+description: "How a change to a note's YAML frontmatter properties is judged on every path: by its effect, decided by asking the component that owns that effect, with no list of property names in the core. Adopted by the owner on 2026-11-21 as R25 after an independent review; the shared block finder is the first build step, the rest is not built."
 status: planning
 tags: [architecture, planning, governance]
 ---
 
-**Status: proposal, 2026-11-21. Nothing here is decided or built.** It answers a finding from the first live workspace rehearsal: an edit that changed one property was refused, and tools in a writing workspace change properties constantly. The owner asked for a principled structure, not a thin special case.
+**Status: adopted in principle, 2026-11-21 (R25). Mostly not built.** It began as a finding from the first live workspace rehearsal: an edit that changed one property was refused, and tools in a writing workspace change properties constantly. A first draft proposed a fixed table of property names. An independent review kept the idea and rejected the table, and the owner adopted the reviewed shape below.
 
-## What exists today
+## Where properties sit
 
-A code survey found the treatment is ad hoc. Five places give properties meaning, each with its own way of finding the block and reading it:
+The same block of properties means something different at each stage, and a different component owns that meaning.
 
-| Where | What it does with properties |
-|---|---|
-| Publication selection | Parses values. `cb-publish` is the only key that can grant publication; `slug` sets the address. |
-| Renderer | Parses values for dates, drafts and the page address. |
-| Trust classifier | Parses values. For agents only, any changed key outside an allowlist forces full review. |
-| Owner write paths | Does not parse. Refuses any edit that touches the block's bytes at all. |
-| Review display | Reads flat `key: value` lines only. |
+| Stage | What properties are there | Who owns the meaning | Must never happen |
+|---|---|---|---|
+| Authoring tools | The writer's fields, plus tool bookkeeping | The owner and their tools | Cyberbaser requiring or adding fields |
+| Source of truth | Plain bytes in the note | The owner | Rewriting or reformatting the block |
+| Publication selection | A signal that a note may be public | The selector and the vault's publication settings | A grant arriving inside an edit or proposal |
+| Projection | Checked for readability and path safety, copied unchanged | Projection | Changing source bytes |
+| Renderer | Address, redirects, tag pages, drafts, dates, title | The renderer adapter, which is replaceable | Its key names becoming core rules |
+| Public site | Pages and addresses people rely on | The emitted site (R23) | A published address vanishing |
+| Proposal, review, application | Exact bytes against pinned source; old and new values shown | The proposer has no authority; the owner decides | Carrying a public-set or address change; auto-apply |
 
-Two consequences. The blanket byte refusal is the *only* thing stopping an edit from flipping a note public or changing its address, which is the right outcome reached by accident. And the same refusal blocks every harmless change, such as a tag, on every owner path.
+## The model
 
-## The proposal: classify a property change by what it does
+**The core knows a small fixed set of effects and no property names.** A change is judged by its strictest effect.
 
-One shared module finds the block and parses it, used by every path. A change is described as the set of top-level keys whose **parsed value** changed, and each key belongs to an effect class. The strictest class present decides what the change needs.
-
-| Class | Keys (built-in defaults) | What a change needs |
+| Effect | How it is detected | What it needs |
 |---|---|---|
-| **Authority**: changes what is public | `cb-publish`, `publish`, `draft` | Never part of an edit or proposal. Only a separate owner selection decision, with a preview of what becomes public. No tier, tool or agent can carry it. |
-| **Route**: changes the address or how the note is found | `slug`, `permalink`, `aliases` | Owner only, as its own reviewed step showing old and new address and the redirect that results. |
-| **Descriptive**: says something about the note | `title`, `tags`, date keys | An ordinary exact change, shown in review. Eligible for lighter review by tier where the owner's policy says so. |
-| **Unknown**: any key with no declared class | everything else, including tool bookkeeping | Full owner review by default. The owner may declare a key descriptive; nothing becomes lighter by default. |
-| **Structural** | block added or removed, duplicate key, second block, unparseable YAML | Refused with a readable reason. |
+| **Changes what is public** | Ask the selector: run publication selection on the source before and after, and compare the public set, including assets. | A separate owner selection decision with a preview. Never part of an edit or proposal, for any tier, tool or agent. |
+| **Changes or removes an address** | Ask the address map the same way, before and after. | The owner only, as its own reviewed step showing old and new addresses and the redirect that results. |
+| **Changes something the renderer uses** | The renderer adapter declares which keys it reads and what each affects. | An ordinary exact change, shown in review. Lighter review by tier only where the vault's policy says so. |
+| **Changes a property nobody claims** | No component declares it. | Full owner review, until the vault's policy names it as harmless. |
+| **Breaks the block's structure** | One shared finder and parser: duplicate key, second block, unclosed block, unparseable YAML. | Refused with a readable reason. |
 
-Bytes that change without changing any parsed value (spacing, quoting, key order, comments) count as a descriptive change.
+The first two are computed, not looked up, so they also catch what a list of names cannot: a note that becomes public because it gained an address while already marked for publication, or a body edit that pulls a private image into the public set. They apply to body edits as much as to property edits. The owner pipeline already compares the selected set before and after every Save; this model makes that the stated rule on every path and adds addresses.
 
-## Rules that keep this principled
+## Rules
 
-- **Parse to classify, never to write.** Classification reads values. The change applied to the vault is still an exact byte operation, and Cyberbaser never re-serializes YAML or writes a field of its own into a note. Both existing principles hold.
-- **One reading, everywhere.** The same module and the same class table serve owner Save, workspace publication, visitor suggestions, forge intake, trust classification and review display. A class cannot mean different things on different paths.
-- **Authority and route keys cannot be demoted.** The owner's policy can move unknown keys into descriptive, and can make descriptive keys stricter. It cannot make a public-set or address change lighter.
-- **Declared in the vault, part of the policy revision.** The existing `frontmatterAllowlist` in the vault's trust settings becomes a `properties` map by class, so the rule is visible, versioned and changes the pinned policy when it changes.
-- **Fail closed.** If the before or after block cannot be parsed, or two readings would disagree about where it ends, the change is structural and refused.
+- **Parse to judge, never to write.** The change applied to the vault is still an exact byte operation. Cyberbaser never re-serializes the block.
+- **Cyberbaser never authors a field.** When the owner decides a note becomes public, the change to the note is the owner's own exact edit, shown in the selection preview. Nothing writes a field on the owner's behalf.
+- **One finder, everywhere.** A single shared routine decides where the block starts and ends, used by selection, trust classification, every owner path, proposals and review. A test on 2026-11-21 showed today's routines disagree on a block preceded by a byte-order mark, or whose opening fence ends in a carriage return, space or tab. The publication check still stopped a public-set change in those cases, so nothing was exposed, but the disagreement goes first.
+- **The serious effects cannot be made lighter.** Vault policy may make any effect stricter, and may name unclaimed properties as harmless. It cannot lighten a public-set or address change.
+- **Declared, versioned, conformance-tested.** Renderer declarations and vault policy are part of the pinned policy revision. A shared conformance test checks that any renderer adapter's declaration matches what it actually does.
+- **Fail closed.** If before or after cannot be read, or selection cannot be run on the candidate, the change is refused.
+- **Scope.** This governs changes that pass through Cyberbaser. The owner editing the vault directly with their own editor and Git is outside it, as always.
 
-## What it means per actor
+## Build order
 
-| Actor | Descriptive | Unknown | Route | Authority |
-|---|---|---|---|---|
-| Owner, from the writing tool or the site | Publishes after review | Publishes after review | Separate reviewed step | Separate selection decision |
-| Agent | May propose | May propose; full review | May not propose | May not propose |
-| Visitor, account, trusted contributor | May propose; review by tier | May propose; full review | May not propose | May not propose |
+1. The single shared finder, adopted by every reader without changing what the selector selects today. *(In progress.)*
+2. Address-map comparison beside the existing selected-set comparison, on every path.
+3. Renderer adapter declaration and vault policy, with the conformance test.
+4. Only then, lift the blanket refusal for renderer-used and harmless properties on the owner's own paths; proposals follow.
+5. Review display that shows list and nested values honestly.
 
-## Evidence to gather before building
+## Evidence still to gather
 
-1. Which keys exist in the real vault and how often each changes, as counts only.
-2. Which keys the workspace's own tools and plugins write without the person asking, since those would otherwise flood review as unknown.
-3. Whether any real note relies on duplicate keys or YAML the parser rejects.
-
-## The decision this needs
-
-Whether to adopt effect classes as the one model for property changes. If yes, the first build is the shared module and the class table behind the existing refusal, changing behavior only for descriptive keys on the owner's own paths.
+Which properties the real vault uses and how often each changes, as counts only; which keys the workspace's tools write unprompted; whether any real note relies on duplicate keys or YAML the parser rejects.
