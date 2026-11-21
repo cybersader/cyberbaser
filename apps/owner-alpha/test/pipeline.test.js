@@ -387,14 +387,14 @@ describe('owner-alpha integration pipeline', () => {
     );
   });
 
-  test('classifies pre-apply, effectful, deployment, and live failures exactly', async () => {
-    const cases = [
-      ['preapply', 'runPreApplyChecks', 'blocked-pre-apply'],
-      ['apply', 'applyAcceptedOperation', 'manual-intervention'],
-      ['deployment', 'monitorDeploymentRun', 'deployment-failed'],
-      ['live', 'confirmLivePage', 'live-verification-failed'],
-    ];
-    for (const [suffix, dependency, expectedState] of cases) {
+  const failureCases = [
+    ['preapply', 'runPreApplyChecks', 'blocked-pre-apply'],
+    ['apply', 'applyAcceptedOperation', 'manual-intervention'],
+    ['deployment', 'monitorDeploymentRun', 'deployment-failed'],
+    ['live', 'confirmLivePage', 'live-verification-failed'],
+  ];
+  for (const [suffix, dependency, expectedState] of failureCases) {
+    test(`classifies ${suffix} failure as ${expectedState}`, async () => {
       const data = await fixture();
       const input = acceptedInput();
       const policyRevision = computePolicyRevision(data.config);
@@ -413,8 +413,8 @@ describe('owner-alpha integration pipeline', () => {
       expect(result.state).toBe(expectedState);
       expect(result.failure.code).toBe(`${suffix}-failed`);
       expect(result.failure.retryable).toBe(expectedState === 'live-verification-failed');
-    }
-  });
+    });
+  }
 
   test('resumes a persisted Forgejo run/job binding without rediscovery or replaying mutation effects', async () => {
     const data = await fixture({ provider: 'forgejo-actions' });
@@ -568,19 +568,26 @@ describe('owner-alpha integration pipeline', () => {
       dependencies,
     });
     const first = handler.startEdit({ jobId: 'OA-LOCK-1', session, operation });
-    const accepted = await first.accepted;
-    expect(accepted.state).toBe('accepted');
-    const paths = pipelineArtifactPaths('OA-LOCK-1');
-    expect(await readJsonArtifact(data.context, paths.session)).toEqual(session);
-    expect(await readJsonArtifact(data.context, paths.operation)).toEqual(operation);
+    let completed;
+    try {
+      const accepted = await first.accepted;
+      expect(accepted.state).toBe('accepted');
+      const paths = pipelineArtifactPaths('OA-LOCK-1');
+      expect(await readJsonArtifact(data.context, paths.session)).toEqual(session);
+      expect(await readJsonArtifact(data.context, paths.operation)).toEqual(operation);
 
-    await started;
-    await expectCodeAsync(
-      () => handler.saveEdit({ jobId: 'OA-LOCK-2', session, operation }),
-      'lock-busy',
-    );
-    releaseChecks();
-    expect((await first.completion).state).toBe('completed');
+      await Promise.race([started, first.completion.then(({ state }) => {
+        throw new Error(`first Save completed as ${state} before reaching the checks gate`);
+      })]);
+      await expectCodeAsync(
+        () => handler.saveEdit({ jobId: 'OA-LOCK-2', session, operation }),
+        'lock-busy',
+      );
+    } finally {
+      releaseChecks();
+      completed = await first.completion;
+    }
+    expect(completed.state).toBe('completed');
     expect((await handler.getJob('OA-LOCK-1')).state).toBe('completed');
   });
 });
