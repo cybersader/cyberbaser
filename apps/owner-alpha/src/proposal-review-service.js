@@ -57,6 +57,9 @@ export function createOwnerProposalReviewService({
   }
 
   return Object.freeze({
+    ...(typeof source.submitSigned === 'function' ? {
+      submitSigned: (input) => source.submitSigned(input, context.projectRoot),
+    } : {}),
     async list({ cursor = null } = {}) {
       const local = await recovered();
       const seenCursors = new Set();

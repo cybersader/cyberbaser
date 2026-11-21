@@ -7,8 +7,9 @@ import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { parseConfig } from '@cyberbaser/trust';
 import { prepareProposal, serializeProposal, createChangeSetProposal, serializeChangeSetProposal } from '@cyberbaser/proposal';
-import { openProposalQueue } from '@cyberbaser/proposal-queue';
+import { digestBytes, openProposalQueue } from '@cyberbaser/proposal-queue';
 import reviewSchema from '../schema/proposal-review-v1.schema.json' with { type: 'json' };
+import signedReviewSchema from '../schema/proposal-review-v2.schema.json' with { type: 'json' };
 import {
   OWNER_DECISION_ARTIFACT_TYPE,
   PROPOSAL_REVIEW_SCHEMA_VERSION,
@@ -74,7 +75,7 @@ function expectCode(action, code) {
   throw new Error(`expected ProposalReviewError(${code})`);
 }
 
-async function evidenceFixture({ rationale = 'Correct the misspelling without changing meaning.', version = 1 } = {}) {
+async function evidenceFixture({ rationale = 'Correct the misspelling without changing meaning.', version = 1, submitter = null } = {}) {
   const parent = await mkdtemp(path.join(os.tmpdir(), 'proposal-review-'));
   cleanup.push(parent);
   const legacy = prepareProposal(BASE, {
@@ -110,19 +111,21 @@ async function evidenceFixture({ rationale = 'Correct the misspelling without ch
     }),
   });
   queues.push(queue);
+  const proposalText = version === 1 ? serializeProposal(proposal) : serializeChangeSetProposal(proposal);
+  const lane = submitter === null ? 'lane-b' : 'lane-signed';
   const accepted = await queue.enqueue({
-    proposalText: version === 1 ? serializeProposal(proposal) : serializeChangeSetProposal(proposal),
+    proposalText,
     baseBytes: BASE,
     policy: { status: 'valid', digest: POLICY_DIGEST, config: TRUST_CONFIG },
-    verifiedSubject: null,
+    verifiedSubject: submitter === null ? null : { author: submitter.id, authorType: 'agent' },
     carrier: {
-      lane: 'lane-b',
-      metadata: { bindingDigest: digest(2), pageId: 'docs/example' },
+      lane,
+      metadata: { bindingDigest: digest(2), pageId: 'docs/example', ...(submitter === null ? {} : { submitter }) },
     },
     idempotency: {
-      scope: 'lane-b',
-      key: randomBytes(32).toString('base64url'),
-      requestDigest: digest(3),
+      scope: lane,
+      key: submitter === null ? randomBytes(32).toString('base64url') : null,
+      requestDigest: submitter === null ? digest(3) : digestBytes(Buffer.from(proposalText)),
     },
   });
   const entry = await queue.load(accepted.receipt.queueId);
@@ -140,6 +143,44 @@ async function evidenceFixture({ rationale = 'Correct the misspelling without ch
 afterEach(async () => {
   await Promise.all(queues.splice(0).map((queue) => queue.close()));
   await Promise.all(cleanup.splice(0).map((target) => rm(target, { recursive: true, force: true })));
+});
+
+test('signed review v2 binds the actor while the new schema still accepts unchanged v1 artifacts', async () => {
+  const submitter = { kind: 'agent', id: 'fixture-agent', label: 'Fixture agent', keyId: 'key-1' };
+  const { evidence: legacy } = await evidenceFixture();
+  const { evidence: signed } = await evidenceFixture({ version: 2, submitter });
+  const validateV2Schema = schemaValidator.compile(signedReviewSchema);
+  for (const evidence of [legacy, signed]) {
+    const summary = createReviewSummary(evidence);
+    const decision = createOwnerDecision({ action: 'approve', reason: 'Good exact correction.', decidedAt: stamp(2),
+      decisionAuthority: { type: 'owner-alpha-local', identity: 'owner' }, reviewEvidence: evidence });
+    for (const value of [evidence, summary, decision]) {
+      expect(value.schemaVersion).toBe(evidence.schemaVersion);
+      expect(validateV2Schema(value)).toBe(true);
+      expect(validateAgainstSchema(value)).toBe(evidence === legacy);
+    }
+    expect(parseReviewEvidence(serializeReviewEvidence(evidence))).toEqual(evidence);
+    expect(parseReviewSummary(serializeReviewSummary(summary, evidence), evidence)).toEqual(summary);
+    expect(parseOwnerDecision(serializeOwnerDecision(decision))).toEqual(decision);
+    if (evidence === legacy) {
+      expect(evidence.schemaVersion).toBe(1);
+      expect(summary).not.toHaveProperty('submitter');
+    } else {
+      expect(evidence.schemaVersion).toBe(2);
+      expect(summary.submitter).toEqual(submitter);
+      const unattributed = { ...summary };
+      delete unattributed.submitter;
+      expect(validateV2Schema(unattributed)).toBe(false);
+      expect(() => validateReviewSummary(unattributed, evidence)).toThrow(ProposalReviewError);
+      const wrongActor = mutable(evidence);
+      wrongActor.carrier.metadata.submitter.id = 'another-agent';
+      expect(() => validateReviewEvidence(wrongActor)).toThrow(ProposalReviewError);
+      const wrongVersion = { ...evidence, schemaVersion: 1 };
+      expect(validateV2Schema(wrongVersion)).toBe(false);
+      expect(validateV2Schema({ ...decision, schemaVersion: 1, reviewEvidence: wrongVersion })).toBe(false);
+      expect(() => validateReviewEvidence(wrongVersion)).toThrow(ProposalReviewError);
+    }
+  }
 });
 
 describe('canonical review evidence', () => {

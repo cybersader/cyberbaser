@@ -7,6 +7,7 @@ export {
   QUEUE_SCHEMA_VERSION,
   QUEUE_STATES,
   assertMetadataSafe,
+  assertSignedSubmission,
   canonicalMetadataBytes,
   digestBytes,
   parseCanonicalMetadata,
@@ -16,7 +17,9 @@ export {
   validateProposalQueueConfig,
   validateQueueId,
   validateReceipt,
+  validateSignedProposal,
   validateStateArtifact,
+  validateVerifiedSubmitter,
 } from './validation.js';
 export {
   inspectProposalQueue,

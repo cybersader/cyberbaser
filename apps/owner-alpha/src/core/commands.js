@@ -7,6 +7,7 @@ import { isPublicationDigest } from '../owner-publication.js';
 import { validatePublicationDraftId } from '../owner-publication-store.js';
 import { storeContextFromConfig } from '../store.js';
 import { actorAllowsGrant } from './grants.js';
+import { createProposalSubmission } from './proposal-submission.js';
 import { refuseSignedRequest } from './signed-request.js';
 
 const signedCommands = new WeakMap();
@@ -57,7 +58,7 @@ export class OwnerCommandPrecondition extends OwnerAlphaError {}
 export function createOwnerCommands({
   config: configInput, projectRoot, principalAdapter, devicePrincipalAdapter = null, createEditSession,
   editSessions, handoffs, directEdits, saveEdit, lookupJob, createJobId,
-  proposalReview = null, publication = null,
+  proposalReview = null, publication = null, proposalClock = Date.now,
 }) {
   const config = validateOwnerAlphaConfig(configInput);
   if (devicePrincipalAdapter !== null && devicePrincipalAdapter.ownerId !== config.owner.identity) {
@@ -65,11 +66,22 @@ export function createOwnerCommands({
   }
   const inFlight = new Set();
   const signedHandlers = new Map();
+  const submitProposal = createProposalSubmission({
+    clock: proposalClock,
+    submit: (input) => proposalReview.submitSigned(input),
+  });
 
   function requireGrant(grant, principal) {
     const bootstrap = principalAdapter?.isVerified(principal) && principal.method === 'bootstrap-session';
     const device = !bootstrap && devicePrincipalAdapter?.isVerified(principal) && principal.method === 'device-key'
       && actorAllowsGrant(principal.actor.kind, grant) && devicePrincipalAdapter.hasGrant(principal, grant);
+    if (grant === 'propose') {
+      if (!device) refuseSignedRequest();
+      if (!config.proposalReview.enabled || typeof proposalReview?.submitSigned !== 'function') {
+        fail('proposal-submission-refused', 'proposal submission was refused');
+      }
+      return;
+    }
     if ((!bootstrap && !device) || principal.id !== config.owner.identity) refuseSignedRequest();
     switch (grant) {
       case 'read':
@@ -194,6 +206,8 @@ export function createOwnerCommands({
       inFlight.delete(editSessionId);
       return { jobId, state: started.state ?? 'accepted' };
     }),
+
+    submitProposal: command('propose', 'proposal-submission-refused', submitProposal),
 
     listProposals: command('review', 'review-list-failed', async (input) => {
       return proposalReview.list(input);

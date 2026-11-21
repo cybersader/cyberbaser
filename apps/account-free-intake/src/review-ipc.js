@@ -1,6 +1,7 @@
 import net from 'node:net';
 import { chmod, lstat, realpath, unlink } from 'node:fs/promises';
 import path from 'node:path';
+import { PROPOSAL_MAX_BYTES } from '@cyberbaser/proposal';
 import {
   ProposalReviewError,
   createReviewEvidence,
@@ -11,10 +12,12 @@ import {
   digestBytes,
   validateDigest,
   validateQueueId,
+  validateVerifiedSubmitter,
 } from '@cyberbaser/proposal-queue';
 
 export const REVIEW_IPC_SCHEMA_VERSION = 1;
 export const REVIEW_IPC_REQUEST_MAX_BYTES = 4 * 1024;
+const SIGNED_REQUEST_MAX_BYTES = 2 * PROPOSAL_MAX_BYTES + REVIEW_IPC_REQUEST_MAX_BYTES;
 export const REVIEW_IPC_RESPONSE_MAX_BYTES = 2 * 1024 * 1024;
 
 const CURSOR_MAX_BYTES = 1024;
@@ -75,7 +78,7 @@ function utcSecond(value, label) {
   return value;
 }
 
-function normalizeRequest(value, maxListEntries) {
+function normalizeRequest(value, maxListEntries, allowSigned) {
   if (!isRecord(value)) fail('invalid-request', 'request must be an object');
   if (value.operation === 'list') {
     exactObject(value, ['schemaVersion', 'operation', 'state', 'cursor', 'limit'], 'list request');
@@ -104,12 +107,24 @@ function normalizeRequest(value, maxListEntries) {
     }
     return Object.freeze({ schemaVersion: REVIEW_IPC_SCHEMA_VERSION, operation: 'load', queueId });
   }
+  if (allowSigned && value.operation === 'submit-signed') {
+    exactObject(value, ['schemaVersion', 'operation', 'proposalText', 'bindingDigest', 'submitter'], 'signed submission');
+    if (value.schemaVersion !== REVIEW_IPC_SCHEMA_VERSION) fail('unsupported-schema', 'request schema is unsupported');
+    if (typeof value.proposalText !== 'string' || Buffer.byteLength(value.proposalText, 'utf8') > PROPOSAL_MAX_BYTES) {
+      fail('invalid-request', 'signed submission exceeds its proposal bound');
+    }
+    const bindingDigest = value.bindingDigest === null ? null : validateDigest(value.bindingDigest, 'bindingDigest');
+    const submitter = validateVerifiedSubmitter(value.submitter);
+    return Object.freeze({ schemaVersion: REVIEW_IPC_SCHEMA_VERSION, operation: value.operation,
+      proposalText: value.proposalText, bindingDigest, submitter });
+  }
   fail('unsupported-operation', 'request operation is unsupported');
 }
 
-export function parseReviewIpcRequest(input, maxListEntries = 100) {
+export function parseReviewIpcRequest(input, maxListEntries = 100, allowSigned = false) {
   const bytes = Buffer.from(input);
-  if (bytes.length < 2 || bytes.length > REVIEW_IPC_REQUEST_MAX_BYTES) fail('invalid-request-bytes', 'request is empty or oversized');
+  const maximum = allowSigned ? SIGNED_REQUEST_MAX_BYTES : REVIEW_IPC_REQUEST_MAX_BYTES;
+  if (bytes.length < 2 || bytes.length > maximum) fail('invalid-request-bytes', 'request is empty or oversized');
   if (bytes.at(-1) !== 0x0a || bytes.indexOf(0x0a) !== bytes.length - 1) fail('noncanonical-request', 'request must contain one final LF');
   if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) fail('invalid-request-bytes', 'request must not contain a UTF-8 BOM');
   let text;
@@ -124,8 +139,11 @@ export function parseReviewIpcRequest(input, maxListEntries = 100) {
   } catch {
     fail('invalid-request-json', 'request must contain strict JSON');
   }
-  const normalized = normalizeRequest(parsed, maxListEntries);
-  if (!canonicalBytes(normalized, REVIEW_IPC_REQUEST_MAX_BYTES).equals(bytes)) fail('noncanonical-request', 'request must use canonical JSON');
+  if (parsed?.operation !== 'submit-signed' && bytes.length > REVIEW_IPC_REQUEST_MAX_BYTES) {
+    fail('invalid-request-bytes', 'review request is oversized');
+  }
+  const normalized = normalizeRequest(parsed, maxListEntries, allowSigned);
+  if (!canonicalBytes(normalized, maximum).equals(bytes)) fail('noncanonical-request', 'request must use canonical JSON');
   return normalized;
 }
 
@@ -218,13 +236,23 @@ function errorBytes(code) {
   return canonicalBytes({ schemaVersion: REVIEW_IPC_SCHEMA_VERSION, error: { code } }, 4096);
 }
 
-export function createReviewIpcHandler({ review, maxListEntries = 100 } = {}) {
+export function createReviewIpcHandler({ review, maxListEntries = 100, submitSigned = null } = {}) {
   if (!review || typeof review.list !== 'function' || typeof review.load !== 'function') fail('invalid-review-source', 'review IPC requires the dedicated read-only snapshot interface');
   if (!Number.isSafeInteger(maxListEntries) || maxListEntries < 1 || maxListEntries > 100) fail('invalid-limit', 'maxListEntries is invalid');
 
   return async function handle(input) {
     try {
-      const request = parseReviewIpcRequest(input, maxListEntries);
+      const request = parseReviewIpcRequest(input, maxListEntries, submitSigned !== null);
+      if (request.operation === 'submit-signed') {
+        try {
+          const { proposalText, bindingDigest, submitter } = request;
+          const { queueId, acceptedAt } = await submitSigned({ proposalText, bindingDigest, submitter });
+          return canonicalBytes({ schemaVersion: REVIEW_IPC_SCHEMA_VERSION, operation: request.operation,
+            receipt: { queueId, acceptedAt, baseBound: true } });
+        } catch {
+          return errorBytes('proposal-submission-refused');
+        }
+      }
       if (request.operation === 'load') {
         const entry = await review.load(request.queueId);
         createReviewEvidence(loadProjection(entry));
@@ -339,11 +367,12 @@ async function unlinkOwnedSocket(socketPath, identity) {
   await unlink(socketPath);
 }
 
-export async function startReviewIpcServer({ config, review } = {}) {
+export async function startReviewIpcServer({ config, review, submitSigned = null } = {}) {
   if (!config?.reviewIpc?.enabled) return null;
   const { socketPath, requestTimeoutMs, maxConcurrentRequests, maxListEntries } = config.reviewIpc;
   await prepareSocketPath(socketPath);
-  const handle = createReviewIpcHandler({ review, maxListEntries });
+  const handle = createReviewIpcHandler({ review, maxListEntries, submitSigned });
+  const requestMaxBytes = submitSigned === null ? REVIEW_IPC_REQUEST_MAX_BYTES : SIGNED_REQUEST_MAX_BYTES;
   const sockets = new Set();
   const inFlight = new Set();
   let active = 0;
@@ -402,7 +431,7 @@ export async function startReviewIpcServer({ config, review } = {}) {
     socket.on('data', (chunk) => {
       if (finished) return;
       length += chunk.length;
-      if (length > REVIEW_IPC_REQUEST_MAX_BYTES) {
+      if (length > requestMaxBytes) {
         finish(errorBytes('request-too-large'));
         return;
       }

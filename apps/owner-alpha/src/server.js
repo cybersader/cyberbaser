@@ -504,6 +504,15 @@ function forgeOriginHtml(origin, { compact = false } = {}) {
   return `<span class="forge-origin">From <a href="${escapeHtml(origin.url)}" rel="noopener noreferrer">pull request #${origin.number}</a> on your forge${compact ? '' : account}</span>`;
 }
 
+function signedSubmitterHtml(entry) {
+  const carrier = entry.evidence?.carrier;
+  if (carrier?.lane !== 'lane-signed') return '';
+  const submitter = carrier.metadata.submitter;
+  const kind = submitter.kind === 'agent' ? 'Agent' : 'Owner device';
+  const key = submitter.keyId.length > 12 ? `${submitter.keyId.slice(0, 12)}…` : submitter.keyId;
+  return `<span class="proposal-submitter" title="Submitter ID: ${escapeHtml(submitter.id)}">Submitted by ${escapeHtml(kind)}: ${escapeHtml(submitter.label)} (key ${escapeHtml(key)})</span>`;
+}
+
 // Several heads of one request are one suggestion in the owner's eyes: the
 // newest is the row, earlier heads fold beneath it.
 function groupActionable(entries) {
@@ -539,10 +548,10 @@ function reviewSummaryCard(entry, href, decision = null, application = null, ear
   const path = `<span class="proposal-row-path">${escapeHtml(entry.summary.source.path)}</span>`;
   const label = decision === null ? null : decisionLabel(decision, application);
   const origin = forgeOrigin(entry);
-  const forge = forgeOriginHtml(origin, { compact: true });
+  const originHtml = forgeOriginHtml(origin, { compact: true }) + signedSubmitterHtml(entry);
   const meta = decision === null
-    ? `${path}<span>Received ${reviewTime(entry.summary.receivedAt)}</span><span>Expires ${reviewTime(entry.summary.expiresAt)}</span>${forge}${entry.summary.route === 'reject' ? '<span class="attention-note">Your policy suggests rejecting</span>' : ''}`
-    : `<span class="decision-label decision-${label.key}">${label.text}</span><span>${reviewTime(label.at)}</span>${path}${forge}<span class="proposal-row-note">\u201c${escapeHtml(compactReviewText(decision.reason, 120))}\u201d</span>`;
+    ? `${path}<span>Received ${reviewTime(entry.summary.receivedAt)}</span><span>Expires ${reviewTime(entry.summary.expiresAt)}</span>${originHtml}${entry.summary.route === 'reject' ? '<span class="attention-note">Your policy suggests rejecting</span>' : ''}`
+    : `<span class="decision-label decision-${label.key}">${label.text}</span><span>${reviewTime(label.at)}</span>${path}${originHtml}<span class="proposal-row-note">\u201c${escapeHtml(compactReviewText(decision.reason, 120))}\u201d</span>`;
   const folded = earlier.length === 0
     ? ''
     : `<p class="earlier-versions">Earlier ${earlier.length === 1 ? 'version' : 'versions'} of this request: ${earlier.map((item) => `<a href="/owner/review/${encodeURIComponent(item.summary.queueId)}">received ${reviewTime(item.summary.receivedAt)}</a>`).join(', ')}</p>`;
@@ -1050,7 +1059,7 @@ function reviewIdentityHeader(entry, view) {
 <span class="identity-path">${escapeHtml(summary.source.path)}</span>
 <span>Received ${reviewTime(summary.receivedAt)}</span>
 <span>Expires ${reviewTime(summary.expiresAt)}</span>
-${forgeOriginHtml(forgeOrigin(entry))}
+${forgeOriginHtml(forgeOrigin(entry))}${signedSubmitterHtml(entry)}
 </div>
 <div class="contributor-note">
 <p class="section-kicker">Why the contributor suggests it</p>
@@ -1220,7 +1229,7 @@ function decisionDetailPage({ decision, summary, queueRetained, application = nu
 <section class="decision-result ${approved ? 'decision-approved' : 'decision-rejected'}" aria-label="Your decision">
 <p class="context-copy">${changeSummaryHtml(view)}</p>
 <p class="receipt-path">${escapeHtml(summary.source.path)}</p>
-<blockquote class="decision-note">${escapeHtml(decision.reason)}</blockquote>
+${signedSubmitterHtml(entry)}<blockquote class="decision-note">${escapeHtml(decision.reason)}</blockquote>
 ${boundary}
 </section>
 ${view.version === 2 ? changeInspection(entry) : ''}

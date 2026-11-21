@@ -1,9 +1,11 @@
 import { execFile } from 'node:child_process';
-import { realpath, stat } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { open, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import {
   describeChangeSet,
+  parseVersionedProposal,
 } from '@cyberbaser/proposal';
 import { applyReviewProposal as applyProposal, classifyReviewProposal as classifyProposal, reviewProposalBinding } from '@cyberbaser/proposal-review';
 import {
@@ -11,10 +13,11 @@ import {
   validateReviewEvidence,
   validateReviewSummary,
 } from '@cyberbaser/proposal-review';
-import { digestBytes } from '@cyberbaser/proposal-queue';
+import { digestBytes, validateDigest } from '@cyberbaser/proposal-queue';
 import { parseConfig } from '@cyberbaser/trust';
-import { validateOwnerAlphaConfig, repositoryMatchesPolicy } from './config.js';
+import { computePolicyRevision, validateOwnerAlphaConfig, repositoryMatchesPolicy } from './config.js';
 import { fail, OwnerAlphaError } from './errors.js';
+import { OWNER_SITE_ARTIFACT_TYPE, OWNER_SITE_MANIFEST_FILENAME, OWNER_SITE_SCHEMA_VERSION } from './site.js';
 import { canonicalJson, deepFreeze } from './json.js';
 
 const execFileAsync = promisify(execFile);
@@ -385,6 +388,49 @@ export async function validateOwnerReviewEvidence({
   });
 }
 
+// Admission trusts only the owner node's active site manifest, not a retained
+// digest supplied by the proposer. The private intake then proves membership
+// and the pinned base from that binding, without reading an unselected note.
+async function currentSignedBinding({ config, projectRoot, source, git }) {
+  if (!path.isAbsolute(projectRoot) || source.repository !== config.repository.remote.url) {
+    fail('signed-binding-unavailable', 'no current publication binding');
+  }
+  pathMatchesPolicy(source.path, config.paths);
+  const checkout = await validateCheckout(config, git);
+  const head = exactObjectId(trimFinalLf(await runGit(git, checkout,
+    ['rev-parse', '--verify', `refs/heads/${config.repository.branch}^{commit}`]), 'publication branch revision'), 'publication branch revision');
+  if (source.revision !== head) fail('signed-binding-unavailable', 'no current publication binding');
+
+  const siteRoot = path.resolve(projectRoot, config.workspace.site);
+  if (await realpath(siteRoot) !== siteRoot) fail('signed-binding-unavailable', 'no current publication binding');
+  const file = await open(path.join(siteRoot, OWNER_SITE_MANIFEST_FILENAME),
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const metadata = await file.stat();
+    if (!metadata.isFile() || metadata.nlink !== 1 || metadata.size > 1024 * 1024) {
+      fail('signed-binding-unavailable', 'no current publication binding');
+    }
+    const bytes = Buffer.alloc(metadata.size + 1);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const { bytesRead } = await file.read(bytes, offset, bytes.length - offset, offset);
+      if (bytesRead === 0) break;
+      offset += bytesRead;
+    }
+    if (offset !== metadata.size) fail('signed-binding-unavailable', 'no current publication binding');
+    const manifest = JSON.parse(UTF8_DECODER.decode(bytes.subarray(0, offset)));
+    if (manifest?.schemaVersion !== OWNER_SITE_SCHEMA_VERSION || manifest.artifactType !== OWNER_SITE_ARTIFACT_TYPE
+      || manifest.source?.head !== head || manifest.source?.branch !== config.repository.branch
+      || manifest.source?.remote?.name !== config.repository.remote.name || manifest.source?.remote?.url !== source.repository
+      || manifest.policyRevision !== computePolicyRevision(config) || manifest.suggestions?.form !== true) {
+      fail('signed-binding-unavailable', 'no current publication binding');
+    }
+    return validateDigest(manifest.suggestions.bindingDigest, 'current publication binding');
+  } finally {
+    await file.close();
+  }
+}
+
 export function createOwnerProposalReviewSource({
   config,
   client,
@@ -407,6 +453,16 @@ export function createOwnerProposalReviewSource({
   }
 
   return Object.freeze({
+    ...(typeof client.submitSigned === 'function' ? {
+      async submitSigned({ proposalText, submitter }, projectRoot) {
+        const { proposal: { changeSet } } = parseVersionedProposal(proposalText);
+        const source = { repository: changeSet.repository, revision: changeSet.baseRevision, path: changeSet.files[0].path };
+        // The queue may return an already acknowledged receipt even when the
+        // current site has moved. Null never authorizes a fresh enqueue.
+        const bindingDigest = await currentSignedBinding({ config: normalizedConfig, projectRoot, source, git }).catch(() => null);
+        return client.submitSigned({ proposalText, bindingDigest, submitter });
+      },
+    } : {}),
     async list(options = {}) {
       const page = await client.list(options);
       const entries = [];

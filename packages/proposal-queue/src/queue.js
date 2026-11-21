@@ -5,12 +5,12 @@ import { parseVersionedProposal, validateChangeSetProposal, serializeChangeSetPr
 import { fail } from './errors.js';
 import { createQueueFilesystem } from './filesystem.js';
 import {
-  addDays, canonicalMetadataBytes, createDurableCarrier, createPendingState, deepFreeze,
+  addDays, assertSignedSubmission, canonicalMetadataBytes, createDurableCarrier, createPendingState, deepFreeze,
   digestBytes, exactObject, expireState, idempotencyDigests, isRecord,
-  normalizeVerifiedSubject, parseCanonicalMetadata, utcSecond, validateCarrierInput,
+  normalizeVerifiedSubject, parseCanonicalMetadata, signedReplayScope, utcSecond, validateCarrierInput,
   validateClassificationArtifact, validateDurableCarrier, validateIdempotencyInput,
   validatePolicyInput, validateProposalQueueConfig, validateQueueId, validateReceipt,
-  validateStateArtifact,
+  validateSignedProposal, validateStateArtifact,
 } from './validation.js';
 
 const OPEN_KEYS = Object.freeze(['config', 'clock', 'idFactory', 'filesystem', 'resolveEvidence']);
@@ -117,6 +117,7 @@ function parseEntryArtifacts(queueId, location, artifacts) {
   const state = parseCanonicalMetadata(artifacts['state.json'], validateStateArtifact, 'state.json');
   if (receipt.queueId !== queueId || state.queueId !== queueId) fail('queue-id-mismatch', 'entry artifacts do not bind their directory identifier');
   if (receipt.lane !== carrier.lane) fail('queue-lane-mismatch', 'receipt and carrier lane disagree');
+  if (carrier.lane === 'lane-signed') assertSignedSubmission(proposal, receipt, carrier, classification);
   if (receipt.proposalDigest !== digestVersioned(proposal) || receipt.proposalByteLength !== proposalBytes.length) fail('proposal-digest-mismatch', 'receipt does not bind the exact canonical proposal bytes');
   if (receipt.sourcePartitionDigest !== sourcePartitionDigest(proposal)) fail('source-partition-mismatch', 'receipt source partition does not match the proposal');
   if (state.createdAt !== receipt.receivedAt) fail('queue-time-mismatch', 'state creation must match receipt time');
@@ -398,31 +399,63 @@ export async function openProposalQueue(options = {}) {
     },
   });
 
+  function checkSignedReplay(replay, signed, submitter) {
+    const previous = replay.carrier.metadata.submitter;
+    if (replay.proposalText !== signed.proposalText || previous.kind !== submitter.kind || previous.id !== submitter.id) {
+      fail('idempotency-conflict', 'signed replay does not bind the same proposal and actor');
+    }
+  }
+
   return Object.freeze({
     review,
+    async replaySigned({ proposalText, submitter }) {
+      requireOpen();
+      return execute(async () => {
+        const signed = validateSignedProposal(exactBytes(proposalText, 'proposalText'), submitter);
+        const replay = indexes.replay.get(signedReplayScope(submitter.keyId, signed.proposalDigest));
+        if (!replay) return null;
+        checkSignedReplay(replay, signed, submitter);
+        return replay.receipt;
+      });
+    },
     async enqueue(input) {
       requireOpen();
       return execute(async () => {
         exactObject(input, ENQUEUE_KEYS, 'enqueue input');
         const carrierInput = validateCarrierInput(input.carrier);
         const idempotency = validateIdempotencyInput(input.idempotency, carrierInput.lane);
+        const signed = carrierInput.lane === 'lane-signed'
+          ? validateSignedProposal(exactBytes(input.proposalText, 'proposalText'), carrierInput.metadata.submitter) : null;
+        if (signed !== null && (idempotency.requestDigest !== signed.proposalDigest
+          || !compareJson(normalizeVerifiedSubject(input.verifiedSubject), signed.verifiedSubject))) {
+          fail('signed-evidence-mismatch', 'signed submission evidence does not bind the verified actor and proposal');
+        }
         const digests = idempotencyDigests(carrierInput, idempotency);
         const replay = digests.replayScope === null ? null : indexes.replay.get(digests.replayScope) ?? null;
         if (replay !== null) {
           if (replay.receipt.requestDigest !== digests.requestDigest) fail('idempotency-conflict', 'lane-scoped idempotency identity is bound to a different request digest');
-          if (input.proposalText !== null && digestVersioned(parseProposal(exactBytes(input.proposalText, 'proposalText'))) !== replay.receipt.proposalDigest) fail('idempotency-conflict', 'lane-scoped idempotency identity is bound to a different proposal');
+          if (signed !== null) {
+            checkSignedReplay(replay, signed, carrierInput.metadata.submitter);
+          } else if (input.proposalText !== null && digestVersioned(parseProposal(exactBytes(input.proposalText, 'proposalText'))) !== replay.receipt.proposalDigest) {
+            fail('idempotency-conflict', 'lane-scoped idempotency identity is bound to a different proposal');
+          }
           return deepFreeze({ replayed: true, receipt: replay.receipt });
         }
-        if (input.proposalText === null && input.baseBytes === null && input.policy === null) return deepFreeze({ replayed: false, receipt: null });
+        if (input.proposalText === null && input.baseBytes === null && input.policy === null) {
+          return deepFreeze({ replayed: false, receipt: null });
+        }
         const proposalBytes = exactBytes(input.proposalText, 'proposalText');
-        const proposal = parseProposal(proposalBytes);
+        const proposal = signed?.proposal ?? parseProposal(proposalBytes);
         const baseBytes = exactBytes(input.baseBytes, 'baseBytes');
         const policy = validatePolicyInput(input.policy);
-        const verifiedSubject = normalizeVerifiedSubject(input.verifiedSubject);
+        const verifiedSubject = signed?.verifiedSubject ?? normalizeVerifiedSubject(input.verifiedSubject);
         if (carrierInput.lane === 'lane-b' && verifiedSubject !== null) fail('lane-b-subject-forbidden', 'Lane B queue submissions must remain anonymous');
         applyVersioned(baseBytes, proposal);
         const classification = createClassificationArtifact(policy, verifiedSubject, classifyVersioned(baseBytes, proposal, policy.config, verifiedSubject));
         const receivedAt = utcSecond(clock(), 'queue clock');
+        if (signed !== null && Date.parse(proposal.submission.submittedAt) > Date.parse(receivedAt)) {
+          fail('invalid-submission-time', 'signed proposal submission cannot follow its receipt');
+        }
         const queueId = queueIdFromFactory(idFactory);
         if (indexes.byId.has(queueId)) fail('queue-id-collision', 'idFactory returned an existing queue identifier');
         const receipt = createReceipt({

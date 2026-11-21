@@ -2,15 +2,19 @@ import { createHash } from 'node:crypto';
 import { parseVersionedProposal } from '@cyberbaser/proposal';
 import { validateReviewProposal as validateProposal, serializeReviewProposal as serializeProposal, reviewProposalDigest as proposalDigest, reviewProposalBinding } from './versioned-proposal.js';
 import {
+  assertSignedSubmission,
   validateClassificationArtifact,
   validateDigest,
   validateDurableCarrier,
   validateQueueId,
   validateReceipt,
   validateStateArtifact,
+  validateVerifiedSubmitter,
 } from '@cyberbaser/proposal-queue';
 
 export const PROPOSAL_REVIEW_SCHEMA_VERSION = 1;
+export const SIGNED_PROPOSAL_REVIEW_SCHEMA_VERSION = 2;
+const schemaForLane = (lane) => lane === 'lane-signed' ? SIGNED_PROPOSAL_REVIEW_SCHEMA_VERSION : PROPOSAL_REVIEW_SCHEMA_VERSION;
 export const REVIEW_EVIDENCE_ARTIFACT_TYPE = 'cyberbaser-proposal-review-evidence';
 export const REVIEW_SUMMARY_ARTIFACT_TYPE = 'cyberbaser-proposal-review-summary';
 export const OWNER_DECISION_ARTIFACT_TYPE = 'cyberbaser-proposal-owner-decision';
@@ -175,7 +179,7 @@ function sha256(bytes) {
 
 export function validateReviewEvidence(value) {
   exactObject(value, ['schemaVersion', 'artifactType', 'queueId', 'proposal', 'receipt', 'carrier', 'classification', 'state'], 'review evidence');
-  if (value.schemaVersion !== PROPOSAL_REVIEW_SCHEMA_VERSION || value.artifactType !== REVIEW_EVIDENCE_ARTIFACT_TYPE) {
+  if (value.schemaVersion !== schemaForLane(value.carrier?.lane) || value.artifactType !== REVIEW_EVIDENCE_ARTIFACT_TYPE) {
     fail('unsupported-review-evidence', 'review evidence schema or artifact type is unsupported');
   }
 
@@ -186,7 +190,7 @@ export function validateReviewEvidence(value) {
   const classification = dependency('review evidence classification', () => validateClassificationArtifact(value.classification));
   const state = dependency('review evidence state', () => validateStateArtifact(value.state));
   const normalized = {
-    schemaVersion: PROPOSAL_REVIEW_SCHEMA_VERSION,
+    schemaVersion: value.schemaVersion,
     artifactType: REVIEW_EVIDENCE_ARTIFACT_TYPE,
     queueId,
     proposal,
@@ -200,6 +204,7 @@ export function validateReviewEvidence(value) {
   if (receipt.queueId !== queueId || state.queueId !== queueId) fail('queue-id-mismatch', 'review evidence queue identifiers must agree');
   if (receipt.lane !== carrier.lane) fail('lane-mismatch', 'review evidence receipt and carrier lanes must agree');
   if (carrier.lane === 'lane-b' && classification.verifiedSubject !== null) fail('lane-b-subject-mismatch', 'Lane B review evidence must remain anonymous');
+  if (carrier.lane === 'lane-signed') dependency('signed review attribution', () => assertSignedSubmission(proposal, receipt, carrier, classification));
   if (state.createdAt !== receipt.receivedAt) fail('receipt-state-mismatch', 'review evidence receipt and state creation times must agree');
   if (Date.parse(proposal.submission.submittedAt) > Date.parse(receipt.receivedAt)) fail('submission-time-mismatch', 'proposal submission must not follow queue receipt');
 
@@ -215,7 +220,7 @@ export function createReviewEvidence(entry) {
   const { version, proposal } = dependency('queue proposalText', () => parseVersionedProposal(entry.proposalText));
   if (Object.hasOwn(entry, 'proposalVersion') && entry.proposalVersion !== version) fail('proposal-version-mismatch', 'IPC version must match the exact artifact');
   return validateReviewEvidence({
-    schemaVersion: PROPOSAL_REVIEW_SCHEMA_VERSION,
+    schemaVersion: schemaForLane(entry.carrier?.lane),
     artifactType: REVIEW_EVIDENCE_ARTIFACT_TYPE,
     queueId: entry.queueId,
     proposal,
@@ -239,11 +244,12 @@ export function reviewEvidenceDigest(value) {
 }
 
 function normalizeReviewSummary(value) {
-  exactObject(value, ['schemaVersion', 'artifactType', 'queueId', 'proposalId', 'proposalDigest', 'candidateDigest', 'reviewEvidenceDigest', 'source', 'receivedAt', 'expiresAt', 'state', 'lane', 'tier', 'route', ...(Object.hasOwn(value, 'proposalVersion') ? ['proposalVersion'] : [])], 'review summary');
+  const signed = value?.lane === 'lane-signed';
+  exactObject(value, ['schemaVersion', 'artifactType', 'queueId', 'proposalId', 'proposalDigest', 'candidateDigest', 'reviewEvidenceDigest', 'source', 'receivedAt', 'expiresAt', 'state', 'lane', 'tier', 'route', ...(signed ? ['submitter'] : []), ...(Object.hasOwn(value ?? {}, 'proposalVersion') ? ['proposalVersion'] : [])], 'review summary');
   if (Object.hasOwn(value, 'proposalVersion') && ![1, 2].includes(value.proposalVersion)) {
     fail('proposal-version-mismatch', 'review summary proposalVersion must be 1 or 2');
   }
-  if (value.schemaVersion !== PROPOSAL_REVIEW_SCHEMA_VERSION || value.artifactType !== REVIEW_SUMMARY_ARTIFACT_TYPE) {
+  if (value.schemaVersion !== schemaForLane(value.lane) || value.artifactType !== REVIEW_SUMMARY_ARTIFACT_TYPE) {
     fail('unsupported-review-summary', 'review summary schema or artifact type is unsupported');
   }
   exactObject(value.source, ['repository', 'revision', 'path'], 'review summary source');
@@ -253,10 +259,10 @@ function normalizeReviewSummary(value) {
     path: utf8String(value.source.path, 'review summary source.path', { maxBytes: 4096, trim: true }),
   };
   if (!['pending-review', 'expired'].includes(value.state)) fail('invalid-review-state', 'review summary state is unsupported');
-  if (!['lane-a', 'lane-b'].includes(value.lane)) fail('invalid-review-lane', 'review summary lane is unsupported');
+  if (!['lane-a', 'lane-b', 'lane-signed'].includes(value.lane)) fail('invalid-review-lane', 'review summary lane is unsupported');
   if (!['auto-merge', 'quick-review', 'full-review', 'reject'].includes(value.route)) fail('invalid-review-route', 'review summary route is unsupported');
   const normalized = {
-    schemaVersion: PROPOSAL_REVIEW_SCHEMA_VERSION,
+    schemaVersion: value.schemaVersion,
     artifactType: REVIEW_SUMMARY_ARTIFACT_TYPE,
     queueId: dependency('review summary queueId', () => validateQueueId(value.queueId)),
     proposalId: utf8String(value.proposalId, 'review summary proposalId', { maxBytes: 1024, trim: true }),
@@ -270,6 +276,7 @@ function normalizeReviewSummary(value) {
     lane: value.lane,
     tier: utf8String(value.tier, 'review summary tier', { maxBytes: 256, trim: true }),
     route: value.route,
+    ...(signed ? { submitter: dependency('review summary submitter', () => validateVerifiedSubmitter(value.submitter)) } : {}),
   };
   if (Date.parse(normalized.expiresAt) <= Date.parse(normalized.receivedAt)) fail('invalid-review-window', 'review summary expiry must follow receipt');
   assertCredentialFree(normalized, 'review summary');
@@ -278,7 +285,7 @@ function normalizeReviewSummary(value) {
 
 function summaryFromEvidence(evidence) {
   return {
-    schemaVersion: PROPOSAL_REVIEW_SCHEMA_VERSION,
+    schemaVersion: evidence.schemaVersion,
     artifactType: REVIEW_SUMMARY_ARTIFACT_TYPE,
     queueId: evidence.queueId,
     proposalId: evidence.proposal.proposalId,
@@ -292,6 +299,7 @@ function summaryFromEvidence(evidence) {
     lane: evidence.receipt.lane,
     tier: evidence.classification.classification.tier,
     route: evidence.classification.classification.route,
+    ...(evidence.carrier.lane === 'lane-signed' ? { submitter: evidence.carrier.metadata.submitter } : {}),
   };
 }
 
@@ -342,7 +350,7 @@ function validateEffectBoundary(value) {
 
 export function validateOwnerDecision(value) {
   exactObject(value, ['schemaVersion', 'artifactType', 'queueId', 'action', 'reason', 'decidedAt', 'decisionAuthority', 'authorityScope', 'reviewEvidenceDigest', 'reviewEvidence', 'effectBoundary'], 'owner decision');
-  if (value.schemaVersion !== PROPOSAL_REVIEW_SCHEMA_VERSION || value.artifactType !== OWNER_DECISION_ARTIFACT_TYPE) {
+  if (value.schemaVersion !== schemaForLane(value.reviewEvidence?.carrier?.lane) || value.artifactType !== OWNER_DECISION_ARTIFACT_TYPE) {
     fail('unsupported-owner-decision', 'owner decision schema or artifact type is unsupported');
   }
   if (!['approve', 'reject'].includes(value.action)) fail('invalid-owner-action', 'owner decision action must be approve or reject');
@@ -361,7 +369,7 @@ export function validateOwnerDecision(value) {
   if (Date.parse(decidedAt) >= Date.parse(reviewEvidence.receipt.expiresAt)) fail('decision-expired', 'owner decision must precede proposal expiry');
 
   const normalized = {
-    schemaVersion: PROPOSAL_REVIEW_SCHEMA_VERSION,
+    schemaVersion: value.schemaVersion,
     artifactType: OWNER_DECISION_ARTIFACT_TYPE,
     queueId,
     action: value.action,
@@ -380,7 +388,7 @@ export function validateOwnerDecision(value) {
 export function createOwnerDecision({ action, reason, decidedAt, decisionAuthority, reviewEvidence }) {
   const evidence = validateReviewEvidence(reviewEvidence);
   return validateOwnerDecision({
-    schemaVersion: PROPOSAL_REVIEW_SCHEMA_VERSION,
+    schemaVersion: evidence.schemaVersion,
     artifactType: OWNER_DECISION_ARTIFACT_TYPE,
     queueId: evidence.queueId,
     action,
