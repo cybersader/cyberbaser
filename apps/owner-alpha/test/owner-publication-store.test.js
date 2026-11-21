@@ -126,6 +126,18 @@ describe('immutable private owner publication drafts', () => {
     expect(first.draft.prepared.session).not.toHaveProperty('origin');
   });
 
+  test('old immutable drafts without attribution retain their original identity and can be published', async () => {
+    const data = await fixture();
+    const { draft } = await data.prepare();
+    const old = structuredClone(draft);
+    delete old.prepared.reference.source.attribution;
+    old.draftId = hash(old.prepared);
+    old.jobId = `OA-PUB-${old.draftId}`;
+    await writeFile(fileFor(data, old.draftId), artifactJson(old), { mode: 0o600 });
+    expect(await loadOwnerPublicationDraft({ ...data, draftId: old.draftId })).toEqual(old);
+    expect((await runtime(data).publish(old.draftId)).jobId).toBe(old.jobId);
+  });
+
   test('requires real callback injections and a positive immediate-check result, redacting thrown data', async () => {
     const data = await fixture();
     for (const key of ['readNote', 'createEditSession', 'immediateChecks']) {
@@ -228,7 +240,7 @@ describe('explicit deterministic publication controller', () => {
 
   test('changed/unavailable source, changed policy and wrong/dirty/unavailable checkout block before authorization', async () => {
     const data = await fixture(); const { draft } = await data.prepare(); const run = runtime(data);
-    for (const current of [note(EDITED, 8), note(EDITED.replace('new', 'NEW'), 7)]) {
+    for (const current of [note(EDITED.replace('new', 'NEW'), 7), note(EDITED.replace('new', 'next'), 8)]) {
       data.setNote(current); await expectCode(() => run.publish(draft.draftId), 'authoring-source-stale');
     }
     data.setNote(note());
@@ -349,7 +361,7 @@ describe('bound immediately-before-application source guard', () => {
     const input = run.starts[0]; const args = { ...data, draftId: draft.draftId, jobId: draft.jobId, session: input.session, operation: input.operation };
     const reloaded = JSON.parse(JSON.stringify(input.session));
     expect(await guardOwnerPublicationSource({ ...args, session: reloaded })).toEqual(draft.prepared.reference.source);
-    data.setNote(note(EDITED, 8)); await expectCode(() => guardOwnerPublicationSource({ ...args, session: reloaded }), 'authoring-source-stale');
+    data.setNote(note(EDITED.replace('new', 'next'), 8)); await expectCode(() => guardOwnerPublicationSource({ ...args, session: reloaded }), 'authoring-source-stale');
     await expectCode(() => guardOwnerPublicationSource({ ...args, readNote: undefined }), 'publication-dependency-required');
     await expectCode(() => guardOwnerPublicationSource({ ...args, readNote: async () => { throw new Error('sensitive-expired-access'); } }), 'authoring-read-failed');
     await expectCode(() => guardOwnerPublicationSource({ ...args, config: configWith((raw) => { raw.ownerPublication.mappings[0].source.identity = 'another-source'; }) }), 'publication-draft-policy-mismatch');

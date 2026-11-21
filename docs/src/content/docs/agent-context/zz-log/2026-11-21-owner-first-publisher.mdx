@@ -1,0 +1,27 @@
+---
+title: Owner editing first and a narrower publisher request
+description: The owner resumed local work on daily in-page editing. A job-ID-only publisher request and Git destination checks are exercised on disposable repositories, without claiming process isolation or a live passkey editor.
+status: log
+---
+
+The owner chose daily personal editing before public suggestions. The first target is the same exact-change editor from a passkey browser away from home, not a new toolbar or a public intake. Keep the production reader and its homepage action placement unchanged. A real-phone Save and subsequent daily use are later acceptance steps; neither happened in this session.
+
+## Local change
+
+The owner pipeline calls a publisher function with one job ID. Under the existing mutation lock, the function checks the job phase and policy revision, reloads durable source and commit evidence, and uses the destination from configuration. A push receipt must match the remote name, branch and commit before deployment observation begins. Git must report exactly one fetch and one push URL matching policy; the push explicitly excludes follow-tags and submodule pushes.
+
+## Evidence and limit
+
+The focused owner-direct, Save acceptance, publication recovery, pipeline and real Git fixture suites passed: 30 tests, 244 assertions, acceptance enabled. The Git fixture used a disposable local bare repository. The recorded refusals include wrong phase, changed policy, missing evidence, an additional push destination and a mismatched receipt. With tag following configured, only the intended branch reached the fixture remote.
+
+## Later the same day: a separate publisher process and headless client commands
+
+Two bounded workers extended this. The publisher can now run as its own process: the app sends one job ID over a private Unix socket (owner-only directory, one request per connection, closed request shape) and advances only on the publisher's durable receipt. Real-process fixtures show the app PID commits and only the publisher PID pushes, a marker placed only in the publisher's environment appears in no response, log or artifact, a missing publisher stops the job with no fallback push, and a killed publisher answers the same job from its receipt after restart. Bun 1.3.14 cannot half-close a Unix stream, so the protocol refuses bytes received with the first line and ignores later ones; stale sockets are reclaimed only by a recorded inode plus a released lifetime lock.
+
+The command core gained `readPublicationStatus`, `readPublicationReceipt` and expected-version prepare for a headless writing client; see the [writing-tool entry](/cyberbaser/agent-context/zz-log/2026-11-21-publish-from-the-writing-tool/).
+
+Evidence: full owner-alpha suite with acceptance enabled, 632 passed, 4 skipped (opt-in), 0 failed on the coordinator's rerun. The coordinator's first run had one hook timeout while the machine was heavily loaded; it did not repeat and the test was not identified.
+
+The statement below still holds for the separate process: same OS user, no OS-level boundary.
+
+This is **not credential isolation**. The app, job store, checkout and credential helper still belong to the current trusted local runtime. No IPC listener was added. Next, give the publisher a separately protected authority record and execution identity, then prove the unprivileged web and renderer processes can neither read the credential nor manufacture an authorized push, including at restart. No passkey account, public relay session, deployment or real vault change was involved.

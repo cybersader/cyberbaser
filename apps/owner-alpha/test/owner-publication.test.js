@@ -195,7 +195,7 @@ describe('injected coherent single-note evidence', () => {
       deeplyFrozen(binding);
       return raw;
     } });
-    expect(captured).toEqual(raw);
+    expect(captured).toEqual({ ...raw, attribution: 'unknown' });
     expect(captured).not.toBe(raw);
     deeplyFrozen(captured);
     raw.text = 'changed after return';
@@ -206,7 +206,7 @@ describe('injected coherent single-note evidence', () => {
     await expectCode(() => readAuthoringSource({ config: configWith(), mappingId: MAPPING.id }), 'authoring-reader-required');
   });
 
-  for (const key of Object.keys(note())) {
+  for (const key of Object.keys(note()).filter((key) => key !== 'version')) {
     test(`rejects missing reader ${key}`, async () => {
       const raw = note();
       delete raw[key];
@@ -231,10 +231,13 @@ describe('injected coherent single-note evidence', () => {
     });
   }
 
-  test('rejects zero, negative, unsafe, nonnumeric and missing coherent versions', async () => {
-    for (const version of [0, -1, 1.5, '7', null, Number.MAX_SAFE_INTEGER + 1, Infinity]) {
+  test('accepts optional advisory versions and rejects invalid supplied versions', async () => {
+    for (const version of [-1, 1.5, '7', null, Number.MAX_SAFE_INTEGER + 1, Infinity]) {
       await expectCode(() => capture(note(EDITED, version)), 'invalid-authoring-version');
     }
+    const omitted = note(); delete omitted.version;
+    expect((await capture(omitted)).version).toBe(0);
+    expect((await capture(note(EDITED, 0))).version).toBe(0);
     expect((await capture(note(EDITED, Number.MAX_SAFE_INTEGER))).version).toBe(Number.MAX_SAFE_INTEGER);
   });
 
@@ -270,7 +273,7 @@ describe('injected coherent single-note evidence', () => {
   test('preserves BOM and Unicode bytes at capture; refuses a BOM-stripped projection', async () => {
     const raw = note('\uFEFFbody café e\u0301\n');
     const result = await capture(raw);
-    expect(result).toEqual(raw);
+    expect(result).toEqual({ ...raw, attribution: 'unknown' });
     expect(Buffer.from(result.bytesBase64, 'base64').subarray(0, 3)).toEqual(Buffer.from([0xef, 0xbb, 0xbf]));
     await expectCode(() => capture({ ...raw, text: raw.text.slice(1) }), 'authoring-source-integrity-mismatch');
     const decomposed = note('e\u0301\n');
@@ -312,7 +315,7 @@ describe('effect-free publication candidate preparation', () => {
     expect(result.artifactType).toBe(OWNER_PUBLICATION_ARTIFACT_TYPE);
     expect(result.schemaVersion).toBe(1);
     expect(result.reference).toEqual({ mapping: MAPPING, policyRevision: computePolicyRevision(config),
-      source: { ...MAPPING.source, version: 7, byteLength: note().byteLength, digest: note().digest } });
+      source: { ...MAPPING.source, version: 7, byteLength: note().byteLength, digest: note().digest, attribution: 'unknown' } });
     expect(result.session.baseCommit).toBe('a'.repeat(40));
     const replayed = applyEditorOperation(result.session, result.operation);
     expect(replayed.toString('base64')).toBe(note().bytesBase64);
@@ -497,12 +500,14 @@ describe('source-only later publication revalidation', () => {
     }
   });
 
-  test('refuses a newer or older version even when bytes match, and changed bytes even at the same version', async () => {
+  test('ignores advisory version changes but refuses changed bytes', async () => {
     const prepared = await prepare();
-    for (const current of [note(EDITED, 8), note(EDITED, 6), note(EDITED.replace('new', 'NEW'), 7)]) {
-      await expectCode(() => revalidateOwnerPublicationSource({ config: configWith(), reference: prepared.reference,
-        readNote: async () => current }), 'authoring-source-stale');
+    for (const current of [note(EDITED, 8), note(EDITED, 6)]) {
+      expect((await revalidateOwnerPublicationSource({ config: configWith(), reference: prepared.reference,
+        readNote: async () => current })).digest).toBe(prepared.reference.source.digest);
     }
+    await expectCode(() => revalidateOwnerPublicationSource({ config: configWith(), reference: prepared.reference,
+      readNote: async () => note(EDITED.replace('new', 'NEW'), 7) }), 'authoring-source-stale');
     await expectCode(() => revalidateOwnerPublicationSource({ config: configWith(), reference: prepared.reference,
       readNote: async () => ({ ...note(), path: 'Other.md' }) }), 'authoring-source-binding-mismatch');
     await expectCode(() => revalidateOwnerPublicationSource({ config: configWith(), reference: prepared.reference,
@@ -533,7 +538,7 @@ describe('source-only later publication revalidation', () => {
       [(ref) => { ref.mapping.relativePath = 'Notes/Other.md'; }, 'publication-policy-mismatch'],
       [(ref) => { ref.mapping.source.path = 'Drafts/Other.md'; }, 'publication-policy-mismatch'],
       [(ref) => { ref.source.identity = 'other-source'; }, 'authoring-source-binding-mismatch'],
-      [(ref) => { ref.source.version = 0; }, 'invalid-authoring-version'],
+      [(ref) => { ref.source.version = -1; }, 'invalid-authoring-version'],
       [(ref) => { delete ref.source.digest; }, 'invalid-authoring-reference'],
       [(ref) => { ref.source.extra = true; }, 'invalid-authoring-reference'],
       [(ref) => { ref.extra = true; }, 'invalid-publication-reference'],
@@ -549,8 +554,9 @@ describe('source-only later publication revalidation', () => {
     const prepared = await prepare();
     const reference = structuredClone(prepared.reference);
     await expectCode(() => revalidateOwnerPublicationSource({ config: configWith(), reference, readNote: async () => {
-      reference.source.version = 8;
-      return note(EDITED, 8);
+      const changed = note(EDITED.replace('new', 'NEW'), 8);
+      reference.source.digest = changed.digest;
+      return changed;
     } }), 'authoring-source-stale');
   });
 });

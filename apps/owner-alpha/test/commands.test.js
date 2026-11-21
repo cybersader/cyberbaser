@@ -37,7 +37,8 @@ afterEach(async () => {
 const protectedCommands = [
   'readPageSource', 'inspectOwnerDirect', 'saveOwnerDirect', 'openRawEdit', 'saveRawEdit',
   'listProposals', 'readProposal', 'recordDecision', 'readDecision', 'applyProposal',
-  'preparePublication', 'readPublicationCurrent', 'readPublicationReview', 'publish', 'readJob',
+  'preparePublication', 'readPublicationStatus', 'readPublicationReceipt', 'readPublicationCurrent',
+  'readPublicationReview', 'publish', 'readJob',
 ];
 
 test.each(protectedCommands)('%s refuses an absent or invalid principal before reading input or dependencies', async (command) => {

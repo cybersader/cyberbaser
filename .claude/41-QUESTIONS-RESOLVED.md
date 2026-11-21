@@ -4,6 +4,18 @@
 
 ## Log
 
+### The Git vault is the authoritative copy (2026-11-21, owner decision)
+
+Asked in a question dialog after a counts-only check showed the owner's sync workspace was an older, partial, unlinked copy. The owner chose the Git vault. A workspace is a writing surface refreshed from the vault at a known commit; publication from it is checked against the vault, bound by text digest plus Git base, and refused when unbound, diverged, non-round-trippable or matching the retired list (private owner-node policy, never committed to a public repository even as plain hashes). The owner's clients are agents and Obsidian mobile, both through the sync workspace. Draft source-snapshot contract: `design/editing-and-trust-roadmap.mdx`. No seam selected, nothing connected.
+
+### Publish from the writing tool first (2026-11-21, clarification)
+
+Owner-first refers to the workflow, not the website UI. Prioritize the workspace plugin and Obsidian mobile as owner clients; the website is primarily for public contribution. Keep one source authority and distinct proposal, authorization and confirmed-live states across clients. The relationship between the actual workspace and the delivery checkout still needs evidence. No plugin build, source migration, sync or real-vault connection is implied. See `design/editing-and-trust-roadmap.mdx`.
+
+### Owner edits first (2026-11-21)
+
+The maintainer chose their own daily in-page edits from a passkey browser before opening suggestions or inviting accounts. Build and test Phases 0–1 in Cyberbaser; the exit requires real owner use, not a synthetic Save. Installing on owner hardware, changing the vault pin or workflows, DNS, and public activation each need separate approval. See `agent-context/zz-log/2026-11-21-owner-first-publisher.mdx`.
+
 ### Editing the live site: custody, transport and invites (2026-11-19, no R-number)
 - **Custody amendment approved (narrow):** an owner-operated, replaceable account adapter may, only in explicitly enabled local account mode, be the record of authority for its own deployment-local principals and persist only what verifies, admits, revokes and recovers them (account IDs and minimal contact data, WebAuthn public-credential bindings, expiring enrollment, invitation and recovery verifiers, revocable server-side sessions and their keys). No passwords, external identity tokens, federation, SSO or shared directory. No other component holds account credentials or browser-session authority. Account state grants no source, review, application or publication authority.
 - **Public suggestion transport:** TLS stays on owner-controlled hardware; Cloudflare stays edge-only and does not terminate submission TLS. The built Cloudflare Tunnel overlay is not the Phase 2 path.

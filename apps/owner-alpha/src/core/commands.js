@@ -1,25 +1,76 @@
 import { validateOwnerAlphaConfig } from '../config.js';
 import { fail, OwnerAlphaError } from '../errors.js';
 import { validateJobId } from '../job-state.js';
+import { isPlainObject } from '../json.js';
 import { authorizeOwnerDirect, deriveOwnerDirect, validateOwnerHandoff } from '../owner-direct.js';
+import { isPublicationDigest } from '../owner-publication.js';
+import { validatePublicationDraftId } from '../owner-publication-store.js';
 import { storeContextFromConfig } from '../store.js';
+import { actorAllowsGrant } from './grants.js';
+import { refuseSignedRequest } from './signed-request.js';
+
+const signedCommands = new WeakMap();
+
+export async function executeSigned(commands, verifier, envelope) {
+  const registered = signedCommands.get(commands);
+  const { command, input, principal } = verifier.verify(envelope, (name) => registered?.has(name) === true);
+  const run = registered?.get(command);
+  if (!run) refuseSignedRequest();
+  return run(input, principal);
+}
+
+function directEditScope(principal) {
+  return principal.method === 'device-key' ? { deviceKeyId: principal.keyId } : { sessionId: principal.sessionId };
+}
+
+function closedInput(input, required, optional = []) {
+  if (!isPlainObject(input) || !Object.hasOwn(input, required)) {
+    fail('invalid-command-input', 'owner command requires its declared input fields');
+  }
+  return Object.fromEntries(Reflect.ownKeys(input).map((key) => {
+    const field = Object.getOwnPropertyDescriptor(input, key);
+    if ((key !== required && !optional.includes(key)) || !field || !Object.hasOwn(field, 'value')) {
+      fail('invalid-command-input', 'owner command accepts only its declared data fields');
+    }
+    return [key, field.value];
+  }));
+}
+
+function mappingInput(input, optional) {
+  const request = closedInput(input, 'mappingId', optional);
+  const { mappingId } = request;
+  if (typeof mappingId !== 'string' || mappingId.length > 128 || mappingId.trim() !== mappingId
+    || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(mappingId) || mappingId.includes('..')) {
+    fail('invalid-publication-mapping-id', 'mapping id must be one opaque safe identifier');
+  }
+  return request;
+}
+
+function draftInput(input) {
+  return { draftId: validatePublicationDraftId(closedInput(input, 'draftId').draftId) };
+}
 
 // Distinguish command preconditions from same-named errors raised by injected
 // effects, whose existing HTTP error mappings differ.
 export class OwnerCommandPrecondition extends OwnerAlphaError {}
 
 export function createOwnerCommands({
-  config: configInput, projectRoot, principalAdapter, createEditSession,
+  config: configInput, projectRoot, principalAdapter, devicePrincipalAdapter = null, createEditSession,
   editSessions, handoffs, directEdits, saveEdit, lookupJob, createJobId,
   proposalReview = null, publication = null,
 }) {
   const config = validateOwnerAlphaConfig(configInput);
+  if (devicePrincipalAdapter !== null && devicePrincipalAdapter.ownerId !== config.owner.identity) {
+    throw new TypeError('device registry owner does not match the configured owner');
+  }
   const inFlight = new Set();
+  const signedHandlers = new Map();
 
   function requireGrant(grant, principal) {
-    if (!principalAdapter.isVerified(principal) || principal.id !== config.owner.identity) {
-      fail('invalid-session', 'a verified owner session is required');
-    }
+    const bootstrap = principalAdapter?.isVerified(principal) && principal.method === 'bootstrap-session';
+    const device = !bootstrap && devicePrincipalAdapter?.isVerified(principal) && principal.method === 'device-key'
+      && actorAllowsGrant(principal.actor.kind, grant) && devicePrincipalAdapter.hasGrant(principal, grant);
+    if ((!bootstrap && !device) || principal.id !== config.owner.identity) refuseSignedRequest();
     switch (grant) {
       case 'read':
       case 'save':
@@ -44,8 +95,12 @@ export function createOwnerCommands({
   }
 
   function command(grant, fallback, execute, { preserveCode = false } = {}) {
-    return async (input, principal) => {
+    const run = async (input, principal) => {
       requireGrant(grant, principal);
+      // A device attestation authorizes only its one signed request, even if
+      // an in-process binding invokes the core without executeSigned().
+      if (principal.method === 'device-key'
+        && !devicePrincipalAdapter.consumeRequest(principal, signedHandlers.get(run), input)) refuseSignedRequest();
       try {
         return await execute(input, principal);
       } catch (error) {
@@ -53,9 +108,11 @@ export function createOwnerCommands({
         fail(preserveCode ? error?.code ?? fallback : fallback, 'owner command failed');
       }
     };
+    signedHandlers.set(run, null);
+    return run;
   }
 
-  return Object.freeze({
+  const commands = Object.freeze({
     // The HTTP binding uses the same check before parsing for routes where
     // feature/availability errors have precedence over malformed input.
     requireGrant,
@@ -76,14 +133,15 @@ export function createOwnerCommands({
       if (!handoff) throw new OwnerCommandPrecondition('owner-handoff-expired', 'the staged change has expired');
       const session = await createEditSession({ config, renderer: { relativePath: handoff.source.path, slug: handoff.slug } });
       const derived = deriveOwnerDirect({ config, session, handoff });
-      const stored = directEdits.create({ ...derived, stageId, sessionId: principal.sessionId });
+      const stored = directEdits.create({ ...derived, stageId, ...directEditScope(principal) });
       return { ...derived, editId: stored.id, operationCount: handoff.operations.length };
     }, { preserveCode: true }),
 
     saveOwnerDirect: command('save', 'owner-save-failed', async (input, principal) => {
       const { editId } = input;
       const edit = directEdits.get(editId);
-      if (!edit || edit.sessionId !== principal.sessionId || !handoffs.get(edit.stageId)) {
+      const scope = directEditScope(principal);
+      if (!edit || edit.sessionId !== scope.sessionId || edit.deviceKeyId !== scope.deviceKeyId || !handoffs.get(edit.stageId)) {
         throw new OwnerCommandPrecondition('owner-handoff-expired', 'the staged change has expired');
       }
       if (inFlight.has(edit.stageId)) throw new OwnerCommandPrecondition('save-in-progress', 'a Save is already in progress');
@@ -176,7 +234,23 @@ export function createOwnerCommands({
     }),
 
     preparePublication: command('publication', 'publication-prepare-failed', async (input) => {
-      return publication.prepare(input);
+      const request = mappingInput(input, ['expectedVersion', 'expectedDigest']);
+      if (Object.hasOwn(request, 'expectedVersion')
+        && (!Number.isSafeInteger(request.expectedVersion) || request.expectedVersion <= 0)) {
+        fail('invalid-publication-expected-version', 'expected version must be a positive safe integer');
+      }
+      if (Object.hasOwn(request, 'expectedDigest') && !isPublicationDigest(request.expectedDigest)) {
+        fail('invalid-publication-expected-digest', 'expected digest must be one canonical SHA-256 digest');
+      }
+      return publication.prepare(request);
+    }),
+
+    readPublicationStatus: command('publication', 'publication-status-unavailable', async (input) => {
+      return publication.readStatus(mappingInput(input));
+    }),
+
+    readPublicationReceipt: command('publication', 'publication-receipt-unavailable', async (input) => {
+      return publication.readReceipt(draftInput(input));
     }),
 
     readPublicationCurrent: command('publication', 'publication-review-unavailable', async (input) => {
@@ -184,17 +258,17 @@ export function createOwnerCommands({
     }),
 
     readPublicationReview: command('publication', 'publication-review-unavailable', async (input) => {
-      const draft = await publication.load(input);
+      const draft = await publication.load(draftInput(input));
       const job = await publication.readJob(draft.jobId);
       return { draft, job, publishAvailable: publication.publishAvailable === true };
     }),
 
     publish: command('publish', 'publication-publish-refused', async (input) => {
-      return publication.publish(input);
+      return publication.publish(draftInput(input));
     }),
 
     readJob: command('read', 'job-lookup-failed', async (input) => {
-      const jobId = validateJobId(input?.jobId);
+      const jobId = validateJobId(closedInput(input, 'jobId').jobId);
       let job;
       try {
         job = await lookupJob(jobId);
@@ -208,4 +282,14 @@ export function createOwnerCommands({
       return job;
     }),
   });
+  // Only public command wrappers belong here, never requireGrant or the
+  // browser's anonymous owner-direct staging route.
+  const byName = new Map();
+  for (const [name, run] of Object.entries(commands)) {
+    if (!signedHandlers.has(run)) continue;
+    signedHandlers.set(run, name);
+    byName.set(name, run);
+  }
+  signedCommands.set(commands, byName);
+  return commands;
 }

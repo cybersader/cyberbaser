@@ -19,6 +19,8 @@ import {
   validateOwnerAlphaConfig,
 } from '../src/index.js';
 
+import { createJobPublisher } from '../src/pipeline.js';
+
 const APP_ROOT = path.resolve(import.meta.dir, '..');
 const EXAMPLE = path.join(APP_ROOT, 'owner-alpha.example.json');
 const POLICY_REVISION = `sha256:${'a'.repeat(64)}`;
@@ -310,6 +312,41 @@ describe('owner-alpha integration pipeline', () => {
     const applied = await readJsonArtifact(data.context, paths.sourceApplied);
     expect(applied.result.candidateBytesBase64).toBe(bound.candidateBytes.toString('base64'));
     expect(applied.result).not.toHaveProperty('candidateBytes');
+  });
+
+  test('publisher accepts a job ID only and requires the durable phase, current policy and exact effect records', async () => {
+    const { context, config } = await fixture();
+    let calls = 0;
+    const publish = createJobPublisher({ context, config, pushCommit: () => { calls++; } });
+    await expectCodeAsync(() => publish({ jobId: 'job', remote: 'elsewhere' }), 'invalid-job-state');
+    for (const [jobId, policyRevision] of [['old-policy', POLICY_REVISION], ['current-policy', computePolicyRevision(config)]]) {
+      const at = '2026-07-31T12:00:00.000Z';
+      await initializeDurableJob(context, { jobId, policyRevision, at });
+      await expectCodeAsync(() => publish(jobId), 'publisher-job-not-admitted');
+      for (const phase of ['preflighting', 'checking', 'rendering', 'ready-to-apply', 'applying', 'source-applied', 'committing', 'committed', 'pushing']) {
+        await transitionDurableJob(context, jobId, phase, { at, reason: `seed-${phase}` });
+      }
+      await expectCodeAsync(() => publish(jobId), jobId === 'old-policy' ? 'publisher-job-not-admitted' : 'publication-evidence-missing');
+    }
+    expect(calls).toBe(0);
+  });
+
+  test('a push receipt for another branch cannot advance the job to deployment', async () => {
+    const data = await fixture();
+    const input = acceptedInput();
+    const policyRevision = computePolicyRevision(data.config);
+    const session = { ...input.session, policyRevision };
+    const operation = { ...input.operation, source: { ...input.operation.source, policyRevision } };
+    const calls = {};
+    const dependencies = fixtureDependencies({ ...input, session, operation }, calls);
+    const push = dependencies.pushExactCommit;
+    dependencies.pushExactCommit = async () => ({ ...await push(), branch: 'other' });
+    const jobId = 'different-receipt';
+    const result = await runOwnerAlphaPipeline({ ...data, jobId, session, operation }, dependencies);
+    expect(result.state).toBe('manual-intervention');
+    expect(result.failure.code).toBe('publisher-receipt-mismatch');
+    expect(calls.discover).toBeUndefined();
+    await expectCodeAsync(() => readJsonArtifact(data.context, pipelineArtifactPaths(jobId).pushed), 'artifact-not-found');
   });
 
   test('blocks a checkout or remote advance immediately before source application', async () => {

@@ -6,6 +6,9 @@ import { fail, OwnerAlphaError } from './errors.js';
 import { deepFreeze } from './json.js';
 
 const execFileAsync = promisify(execFile);
+// This exception belongs to a validated publisher process context, never a
+// JSON policy field or a context object the web app can construct by cloning.
+const publisherStores = new WeakMap();
 
 function contained(root, target, { strict = false, code = 'path-outside-root' } = {}) {
   const resolvedRoot = path.resolve(root);
@@ -57,6 +60,37 @@ export function storeContextFromConfig(config, projectRoot) {
   });
 }
 
+function unsafePublisherStore() {
+  fail('publisher-unsafe-store', 'publisher store must be a real directory outside the published checkout');
+}
+
+async function assertPublisherStoreLocation(context, checkout) {
+  try {
+    // The app store can live in the *code* worktree. The content checkout is
+    // the published repository: disallow physical containment there without
+    // reading .git metadata or trusting symlink aliases. Comparing inodes
+    // also catches a second mount of the entire checkout at another path.
+    if (context.storeRoot === checkout || context.storeRoot.startsWith(`${checkout}/`)
+      || await realpath(checkout) !== checkout || await realpath(context.storeRoot) !== context.storeRoot) unsafePublisherStore();
+    const source = await lstat(checkout, { bigint: true });
+    if (!source.isDirectory()) unsafePublisherStore();
+    for (let current = context.storeRoot;; current = path.dirname(current)) {
+      const ancestor = await lstat(current, { bigint: true });
+      if (!ancestor.isDirectory() || (ancestor.dev === source.dev && ancestor.ino === source.ino)) unsafePublisherStore();
+      if (path.dirname(current) === current) break;
+    }
+  } catch {
+    unsafePublisherStore();
+  }
+}
+
+export async function createPublisherStoreContext(context, checkout) {
+  const result = defineStoreContext(context);
+  await assertPublisherStoreLocation(result, checkout);
+  publisherStores.set(result, checkout);
+  return result;
+}
+
 export function resolveStorePath(context, relativePath) {
   const safe = safeRelativePath(relativePath);
   return contained(context.storeRoot, path.join(context.storeRoot, ...safe.split('/')), {
@@ -89,6 +123,7 @@ export async function assertNoSymlinkComponents(context, target) {
 
 export async function assertIgnoredPath(context, target) {
   const absolute = contained(context.projectRoot, target, { code: 'path-outside-project' });
+  if (publisherStores.has(context)) return absolute;
   try {
     await execFileAsync(
       'git',
@@ -105,6 +140,7 @@ export async function assertIgnoredPath(context, target) {
 }
 
 export async function prepareStore(context) {
+  if (publisherStores.has(context)) await assertPublisherStoreLocation(context, publisherStores.get(context));
   await assertNoSymlinkComponents(context, context.workspaceRoot);
   await assertIgnoredPath(context, context.workspaceRoot);
   await mkdir(context.storeRoot, { recursive: true, mode: 0o700 });
