@@ -219,29 +219,26 @@ async function exactRemoteRef(checkout, remote, branch, git) {
 }
 
 async function assertRemoteDestination(checkout, remote, expectedUrl, git) {
-  const [fetchUrl, pushUrl] = await Promise.all([
-    git(checkout, ['remote', 'get-url', remote], { encoding: 'utf8' }),
-    git(checkout, ['remote', 'get-url', '--push', remote], { encoding: 'utf8' }),
+  // A remote can have several push URLs. Ask for all of them and match the
+  // exact Git output, including its terminator, rather than trimming it.
+  const [fetchUrls, pushUrls] = await Promise.all([
+    git(checkout, ['remote', 'get-url', '--all', remote], { encoding: 'buffer' }),
+    git(checkout, ['remote', 'get-url', '--push', '--all', remote], { encoding: 'buffer' }),
   ]);
-  if (fetchUrl !== expectedUrl || pushUrl !== expectedUrl) {
-    fail('remote-destination-mismatch', 'configured Git fetch and push destinations must both equal policy', {
-      expected: expectedUrl,
-      fetchUrl,
-      pushUrl,
-    });
+  const expected = Buffer.from(`${expectedUrl}\n`);
+  if (!expected.equals(fetchUrls) || !expected.equals(pushUrls)) {
+    fail('remote-destination-mismatch', 'Git must have exactly one fetch and one push destination, both equal to policy');
   }
 }
 
 /** Independently prove a commit is the exact accepted one-file splice. */
-export async function verifyExactCommit({
-  checkout,
-  commit,
-  application,
-  expectedMessage,
-} = {}, overrides = {}) {
-  const deps = dependencies(overrides);
+export async function verifyExactCommit(request = {}, overrides = {}) {
+  return verifyBoundCommit(request, dependencies(overrides));
+}
+
+async function verifyBoundCommit({ checkout, commit, application, expectedMessage }, deps, bare = false) {
   const binding = applicationBinding(application);
-  await assertCheckout(checkout, deps.git);
+  if (!bare) await assertCheckout(checkout, deps.git);
   const revision = exactCommit(commit, 'commit');
   await deps.git(checkout, ['cat-file', '-e', `${revision}^{commit}`]);
   const ancestry = (await deps.git(checkout, ['rev-list', '--parents', '-n', '1', revision], { encoding: 'utf8' }))
@@ -252,16 +249,23 @@ export async function verifyExactCommit({
       ancestry,
     });
   }
-  const committedMessage = await deps.git(
-    checkout,
-    ['show', '-s', '--format=%B', revision],
-    { encoding: 'utf8' },
-  );
-  if (expectedMessage !== undefined && committedMessage !== expectedMessage) {
-    fail('commit-message-mismatch', 'application commit message must equal the exact authorized message', {
-      expected: expectedMessage,
-      actual: committedMessage,
-    });
+  let committedMessage;
+  if (bare) {
+    const object = await deps.git(checkout, ['cat-file', 'commit', revision]);
+    const boundary = object.indexOf('\n\n');
+    if (typeof expectedMessage !== 'string' || boundary < 0
+      || !object.subarray(boundary + 2).equals(Buffer.from(`${expectedMessage}\n`))) {
+      fail('commit-message-mismatch', 'application commit message must equal the exact bound message bytes');
+    }
+    committedMessage = expectedMessage;
+  } else {
+    committedMessage = await deps.git(checkout, ['show', '-s', '--format=%B', revision], { encoding: 'utf8' });
+    if (expectedMessage !== undefined && committedMessage !== expectedMessage) {
+      fail('commit-message-mismatch', 'application commit message must equal the exact authorized message', {
+        expected: expectedMessage,
+        actual: committedMessage,
+      });
+    }
   }
 
   const changedPaths = parseNul(await deps.git(checkout, [
@@ -450,7 +454,17 @@ export async function commitAppliedCandidate({
 }
 
 /** Push exactly commit:refs/heads/branch without force, then verify the remote ref. */
-export async function pushExactCommit({
+export async function pushExactCommit(request = {}, overrides = {}) {
+  return pushBoundCommit(request, dependencies(overrides));
+}
+
+// The isolated publisher provides its own Git runner and passes the policy URL
+// directly. This path must not consult a checkout or resolve a named remote.
+export async function pushExactCommitFromBare(request, deps) {
+  return pushBoundCommit({ ...request, useHooks: false }, deps, true);
+}
+
+async function pushBoundCommit({
   checkout,
   application,
   commit,
@@ -458,19 +472,22 @@ export async function pushExactCommit({
   remoteUrl: configuredRemoteUrl,
   branch,
   useHooks = true,
-} = {}, overrides = {}) {
-  const deps = dependencies(overrides);
+  expectedMessage,
+}, deps, bare = false) {
   const binding = applicationBinding(application);
   const revision = exactCommit(commit, 'commit');
   const targetRemote = remoteName(remote);
   const targetRemoteUrl = remoteUrl(configuredRemoteUrl);
   const targetBranch = branchName(branch);
   if (typeof useHooks !== 'boolean') fail('invalid-hooks-policy', 'useHooks must be an explicit boolean');
-  await assertCheckout(checkout, deps.git);
-  await assertRemoteDestination(checkout, targetRemote, targetRemoteUrl, deps.git);
-  await verifyExactCommit({ checkout, commit: revision, application: binding }, overrides);
+  if (!bare) {
+    await assertCheckout(checkout, deps.git);
+    await assertRemoteDestination(checkout, targetRemote, targetRemoteUrl, deps.git);
+  }
+  await verifyBoundCommit({ checkout, commit: revision, application: binding, expectedMessage: bare ? expectedMessage : undefined }, deps, bare);
 
-  const before = await exactRemoteRef(checkout, targetRemote, targetBranch, deps.git);
+  const destination = bare ? targetRemoteUrl : targetRemote;
+  const before = await exactRemoteRef(checkout, destination, targetBranch, deps.git);
   if (before === revision) {
     return freeze({
       status: 'already-pushed',
@@ -493,16 +510,17 @@ export async function pushExactCommit({
   }
 
   const refspec = `${revision}:refs/heads/${targetBranch}`;
-  const args = ['push', '--porcelain'];
+  const args = ['push', '--porcelain', '--no-follow-tags', '--recurse-submodules=no'];
   if (!useHooks) args.push('--no-verify');
-  args.push(targetRemote, refspec);
+  if (bare) args.push('--');
+  args.push(destination, refspec);
   let pushFailure = null;
   try {
     await deps.mutateGit(checkout, args, { encoding: 'utf8', env: commandEnvironment() });
   } catch (error) {
     pushFailure = error;
   }
-  const remoteHead = await exactRemoteRef(checkout, targetRemote, targetBranch, deps.git);
+  const remoteHead = await exactRemoteRef(checkout, destination, targetBranch, deps.git);
   if (remoteHead !== revision) {
     throw new OwnerAlphaError(
       remoteHead !== binding.baseCommit ? 'remote-advanced' : 'git-push-failed',

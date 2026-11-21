@@ -6,9 +6,10 @@ import path from 'node:path';
 import { applyCorrection } from '@cyberbaser/correction';
 import { checkSite } from '@cyberbaser/linkcheck';
 import { checkChange } from '@cyberbaser/ofm';
-import { project, verifyProjection } from '@cyberbaser/projection';
+import { pageTargets, project, projectedPath, verifyProjection } from '@cyberbaser/projection';
 import { select } from '@cyberbaser/publish';
 import { classify, parseConfig } from '@cyberbaser/trust';
+import { comparePublicationEffects } from './effects.js';
 import { fail, OwnerAlphaError } from './errors.js';
 import { deepFreeze } from './json.js';
 import { renderPinnedQuartz } from './quartz-renderer.js';
@@ -217,8 +218,9 @@ function summarizeVerification(verification) {
   };
 }
 
-/** Select, project and explicitly verify one isolated baseline or candidate vault. */
-export async function runPublicationChecks({ vaultDir, outputDir, sourcePath }) {
+const LOWERCASE_PROJECTION = false;
+
+async function inspectPublication({ vaultDir, outputDir, sourcePath }) {
   const relativePath = sourcePathValue(sourcePath);
   const selection = select(vaultDir, { audience: 'public' });
   if (!selection.published.includes(relativePath)) {
@@ -231,7 +233,7 @@ export async function runPublicationChecks({ vaultDir, outputDir, sourcePath }) 
   const projection = project(vaultDir, outputDir, {
     audience: 'public',
     selectResult: selection,
-    lowercase: false,
+    lowercase: LOWERCASE_PROJECTION,
     verify: true,
     writeReport: false,
   });
@@ -241,7 +243,7 @@ export async function runPublicationChecks({ vaultDir, outputDir, sourcePath }) 
     });
   }
 
-  const verification = verifyProjection(vaultDir, outputDir, selection, { lowercase: false });
+  const verification = verifyProjection(vaultDir, outputDir, selection, { lowercase: LOWERCASE_PROJECTION });
   if (!verification.ok) {
     fail('projection-verification-failed', 'explicit post-copy publication verification failed', {
       unexpected: verification.unexpected.slice(0, 20),
@@ -256,7 +258,7 @@ export async function runPublicationChecks({ vaultDir, outputDir, sourcePath }) 
     fail('projected-source-bytes-changed', 'the selected source was not projected byte-for-byte');
   }
 
-  return deepFreeze({
+  const summary = deepFreeze({
     ok: true,
     sourcePublished: true,
     published: [...selection.published].sort(),
@@ -273,6 +275,30 @@ export async function runPublicationChecks({ vaultDir, outputDir, sourcePath }) 
     verification: summarizeVerification(verification),
     sourceBytesIdentical: true,
   });
+  return { summary, selection };
+}
+
+/** Select, project and explicitly verify one isolated baseline or candidate vault. */
+export async function runPublicationChecks(input) {
+  return (await inspectPublication(input)).summary;
+}
+
+/** Use the projection's canonical targets, not any renderer's emitted URLs. */
+function publicationEffectsInput(selection, lane) {
+  try {
+    const { published: { pages, assets }, slugs } = selection.report;
+    const addresses = pageTargets(pages, slugs, LOWERCASE_PROJECTION);
+    for (const asset of assets) addresses.set(asset, projectedPath(asset, LOWERCASE_PROJECTION));
+    if (addresses.size === selection.published.length && selection.published.every((source) => {
+      const address = addresses.get(source);
+      return typeof address === 'string' && address.length > 0;
+    })) {
+      return { published: selection.published, addresses };
+    }
+  } catch {
+    // The underlying error may identify a different source. Report only the lane.
+  }
+  fail('address-map-unavailable', 'a complete publication address map could not be computed', { lane });
 }
 
 function compareText(left, right) {
@@ -651,10 +677,6 @@ async function copyCheckout(sourceDir, destinationDir) {
   });
 }
 
-function sameStrings(left, right) {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
-}
-
 function basePathFromConfig(config) {
   try {
     return new URL(config?.live?.baseUrl).pathname.replace(/^\/+|\/+$/gu, '');
@@ -780,18 +802,32 @@ export async function runPreApplyChecks({
       fail('baseline-copy-changed', 'the isolated baseline source changed while preparing the candidate');
     }
 
-    const baselinePublication = await runPublicationChecks({
+    const baselinePublication = await inspectPublication({
       vaultDir: baselineVault,
       outputDir: baselineProjection,
       sourcePath: relativePath,
     });
-    const candidatePublication = await runPublicationChecks({
+    const candidatePublication = await inspectPublication({
       vaultDir: candidateVault,
       outputDir: candidateProjection,
       sourcePath: relativePath,
     });
-    if (!sameStrings(baselinePublication.published, candidatePublication.published)) {
+    const { publicSet, addresses } = comparePublicationEffects(
+      publicationEffectsInput(baselinePublication.selection, 'baseline'),
+      publicationEffectsInput(candidatePublication.selection, 'candidate'),
+    );
+    if (publicSet.changed) {
       fail('published-set-changed', 'the candidate changed the selected publication file set');
+    }
+    // As with selected-set equality, an ordinary edit cannot authorize this effect.
+    if (addresses.changed) {
+      const edited = addresses.moved.find(({ source }) => source === relativePath);
+      fail('address-map-changed', 'the candidate changed the publication address map', {
+        added: addresses.added.length,
+        removed: addresses.removed.length,
+        moved: addresses.moved.length,
+        ...(edited && { editedSource: { from: edited.from, to: edited.to } }),
+      });
     }
 
     const baselineRender = await render({
@@ -824,9 +860,10 @@ export async function runPreApplyChecks({
       ok: true,
       immediate,
       publication: {
-        baseline: baselinePublication,
-        candidate: candidatePublication,
+        baseline: baselinePublication.summary,
+        candidate: candidatePublication.summary,
         selectedSetUnchanged: true,
+        addressMapUnchanged: true,
       },
       renderer: {
         baseline: plain(baselineRender ?? {}),

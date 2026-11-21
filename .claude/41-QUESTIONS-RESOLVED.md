@@ -4,11 +4,30 @@
 
 ## Log
 
+### [R25] Property changes are judged by effect, asked of the component that owns it (2026-11-21)
+- **Asked:** after the first live workspace rehearsal refused a property edit, whether publishing from a writing tool may change properties. The owner asked for a principled structure, not a thin special case, then for an independent check against the architecture.
+- **Decided (owner, question dialog, after an independent Fable 5.2 review):** adopt effect-based handling with **no property names in the core**. "Changes what is public" and "changes an address" are computed by running selection and the address map before and after, for body edits too; the renderer adapter declares the keys it uses; unclaimed keys get full review until vault policy names them harmless; structural breakage is refused. Serious effects cannot be lightened by policy. Cyberbaser never authors a field.
+- **Amends:** the "no frontmatter" rule of the owner lane and the September apply decision. The blanket refusal stays until build steps 1 to 3 land.
+- **Rejected:** a built-in table of key names (conflicts with renderer-agnostic and pluggable-control constraints; R23 says `slug`/`aliases`/`permalink` are not canonical route authority).
+- **Canonical:** `docs/src/content/docs/design/property-policy.mdx`.
+
+### The Git vault is the authoritative copy (2026-11-21, owner decision)
+
+Asked in a question dialog after a counts-only check showed the owner's sync workspace was an older, partial, unlinked copy. The owner chose the Git vault. A workspace is a writing surface refreshed from the vault at a known commit; publication from it is checked against the vault, bound by text digest plus Git base, and refused when unbound, diverged, non-round-trippable or matching the retired list (private owner-node policy, never committed to a public repository even as plain hashes). The owner's clients are agents and Obsidian mobile, both through the sync workspace. Draft source-snapshot contract: `design/editing-and-trust-roadmap.mdx`. No seam selected, nothing connected.
+
+### Publish from the writing tool first (2026-11-21, clarification)
+
+Owner-first refers to the workflow, not the website UI. Prioritize the workspace plugin and Obsidian mobile as owner clients; the website is primarily for public contribution. Keep one source authority and distinct proposal, authorization and confirmed-live states across clients. The relationship between the actual workspace and the delivery checkout still needs evidence. No plugin build, source migration, sync or real-vault connection is implied. See `design/editing-and-trust-roadmap.mdx`.
+
+### Owner edits first (2026-11-21)
+
+The maintainer chose their own daily in-page edits from a passkey browser before opening suggestions or inviting accounts. Build and test Phases 0–1 in Cyberbaser; the exit requires real owner use, not a synthetic Save. Installing on owner hardware, changing the vault pin or workflows, DNS, and public activation each need separate approval. See `agent-context/zz-log/2026-11-21-owner-first-publisher.mdx`.
+
 ### Editing the live site: custody, transport and invites (2026-11-19, no R-number)
 - **Custody amendment approved (narrow):** an owner-operated, replaceable account adapter may, only in explicitly enabled local account mode, be the record of authority for its own deployment-local principals and persist only what verifies, admits, revokes and recovers them (account IDs and minimal contact data, WebAuthn public-credential bindings, expiring enrollment, invitation and recovery verifiers, revocable server-side sessions and their keys). No passwords, external identity tokens, federation, SSO or shared directory. No other component holds account credentials or browser-session authority. Account state grants no source, review, application or publication authority.
 - **Public suggestion transport:** TLS stays on owner-controlled hardware; Cloudflare stays edge-only and does not terminate submission TLS. The built Cloudflare Tunnel overlay is not the Phase 2 path.
 - **Invites:** owner-issued only at first; trusted-sponsor invites only after a first cohort shows the need.
-- **Editor reach:** not selected. The maintainer asked whether Iroh or similar protocols can avoid exposing the home network, and asked for an architecture that does not need rework later. Answered by the layered architecture in `design/editing-and-trust-roadmap.mdx`: reach is a replaceable carrier under one transport-neutral command protocol.
+- **Editor reach (decided later the same day):** **Iroh through a relay, starting on n0's public relay, self-hosted later.** The relay passes only end-to-end encrypted traffic and the passkey assertion is bound to the Iroh connection, so a public relay can deny or delay editing but cannot read or forge commands. Accepted costs: n0 documents its public relays as development and testing infrastructure with rate limits and no uptime promise, and n0 sees connection metadata (the owner's home IP, the browser's IP, timing and volume). The relay URL is configuration: moving to an owner-run `iroh-relay` on a small non-hyperscaler server, or a dedicated n0 relay, changes no code. The n0 relay is the one explicitly configured relay, never a silent fallback. Private-network HTTPS stays available at home. Why: reach from any browser with no open home port and no server to rent at first; the layered architecture keeps reach a replaceable carrier under one transport-neutral command protocol, so the relay choice can change without rework.
 - **Chronology:** `docs/src/content/docs/agent-context/zz-log/2026-11-19-editing-and-trust-research.mdx`.
 
 ### Owner direct in-place Save is not a visitor approval (2026-11-17, no R-number)

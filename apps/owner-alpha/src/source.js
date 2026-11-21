@@ -4,6 +4,7 @@ import { lstat, open, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
+import { findFrontmatter } from '../../../packages/correction/src/frontmatter.js';
 import { computePolicyRevision, validateOwnerAlphaConfig } from './config.js';
 import { fail, OwnerAlphaError } from './errors.js';
 import { deepFreeze, isPlainObject } from './json.js';
@@ -12,6 +13,7 @@ const execFileAsync = promisify(execFile);
 const COMMIT_RE = /^[0-9a-f]{40}$/u;
 const TRACKED_ENTRY_RE = /^(100644|100755) ([0-9a-f]{40}|[0-9a-f]{64}) 0\t([^\0]+)\0$/u;
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
+const WORKSPACE_UTF8_DECODER = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 
 export const EDIT_SESSION_SCHEMA_VERSION = 1;
 export const EDIT_SESSION_ARTIFACT_TYPE = 'owner-alpha-edit-session';
@@ -292,41 +294,34 @@ async function readSourceFile(root, relativePath, maxSourceBytes) {
   }
 }
 
-function decodeSource(bytes) {
+function decodeSource(bytes, workspacePublication) {
   let text;
   try {
-    text = UTF8_DECODER.decode(bytes);
+    text = (workspacePublication ? WORKSPACE_UTF8_DECODER : UTF8_DECODER).decode(bytes);
   } catch {
     fail('source-invalid-utf8', 'source must be valid UTF-8');
   }
-  if (text.includes('\r')) {
+  if (!workspacePublication && text.includes('\r')) {
     fail('source-not-lf-only', 'owner-alpha browser MVP accepts LF-only Markdown source');
   }
   return text;
 }
 
 export function detectYamlFrontmatterRange(sourceBytes) {
-  const bytes = Buffer.from(sourceBytes);
-  if (bytes.length < 4 || !bytes.subarray(0, 4).equals(Buffer.from('---\n'))) return null;
-
-  let lineStart = 4;
-  while (lineStart <= bytes.length) {
-    const newline = bytes.indexOf(0x0a, lineStart);
-    const lineEnd = newline === -1 ? bytes.length : newline;
-    const line = bytes.subarray(lineStart, lineEnd);
-    if (line.equals(Buffer.from('---')) || line.equals(Buffer.from('...'))) {
-      return deepFreeze({ start: 0, end: newline === -1 ? lineEnd : newline + 1 });
-    }
-    if (newline === -1) break;
-    lineStart = newline + 1;
-  }
-  fail('unterminated-frontmatter', 'source begins with YAML frontmatter but has no closing delimiter');
+  const found = findFrontmatter(sourceBytes instanceof Uint8Array ? sourceBytes : Buffer.from(sourceBytes));
+  // The persisted owner protection span also includes a leading BOM. Keep its
+  // existing shape; policy decisions and diagnostics derive from the exact bytes.
+  return found.kind === 'none' ? null : deepFreeze({ start: 0, end: found.protectionEnd ?? found.range.end });
 }
 
-export async function createEditSession({ config: configInput, renderer, git = defaultGitRunner }) {
+export async function createEditSession({ config: configInput, renderer, git = defaultGitRunner, workspacePublication = false }) {
   const config = validateOwnerAlphaConfig(configInput);
   const request = validateRendererRequest(renderer);
   pathMatchesPolicy(request.relativePath, config.paths);
+  if (workspacePublication && !config.ownerPublication.mappings?.some((mapping) => mapping.source.kind === 'workspace'
+    && mapping.relativePath === request.relativePath && mapping.slug === request.slug)) {
+    fail('publication-session-binding-mismatch', 'workspace edit session requires its configured target');
+  }
   const checkout = await assertCheckoutReady(config, { git });
 
   const trackedOutput = await runGit(git, checkout.root, [
@@ -338,7 +333,7 @@ export async function createEditSession({ config: configInput, renderer, git = d
   ]);
   const tracked = parseTrackedEntry(trackedOutput, request.relativePath);
   const bytes = await readSourceFile(checkout.root, request.relativePath, config.limits.maxSourceBytes);
-  const text = decodeSource(bytes);
+  const text = decodeSource(bytes, workspacePublication);
   const frontmatter = detectYamlFrontmatterRange(bytes);
 
   const headAfterRead = exactCommit(await runGit(git, checkout.root, ['rev-parse', 'HEAD']), 'HEAD');

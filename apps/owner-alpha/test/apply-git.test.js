@@ -281,8 +281,25 @@ describe('exact commit and non-force publication', () => {
       branch: 'main',
       useHooks: true,
     }), 'remote-destination-mismatch');
-    expect(error.details.fetchUrl).toBe(fx.remote);
-    expect(error.details.pushUrl).toBe(alternate);
+    expect(JSON.stringify(error)).not.toContain(alternate);
+    expect((await git(fx.remote, ['rev-parse', 'refs/heads/main'])).stdout).toBe(fx.baseCommit);
+  });
+
+  test('requires a single destination even when the first push URL matches policy', async () => {
+    const fx = await fixture();
+    const application = await applyFx(fx);
+    const committed = await commitFx(fx, application);
+    await git(fx.checkout, ['config', '--add', 'remote.origin.pushurl', fx.remote]);
+    await git(fx.checkout, ['config', '--add', 'remote.origin.pushurl', path.join(fx.root, 'other.git')]);
+    const observed = [];
+    await expectCode(() => pushExactCommit({
+      checkout: fx.checkout, application, commit: committed.commit,
+      remote: 'origin', remoteUrl: fx.remote, branch: 'main',
+    }, {
+      git: (cwd, args, opts) => { observed.push(args[0]); return moduleGit(cwd, args, opts); },
+      mutateGit: () => { throw new Error('unexpected mutation'); },
+    }), 'remote-destination-mismatch');
+    expect(observed).not.toContain('ls-remote');
     expect((await git(fx.remote, ['rev-parse', 'refs/heads/main'])).stdout).toBe(fx.baseCommit);
   });
 
@@ -339,6 +356,8 @@ describe('exact commit and non-force publication', () => {
       application,
     })).toEqual(committed.verification);
 
+    await git(fx.checkout, ['tag', '-a', 'local-marker', '-m', 'not part of the publication']);
+    await git(fx.checkout, ['config', 'push.followTags', 'true']);
     const pushed = await pushExactCommit({
       checkout: fx.checkout,
       application,
@@ -349,6 +368,7 @@ describe('exact commit and non-force publication', () => {
       useHooks: true,
     });
     expect(pushed.status).toBe('pushed');
+    expect((await git(fx.remote, ['for-each-ref', '--format=%(refname)'])).stdout).toBe('refs/heads/main');
     expect(pushed.refspec).toBe(`${committed.commit}:refs/heads/main`);
     expect(pushed.forceUsed).toBe(false);
     expect((await git(fx.remote, ['rev-parse', 'refs/heads/main'])).stdout).toBe(committed.commit);

@@ -1,0 +1,58 @@
+---
+title: Property changes
+description: "How a change to a note's YAML frontmatter properties is judged on every path: by its effect, decided by asking the component that owns that effect, with no list of property names in the core. Adopted by the owner on 2026-11-21 as R25 after an independent review; the shared block finder is the first build step, the rest is not built."
+status: planning
+tags: [architecture, planning, governance]
+---
+
+**Status: adopted in principle, 2026-11-21 (R25). Mostly not built.** It began as a finding from the first live workspace rehearsal: an edit that changed one property was refused, and tools in a writing workspace change properties constantly. A first draft proposed a fixed table of property names. An independent review kept the idea and rejected the table, and the owner adopted the reviewed shape below.
+
+## Where properties sit
+
+The same block of properties means something different at each stage, and a different component owns that meaning.
+
+| Stage | What properties are there | Who owns the meaning | Must never happen |
+|---|---|---|---|
+| Authoring tools | The writer's fields, plus tool bookkeeping | The owner and their tools | Cyberbaser requiring or adding fields |
+| Source of truth | Plain bytes in the note | The owner | Rewriting or reformatting the block |
+| Publication selection | A signal that a note may be public | The selector and the vault's publication settings | A grant arriving inside an edit or proposal |
+| Projection | Checked for readability and path safety, copied unchanged | Projection | Changing source bytes |
+| Renderer | Address, redirects, tag pages, drafts, dates, title | The renderer adapter, which is replaceable | Its key names becoming core rules |
+| Public site | Pages and addresses people rely on | The emitted site (R23) | A published address vanishing |
+| Proposal, review, application | Exact bytes against pinned source; old and new values shown | The proposer has no authority; the owner decides | Carrying a public-set or address change; auto-apply |
+
+## The model
+
+**The core knows a small fixed set of effects and no property names.** A change is judged by its strictest effect.
+
+| Effect | How it is detected | What it needs |
+|---|---|---|
+| **Changes what is public** | Ask the selector: run publication selection on the source before and after, and compare the public set, including assets. | A separate owner selection decision with a preview. Never part of an edit or proposal, for any tier, tool or agent. |
+| **Changes or removes an address** | Ask the address map the same way, before and after. | The owner only, as its own reviewed step showing old and new addresses and the redirect that results. |
+| **Changes something the renderer uses** | The renderer adapter declares which keys it reads and what each affects. | An ordinary exact change, shown in review. Lighter review by tier only where the vault's policy says so. |
+| **Changes a property nobody claims** | No component declares it. | Full owner review, until the vault's policy names it as harmless. |
+| **Breaks the block's structure** | One shared finder and parser: duplicate key, second block, unclosed block, unparseable YAML. | Refused with a readable reason. |
+
+The first two are computed, not looked up, so they also catch what a list of names cannot: a note that becomes public because it gained an address while already marked for publication, or a body edit that pulls a private image into the public set. They apply to body edits as much as to property edits. The owner pipeline already compares the selected set before and after every Save; this model makes that the stated rule on every path and adds addresses.
+
+## Rules
+
+- **Parse to judge, never to write.** The change applied to the vault is still an exact byte operation. Cyberbaser never re-serializes the block.
+- **Cyberbaser never authors a field.** When the owner decides a note becomes public, the change to the note is the owner's own exact edit, shown in the selection preview. Nothing writes a field on the owner's behalf.
+- **One finder, everywhere.** A single shared routine decides where the block starts and ends, used by selection, trust classification, every owner path, proposals and review. A test on 2026-11-21 showed today's routines disagree on a block preceded by a byte-order mark, or whose opening fence ends in a carriage return, space or tab. The publication check still stopped a public-set change in those cases, so nothing was exposed, but the disagreement goes first.
+- **The serious effects cannot be made lighter.** Vault policy may make any effect stricter, and may name unclaimed properties as harmless. It cannot lighten a public-set or address change.
+- **Declared, versioned, conformance-tested.** Renderer declarations and vault policy are part of the pinned policy revision. A shared conformance test checks that any renderer adapter's declaration matches what it actually does.
+- **Fail closed.** If before or after cannot be read, or selection cannot be run on the candidate, the change is refused.
+- **Scope.** This governs changes that pass through Cyberbaser. The owner editing the vault directly with their own editor and Git is outside it, as always.
+
+## Build order
+
+1. The single shared finder, adopted by every reader without changing what the selector selects today. *(Built 2026-11-21; not yet checked against the real vault.)*
+2. Address-map comparison beside the existing selected-set comparison, on every path. *(Built 2026-11-21 on the owner Save checks.)*
+3. Renderer adapter declaration and vault policy, with the conformance test.
+4. Only then, lift the blanket refusal for renderer-used and harmless properties on the owner's own paths; proposals follow.
+5. Review display that shows list and nested values honestly.
+
+## Evidence still to gather
+
+Which properties the real vault uses and how often each changes, as counts only; which keys the workspace's tools write unprompted; whether any real note relies on duplicate keys or YAML the parser rejects.

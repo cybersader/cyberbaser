@@ -11,6 +11,7 @@ import {
   isPlainObject,
 } from './json.js';
 import { validatePrivateNetworkIpv4Host } from './network.js';
+import { validSocketPath } from './publisher/protocol.js';
 
 export const CONFIG_SCHEMA_VERSION = 1;
 export const MAX_CONFIG_BYTES = 256 * 1024;
@@ -472,13 +473,23 @@ function validateOwnerPublication(value) {
     objectAt(value, '$.ownerPublication', ['enabled']);
     return { enabled: false };
   }
-  const input = objectAt(value, '$.ownerPublication', ['enabled', 'mappings']);
+  const input = objectAt(value, '$.ownerPublication', ['enabled', 'mappings',
+    ...(Object.hasOwn(value, 'retiredList') ? ['retiredList'] : []),
+  ]);
+  const retiredList = Object.hasOwn(input, 'retiredList') ? {
+    file: absoluteCheckout(objectAt(input.retiredList, '$.ownerPublication.retiredList', ['file']).file,
+      '$.ownerPublication.retiredList.file'),
+  } : undefined;
   if (!Array.isArray(input.mappings) || input.mappings.length !== 1) {
     fail('invalid-config', '$.ownerPublication.mappings must contain exactly one existing-page mapping');
   }
   const location = '$.ownerPublication.mappings[0]';
   const mapping = objectAt(input.mappings[0], location, ['id', 'source', 'relativePath', 'slug']);
-  const source = objectAt(mapping.source, `${location}.source`, ['identity', 'path']);
+  const hasKind = isPlainObject(mapping.source) && Object.hasOwn(mapping.source, 'kind');
+  const source = objectAt(mapping.source, `${location}.source`, ['identity', 'path', ...(hasKind ? ['kind'] : [])]);
+  if (hasKind && source.kind !== 'workspace') {
+    fail('invalid-config', `${location}.source.kind must be omitted or "workspace"`);
+  }
   const relativePath = publicationPath(mapping.relativePath, `${location}.relativePath`);
   if (path.posix.extname(relativePath) !== '.md') {
     fail('invalid-config-path', `${location}.relativePath must identify one lowercase .md page`);
@@ -490,10 +501,12 @@ function validateOwnerPublication(value) {
       source: {
         identity: publicationId(source.identity, `${location}.source.identity`),
         path: publicationPath(source.path, `${location}.source.path`),
+        ...(hasKind ? { kind: source.kind } : {}),
       },
       relativePath,
       slug: publicationPath(mapping.slug, `${location}.slug`),
     }],
+    ...(retiredList !== undefined ? { retiredList } : {}),
   };
 }
 
@@ -737,6 +750,14 @@ export function suggestionsEnabled(config) {
   return config.suggestions.form.enabled || config.suggestions.forge.enabled;
 }
 
+function validatePublisher(value) {
+  const { socketPath } = objectAt(value, '$.publisher', ['socketPath']);
+  if (!validSocketPath(socketPath)) {
+    fail('invalid-config-path', '$.publisher.socketPath must be one normalized absolute Unix socket path');
+  }
+  return { socketPath };
+}
+
 export function validateOwnerAlphaConfig(value) {
   assertNoCredentialMaterial(value);
   const input = objectAt(value, '$', [
@@ -754,6 +775,7 @@ export function validateOwnerAlphaConfig(value) {
     'git',
     ...(isPlainObject(value) && Object.hasOwn(value, 'suggestions') ? ['suggestions'] : []),
     ...(isPlainObject(value) && Object.hasOwn(value, 'ownerPublication') ? ['ownerPublication'] : []),
+    ...(isPlainObject(value) && Object.hasOwn(value, 'publisher') ? ['publisher'] : []),
   ]);
   if (input.schemaVersion !== CONFIG_SCHEMA_VERSION) {
     fail('unsupported-config-version', `schemaVersion must be ${CONFIG_SCHEMA_VERSION}`);
@@ -787,6 +809,8 @@ export function validateOwnerAlphaConfig(value) {
     git: validateGit(input.git),
     suggestions: validateSuggestions(input.suggestions, { listen, proposalReview, repository }),
     ownerPublication: validateOwnerPublication(input.ownerPublication),
+    // Local execution routing, not a change to the approved publication policy.
+    ...(Object.hasOwn(input, 'publisher') ? { publisher: validatePublisher(input.publisher) } : {}),
   };
   return deepFreeze(normalized);
 }

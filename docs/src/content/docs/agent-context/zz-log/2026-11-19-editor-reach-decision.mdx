@@ -1,0 +1,8 @@
+---
+title: Editor reach decided, Iroh on n0's public relay first
+description: "The owner chose Iroh as the editor carrier, starting on n0's public relay with an owner-run relay later as a configuration change; accepted costs are n0 rate limits, no uptime promise and n0 seeing connection metadata."
+status: log
+tags: [architecture, security, planning]
+---
+
+After the Iroh carrier spike, the owner asked whether n0's public relays could be used instead of running one. The answer given: yes, without weakening security, because the relay only forwards end-to-end encrypted traffic and the passkey assertion is bound to the Iroh connection, so a relay can block or delay editing but cannot read or forge it. The costs are reliability (n0 documents public relays as development and testing infrastructure, rate-limited, with no uptime promise) and metadata (n0 sees the owner's home IP, the browser's IP, timing and volume). The owner accepted. This closes the last open decision in the [editing and trust roadmap](/cyberbaser/design/editing-and-trust-roadmap/). The relay URL is configuration; switching to a self-hosted `iroh-relay` or a dedicated n0 relay needs no code change. The n0 relay is the one configured relay, not a silent fallback, which keeps the spike's no-fallback rule. Nothing was built or deployed; steps 2 to 6 stay paused until the owner resumes.

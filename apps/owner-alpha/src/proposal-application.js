@@ -456,7 +456,7 @@ export function deriveProposalApplication({ config: configInput, input: inputVal
   try {
     candidate = applyEditorOperation(session, operation);
   } catch (error) {
-    if (error instanceof OwnerAlphaError && error.code === 'frontmatter-edit-rejected') return unapplicable('frontmatter-change');
+    if (error instanceof OwnerAlphaError && error.code === 'frontmatter-edit-rejected') return unapplicable('frontmatter-change', error.details);
     if (error instanceof OwnerAlphaError && ['candidate-not-lf-only', 'source-not-lf-only'].includes(error.code)) {
       return unapplicable('source-not-lf-only', { code: error.code });
     }

@@ -1,4 +1,5 @@
 import { digestBytes } from '@cyberbaser/proposal-queue';
+import { findFrontmatterInText } from '../../../packages/correction/src/frontmatter.js';
 import { validateChangeSetCorrection } from './change-set-operation.js';
 import { randomUUID } from 'node:crypto';
 import { applyAcceptedOperation } from './apply.js';
@@ -26,6 +27,7 @@ import {
 import { canonicalJson, deepFreeze, isPlainObject } from './json.js';
 import { confirmLivePage } from './live-confirm.js';
 import { applyEditorOperation, deriveEditorOperation } from './operation.js';
+import { requestPublication } from './publisher/client.js';
 import {
   DEFAULT_OWNER_ALPHA_PROJECT_ROOT,
   rebuildOwnerSite,
@@ -399,6 +401,45 @@ async function reconcileCommit(input, application, config, dependencies) {
   });
 }
 
+function assertPushedReceipt(pushed, committed, config) {
+  if (!['pushed', 'already-pushed'].includes(pushed?.status) || pushed.commit !== committed.commit
+    || pushed.remoteRef !== committed.commit || pushed.branch !== config.repository.branch
+    || pushed.remote !== config.repository.remote.name) {
+    fail('publisher-receipt-mismatch', 'push evidence does not match the bound commit and destination');
+  }
+}
+
+// The executor accepts a job ID, never a destination, checkout, commit or candidate.
+// The pipeline holds the mutation lock; the IPC publisher must not acquire it again.
+export function createJobPublisher({ config, context, pushCommit = pushExactCommit, bindCommitMessage = false }) {
+  const options = artifactOptions(config);
+  const policyRevision = computePolicyRevision(config);
+  return async function publishJob(id) {
+    const jobId = validateJobId(id);
+    const paths = pipelineArtifactPaths(jobId);
+    const state = await loadDurableJob(context, jobId, options);
+    if (state.state !== 'pushing' || state.policyRevision !== policyRevision || !config.git.autoPush || !config.git.autoCommit) {
+      fail('publisher-job-not-admitted', 'publication requires a pushing job bound to the current automatic publication policy');
+    }
+    const durable = await loadRecord(context, paths.sourceApplied, 'owner-alpha-source-applied-effect', jobId, options);
+    const committed = await loadRecord(context, paths.committed, 'owner-alpha-committed-effect', jobId, options);
+    if (durable === null || committed === null) {
+      fail('publication-evidence-missing', 'push phase requires durable source and commit evidence');
+    }
+    const application = deserializeApplication(durable);
+    const prior = await loadRecord(context, paths.pushed, 'owner-alpha-pushed-effect', jobId, options);
+    const pushed = prior ?? await pushCommit({
+      checkout: config.repository.checkout, application, commit: committed.commit,
+      remote: config.repository.remote.name, remoteUrl: config.repository.remote.url,
+      branch: config.repository.branch, useHooks: config.git.useHooks,
+      ...(bindCommitMessage ? { expectedMessage: committed.message } : {}),
+    });
+    assertPushedReceipt(pushed, committed, config);
+    if (prior === null) await saveRecord(context, paths.pushed, 'owner-alpha-pushed-effect', jobId, pushed, options);
+    return prior === null ? pushed.status : 'already-pushed';
+  };
+}
+
 function pipelineSummary(state, paths) {
   return deepFreeze({
     jobId: state.jobId,
@@ -447,7 +488,9 @@ async function executeLocked(input, config, context, dependencies) {
   let checks = null;
   let application = null;
   let committed = null;
-  let pushed = null;
+  const publishJob = config.publisher ? null : createJobPublisher({
+    config, context, pushCommit: (request) => dependencies.pushExactCommit(request, input.gitDependencies),
+  });
   let runBinding = null;
   let enteredApplying = false;
 
@@ -610,31 +653,19 @@ async function executeLocked(input, config, context, dependencies) {
           break;
         }
         case 'pushing': {
-          const durableApplication = await loadRecord(context, paths.sourceApplied, 'owner-alpha-source-applied-effect', jobId, options);
-          committed = await loadRecord(context, paths.committed, 'owner-alpha-committed-effect', jobId, options);
-          if (durableApplication === null || committed === null) {
-            fail('publication-evidence-missing', 'push phase requires durable source and commit evidence');
-          }
-          application = deserializeApplication(durableApplication);
-          pushed = await loadRecord(context, paths.pushed, 'owner-alpha-pushed-effect', jobId, options);
-          if (pushed === null) {
-            pushed = await dependencies.pushExactCommit({
-              checkout: config.repository.checkout,
-              application,
-              commit: committed.commit,
-              remote: config.repository.remote.name,
-              remoteUrl: config.repository.remote.url,
-              branch: config.repository.branch,
-              useHooks: config.git.useHooks,
-            }, input.gitDependencies);
-            pushed = await saveRecord(
-              context,
-              paths.pushed,
-              'owner-alpha-pushed-effect',
+          if (config.publisher) {
+            await requestPublication({
+              socketPath: config.publisher.socketPath,
               jobId,
-              pushed,
-              options,
-            );
+              timeoutMs: config.limits.networkTimeoutMs,
+            });
+            const receipt = await loadRecord(context, paths.pushed, 'owner-alpha-pushed-effect', jobId, options);
+            if (receipt === null) fail('pushed-evidence-missing', 'publisher did not persist an exact push receipt');
+            const boundCommit = await loadRecord(context, paths.committed, 'owner-alpha-committed-effect', jobId, options);
+            if (boundCommit === null) fail('committed-evidence-missing', 'push phase has no durable exact commit evidence');
+            assertPushedReceipt(receipt, boundCommit, config);
+          } else {
+            await publishJob(jobId);
           }
           state = await transition(context, state, 'pushed', 'exact-push-durable', dependencies);
           break;
@@ -822,8 +853,8 @@ export async function getOwnerAlphaJob({ config: configInput, projectRoot, conte
       : { type: session.origin?.type === 'owner-publication' ? 'owner-publication' : 'owner-edit', relativePath: session.relativePath };
   }
   const filename = session?.relativePath?.split('/').at(-1)?.replace(/\.md$/u, '');
-  const frontmatter = session?.source?.text?.match(/^---\r?\n([\s\S]*?)^---\r?$/mu)?.[1];
-  const titleLine = frontmatter?.match(/^title:[ \t]*([^\r\n]+)$/mu)?.[1];
+  const found = findFrontmatterInText(session?.source?.text ?? '');
+  const titleLine = found.yamlText?.match(/^title:[ \t]*([^\r\n]+)$/mu)?.[1];
   const title = titleLine?.trim().replace(/^(["'])(.*)\1$/u, '$2') || filename;
   const page = session && typeof session.slug === 'string' ? { title: title || 'Your page', slug: session.slug } : null;
   return deepFreeze({ ...pipelineSummary(state, paths), origin, page });

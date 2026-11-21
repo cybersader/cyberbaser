@@ -1,5 +1,6 @@
 import { applyOwnerChangeSet, proveChangeSetOutsideBytes } from './change-set-operation.js';
 import { createHash } from 'node:crypto';
+import { findFrontmatter } from '../../../packages/correction/src/frontmatter.js';
 import {
   applyCorrection,
   CorrectionError,
@@ -35,7 +36,7 @@ function exactSessionString(value, label) {
   return value;
 }
 
-export function validateEditSession(session) {
+export function validateEditSession(session, { workspacePublication = false } = {}) {
   if (!isPlainObject(session)
     || session.schemaVersion !== EDIT_SESSION_SCHEMA_VERSION
     || session.artifactType !== EDIT_SESSION_ARTIFACT_TYPE
@@ -64,7 +65,7 @@ export function validateEditSession(session) {
     || Buffer.from(session.source.text, 'utf8').toString('base64') !== session.source.bytesBase64) {
     fail('edit-session-source-mismatch', 'session source text, bytes, length, and digest must identify one exact base');
   }
-  if (session.source.text.includes('\r')) {
+  if (!workspacePublication && session.source.text.includes('\r')) {
     fail('source-not-lf-only', 'owner-alpha browser MVP accepts LF-only Markdown source');
   }
   const detected = detectYamlFrontmatterRange(base);
@@ -138,18 +139,21 @@ function assertOperationBinding(session, operation) {
 }
 
 function assertFrontmatterUnchanged(base, candidate, correction, frontmatter) {
+  const refuse = (message, bytes = base) => fail('frontmatter-edit-rejected', message, {
+    frontmatterKind: findFrontmatter(bytes).kind === 'block' ? 'properties' : 'fence-like',
+  });
   if (frontmatter && correction.start < frontmatter.end) {
-    fail('frontmatter-edit-rejected', 'owner-alpha browser edits must not intersect YAML frontmatter');
+    refuse('owner-alpha browser edits must not intersect YAML frontmatter');
   }
 
   const candidateFrontmatter = detectYamlFrontmatterRange(candidate);
   if (JSON.stringify(candidateFrontmatter) !== JSON.stringify(frontmatter)) {
-    fail('frontmatter-edit-rejected', 'owner-alpha browser edits must not add, remove, or resize YAML frontmatter');
+    refuse('owner-alpha browser edits must not add, remove, or resize YAML frontmatter', frontmatter ? base : candidate);
   }
   if (frontmatter
     && !candidate.subarray(frontmatter.start, frontmatter.end)
       .equals(base.subarray(frontmatter.start, frontmatter.end))) {
-    fail('frontmatter-edit-rejected', 'owner-alpha browser edits must preserve exact YAML frontmatter bytes');
+    refuse('owner-alpha browser edits must preserve exact YAML frontmatter bytes');
   }
 }
 
@@ -169,14 +173,14 @@ function assertLfOnlyCandidate(candidate) {
   }
 }
 
-export function deriveEditorOperation({ session, editedText, config: configInput }) {
+export function deriveEditorOperation({ session, editedText, config: configInput, workspacePublication = false }) {
   const config = validateOwnerAlphaConfig(configInput);
-  const { base, frontmatter } = validateEditSession(session);
+  const { base, frontmatter } = validateEditSession(session, { workspacePublication });
   if (computePolicyRevision(config) !== session.policyRevision) {
     fail('edit-session-policy-mismatch', 'current config policy revision differs from the edit session');
   }
   if (typeof editedText !== 'string') fail('invalid-editor-value', 'editedText must be a string');
-  if (editedText.includes('\r')) {
+  if (!workspacePublication && editedText.includes('\r')) {
     fail('editor-value-not-lf-only', 'owner-alpha browser MVP accepts LF-only edited Markdown');
   }
 
@@ -200,7 +204,7 @@ export function deriveEditorOperation({ session, editedText, config: configInput
   if (!candidate.equals(editedBytes)) {
     fail('candidate-editor-mismatch', 'derived exact operation did not reproduce the editor value');
   }
-  assertLfOnlyCandidate(candidate);
+  if (!workspacePublication) assertLfOnlyCandidate(candidate);
   assertFrontmatterUnchanged(base, candidate, correction, frontmatter);
   proveOutsideBytesUnchanged(base, candidate, correction);
 
@@ -239,8 +243,11 @@ export function deriveEditorOperation({ session, editedText, config: configInput
   });
 }
 
-export function applyEditorOperation(session, operation) {
-  const { base, frontmatter } = validateEditSession(session);
+export function applyEditorOperation(session, operation, options = {}) {
+  // The pipeline independently validates this immutable owner authorization before effects.
+  const workspacePublication = operation?.operationType === 'offset' && (options.workspacePublication === true
+    || (session?.origin?.type === 'owner-publication' && session.origin.reference?.mapping?.source?.kind === 'workspace'));
+  const { base, frontmatter } = validateEditSession(session, { workspacePublication });
   assertOperationBinding(session, operation);
   if (operation.schemaVersion === 2) {
     if (!['approved-proposal', 'owner-direct'].includes(session.origin?.type)) fail('invalid-source-operation', 'multi-change operations require explicit owner provenance');
@@ -257,7 +264,7 @@ export function applyEditorOperation(session, operation) {
   } catch (error) {
     rethrowCorrection(error);
   }
-  assertLfOnlyCandidate(candidate);
+  if (!workspacePublication) assertLfOnlyCandidate(candidate);
   assertFrontmatterUnchanged(base, candidate, correction, frontmatter);
   proveOutsideBytesUnchanged(base, candidate, correction);
   return candidate;
