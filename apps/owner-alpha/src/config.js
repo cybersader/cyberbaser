@@ -262,7 +262,9 @@ function validateRepository(value, provider) {
 }
 
 function validateOwner(value, repository, provider) {
-  const input = objectAt(value, '$.owner', ['identity', 'allowedTrustRoutes']);
+  const optional = isPlainObject(value) && Object.hasOwn(value, 'allowProperties');
+  const input = objectAt(value, '$.owner', ['identity', 'allowedTrustRoutes', ...(optional ? ['allowProperties'] : [])]);
+  const allowProperties = optional && requiredBoolean(input.allowProperties, '$.owner.allowProperties');
   const maxIdentityLength = provider === 'github-actions' ? 39 : 100;
   const identity = exactString(input.identity, '$.owner.identity', { max: maxIdentityLength });
   if (identity !== repository.identity.owner) {
@@ -284,7 +286,7 @@ function validateOwner(value, repository, provider) {
   if (!allowedTrustRoutes.includes('auto-merge')) {
     fail('invalid-trust-policy', '$.owner.allowedTrustRoutes must include "auto-merge"');
   }
-  return { identity, allowedTrustRoutes };
+  return { identity, allowedTrustRoutes, ...(allowProperties ? { allowProperties } : {}) };
 }
 
 function validateGithubLive(value, repository) {

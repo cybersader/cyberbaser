@@ -3,7 +3,7 @@ import { findFrontmatterInText } from '../../../packages/correction/src/frontmat
 import { computePolicyRevision, validateOwnerAlphaConfig } from './config.js';
 import { fail } from './errors.js';
 import { canonicalJson, deepFreeze, isPlainObject } from './json.js';
-import { applyEditorOperation, deriveEditorOperation, validateEditSession } from './operation.js';
+import { applyEditorOperation, deriveEditorOperation, hasAdjacentFrontmatter, validateEditSession } from './operation.js';
 import {
   createEditSession as defaultCreateEditSession, EDIT_SESSION_ARTIFACT_TYPE,
   EDIT_SESSION_SCHEMA_VERSION, liveUrlForSlug, pathMatchesPolicy,
@@ -226,16 +226,7 @@ export function assertFoldedWorkspaceNote(foldedBase, foldedText) {
   const leading = findFrontmatterInText(foldedText);
   if (leading.kind === 'none') return;
   const invalid = () => fail('workspace-properties-invalid', 'workspace note has invalid frontmatter structure');
-  if (leading.reason === 'unclosed') invalid();
-  // The old owner closer may differ from the selector's closer; continue to
-  // check for a duplicate at either boundary without classifying it as YAML.
-  const ends = new Set([leading.textRange.end, leading.legacyTextEnd ?? leading.textRange.end]);
-  for (const end of ends) {
-    const rest = foldedText.slice(end).replace(/^(?:[ \t]*\n)*/u, '');
-    const second = findFrontmatterInText(rest);
-    // A standalone thematic break is not a complete second block.
-    if (second.kind !== 'none' && second.reason !== 'unclosed') invalid();
-  }
+  if (leading.reason === 'unclosed' || hasAdjacentFrontmatter(foldedText, leading)) invalid();
 }
 
 function linesWithTerminators(text) {
@@ -421,8 +412,8 @@ export async function prepareOwnerPublication(input) {
   const { config, mapping, policyRevision, note, session, workspace } = await capturePublicationInputs(input);
   const base = Buffer.from(session.source.bytesBase64, 'base64');
   const text = workspace ? spellWorkspaceCandidate(base, note.text) : note.text;
-  const operation = deriveEditorOperation({ session, editedText: text, config, workspacePublication: workspace });
-  const bytes = applyEditorOperation(session, operation, { workspacePublication: workspace });
+  const operation = deriveEditorOperation({ session, editedText: text, config, workspacePublication: workspace, ownerPublication: true });
+  const bytes = applyEditorOperation(session, operation, { workspacePublication: workspace, allowProperties: workspace && config.owner.allowProperties });
   const digest = publicationDigest(bytes);
   const foldedCandidate = workspace ? foldWorkspaceText(bytes) : undefined;
   if (!bytes.equals(Buffer.from(text)) || (workspace ? foldedCandidate !== foldWorkspaceText(note.text) : digest !== note.digest)) {

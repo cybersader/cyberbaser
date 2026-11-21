@@ -25,7 +25,7 @@ import {
   validateJobId,
 } from './job-state.js';
 import { canonicalJson, deepFreeze, isPlainObject } from './json.js';
-import { confirmLivePage } from './live-confirm.js';
+import { confirmLivePage, hasExactSuccessfulDeployment, hasStableLiveProof, isStableWitness } from './live-confirm.js';
 import { applyEditorOperation, deriveEditorOperation } from './operation.js';
 import { requestPublication } from './publisher/client.js';
 import {
@@ -257,6 +257,13 @@ async function loadRecord(context, relativePath, artifactType, jobId, options) {
   return value === null ? null : artifactResult(value, artifactType, jobId);
 }
 
+async function readStableDeploymentCommit(context, paths, jobId, options) {
+  const commit = (await loadRecord(context, paths.committed, 'owner-alpha-committed-effect', jobId, options))?.commit;
+  const binding = await loadRecord(context, paths.runBound, 'owner-alpha-run-bound-effect', jobId, options);
+  const deployment = await loadRecord(context, paths.deployment, 'owner-alpha-deployment-result', jobId, options);
+  return hasExactSuccessfulDeployment(commit, binding, deployment) ? commit : null;
+}
+
 async function saveRecord(context, relativePath, artifactType, jobId, result, options) {
   const record = artifactRecord(artifactType, jobId, result);
   const persisted = await createOrMatch(context, relativePath, record, options);
@@ -374,7 +381,7 @@ async function boundInputs(input, config, context, paths, dependencies, options)
     fail('source-operation-artifact-mismatch', 'supplied source operation differs from the durable immutable operation');
   }
   operation = deepFreeze(operation);
-  const candidateBytes = dependencies.applyEditorOperation(session, operation);
+  const candidateBytes = dependencies.applyEditorOperation(session, operation, { allowProperties: config.owner.allowProperties });
   return { session, operation, candidateBytes };
 }
 
@@ -740,29 +747,34 @@ async function executeLocked(input, config, context, dependencies) {
           bindings ??= await boundInputs(input, config, context, paths, dependencies, options);
           checks ??= await loadRecord(context, paths.preApplyChecks, 'owner-alpha-pre-apply-check-result', jobId, options);
           if (checks === null) fail('pre-apply-evidence-missing', 'live verification requires durable rendered witnesses');
+          const witnesses = checks.rendered?.witnesses;
+          const stable = witnesses?.kind === 'no-visible-change';
           let live = await loadRecord(context, paths.live, 'owner-alpha-live-result', jobId, options);
+          const applicationSha = stable ? await readStableDeploymentCommit(context, paths, jobId, options) : null;
+          if (stable && applicationSha === null) {
+            fail('deployment-evidence-missing', 'live verification requires a successful deployment of the exact commit');
+          }
+          const proof = { pageUrl: bindings.session.liveUrl, commit: applicationSha, witness: witnesses };
           if (live === null) {
-            const witnesses = checks.rendered?.witnesses;
-            if (typeof witnesses?.old !== 'string' || typeof witnesses?.new !== 'string') {
-              fail('live-witness-evidence-missing', 'pre-apply checks did not persist exact old/new live witnesses');
+            if (stable ? !isStableWitness(witnesses) : typeof witnesses?.old !== 'string' || typeof witnesses?.new !== 'string') {
+              fail('live-witness-evidence-missing', 'pre-apply checks did not persist a valid live witness');
             }
             live = await dependencies.confirmLivePage({
               config,
               pageUrl: bindings.session.liveUrl,
-              oldWitness: witnesses.old,
-              newWitness: witnesses.new,
+              ...(stable ? { stableWitness: witnesses.stable } : { oldWitness: witnesses.old, newWitness: witnesses.new }),
               signal: input.signal,
             }, input.liveDependencies);
-            live = await saveRecord(
-              context,
-              paths.live,
-              'owner-alpha-live-result',
-              jobId,
-              live,
-              options,
-            );
+            if (stable) {
+              live = { ...live, applicationSha, visibleTextDigest: witnesses.digest };
+              if (!hasStableLiveProof(live, proof)) fail('live-witness-evidence-missing', 'live page did not establish the stable witness');
+            }
+            live = await saveRecord(context, paths.live, 'owner-alpha-live-result', jobId, live, options);
           }
-          state = await transition(context, state, 'live-confirmed', 'live-visible-witness-confirmed', dependencies);
+          if (stable && !hasStableLiveProof(live, proof)) {
+            fail('live-witness-evidence-missing', 'stored live result does not match the stable witness and deployed commit');
+          }
+          state = await transition(context, state, 'live-confirmed', stable ? 'live-stable-witness-confirmed' : 'live-visible-witness-confirmed', dependencies);
           break;
         }
         case 'live-confirmed':
@@ -857,7 +869,18 @@ export async function getOwnerAlphaJob({ config: configInput, projectRoot, conte
   const titleLine = found.yamlText?.match(/^title:[ \t]*([^\r\n]+)$/mu)?.[1];
   const title = titleLine?.trim().replace(/^(["'])(.*)\1$/u, '$2') || filename;
   const page = session && typeof session.slug === 'string' ? { title: title || 'Your page', slug: session.slug } : null;
-  return deepFreeze({ ...pipelineSummary(state, paths), origin, page });
+  const options = artifactOptions(config);
+  const live = state.history.some(({ to }) => to === 'live-confirmed')
+    ? await loadRecord(store, paths.live, 'owner-alpha-live-result', jobId, options) : null;
+  let liveKind = null;
+  if (live?.kind === 'no-visible-change') {
+    const commit = await readStableDeploymentCommit(store, paths, jobId, options);
+    const checks = await loadRecord(store, paths.preApplyChecks, 'owner-alpha-pre-apply-check-result', jobId, options);
+    if (commit && hasStableLiveProof(live, { pageUrl: session?.liveUrl, commit, witness: checks?.rendered?.witnesses })) liveKind = live.kind;
+  } else if (live?.oldWitnessAbsent === true && live.newWitnessUnique === true) {
+    liveKind = 'text';
+  }
+  return deepFreeze({ ...pipelineSummary(state, paths), origin, page, ...(liveKind && { liveKind }) });
 }
 
 /** Narrow server adapter: durable acceptance precedes the automatic effect pipeline. */

@@ -521,7 +521,7 @@ async function validateReadDraft(draft, config, draftId, mapping, policyRevision
   const { source } = reference;
   assertSourceReference(source, mapping, Number.MAX_SAFE_INTEGER);
   const workspace = mapping.source.kind === 'workspace';
-  const bytes = applyEditorOperation(session, operation, { workspacePublication: workspace });
+  const bytes = applyEditorOperation(session, operation, { workspacePublication: workspace, allowProperties: workspace });
   if (workspace) {
     const foldedBase = assertWorkspaceDeliveryRoundTrip(Buffer.from(session.source.bytesBase64, 'base64'));
     const foldedCandidate = assertWorkspaceDeliveryRoundTrip(bytes);
@@ -547,6 +547,7 @@ async function projectReadDraft({ context, config, maximum, policyRevision, read
   let jobId = null;
   let state = 'needs-attention';
   let liveVerified = false;
+  let liveKind;
   let liveOrder = null;
   let publishedCommit = null;
   try {
@@ -562,6 +563,7 @@ async function projectReadDraft({ context, config, maximum, policyRevision, read
       state = PUBLICATION_JOB_STATES[job.state];
       if (evidence.confirmedAt !== null && !liveVerified) state = 'not-verified';
       if (liveVerified) {
+        liveKind = evidence.liveKind ?? 'text';
         liveOrder = [evidence.confirmedAt, evidence.createdAt, job.authorizedAt, draft.draftId];
         const effect = evidence.committed;
         const commit = effect?.status === 'committed' && effect.commit === effect.verification?.commit
@@ -579,7 +581,7 @@ async function projectReadDraft({ context, config, maximum, policyRevision, read
   } catch { /* Partial or invalid job evidence can never assert live or prepared. */ }
   return { receipt: { draftId: draft.draftId, mappingId: mapping.id, version: source.version,
     ...digestProjection(source), attribution: validatePublicationAttribution(source.attribution ?? 'unknown'),
-    jobId, state, liveVerified }, liveOrder, publishedCommit };
+    jobId, state, liveVerified, ...(liveVerified && { liveKind }) }, liveOrder, publishedCommit };
 }
 
 // Sort only immutable timestamps; confirmation time, not preparation time or
@@ -643,7 +645,7 @@ export async function readOwnerPublicationStatus({ context: contextInput, config
   let latestOrder = null;
   let liveOrder = null;
   const visit = (draft, result) => {
-    const { version, attribution, jobId, state } = result.receipt;
+    const { version, attribution, jobId, state, liveKind } = result.receipt;
     const digest = digestProjection(draft.prepared.reference.source);
     const order = [draft.createdAt, draft.draftId];
     if (isLater(order, latestOrder)) {
@@ -651,7 +653,7 @@ export async function readOwnerPublicationStatus({ context: contextInput, config
       latestOrder = order;
     }
     if (result.liveOrder !== null && isLater(result.liveOrder, liveOrder)) {
-      live = { version, ...digest, attribution, jobId, verified: true };
+      live = { version, ...digest, attribution, jobId, verified: true, liveKind };
       liveOrder = result.liveOrder;
     }
   };

@@ -244,12 +244,15 @@ ${publicationEnabled ? '<a href="/owner/publication">Publish workspace page</a>'
   });
 }
 
+const NO_VISIBLE_CHANGE_COPY = 'Published, nothing visible changed';
+
 function publicJob(job) {
   const result = {
     jobId: job.jobId,
     state: job.state,
     revision: job.revision,
   };
+  if (job.liveKind === 'no-visible-change') result.liveCopy = NO_VISIBLE_CHANGE_COPY;
   if (typeof job.createdAt === 'string') result.createdAt = job.createdAt;
   if (typeof job.updatedAt === 'string') result.updatedAt = job.updatedAt;
   if (job.recovery && typeof job.recovery === 'object') {
@@ -329,7 +332,7 @@ function jobPage(job, readerOrigin) {
   const stopped = Object.hasOwn(SAVE_STOPS, safe.state) && !done && safe.state !== 'live-verification-failed';
   const current = SAVE_STEPS.findIndex(step => step.states.includes(safe.state));
   const active = current === -1 ? SAVE_STOPS[safe.state]?.step ?? 0 : current;
-  const copy = SAVE_STOPS[safe.state]?.copy ?? SAVE_STEPS[active].label;
+  const copy = safe.liveCopy ?? SAVE_STOPS[safe.state]?.copy ?? SAVE_STEPS[active].label;
   const title = job.page?.title || safe.origin?.relativePath?.split('/').at(-1)?.replace(/\.md$/u, '') || 'Your page';
   const slug = job.page?.slug ?? safe.origin?.relativePath?.replace(/\.md$/u, '');
   const view = slug ? liveUrlForSlug(`${readerOrigin}/cyberbase/`, slug) : `${readerOrigin}/cyberbase/`;
@@ -862,13 +865,14 @@ function publicationJobPage(safe) {
   const uncertain = ['failed', 'manual-intervention', 'cancelled'].includes(safe.state);
   const steps = JOB_STEPS.map((step, index) => {
     const status = uncertain ? 'unknown' : done || index < current ? 'done' : index === current ? (stopped ? 'stopped' : 'current') : 'pending';
+    const stepCopy = step.key === 'live' && safe.liveCopy ? safe.liveCopy : step.label;
     const label = { done: 'Done', current: 'In progress', stopped: 'Stopped', pending: 'Waiting', unknown: 'See record' }[status];
-    return `<li class="job-step job-step-${status}" data-step="${step.key}" data-status="${status}"><span>${escapeHtml(step.label)}</span><span class="publication-step-status">${label}</span></li>`;
+    return `<li class="job-step job-step-${status}" data-step="${step.key}" data-status="${status}"><span>${escapeHtml(stepCopy)}</span><span class="publication-step-status">${label}</span></li>`;
   }).join('');
   return pageShell({ title: `${title} · Publication`, bodyClass: 'publication-page', script: '/owner/assets/publication.js',
     body: `${publicationHeader(true)}<main class="publication-shell publication-job" id="owner-job" data-job-id="${escapeHtml(safe.jobId)}" data-stages="${escapeHtml(JSON.stringify(stages))}">
 <header class="publication-heading"><h1>${escapeHtml(title)}</h1></header>
-<section aria-label="Publication progress" aria-live="polite"><h2 id="job-stage">${escapeHtml(PUBLICATION_STOPS[safe.state]?.copy ?? stages.activeCopy)}</h2>
+<section aria-label="Publication progress" aria-live="polite"><h2 id="job-stage">${escapeHtml(safe.liveCopy ?? PUBLICATION_STOPS[safe.state]?.copy ?? stages.activeCopy)}</h2>
 <p class="publication-explanation" id="publication-job-note" data-complete-copy="The reviewed version completed its publication checks.">${done ? 'The reviewed version completed its publication checks.' : 'This runs in the background. You can close this page and return to follow its progress.'}</p>
 <ol class="job-steps" id="job-steps">${steps}</ol><p id="job-error" class="error" role="alert">${safe.failure ? `Stopped (${escapeHtml(safe.failure.code)}).` : ''}</p></section>
 <details class="technical-evidence"><summary>Details for the record</summary><div class="publication-record">

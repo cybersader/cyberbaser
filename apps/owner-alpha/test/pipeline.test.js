@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -19,7 +19,8 @@ import {
   validateOwnerAlphaConfig,
 } from '../src/index.js';
 
-import { createJobPublisher } from '../src/pipeline.js';
+import { createJobPublisher, getOwnerAlphaJob } from '../src/pipeline.js';
+import { resolveStorePath } from '../src/store.js';
 
 const APP_ROOT = path.resolve(import.meta.dir, '..');
 const EXAMPLE = path.join(APP_ROOT, 'owner-alpha.example.json');
@@ -42,13 +43,14 @@ async function command(args, cwd) {
   if (exitCode !== 0) throw new Error(`${args.join(' ')} failed: ${stderr || stdout}`);
 }
 
-async function fixture({ provider = 'github-actions' } = {}) {
+async function fixture({ provider = 'github-actions', allowProperties = false } = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'owner-alpha-pipeline-'));
   cleanup.push(root);
   await command(['git', 'init', '-q'], root);
   await writeFile(path.join(root, '.gitignore'), '.workspace/\n', 'utf8');
   const raw = JSON.parse(await readFile(EXAMPLE, 'utf8'));
   raw.repository.checkout = root;
+  if (allowProperties) raw.owner.allowProperties = true;
   if (provider === 'forgejo-actions') {
     raw.repository.remote.url = 'https://forgejo.example/owner/repository.git';
     raw.owner.identity = 'owner';
@@ -312,7 +314,83 @@ describe('owner-alpha integration pipeline', () => {
     const applied = await readJsonArtifact(data.context, paths.sourceApplied);
     expect(applied.result.candidateBytesBase64).toBe(bound.candidateBytes.toString('base64'));
     expect(applied.result).not.toHaveProperty('candidateBytes');
+    expect(await getOwnerAlphaJob({ ...data, jobId: 'OA-HAPPY' })).toHaveProperty('liveKind', 'text');
   });
+
+  for (const [name, provider, code] of [
+    ['GitHub success', 'github-actions'],
+    ['Forgejo success', 'forgejo-actions'],
+    ['missing deployment', 'github-actions', 'deployment-evidence-missing'],
+    ['other commit', 'github-actions', 'deployment-evidence-missing'],
+    ['other attempt', 'github-actions', 'deployment-evidence-missing'],
+    ['missing stable text', 'github-actions', 'live-confirm-timeout'],
+    ['unreachable page', 'github-actions', 'live-confirm-timeout'],
+  ]) {
+    test(`stable witness with ${name} verifies only exact durable deployment and visible page evidence`, async () => {
+      const data = await fixture({ provider, allowProperties: true });
+      const input = acceptedInput();
+      const policyRevision = computePolicyRevision(data.config);
+      const session = { ...input.session, policyRevision, liveUrl: `${data.config.live.baseUrl}docs/page` };
+      const operation = { ...input.operation, source: { ...input.operation.source, policyRevision, liveUrl: session.liveUrl } };
+      const jobId = 'OA-STABLE';
+      const paths = pipelineArtifactPaths(jobId);
+      const at = '2026-07-31T12:00:00.000Z';
+      await initializeDurableJob(data.context, { jobId, policyRevision, at });
+      for (const state of [
+        'preflighting', 'checking', 'rendering', 'ready-to-apply', 'applying', 'source-applied', 'committing', 'committed',
+        'pushing', 'pushed', 'discovering-run', 'run-bound', 'monitoring-deployment', 'deployment-succeeded', 'verifying-live',
+      ]) await transitionDurableJob(data.context, jobId, state, { at, reason: `seed-${state}` });
+      const save = (file, artifactType, result) => createJsonArtifactOnce(data.context, file, { schemaVersion: 1, artifactType, jobId, result });
+      const stable = 'A stable visible passage.';
+      const visibleTextDigest = `sha256:${createHash('sha256').update(stable).digest('hex')}`;
+      await save(paths.preApplyChecks, 'owner-alpha-pre-apply-check-result', {
+        rendered: { witnesses: { kind: 'no-visible-change', stable, digest: visibleTextDigest } },
+      });
+      await save(paths.committed, 'owner-alpha-committed-effect', { status: 'committed', commit: COMMIT });
+      await save(paths.runBound, 'owner-alpha-run-bound-effect', { binding: { provider, headSha: COMMIT, runId: '42', runAttempt: 1 } });
+      if (name !== 'missing deployment') {
+        const headSha = name === 'other commit' ? BASE_COMMIT : COMMIT;
+        await save(paths.deployment, 'owner-alpha-deployment-result', provider === 'github-actions'
+          ? { provider, run: { runId: '42', headSha, runAttempt: name === 'other attempt' ? 2 : 1, status: 'completed', conclusion: 'success' }, environment: { state: 'success' } }
+          : { provider, run: { id: '42', headSha, status: 'success' }, publication: { state: 'success' } });
+      }
+      const calls = {};
+      const { confirmLivePage: _, ...dependencies } = fixtureDependencies(input, calls);
+      let now = 0;
+      let fetchCount = 0;
+      const result = await runOwnerAlphaPipeline({ ...data, jobId, session, operation, liveDependencies: {
+        clock: () => now,
+        sleep: async (ms) => { now += ms; },
+        fetch: async (url) => {
+          expect(url).toBe(session.liveUrl);
+          fetchCount += 1;
+          const paragraph = name === 'missing stable text' ? `<p hidden>${stable}</p><p>Different visible text.</p>` : `<p>${stable}</p>`;
+          return new Response(`<html><body>${paragraph}</body></html>`, {
+            status: name === 'unreachable page' ? 503 : 200, headers: { 'Content-Type': 'text/html' },
+          });
+        },
+      } }, dependencies);
+      if (code) {
+        expect(result).toMatchObject({ state: 'live-verification-failed', failure: { code, retryable: true } });
+        if (code === 'deployment-evidence-missing') expect(fetchCount).toBe(0);
+        else expect(fetchCount).toBeGreaterThan(0);
+        expect(calls).toEqual({});
+        await expectCodeAsync(() => readJsonArtifact(data.context, paths.live), 'artifact-not-found');
+        expect(await getOwnerAlphaJob({ ...data, jobId })).not.toHaveProperty('liveKind');
+      } else {
+        expect(result.state).toBe('completed');
+        expect(fetchCount).toBe(1);
+        expect(calls).toEqual({ rebuild: 1 });
+        const { result: live } = await readJsonArtifact(data.context, paths.live);
+        expect(live).toMatchObject({ kind: 'no-visible-change', pageUrl: session.liveUrl, stableWitnessPresent: true, applicationSha: COMMIT, visibleTextDigest });
+        expect(live).not.toHaveProperty('oldWitnessAbsent');
+        expect(live).not.toHaveProperty('newWitnessUnique');
+        expect(await getOwnerAlphaJob({ ...data, jobId })).toHaveProperty('liveKind', live.kind);
+        await unlink(resolveStorePath(data.context, paths.deployment));
+        expect(await getOwnerAlphaJob({ ...data, jobId })).not.toHaveProperty('liveKind');
+      }
+    });
+  }
 
   test('publisher accepts a job ID only and requires the durable phase, current policy and exact effect records', async () => {
     const { context, config } = await fixture();

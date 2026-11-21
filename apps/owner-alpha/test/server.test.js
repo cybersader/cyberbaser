@@ -1943,6 +1943,20 @@ describe('job status routes', () => {
     expect(stoppedBody).not.toContain('must-not-leak');
   });
 
+  test('reports an unchanged render as published without implying a text transition', async () => {
+    const { fetch } = await handlerFixture({
+      lookupJob: async (jobId) => ({ ...fixtureJob(jobId), state: 'completed', liveKind: 'no-visible-change' }),
+    });
+    const { cookie } = await openEdit(fetch);
+    const api = await fetch(request('/api/jobs/OA-PROPERTIES', { headers: { Cookie: cookie } }));
+    expect(await api.json()).toHaveProperty('liveCopy', 'Published, nothing visible changed');
+    const page = await fetch(request('/owner/jobs/OA-PROPERTIES', { headers: { Cookie: cookie } }));
+    expect(page.status).toBe(200);
+    const html = await page.text();
+    expect(html).toContain('<strong id="job-stage">Published, nothing visible changed</strong>');
+    expect(html).not.toContain('<strong id="job-stage">Saved</strong>');
+  });
+
   test('returns a redacted job projection as JSON and a control-free status page', async () => {
     const { fetch } = await handlerFixture();
     const opened = await openEdit(fetch);

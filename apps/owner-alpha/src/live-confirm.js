@@ -2,7 +2,7 @@ import { fail, OwnerAlphaError } from './errors.js';
 
 export const LIVE_HTML_MAX_BYTES = 4 * 1024 * 1024;
 
-function validateInputs({ config, pageUrl, targetUrl, url, oldWitness, oldText, quote, newWitness, newText, replacement }) {
+function validateInputs({ config, pageUrl, targetUrl, url, oldWitness, oldText, quote, newWitness, newText, replacement, stableWitness }) {
   const configuredBase = config?.live?.baseUrl;
   const limits = config?.limits;
   if (typeof configuredBase !== 'string'
@@ -47,6 +47,7 @@ function validateInputs({ config, pageUrl, targetUrl, url, oldWitness, oldText, 
   if (target.href !== requestedUrl) {
     fail('invalid-live-url', 'pageUrl must be one exact canonical URL, including its path and query');
   }
+  if (stableWitness !== undefined) return { base, target, stableWitness: normalizeWitness(stableWitness, 'stableWitness'), limits };
   const oldValue = normalizeWitness(expectedOld, 'oldWitness');
   const newValue = normalizeWitness(expectedNew, 'newWitness');
   if (oldValue === newValue || newValue.includes(oldValue)) {
@@ -416,9 +417,11 @@ export async function confirmLivePage(input = {}, dependencyOverrides = {}) {
         throw error;
       }
       const visibleText = visibleBodyText(bytes);
-      const oldCount = occurrenceCount(visibleText, expected.oldWitness);
-      const newCount = occurrenceCount(visibleText, expected.newWitness);
-      if (oldCount === 0 && newCount === 1) {
+      const stable = expected.stableWitness !== undefined;
+      const oldCount = stable ? null : occurrenceCount(visibleText, expected.oldWitness);
+      const newCount = stable ? null : occurrenceCount(visibleText, expected.newWitness);
+      const stableWitnessPresent = stable && visibleText.includes(expected.stableWitness);
+      if (stable ? stableWitnessPresent : oldCount === 0 && newCount === 1) {
         const completedAt = dependencies.clock();
         if (!Number.isFinite(completedAt)) fail('invalid-clock', 'injected clock must return finite epoch milliseconds');
         return Object.freeze({
@@ -431,14 +434,13 @@ export async function confirmLivePage(input = {}, dependencyOverrides = {}) {
           contentType,
           responseBytes: bytes.byteLength,
           visibleTextCharacters: visibleText.length,
-          oldWitnessAbsent: true,
-          newWitnessUnique: true,
+          ...(stable ? { kind: 'no-visible-change', stableWitnessPresent } : { oldWitnessAbsent: true, newWitnessUnique: true }),
           attempts,
           elapsedMs: Math.max(0, completedAt - deadline.state.startedAt),
           sharedAbortSignal: signals.size === 1,
         });
       }
-      lastObservation = { status, finalUrl, oldWitnessCount: oldCount, newWitnessCount: newCount };
+      lastObservation = { status, finalUrl, ...(stable ? { stableWitnessPresent } : { oldWitnessCount: oldCount, newWitnessCount: newCount }) };
       if (await retryOrTimeout(deadline, attempts, lastObservation)) continue;
     }
   } finally {
@@ -448,3 +450,28 @@ export async function confirmLivePage(input = {}, dependencyOverrides = {}) {
 
 export const confirmLive = confirmLivePage;
 export const verifyLivePage = confirmLivePage;
+
+export function isStableWitness(witness) {
+  return witness?.kind === 'no-visible-change' && typeof witness.stable === 'string' && witness.stable.trim() !== ''
+    && /^sha256:[0-9a-f]{64}$/u.test(witness.digest ?? '');
+}
+
+export function hasStableLiveProof(live, { pageUrl, commit, witness }) {
+  return isStableWitness(witness) && live?.kind === witness.kind && live.stableWitnessPresent === true
+    && live.pageUrl === pageUrl && live.applicationSha === commit && live.visibleTextDigest === witness.digest;
+}
+
+/** Check the persisted provider-specific success against the original bound run. */
+export function hasExactSuccessfulDeployment(commit, discovery, deployment) {
+  const bound = discovery?.binding;
+  const run = deployment?.run;
+  if (!/^[0-9a-f]{40}$/u.test(commit ?? '') || bound?.headSha !== commit || run?.headSha !== commit
+    || typeof bound.runId !== 'string' || !/^[1-9][0-9]*$/u.test(bound.runId)
+    || deployment.provider !== bound.provider) return false;
+  if (bound.provider === 'github-actions') {
+    return run.runId === bound.runId && Number.isSafeInteger(bound.runAttempt) && run.runAttempt === bound.runAttempt
+      && run.status === 'completed' && run.conclusion === 'success' && deployment.environment?.state === 'success';
+  }
+  return bound.provider === 'forgejo-actions' && run.id === bound.runId
+    && run.status === 'success' && deployment.publication?.state === 'success';
+}

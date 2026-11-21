@@ -179,7 +179,7 @@ if (root) {
     const done = job.state === 'completed';
     const stopped = Object.hasOwn(stages.stops, job.state) && !done;
     const uncertain = ['failed', 'manual-intervention', 'cancelled'].includes(job.state);
-    stage.textContent = stages.stops[job.state]?.copy ?? (found !== -1 ? stages.activeCopy : null) ?? 'Publication status is unavailable. Check the record before taking another action.';
+    stage.textContent = job.liveCopy ?? stages.stops[job.state]?.copy ?? (found !== -1 ? stages.activeCopy : null) ?? 'Publication status is unavailable. Check the record before taking another action.';
     steps.forEach((element, index) => {
       const status = uncertain ? 'unknown' : done || index < current ? 'done' : index === current ? (stopped ? 'stopped' : 'current') : 'pending';
       element.className = `job-step job-step-${status}`;

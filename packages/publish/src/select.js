@@ -141,12 +141,15 @@ export function resolveConfig(config, audience = 'public') {
 
 // ---------------------------------------------------------------- frontmatter
 
-export function parseFrontmatter(content) {
+export function parseFrontmatter(content, { requireMapping = false } = {}) {
   if (typeof content !== 'string') return { data: {} };
   const frontmatter = findFrontmatterInText(content);
   if (frontmatter.kind !== 'block') return { data: {} };
   try {
     const data = yaml.load(frontmatter.yamlText);
+    if (requireMapping && (!data || Object.getPrototypeOf(data) !== Object.prototype)) {
+      return { data: {}, error: 'frontmatter is not a mapping' };
+    }
     if (data === null || data === undefined) return { data: {} };
     if (typeof data !== 'object' || Array.isArray(data)) return { data: {}, error: 'frontmatter is not a mapping' };
     return { data };

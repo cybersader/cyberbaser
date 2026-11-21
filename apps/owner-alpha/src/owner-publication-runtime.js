@@ -6,6 +6,7 @@ import { computePolicyRevision, validateOwnerAlphaConfig } from './config.js';
 import { fail, OwnerAlphaError } from './errors.js';
 import { validateJobId, validateJobState } from './job-state.js';
 import { artifactJson, deepFreeze, isPlainObject } from './json.js';
+import { hasExactSuccessfulDeployment, hasStableLiveProof } from './live-confirm.js';
 import { PIPELINE_SCHEMA_VERSION, pipelineArtifactPaths } from './pipeline.js';
 import { assertPrivateDirectory, readPrivateFile } from './proposal-decisions.js';
 import { defaultProposalReviewGit, readTrustPolicy } from './proposal-review.js';
@@ -76,29 +77,37 @@ function publicationJobReader({ config: configInput, context }, includeEvidence)
         publication: { draftId, authorizationDigest } };
       if (!includeEvidence) return result(job);
       const confirmedAt = state.history.find(({ to }) => to === 'live-confirmed')?.at ?? null;
-      let verified = false;
+      let liveKind = null;
+      let committed = null;
+      const readResult = async (file, artifactType) => {
+        const absolute = resolveStorePath(context, file);
+        await assertPrivateDirectory(path.dirname(absolute), 'publication evidence');
+        const record = await read(absolute);
+        if (record?.schemaVersion !== PIPELINE_SCHEMA_VERSION || record.artifactType !== artifactType
+          || record.jobId !== jobId || !isPlainObject(record.result)) throw new Error('binding');
+        return record.result;
+      };
       if (confirmedAt !== null) {
         try {
-          const file = resolveStorePath(context, files.live);
-          await assertPrivateDirectory(path.dirname(file), 'publication results');
-          const live = await read(file);
-          verified = live?.schemaVersion === PIPELINE_SCHEMA_VERSION && live.artifactType === 'owner-alpha-live-result'
-            && live.jobId === jobId && isPlainObject(live.result)
-            && live.result.oldWitnessAbsent === true && live.result.newWitnessUnique === true
-            && (!Object.hasOwn(live.result, 'pageUrl') || live.result.pageUrl === session.liveUrl);
+          const live = await readResult(files.live, 'owner-alpha-live-result');
+          if (Object.hasOwn(live, 'pageUrl') && live.pageUrl !== session.liveUrl) throw new Error('binding');
+          if (live.kind === 'no-visible-change') {
+            committed = await readResult(files.committed, 'owner-alpha-committed-effect');
+            const binding = await readResult(files.runBound, 'owner-alpha-run-bound-effect');
+            const deployment = await readResult(files.deployment, 'owner-alpha-deployment-result');
+            const preApply = await readResult(files.preApplyChecks, 'owner-alpha-pre-apply-check-result');
+            if (hasStableLiveProof(live, { pageUrl: session.liveUrl, commit: committed.commit, witness: preApply.rendered?.witnesses })
+              && hasExactSuccessfulDeployment(committed.commit, binding, deployment)) liveKind = live.kind;
+          } else if ((live.kind ?? 'text') === 'text' && live.oldWitnessAbsent === true && live.newWitnessUnique === true) {
+            liveKind = 'text';
+          }
         } catch { /* Preserve job state when live evidence is missing or unsafe. */ }
       }
-      let committed = null;
-      if (verified && session.origin.reference?.mapping?.source?.kind === 'workspace') {
-        try {
-          const file = resolveStorePath(context, files.committed);
-          await assertPrivateDirectory(path.dirname(file), 'publication effects');
-          const record = await read(file);
-          if (record?.schemaVersion === PIPELINE_SCHEMA_VERSION && record.artifactType === 'owner-alpha-committed-effect'
-            && record.jobId === jobId && isPlainObject(record.result)) committed = record.result;
-        } catch { /* Never advance a baseline without bound committed evidence. */ }
+      if (liveKind === 'text' && session.origin.reference?.mapping?.source?.kind === 'workspace') {
+        try { committed = await readResult(files.committed, 'owner-alpha-committed-effect'); }
+        catch { /* Never advance a baseline without bound committed evidence. */ }
       }
-      return result(job, { createdAt: state.createdAt, confirmedAt, verified, committed });
+      return result(job, { createdAt: state.createdAt, confirmedAt, verified: liveKind !== null, liveKind, committed });
     } catch {
       return result({ status: 'unavailable' });
     }

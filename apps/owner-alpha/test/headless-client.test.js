@@ -19,8 +19,8 @@ const failureMessage = 'synthetic worker stderr must not escape';
 
 afterEach(async () => { await Promise.all(cleanup.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 
-async function fixture() {
-  const f = await publicationFixture();
+async function fixture(options) {
+  const f = await publicationFixture(options);
   const starts = [];
   let time = Date.parse('2026-11-21T10:00:00.000Z');
   const at = () => new Date(time += 1000).toISOString();
@@ -81,7 +81,7 @@ function assertNoPrivateData(payload) {
 }
 
 function expectedReceipt(draftId, version, text, jobId, state, liveVerified, attribution = 'unknown') {
-  return { draftId, mappingId: MAPPING.id, version, digest: digest(text), jobId, state, liveVerified, attribution };
+  return { draftId, mappingId: MAPPING.id, version, digest: digest(text), jobId, state, liveVerified, attribution, ...(liveVerified && { liveKind: 'text' }) };
 }
 
 function expectedLatest(receipt) {
@@ -126,7 +126,7 @@ test('headless client reviews an exact revision and follows one publication thro
   const receipt = await b.receipt(draftId);
   const status = await b.status();
   expect(receipt).toEqual(live);
-  expect(status).toEqual({ ...page, selected: true, live: { version: 7, digest: digest(EDITED), jobId, verified: true, attribution }, latest: expectedLatest(live) });
+  expect(status).toEqual({ ...page, selected: true, live: { version: 7, digest: digest(EDITED), jobId, verified: true, liveKind: 'text', attribution }, latest: expectedLatest(live) });
   for (const payload of [receipt, status, prepared, publishing]) assertNoPrivateData(payload);
 });
 
@@ -140,7 +140,7 @@ test('failed, missing, or wrongly bound live evidence never replaces the previou
   // Local rebuild failure does not undo the already recorded public check.
   await f.advance(old.jobId, 'live-confirmed', 'rebuilding-local', 'failed');
   expect(await client.receipt(first.draftId)).toEqual(expectedReceipt(first.draftId, 7, EDITED, old.jobId, 'needs-attention', true));
-  const previous = { version: 7, digest: digest(EDITED), jobId: old.jobId, verified: true, attribution: 'unknown' };
+  const previous = { version: 7, digest: digest(EDITED), jobId: old.jobId, verified: true, liveKind: 'text', attribution: 'unknown' };
   expect((await client.status()).live).toEqual(previous);
 
   f.setSource(secondText, 8);
@@ -166,7 +166,44 @@ test('failed, missing, or wrongly bound live evidence never replaces the previou
   expect(await client.status()).toEqual(expectedStatus);
   await unlink(liveFile);
   await f.witness(newer.jobId);
-  expect((await client.status()).live).toEqual({ version: 8, digest: digest(secondText), jobId: newer.jobId, verified: true, attribution: 'unknown' });
+  expect((await client.status()).live).toEqual({ version: 8, digest: digest(secondText), jobId: newer.jobId, verified: true, liveKind: 'text', attribution: 'unknown' });
+});
+
+test('headless receipt and status distinguish an unchanged render from a text transition', async () => {
+  const source = `---\nname: Example # old comment\n---\n${BASE}`;
+  const edited = source.replace('old comment', 'new comment');
+  const f = await fixture({ workspace: true, base: source, allowProperties: true });
+  f.setSource(source, 1);
+  await f.runtime.bindWorkspaceBaseline(page);
+  f.setSource(edited, 2);
+  const client = f.client();
+  const { draftId } = (await client.prepare()).summary;
+  const { jobId } = await client.publish(draftId);
+  await f.reachLiveCheck(jobId);
+  const { files, liveUrl } = f.starts[0];
+  const commit = '2'.repeat(40);
+  const stable = 'Synthetic page The old value.';
+  const visibleTextDigest = `sha256:${createHash('sha256').update(stable).digest('hex')}`;
+  const save = (file, artifactType, result) => createJsonArtifactOnce(f.context, file, { schemaVersion: PIPELINE_SCHEMA_VERSION, artifactType, jobId, result });
+  const binding = { provider: 'github-actions', headSha: commit, runId: '42', runAttempt: 1 };
+  await save(files.preApplyChecks, 'owner-alpha-pre-apply-check-result', { rendered: { witnesses: { kind: 'no-visible-change', stable, digest: visibleTextDigest } } });
+  await save(files.committed, 'owner-alpha-committed-effect', { commit });
+  await save(files.runBound, 'owner-alpha-run-bound-effect', { binding });
+  await f.witness(jobId, { result: { kind: 'no-visible-change', pageUrl: liveUrl, stableWitnessPresent: true, applicationSha: commit, visibleTextDigest } });
+  expect(await client.receipt(draftId)).toMatchObject({ liveVerified: false });
+  await f.advance(jobId, 'live-confirmed', 'rebuilding-local', 'completed');
+  expect(await client.receipt(draftId)).toMatchObject({ liveVerified: false });
+  expect((await client.status()).live).toBeNull();
+  await save(files.deployment, 'owner-alpha-deployment-result', { provider: binding.provider,
+    run: { ...binding, status: 'completed', conclusion: 'success' }, environment: { state: 'success' } });
+  const receipt = await f.client().receipt(draftId);
+  const status = await f.client().status();
+  expect(receipt).toMatchObject({ jobId, state: 'live', liveVerified: true, liveKind: 'no-visible-change' });
+  expect(status.live).toMatchObject({ jobId, verified: true, liveKind: 'no-visible-change' });
+  for (const payload of [receipt, status]) {
+    expect(JSON.stringify(payload)).not.toContain(stable);
+    expect(JSON.stringify(payload)).not.toContain(visibleTextDigest);
+  }
 });
 
 test('only digest expectations refuse capture and Publish refuses changed prepared text', async () => {

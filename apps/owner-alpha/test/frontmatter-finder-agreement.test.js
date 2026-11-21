@@ -110,12 +110,18 @@ function expectProposalRefusal(config, { before, after }, frontmatterKind) {
 }
 
 for (const [label, opener] of [['plain LF', '---\n'], ['trailing space', '--- \n'], ['trailing tab', '---\t\n']]) {
-  test(`${label}: every reader sees properties, and browser, workspace and proposal guards refuse changing them`, async () => {
+  test(`${label}: every reader sees properties; owner guards allow only by opt-in and proposal guards still refuse`, async () => {
     const note = fixtureText(opener);
     expectFinders(note, 'frontmatter');
     await withFixture(note.before, async ({ config, sessionFor }) => {
       for (const workspacePublication of [false, true]) {
         expectPropertyRefusal({ session: await sessionFor({ workspacePublication }), editedText: note.after, config, workspacePublication });
+      }
+      config.owner.allowProperties = true;
+      for (const workspacePublication of [false, true]) {
+        const session = await sessionFor({ workspacePublication });
+        const operation = deriveEditorOperation({ session, editedText: note.after, config, workspacePublication });
+        expect(applyEditorOperation(session, operation, { workspacePublication, allowProperties: true })).toEqual(Buffer.from(note.after));
       }
       expectProposalRefusal(config, note, 'properties');
     });

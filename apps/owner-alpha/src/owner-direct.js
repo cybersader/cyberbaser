@@ -39,7 +39,7 @@ export function deriveOwnerDirect({ config: inputConfig, session, handoff, submi
     frontmatter, outsideBytesUnchanged: true,
   });
   // Validation only; authorization is created separately after an authenticated Save.
-  applyEditorOperation({ ...session, origin: { type: 'owner-direct' } }, operation);
+  applyEditorOperation({ ...session, origin: { type: 'owner-direct' } }, operation, { allowProperties: config.owner.allowProperties });
   return deepFreeze({ session, operation });
 }
 

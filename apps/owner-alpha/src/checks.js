@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { findFrontmatter } from '../../../packages/correction/src/frontmatter.js';
 import { applyOwnerChangeSet, validateChangeSetCorrection, proveChangeSetOutsideBytes } from './change-set-operation.js';
 import { TextDecoder } from 'node:util';
 import { cp, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
@@ -12,6 +14,7 @@ import { classify, parseConfig } from '@cyberbaser/trust';
 import { comparePublicationEffects } from './effects.js';
 import { fail, OwnerAlphaError } from './errors.js';
 import { deepFreeze } from './json.js';
+import { ownerPropertyEditsAllowed } from './operation.js';
 import { renderPinnedQuartz } from './quartz-renderer.js';
 
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
@@ -582,6 +585,7 @@ export async function runRenderChecks({
   oldText,
   newText,
   maxWitnessChars = MAX_VISIBLE_WITNESS_CHARS,
+  propertyChange = null,
 }) {
   const page = renderedPagePath(targetPage);
   let baselineHtml;
@@ -620,12 +624,22 @@ export async function runRenderChecks({
       maxChars: maxWitnessChars,
     })
     : null;
-  if (hasNonEmptyAnchors && anchored === null) {
+  let witnesses = anchored;
+  if (witnesses === null && propertyChange === 'only' && baselineVisible === candidateVisible && baselineVisible) {
+    const stable = Array.from(baselineVisible).slice(0, maxWitnessChars).join('').trimEnd();
+    witnesses = { kind: 'no-visible-change', stable, digest: `sha256:${createHash('sha256').update(baselineVisible).digest('hex')}` };
+  }
+  if (witnesses === null && hasNonEmptyAnchors && (!propertyChange || baselineVisible === candidateVisible)) {
     fail('rendered-operation-witness-missing', 'the exact old/new operation text could not produce bounded visible witnesses');
   }
-  const witnesses = anchored ?? deriveVisibleWitnesses(baselineVisible, candidateVisible, {
-    maxChars: maxWitnessChars,
-  });
+  if (witnesses === null) {
+    try {
+      witnesses = deriveVisibleWitnesses(baselineVisible, candidateVisible, { maxChars: maxWitnessChars });
+    } catch (error) {
+      if (!propertyChange || !hasNonEmptyAnchors || !(error instanceof OwnerAlphaError)) throw error;
+      fail('rendered-operation-witness-missing', 'the property change could not produce bounded visible witnesses');
+    }
+  }
 
   return deepFreeze({
     ok: true,
@@ -698,6 +712,17 @@ function rendererFunction(renderer) {
   if (typeof renderer === 'function') return renderer;
   if (renderer && typeof renderer.render === 'function') return renderer.render.bind(renderer);
   fail('invalid-renderer', 'renderer must be an injected function or object with render()');
+}
+
+function propertyChangeScope({ config, session, base, candidate, operation }) {
+  if (config?.owner?.allowProperties !== true || !ownerPropertyEditsAllowed(session)) return null;
+  const before = findFrontmatter(base);
+  const after = findFrontmatter(candidate);
+  if (before.kind !== 'block' || after.kind !== 'block') return null;
+  const spans = operation.operationType === 'change-set' ? operation.proposal.changeSet.files[0].operations : [operation];
+  if (!spans.some(({ start }) => start < before.range.end)) return null;
+  return spans.every(({ start, end }) => start >= before.range.start && start < before.range.end && end <= before.range.end)
+    && base.subarray(before.range.end).equals(candidate.subarray(after.range.end)) ? 'only' : 'mixed';
 }
 
 /**
@@ -854,6 +879,7 @@ export async function runPreApplyChecks({
       oldText: decodeUtf8(normalizedOperation.expectedOldBytes, 'operation expected old bytes'),
       newText: decodeUtf8(normalizedOperation.replacementBytes, 'operation replacement bytes'),
       maxWitnessChars,
+      propertyChange: propertyChangeScope({ config, session, base, candidate, operation: normalizedOperation.correction }),
     });
 
     result = {

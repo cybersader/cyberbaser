@@ -74,7 +74,7 @@ function localGitEffects(remote, git) {
 
 export async function publicationFixture({ trust = 'trusted: [example]\n', overrides = {}, onRoot,
   workspace = false, retiredFile, sourcePath = PRIVATE_PATH, sourceIdentity = PRIVATE_ID,
-  base = BASE, localGit = false } = {}) {
+  base = BASE, localGit = false, allowProperties, publishConfig } = {}) {
   const tempRoot = await mkdtemp(path.join(await realpath(os.tmpdir()), 'publication-runtime-'));
   const root = localGit ? path.join(tempRoot, 'delivery') : tempRoot;
   cleanup.push(tempRoot);
@@ -97,12 +97,14 @@ export async function publicationFixture({ trust = 'trusted: [example]\n', overr
   raw.repository.remote.url = 'https://github.com/example/fixture.git';
   raw.owner.identity = 'example'; raw.workflow.repository = 'example/fixture'; raw.live.baseUrl = 'https://example.github.io/fixture/';
   const mapping = { ...MAPPING, source: { identity: sourceIdentity, path: sourcePath, ...(workspace ? { kind: 'workspace' } : {}) } };
+  if (allowProperties !== undefined) raw.owner.allowProperties = allowProperties;
   raw.ownerPublication = { enabled: true, mappings: [mapping], ...(retiredFile === undefined ? {} : { retiredList: { file: retiredFile } }) };
   const config = validateOwnerAlphaConfig(raw);
   if (localGit) await run(tempRoot, ['init', '--bare', '-q', '-b', 'main', '--template=', remote]);
   await run(root, ['remote', 'add', 'origin', localGit ? remote : config.repository.remote.url]);
   await mkdir(path.join(root, 'Notes'));
   await writeFile(path.join(root, 'Notes/Page.md'), base);
+  if (publishConfig !== undefined) await writeFile(path.join(root, 'publish.yml'), publishConfig);
   await writeFile(path.join(root, '.gitignore'), '.workspace/\n');
   if (trust !== null) { await mkdir(path.join(root, '.cyberbaser')); await writeFile(path.join(root, '.cyberbaser/trust.yml'), trust); }
   await run(root, ['add', '.']);
