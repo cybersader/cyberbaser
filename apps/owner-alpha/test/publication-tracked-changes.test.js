@@ -55,11 +55,24 @@ describe('publication endpoint tracked changes', () => {
   });
   test.each([
     ['```js\nsame\n```\n', '```python\nsame\n```\n'], ['1. same\n', '3. same\n'],
-    ['1. same\n', '1) same\n'], ['- same\n', '+ same\n'], ['---\n', '***\n'],
-    ['same\nwords\n', 'same words\n'],
-  ])('source-only formatting remains navigable with exact prior source: %s', (base, next) => {
+    ['1. same\n', '1) same\n'], ['- same\n', '+ same\n'],
+    ['Body.\n\n---\n', 'Body.\n\n***\n', '---\n'], ['same\nwords\n', 'same words\n'],
+  ])('source-only formatting remains navigable with exact prior source: %s', (base, next, previous = base) => {
     const result = review(base, next); expect(result.counts.source).toBe(1); expect(changed(result)[0].mark).toBe(1);
-    expect(changed(result)[0].previous).toEqual([base]); expect(changed(result)[0].tracked.reason).toContain('Source/formatting');
+    expect(changed(result)[0].previous).toEqual([previous]); expect(changed(result)[0].tracked.reason).toContain('Source/formatting');
+  });
+  test('replacing a leading unclosed fence exposes its previous exact source at a navigable change', () => {
+    const value = input('---\n', '***\n');
+    const display = publicationDisplay(value);
+    expect(display.file.current.blocks[0]).toMatchObject({ kind: 'fence-like', start: 0, end: value.baseText.length,
+      uninterpreted: ['fence-like text'] });
+    const result = display.tracked;
+    expect(result.counts.exact).toBe(1); expect(result.counts.source).toBe(0);
+    expect(result.coarse).toBe(false); expect(result.markCount).toBe(1);
+    const rows = changed(result); expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ mark: 1, position: 0, previous: [value.baseText],
+      tracked: { kind: 'exact', reason: expect.stringContaining('exact-source fallback') } });
+    expect(value.candidateText.slice(rows[0].block.start, rows[0].block.end)).toBe('***\n');
   });
   test('structural metadata differs even if words do not', () => {
     const result = review('# Same\n', '## Same\n'); expect(result.counts.block).toBe(1);

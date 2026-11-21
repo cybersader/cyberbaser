@@ -19,6 +19,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import yaml from 'js-yaml';
+import { findFrontmatterInText } from '../../correction/src/frontmatter.js';
 import { extractRefs } from './links.js';
 
 export const CONFIG_FILENAME = 'publish.yml';
@@ -140,13 +141,12 @@ export function resolveConfig(config, audience = 'public') {
 
 // ---------------------------------------------------------------- frontmatter
 
-const FRONTMATTER = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
-
 export function parseFrontmatter(content) {
-  const m = typeof content === 'string' ? content.match(FRONTMATTER) : null;
-  if (!m) return { data: {} };
+  if (typeof content !== 'string') return { data: {} };
+  const frontmatter = findFrontmatterInText(content);
+  if (frontmatter.kind !== 'block') return { data: {} };
   try {
-    const data = yaml.load(m[1]);
+    const data = yaml.load(frontmatter.yamlText);
     if (data === null || data === undefined) return { data: {} };
     if (typeof data !== 'object' || Array.isArray(data)) return { data: {}, error: 'frontmatter is not a mapping' };
     return { data };

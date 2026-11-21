@@ -4,6 +4,7 @@ import { lstat, open, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
+import { findFrontmatter } from '../../../packages/correction/src/frontmatter.js';
 import { computePolicyRevision, validateOwnerAlphaConfig } from './config.js';
 import { fail, OwnerAlphaError } from './errors.js';
 import { deepFreeze, isPlainObject } from './json.js';
@@ -306,24 +307,11 @@ function decodeSource(bytes, workspacePublication) {
   return text;
 }
 
-export function detectYamlFrontmatterRange(sourceBytes, { workspacePublication = false } = {}) {
-  const bytes = Buffer.from(sourceBytes);
-  const heading = workspacePublication && bytes.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf])) ? 3 : 0;
-  const opener = workspacePublication && bytes.subarray(heading, heading + 5).equals(Buffer.from('---\r\n')) ? 5 : 4;
-  if (!bytes.subarray(heading, heading + opener).equals(Buffer.from(opener === 5 ? '---\r\n' : '---\n'))) return null;
-
-  let lineStart = heading + opener;
-  while (lineStart <= bytes.length) {
-    const newline = bytes.indexOf(0x0a, lineStart);
-    const lineEnd = newline === -1 ? bytes.length : newline;
-    const line = bytes.subarray(lineStart, workspacePublication && newline !== -1 && bytes[lineEnd - 1] === 13 ? lineEnd - 1 : lineEnd);
-    if (line.equals(Buffer.from('---')) || line.equals(Buffer.from('...'))) {
-      return deepFreeze({ start: 0, end: newline === -1 ? lineEnd : newline + 1 });
-    }
-    if (newline === -1) break;
-    lineStart = newline + 1;
-  }
-  fail('unterminated-frontmatter', 'source begins with YAML frontmatter but has no closing delimiter');
+export function detectYamlFrontmatterRange(sourceBytes) {
+  const found = findFrontmatter(sourceBytes instanceof Uint8Array ? sourceBytes : Buffer.from(sourceBytes));
+  // The persisted owner protection span also includes a leading BOM. Keep its
+  // existing shape; policy decisions and diagnostics derive from the exact bytes.
+  return found.kind === 'none' ? null : deepFreeze({ start: 0, end: found.protectionEnd ?? found.range.end });
 }
 
 export async function createEditSession({ config: configInput, renderer, git = defaultGitRunner, workspacePublication = false }) {
@@ -346,7 +334,7 @@ export async function createEditSession({ config: configInput, renderer, git = d
   const tracked = parseTrackedEntry(trackedOutput, request.relativePath);
   const bytes = await readSourceFile(checkout.root, request.relativePath, config.limits.maxSourceBytes);
   const text = decodeSource(bytes, workspacePublication);
-  const frontmatter = detectYamlFrontmatterRange(bytes, { workspacePublication });
+  const frontmatter = detectYamlFrontmatterRange(bytes);
 
   const headAfterRead = exactCommit(await runGit(git, checkout.root, ['rev-parse', 'HEAD']), 'HEAD');
   const statusAfterRead = await runGit(git, checkout.root, [

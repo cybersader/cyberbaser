@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
+import { findFrontmatterInText } from '../../../packages/correction/src/frontmatter.js';
 import { computePolicyRevision, validateOwnerAlphaConfig } from './config.js';
 import { fail } from './errors.js';
 import { canonicalJson, deepFreeze, isPlainObject } from './json.js';
 import { applyEditorOperation, deriveEditorOperation, validateEditSession } from './operation.js';
 import {
   createEditSession as defaultCreateEditSession, EDIT_SESSION_ARTIFACT_TYPE,
-  EDIT_SESSION_SCHEMA_VERSION, detectYamlFrontmatterRange, liveUrlForSlug, pathMatchesPolicy,
+  EDIT_SESSION_SCHEMA_VERSION, liveUrlForSlug, pathMatchesPolicy,
 } from './source.js';
 
 export const OWNER_PUBLICATION_SCHEMA_VERSION = 1;
@@ -220,20 +221,21 @@ export function assertFoldedWorkspaceNote(foldedBase, foldedText) {
     if (offset === foldedText.length) fail('workspace-text-repeated', 'workspace note repeats the vault text', { repeats });
   }
 
-  // The existing Markdown frontmatter detector validates delimiter structure,
-  // not YAML values. Treat a second complete adjacent block as unsafe rather
-  // than trying to parse YAML with a new validator in this write path.
-  if (!foldedText.startsWith('---\n')) return;
-  const bytes = Buffer.from(foldedText);
+  // Treat an unclosed leading block or a second complete adjacent block as
+  // unsafe without guessing YAML values in this write path.
+  const leading = findFrontmatterInText(foldedText);
+  if (leading.kind === 'none') return;
   const invalid = () => fail('workspace-properties-invalid', 'workspace note has invalid frontmatter structure');
-  let leading;
-  try { leading = detectYamlFrontmatterRange(bytes); } catch { invalid(); }
-  if (!leading) return;
-  const rest = bytes.subarray(leading.end).toString('utf8').replace(/^(?:[ \t]*\n)*/u, '');
-  if (!rest.startsWith('---\n')) return;
-  let second;
-  try { second = detectYamlFrontmatterRange(Buffer.from(rest)); } catch { /* A standalone thematic break is not a complete second block. */ }
-  if (second) invalid();
+  if (leading.reason === 'unclosed') invalid();
+  // The old owner closer may differ from the selector's closer; continue to
+  // check for a duplicate at either boundary without classifying it as YAML.
+  const ends = new Set([leading.textRange.end, leading.legacyTextEnd ?? leading.textRange.end]);
+  for (const end of ends) {
+    const rest = foldedText.slice(end).replace(/^(?:[ \t]*\n)*/u, '');
+    const second = findFrontmatterInText(rest);
+    // A standalone thematic break is not a complete second block.
+    if (second.kind !== 'none' && second.reason !== 'unclosed') invalid();
+  }
 }
 
 function linesWithTerminators(text) {

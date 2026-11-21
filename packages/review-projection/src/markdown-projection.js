@@ -1,3 +1,4 @@
+import { findFrontmatterInText } from '../../correction/src/frontmatter.js';
 import { exposeInvisibleText } from './invisible-text.js';
 
 const FENCE = /^(?:```|~~~)/u;
@@ -151,22 +152,20 @@ export function inlineTokens(value) {
 
 const block = (kind, start, end, extra = {}) => Object.freeze({ kind, start, end, ...extra });
 
-function frontmatterBlock(all, index) {
-  if (index !== 0 || all[0]?.text !== '---') return null;
-  for (let cursor = 1; cursor < all.length; cursor += 1) {
-    if (all[cursor].text === '---') {
-      const entries = all.slice(1, cursor)
-        .map((line) => {
-          const split = line.text.indexOf(':');
-          return split === -1
-            ? { name: exposeInvisibleText(line.text), value: '' }
-            : { name: exposeInvisibleText(line.text.slice(0, split)), value: exposeInvisibleText(line.text.slice(split + 1).trim()) };
-        })
-        .filter((entry) => entry.name.trim().length > 0);
-      return { block: block('frontmatter', all[0].start, all[cursor].end, { entries: Object.freeze(entries) }), next: cursor + 1 };
-    }
-  }
-  return null;
+function frontmatterBlock(all, found) {
+  if (found.kind === 'none') return null;
+  const end = found.textRange.end;
+  const next = all.findIndex((line) => line.end === end) + 1;
+  if (found.kind === 'fence-like') return { block: block('fence-like', 0, end), next };
+  const entries = found.yamlText.split(/\r?\n/u)
+    .map((line) => {
+      const split = line.indexOf(':');
+      return split === -1
+        ? { name: exposeInvisibleText(line), value: '' }
+        : { name: exposeInvisibleText(line.slice(0, split)), value: exposeInvisibleText(line.slice(split + 1).trim()) };
+    })
+    .filter((entry) => entry.name.trim().length > 0);
+  return { block: block('frontmatter', 0, end, { entries: Object.freeze(entries) }), next };
 }
 
 function fencedBlock(all, index) {
@@ -235,10 +234,13 @@ function gapBlock(all, index) {
 export function markdownBlocks(text) {
   const all = lines(text);
   const blocks = [];
-  let index = 0;
+  const found = findFrontmatterInText(text);
+  const frontmatterBody = found.yamlText;
+  const frontmatter = frontmatterBlock(all, found);
+  if (frontmatter) blocks.push(frontmatter.block);
+  let index = frontmatter?.next ?? 0;
   while (index < all.length) {
-    const produced = frontmatterBlock(all, index)
-      ?? gapBlock(all, index)
+    const produced = gapBlock(all, index)
       ?? fencedBlock(all, index)
       ?? (() => {
         const heading = HEADING.exec(all[index].text);
@@ -279,12 +281,10 @@ export function markdownBlocks(text) {
     if (item.kind === 'frontmatter') {
       // Only flat `key: value` metadata is read; nested or list-valued YAML
       // would show as names with empty values, so it degrades instead.
-      const body = slice.split('\n').map((line) => (line.endsWith('\r') ? line.slice(0, -1) : line));
-      body.shift();
-      while (body.length > 0 && body.at(-1).trim().length === 0) body.pop();
-      body.pop();
+      const body = frontmatterBody.split(/\r?\n/u);
       if (body.some((line) => line.trim().length > 0 && !FRONTMATTER_ENTRY.test(line))) found.push('structured metadata');
     }
+    if (item.kind === 'fence-like') found.push('fence-like text');
     return Object.freeze({ ...item, uninterpreted: Object.freeze(found) });
   }));
 }
