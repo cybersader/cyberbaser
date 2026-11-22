@@ -151,8 +151,9 @@ export function registerV2ApplicationCases(api) {
     const html = await detail.text();
     expect(html).toContain('Line 5, column 9');
     expect(html).toContain('Change 2');
-    expect(html).toContain('Approve all');
-    expect(html).toContain('Reject all');
+    // One whole-set decision: the panel lists both changes and the note sheet covers both.
+    expect(html).toContain('See all 2 changes');
+    expect(html).toContain('data-change-count="2"');
     expect(html).toContain('Tail');
     const before = await gitState(item.checkout);
     await decide();

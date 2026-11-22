@@ -1,12 +1,69 @@
 {
-// This client can share a page with the publication reading controls or Apply.
+// The page sits in a sandboxed frame with no scripts. Moving between changes
+// navigates that frame to an anchor Cyberbaser placed on each change; the
+// frame's own CSS highlights the targeted change.
+const app = document.querySelector('#owner-review-detail');
+const frame = document.querySelector('#rv-frame');
+const sheet = document.querySelector('#rv-sheet');
+const fold = document.querySelector('#rv-fold');
+if (sheet && fold) {
+  fold.addEventListener('click', () => {
+    const folded = sheet.classList.toggle('is-min');
+    fold.setAttribute('aria-expanded', String(!folded));
+    fold.setAttribute('aria-label', folded ? 'Show the panel' : 'Hide the panel');
+  });
+}
+const anchors = (app?.dataset.anchors ?? '').split(',').filter(Boolean).map(Number);
+const position = document.querySelector('#rv-pos');
+const listLinks = [...document.querySelectorAll('#rv-list a[data-change]')];
+let current = 0;
+function showChange(index) {
+  if (!frame || anchors.length === 0) return;
+  current = (index + anchors.length) % anchors.length;
+  const number = anchors[current];
+  frame.src = `${app.dataset.frame}#c${number}`;
+  if (position) position.textContent = `${current + 1} of ${anchors.length}`;
+  for (const link of listLinks) link.setAttribute('aria-current', String(Number(link.dataset.change) === number));
+}
+document.querySelector('#rv-prev')?.addEventListener('click', () => showChange(current - 1));
+document.querySelector('#rv-next')?.addEventListener('click', () => showChange(current + 1));
+for (const link of listLinks) {
+  link.addEventListener('click', (event) => {
+    event.preventDefault();
+    showChange(anchors.indexOf(Number(link.dataset.change)));
+  });
+}
+if (listLinks.length && anchors.length) listLinks.find((link) => Number(link.dataset.change) === anchors[0])?.setAttribute('aria-current', 'true');
+const listToggle = document.querySelector('#rv-list-toggle');
+const list = document.querySelector('#rv-list');
+if (listToggle && list) {
+  const total = list.children.length;
+  listToggle.addEventListener('click', () => {
+    const open = list.hidden;
+    list.hidden = !open;
+    listToggle.setAttribute('aria-expanded', String(open));
+    listToggle.textContent = open ? 'Hide the list' : `See all ${total} changes`;
+  });
+}
+// "I've seen this": changes the page cannot show are looked at before Approve.
+const seen = document.querySelector('#rv-seen');
+let acknowledged = false;
+if (seen) {
+  seen.addEventListener('click', () => {
+    acknowledged = true;
+    const approveButton = document.querySelector('.rv-act [data-action="approve"]');
+    seen.hidden = true;
+    if (approveButton) { approveButton.hidden = false; approveButton.focus(); }
+  });
+}
 const rehearsalDismiss = document.querySelector('[data-dismiss-rehearsal]');
 if (rehearsalDismiss) {
   rehearsalDismiss.addEventListener('click', () => {
     rehearsalDismiss.closest('.proposal-rehearsal-notice').hidden = true;
-    document.querySelector('.proposal-appbar a, #owner-review-list h1')?.focus();
+    document.querySelector('#owner-review-list h1')?.focus();
   });
 }
+
 const form = document.querySelector('#review-decision-form');
 const reason = document.querySelector('#decision-reason');
 const status = document.querySelector('#decision-status');
@@ -33,7 +90,7 @@ for (const link of modeLinks) {
 
 if (form && reason && status && byteCount && dialog && dialogTitle && confirmButton && cancelButton) {
   const maximumReasonBytes = Number(form.dataset.maxReasonBytes);
-  const actionButtons = [...document.querySelectorAll('.decision-bar [data-action]')];
+  const actionButtons = [...document.querySelectorAll('.rv-act [data-action]')];
   let selectedAction = null;
   let actionTrigger = null;
   let inFlight = false;
@@ -75,10 +132,11 @@ if (form && reason && status && byteCount && dialog && dialogTitle && confirmBut
     selectedAction = action;
     actionTrigger = trigger;
     const approving = action === 'approve';
-    const multi = Number(form.dataset.changeCount) > 1;
-    dialogTitle.textContent = multi ? (approving ? 'Approve all changes?' : 'Reject all changes?') : (approving ? 'Approve this suggestion?' : 'Reject this suggestion?');
+    const count = Number(form.dataset.changeCount);
+    const what = count > 1 ? `all ${count} changes` : 'this proposal';
+    dialogTitle.textContent = approving ? `Approve ${what}?` : `Reject ${what}?`;
     confirmButton.dataset.action = action;
-    confirmButton.textContent = multi ? (approving ? 'Approve all' : 'Reject all') : (approving ? 'Approve suggestion' : 'Reject suggestion');
+    confirmButton.textContent = approving ? 'Approve' : 'Reject';
     showStatus('');
     dialog.showModal();
     reason.focus();
@@ -86,6 +144,7 @@ if (form && reason && status && byteCount && dialog && dialogTitle && confirmBut
 
   function recoveryMessage(code) {
     if (code === 'lock-busy') return 'Another owner action is finishing. Wait a moment, then try again.';
+    if (code === 'unseen-changes-not-acknowledged') return 'Look at the changes the page can’t show, then choose I’ve seen this. Nothing was recorded.';
     if (code === 'decision-evidence-mismatch' || code === 'decision-evidence-conflict') {
       return 'This proposal changed while you were reading it. Nothing was recorded. Reload it before deciding.';
     }
@@ -126,6 +185,7 @@ if (form && reason && status && byteCount && dialog && dialogTitle && confirmBut
             action: selectedAction,
             reason: reason.value,
             csrf: form.dataset.csrf,
+            ...(selectedAction === 'approve' && form.dataset.mustSee === 'true' && acknowledged ? { acknowledgedInvisible: true } : {}),
           }),
         },
       );

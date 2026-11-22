@@ -16,6 +16,12 @@ Three design rounds followed, all as local mockups under `.workspace/review-rout
 
 No route is selected. The interim document-first page (commit `adb0d9e`) is kept for its display engine (whole-word change boundaries) and hidden-comment masking, not its look.
 
+## Route C built (owner decision, same day)
+
+Asked "should I build the review experience as prototyped?", the owner chose "Yes, build it as prototyped". Built in the owner app: a review shell on the owner origin with Cyberbaser's bottom panel (desktop: floating side panel), and the note in an `<iframe sandbox="">` served from an owner-only route with `default-src 'none'`, its own `sandbox` CSP directive and `frame-ancestors 'self'`, so vault content can neither run nor reach the decision controls. Previous/next moves the frame by fragment anchors; no script runs in the frame. Heavy edits fold as "Rewritten" (at least 12 words each side and at least 60% of words changed). Changes readers cannot see require "I've seen this", and the server refuses an Approve without `acknowledgedInvisible`; this is the only change to decision handling. Unapplicable changes show no Approve on the page; the server still accepts a direct approval, as before.
+
+**Not yet "as your site shows it".** Every fixture used the fallback: the note rendered from its projection and styled with the site's appearance tokens. Binding the owner-private Quartz build at the proposal's pinned base, with changes placed by source provenance, was not built, because Quartz is not installed in this environment. Also open: hidden-comment changes are acknowledged without being displayed; a stale proposal shows an empty page above the panel; decided proposals show each change in its own sentence because decision records do not keep the page text. Coordinator rerun: owner-alpha, review-projection and proposal-review 807 passed, 8 opt-in skips, 0 failed; browser review tests 2 passed with the acceptance flag.
+
 ## Other findings the same day
 
 - **Socket bug caught by CI on the pinned runtime.** The signed-request socket relied on `listen()` failing when the path already existed. On Bun 1.3.11, the version pinned in the owner-app container and CI, `listen()` replaced an existing regular file instead. The local Bun 1.3.14 masked it. Fixed by refusing any existing entry before binding (`af66287`). The publisher and the intake socket already checked first. Local and CI Bun versions differ; the descriptor defect behind the intermittent `EBADF` test failures is fixed upstream in Bun 1.4.0.

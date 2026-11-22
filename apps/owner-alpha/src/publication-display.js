@@ -88,7 +88,9 @@ export function proposalDisplay(input, Segmenter = Intl.Segmenter) {
     return hidden ? { ...row, hidden: true } : row;
   });
   const anchors = new Map();
-  if (!display.tracked.coarse) for (let operation = 1; operation <= operations.length; operation += 1) {
+  // A broad but word-level rewrite still has an exact place for every change;
+  // only a block-level fallback (tracked.reason) loses per-change anchors.
+  if (!display.tracked.coarse || display.tracked.reason === null) for (let operation = 1; operation <= operations.length; operation += 1) {
     const old = oldSegments.find((part) => part.operation === operation);
     const next = nextSegments.find((part) => part.operation === operation);
     const row = rows.find((item) => item.changed && !item.deleted && item.block && next?.kind === 'added' && containing([item.block], next))

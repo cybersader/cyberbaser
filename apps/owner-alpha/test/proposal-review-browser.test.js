@@ -312,114 +312,119 @@ acceptanceTest('browser review is content-first, deliberate, recoverable, and re
     await page.waitForURL(`${fixture.ownerOrigin}/owner/review`);
     await expect(page.locator('h1').textContent()).resolves.toBe('Proposals');
     await expect(page.locator('#needs-review .proposal-row').count()).resolves.toBe(2);
-    await expect(page.locator('#needs-review .proposal-row del').count()).resolves.toBe(2);
-    await expect(page.locator('#needs-review .proposal-row ins').count()).resolves.toBe(2);
+    await expect(page.locator('#needs-review .proposal-row-count').allTextContents()).resolves.toEqual(['1 change', '1 change']);
+    await expect(page.locator('#needs-review .proposal-row').first().textContent()).resolves.toContain('From a visitor');
     await capture(page, 'inbox-light-desktop');
 
     await Promise.all([
       page.waitForURL(`${fixture.ownerOrigin}/owner/review/**`),
       page.locator('#needs-review .proposal-row-link').first().click(),
     ]);
-    const changesTab = page.getByRole('link', { name: 'Changes' });
-    const proposedTab = page.getByRole('link', { name: 'Proposed' });
-    const currentTab = page.getByRole('link', { name: 'Current' });
-    const compareTab = page.getByRole('link', { name: 'Compare' });
-    await expect(changesTab.getAttribute('aria-current')).resolves.toBe('page');
-    await expect(page.locator('.mode-panel-changes .md-heading').count()).resolves.toBeGreaterThan(0);
-    await expect(page.locator('.mode-panel-changes .md-list li').count()).resolves.toBe(2);
-    await expect(page.locator('.md-source-label').first().textContent()).resolves.toContain('Exact source');
-    await expect(page.locator('.md-source del').count()).resolves.toBe(1);
-    await expect(page.locator('.md-source ins').count()).resolves.toBe(1);
+    // Content first: the note, as the site shows it, in a sandboxed frame; the
+    // private panel beside it holds the decision.
+    const frameElement = page.locator('#rv-frame');
+    await expect(frameElement.getAttribute('sandbox')).resolves.toBe('');
+    const note = page.frameLocator('#rv-frame');
+    await expect(note.locator('h1').textContent()).resolves.toBe('Notes');
+    await expect(note.locator('del').allTextContents()).resolves.toEqual(['teh']);
+    await expect(note.locator('ins').allTextContents()).resolves.toEqual(['the']);
+    await expect(note.locator('ul li').count()).resolves.toBe(2);
+    await expect(note.locator('h3').textContent()).resolves.toBe('Notes');
+    await expect(page.locator('.rv-sheet h1').textContent()).resolves.toBe('1 change');
+    await expect(page.locator('.rv-from').textContent()).resolves.toBe('From a visitor, not signed in.');
+    const frameBox = await frameElement.boundingBox();
+    const sheetBox = await page.locator('#rv-sheet').boundingBox();
+    expect(frameBox.x + frameBox.width).toBeLessThanOrEqual(sheetBox.x);
     await capture(page, 'proposal-light-desktop');
 
-    await Promise.all([
-      page.waitForURL(/[?]mode=current$/u),
-      currentTab.click(),
-    ]);
+    // Exact evidence stays one tap away, with its comparison modes.
+    await page.locator('.rv-details > summary').click();
+    const changesTab = page.getByRole('link', { name: 'Changes' });
+    const currentTab = page.getByRole('link', { name: 'Current' });
+    const compareTab = page.getByRole('link', { name: 'Compare' });
+    await page.locator('#publication-review-details > details > summary').click();
+    await expect(changesTab.getAttribute('aria-current')).resolves.toBe('page');
+    await expect(page.locator('.mode-panel-changes .md-source del').count()).resolves.toBe(1);
+    await expect(page.locator('.mode-panel-changes .md-source ins').count()).resolves.toBe(1);
+    await Promise.all([page.waitForURL(/[?]mode=current$/u), currentTab.click()]);
     await expect(page.locator('.mode-panel-current .md-source ins').count()).resolves.toBe(0);
-    await expect(page.locator('.mode-panel-current .md-source del').count()).resolves.toBe(1);
-    await Promise.all([
-      page.waitForURL(/[?]mode=proposed$/u),
-      proposedTab.click(),
-    ]);
-    await expect(page.locator('.mode-panel-proposed .md-source del').count()).resolves.toBe(0);
-    await Promise.all([
-      page.waitForURL(/[?]mode=compare$/u),
-      compareTab.click(),
-    ]);
-    await expect(page.locator('.proof').evaluateAll((items) => items.map((item) => item.getAttribute('aria-label'))))
-      .resolves.toEqual(['Current source', 'Proposed change']);
     await currentTab.focus();
     await currentTab.press('End');
     await expect(compareTab.evaluate((element) => element === document.activeElement)).resolves.toBe(true);
     await compareTab.press('Home');
     await expect(changesTab.evaluate((element) => element === document.activeElement)).resolves.toBe(true);
-    await Promise.all([
-      page.waitForURL(/[?]mode=changes$/u),
-      changesTab.click(),
-    ]);
+    await Promise.all([page.waitForURL(/[?]mode=changes$/u), changesTab.click()]);
 
     // Approve opens one sheet; the note is asked for there and checked on confirm.
-    const approve = page.getByRole('button', { name: 'Approve', exact: true });
+    const approve = page.locator('.rv-act [data-action="approve"]');
     const sheet = page.locator('#decision-dialog');
-    await expect(page.locator('.decision-bar-change strong').textContent()).resolves.toContain('“teh” to “the”');
     await approve.click();
     await expect(sheet.evaluate((element) => element.open)).resolves.toBe(true);
-    await expect(page.locator('#decision-dialog-title').textContent()).resolves.toBe('Approve this suggestion?');
-    const note = page.locator('#decision-reason');
-    await expect(note.evaluate((element) => element === document.activeElement)).resolves.toBe(true);
-    const confirmApproval = page.getByRole('button', { name: 'Approve suggestion' });
-    await confirmApproval.click();
+    await expect(page.locator('#decision-dialog-title').textContent()).resolves.toBe('Approve this proposal?');
+    const reasonField = page.locator('#decision-reason');
+    await expect(reasonField.evaluate((element) => element === document.activeElement)).resolves.toBe(true);
+    const confirm = page.locator('#decision-confirm');
+    await expect(confirm.textContent()).resolves.toBe('Approve');
+    await confirm.click();
     await expect(page.locator('#decision-status').textContent()).resolves.toContain('Write a short note');
     expect(decisionPosts).toBe(0);
 
-    await note.fill('🧭'.repeat(1025));
+    await reasonField.fill('🧭'.repeat(1025));
     await expect(page.locator('#decision-byte-count').textContent()).resolves.toContain('4100 of 4096');
     await expect(page.locator('#decision-byte-count').evaluate((element) => getComputedStyle(element).display)).resolves.toBe('block');
-    await confirmApproval.click();
+    await confirm.click();
     await expect(page.locator('#decision-status').textContent()).resolves.toContain('4096 UTF-8 bytes or fewer');
 
-    await note.fill('The wording is clear and correct.');
+    await reasonField.fill('The wording is clear and correct.');
     await expect(page.locator('#decision-byte-count').evaluate((element) => getComputedStyle(element).display)).resolves.toBe('none');
     expect(decisionPosts).toBe(0);
     await page.keyboard.press('Escape');
     await expect(sheet.evaluate((element) => element.open)).resolves.toBe(false);
     await expect(approve.evaluate((element) => element === document.activeElement)).resolves.toBe(true);
 
+    // Phone: the page on top, the panel at the bottom, nothing wider than the screen.
     await page.setViewportSize({ width: 390, height: 844 });
     await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    expect(await page.locator('.md-source').first().evaluate((element) => getComputedStyle(element).whiteSpace)).toBe('pre-wrap');
-    expect(await page.locator('.technical-evidence').evaluate((element) => element.open)).toBe(false);
-    await capture(page, 'exact-dark-mobile');
+    const phoneFrame = await frameElement.boundingBox();
+    const phoneSheet = await page.locator('#rv-sheet').boundingBox();
+    expect(phoneFrame.y + phoneFrame.height).toBeLessThanOrEqual(phoneSheet.y + 1);
+    expect(Math.abs((phoneSheet.y + phoneSheet.height) - 844)).toBeLessThanOrEqual(2);
+    expect(await page.locator('.rv-details').evaluate((element) => element.open)).toBe(true);
+    await page.locator('#rv-fold').click();
+    await expect(page.locator('#rv-body').isVisible()).resolves.toBe(false);
+    await expect(page.locator('#rv-fold').getAttribute('aria-expanded')).resolves.toBe('false');
+    await page.locator('#rv-fold').click();
+    await capture(page, 'proposal-dark-mobile');
     await approve.click();
-    await expect(note.inputValue()).resolves.toBe('The wording is clear and correct.');
+    await expect(reasonField.inputValue()).resolves.toBe('The wording is clear and correct.');
     const dialogBox = await page.locator('#decision-dialog').boundingBox();
     expect(Math.abs((dialogBox.y + dialogBox.height) - 844)).toBeLessThanOrEqual(2);
     await capture(page, 'approval-confirm-dark-mobile');
     expect(decisionPosts).toBe(0);
 
-    await confirmApproval.click();
+    // A refused write keeps the sheet, the note and the choice; retrying records it.
+    await confirm.click();
     await page.waitForFunction(() => document.querySelector('#decision-status')?.textContent
       ?.includes('Another owner action is finishing'));
     expect(decisionPosts).toBe(1);
     await expect(sheet.evaluate((element) => element.open)).resolves.toBe(true);
-    await expect(note.inputValue()).resolves.toBe('The wording is clear and correct.');
-    await confirmApproval.click();
+    await expect(reasonField.inputValue()).resolves.toBe('The wording is clear and correct.');
+    await confirm.click();
     await page.waitForURL(`${fixture.ownerOrigin}/owner/decisions/**`);
     expect(decisionPosts).toBe(2);
-    await expect(page.getByText('Source unchanged', { exact: true }).textContent()).resolves.toBe('Source unchanged');
-    await expect(page.getByText('Nothing on the page changed when you approved. Putting it on the page is the separate step below.').count()).resolves.toBe(1);
+    await expect(page.locator('#application-heading').textContent()).resolves.toBe('Approved');
+    await expect(page.getByText('The page has not changed. Applying is a separate step.', { exact: true }).count()).resolves.toBe(1);
     await expect(page.locator('[data-action]').count()).resolves.toBe(0);
+    await expect(page.frameLocator('#rv-frame').locator('ins').allTextContents()).resolves.toEqual(['the']);
     // The separate step: put it on the page. One button, one sheet, then the job.
-    await expect(page.locator('#application-heading').textContent()).resolves.toBe('Put it on the page');
     const applyButton = page.getByRole('button', { name: 'Apply to page', exact: true });
     await expect(applyButton.count()).resolves.toBe(1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await capture(page, 'approval-receipt-dark-mobile');
     const receiptUrl = page.url();
     await applyButton.click();
-    await expect(page.locator('#apply-dialog-title').textContent()).resolves.toBe('Apply this suggestion to the page?');
+    await expect(page.locator('#apply-dialog-title').textContent()).resolves.toBe('Apply to the page?');
     await expect(page.locator('#apply-confirm').evaluate((element) => element === document.activeElement)).resolves.toBe(true);
     await capture(page, 'apply-confirm-dark-mobile');
     await page.keyboard.press('Escape');
@@ -435,10 +440,9 @@ acceptanceTest('browser review is content-first, deliberate, recoverable, and re
     await expect(page.getByRole('link', { name: 'Back to the suggestion' }).count()).resolves.toBe(1);
     await capture(page, 'apply-job-dark-mobile');
     await page.goto(receiptUrl);
-    await expect(page.locator('#application-heading').textContent()).resolves.toBe('On its way to the page');
+    await expect(page.locator('#application-heading').textContent()).resolves.toBe('Applying');
     await expect(page.locator('.application-stage strong').textContent()).resolves.toBe('Pushing to your repository');
     await expect(page.getByRole('link', { name: 'Follow it' }).getAttribute('href')).resolves.toBe('/owner/jobs/OA-browser-1');
-    await expect(page.getByText('Applied', { exact: true }).count()).resolves.toBe(1);
     await expect(page.getByRole('button', { name: 'Apply to page', exact: true }).count()).resolves.toBe(0);
     await capture(page, 'applied-receipt-dark-mobile');
     await Promise.all([
@@ -446,15 +450,6 @@ acceptanceTest('browser review is content-first, deliberate, recoverable, and re
       page.getByRole('link', { name: 'Back to Proposals' }).click(),
     ]);
     await expect(page.locator('#decided .decision-label').first().textContent()).resolves.toBe('Applied');
-    await Promise.all([
-      page.waitForURL(`${fixture.ownerOrigin}/owner/decisions/**`),
-      page.locator('#decided .proposal-row-link').first().click(),
-    ]);
-
-    await Promise.all([
-      page.waitForURL(`${fixture.ownerOrigin}/owner/review`),
-      page.getByRole('link', { name: 'Back to Proposals' }).click(),
-    ]);
     await expect(page.locator('#decided .proposal-row').count()).resolves.toBe(1);
     await capture(page, 'decided-dark-mobile');
     await Promise.all([
@@ -463,14 +458,15 @@ acceptanceTest('browser review is content-first, deliberate, recoverable, and re
     ]);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'no-preference' });
-    await page.getByRole('button', { name: 'Reject', exact: true }).click();
-    await expect(page.locator('#decision-dialog-title').textContent()).resolves.toBe('Reject this suggestion?');
+    await page.locator('.rv-act [data-action="reject"]').click();
+    await expect(page.locator('#decision-dialog-title').textContent()).resolves.toBe('Reject this proposal?');
+    await expect(confirm.textContent()).resolves.toBe('Reject');
     await page.locator('#decision-reason').fill('The suggestion changes the intended meaning.');
     await capture(page, 'rejection-confirm-light-desktop');
     expect(decisionPosts).toBe(2);
-    await page.getByRole('button', { name: 'Reject suggestion' }).click();
+    await confirm.click();
     await page.waitForURL(`${fixture.ownerOrigin}/owner/decisions/**`);
-    await expect(page.locator('h1').textContent()).resolves.toBe('You rejected this suggestion');
+    await expect(page.locator('#application-heading').textContent()).resolves.toBe('Rejected');
     await capture(page, 'rejection-receipt-light-desktop');
     await Promise.all([
       page.waitForURL(`${fixture.ownerOrigin}/owner/review`),
@@ -502,21 +498,30 @@ acceptanceTest('browser v2 reviews every change and makes one whole-set decision
       await page.waitForURL(`${fixture.readerOrigin}/cyberbase/`);
       await page.click('#review-link');
       await page.waitForURL(`${fixture.ownerOrigin}/owner/review`);
-      expect(await page.locator('#needs-review .proposal-row').first().textContent()).toContain('docs/notes.md — 2 changes');
-      await page.locator('#needs-review .proposal-row-link').first().click();
+      const row = page.locator('#needs-review .proposal-row').first();
+      expect(await row.locator('.proposal-row-title').textContent()).toBe('Notes');
+      expect(await row.locator('.proposal-row-count').textContent()).toBe('2 changes');
+      await row.locator('.proposal-row-link').click();
       await page.waitForURL(`${fixture.ownerOrigin}/owner/review/**`);
+      // Every change is on the page, reachable from the panel, and exact in Details.
+      const note = page.frameLocator('#rv-frame');
+      expect(await note.locator('del').allTextContents()).toEqual(['teh', 'second']);
+      expect(await note.locator('ins').allTextContents()).toEqual(['the', 'another']);
+      expect(await page.locator('#rv-pos').textContent()).toBe('1 of 2');
+      await page.locator('#rv-next').click();
+      expect(await page.locator('#rv-pos').textContent()).toBe('2 of 2');
+      await page.waitForFunction(() => document.querySelector('#rv-frame').getAttribute('src').endsWith('/page#c2'));
+      await page.locator('#rv-list-toggle').click();
+      expect(await page.locator('#rv-list li').count()).toBe(2);
+      expect(await page.locator('#rv-list a[aria-current="true"]').textContent()).toContain('second');
+      await page.locator('#rv-list a[data-change="1"]').click();
+      expect(await page.locator('#rv-pos').textContent()).toBe('1 of 2');
       expect(await page.locator('.inspected-change').count()).toBe(2);
       expect(await page.locator('.inspected-change').first().textContent()).toContain('Line 1, column 9');
       expect(await page.locator('.inspected-change').last().textContent()).toContain('another');
-      expect(await page.locator('.mode-panel-changes .md-source del').count()).toBe(2);
-      await page.getByRole('link', { name: 'Proposed', exact: true }).click();
-      await page.waitForURL(/[?]mode=proposed$/u);
-      expect(await page.locator('.mode-panel-proposed').textContent()).toContain('Correct the typo.');
-      expect(await page.locator('.mode-panel-proposed').textContent()).toContain('another item');
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-      const label = action === 'approve' ? 'Approve all' : 'Reject all';
-      await page.getByRole('button', { name: label, exact: true }).click();
-      expect(await page.locator('#decision-dialog-title').textContent()).toBe(action === 'approve' ? 'Approve all changes?' : 'Reject all changes?');
+      await page.locator(`.rv-act [data-action="${action}"]`).click();
+      expect(await page.locator('#decision-dialog-title').textContent()).toBe(action === 'approve' ? 'Approve all 2 changes?' : 'Reject all 2 changes?');
       await page.locator('#decision-reason').fill('Decide both changes as one suggestion.');
       await page.locator('#decision-confirm').click();
       await page.waitForURL(`${fixture.ownerOrigin}/owner/decisions/**`);

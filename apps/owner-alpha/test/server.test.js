@@ -574,16 +574,16 @@ describe('privileged proposal review routes', () => {
     }));
     const detailBody = await detail.text();
     expect(detail.status).toBe(200);
-    expect(detailBody).toContain('The full note is not available. See the exact changes in Details.');
+    expect(detailBody).toContain('The page can’t be shown here, so this is the exact change.');
     expect(detailBody).not.toContain('Compare full versions');
-    expect(detailBody).toContain('<aside class="decision-bar" aria-label="Your decision">');
-    expect(detailBody).toContain('Approve this suggestion?');
-    expect(detailBody).toContain('<details id="publication-review-fallback">');
+    expect(detailBody).toContain('<section class="rv-sheet" id="rv-sheet" aria-label="Cyberbaser, private to you">');
+    expect(detailBody).toContain('Approve this proposal?');
+    expect(detailBody).toContain('<details class="rv-details" id="publication-review-fallback">');
     expect(detailBody).toContain('<summary>Details</summary>');
     expect(detailBody).toContain('<section id="publication-review-details">');
     expect(detailBody).toContain('docs/example.md');
     expect(detailBody).toContain('id="decision-reason"');
-    expect(detailBody).toContain('This records your decision and nothing else. The page stays exactly as it is.');
+    expect(detailBody).toContain('This records your decision. The page stays exactly as it is.');
     expect(detailBody).toContain('type="button" data-action="reject"');
     expect(detailBody).toContain('type="button" data-action="approve"');
     expect(detailBody).toContain('<dialog id="decision-dialog"');
@@ -619,7 +619,7 @@ describe('privileged proposal review routes', () => {
     expect(opened.response.status).toBe(200);
     expect(opened.body).toContain('Change 1 · Bytes 13–16');
     expect(opened.body).toContain('<h4>Before</h4><pre>teh</pre>');
-    expect(opened.body).toContain('The full note is not available.');
+    expect(opened.body).toContain('The page can’t be shown here, so this is the exact change.');
     expect(opened.body).not.toContain('Compare full versions');
   });
 
@@ -671,15 +671,28 @@ describe('privileged proposal review routes', () => {
     return opened.body;
   }
 
+  // The note itself is served on its own sandboxed route, not in the shell.
+  async function renderFrame(entry) {
+    const service = {
+      ...reviewServiceFixture(),
+      async load() { return { entry, decision: null }; },
+    };
+    const { fetch } = await enabledFixture({ proposalReview: service });
+    const opened = await openReview(fetch);
+    const framed = await fetch(request(`/owner/review/${REVIEW_QUEUE_ID}/page`, { headers: { Cookie: opened.cookie } }));
+    expect(framed.status).toBe(200);
+    return framed.text();
+  }
+
   test('shows a changed passage exactly once even when the page holds invisible characters', async () => {
     const baseText = 'Intro\u200b text.\n\nMiddle para.\n\nTail changed.\n';
     const entry = projectedEntry({ baseText, oldText: 'changed', replacementText: 'edited' });
     const body = await renderMode(entry, 'changes');
-    const document = body.match(/<article class="publication-reviewed-document"[^>]*>([\s\S]*?)<\/article>/u)?.[1];
+    const document = await renderFrame(entry);
     expect(document.match(/Middle para\./gu)).toHaveLength(1);
     expect(document.match(/⟦U\+200B ZERO WIDTH SPACE⟧/gu)).toHaveLength(1);
-    expect(document).toContain('<del class="publication-del" aria-label="Removed">changed</del>');
-    expect(document).toContain('<ins class="publication-ins" aria-label="Added">edited</ins>');
+    expect(document).toContain('<del>changed</del>');
+    expect(document).toContain('<ins>edited</ins>');
     const comparison = body.split('<summary>Compare full versions</summary>')[1];
     expect(comparison.match(/Exact source · changed passage/gu)).toHaveLength(1);
     expect(comparison).toContain('<del class="doc-removed">changed</del>');
@@ -725,9 +738,10 @@ describe('privileged proposal review routes', () => {
     const entry = structuredClone(REVIEW_ENTRY);
     const reason = 'the pinned page exceeds the 262144 byte reading bound, so only the declared change spans are shown';
     entry.document = { baseText: null, candidateText: null, reason };
-    const body = await renderMode(entry, 'changes');
+    const body = await renderFrame(entry);
     expect(body).toContain(reason);
     expect(body).not.toContain('does not exist in the pinned base');
+    expect(await renderMode(entry, 'changes')).toContain('The page can’t be shown here, so this is the exact change.');
   });
 
   test('keeps verified reading text out of list and detail JSON projections', async () => {
@@ -933,7 +947,7 @@ describe('privileged proposal review routes', () => {
     const receipt = await fetch(request(`/owner/decisions/${newer.summary.queueId}`, { headers: { Cookie: opened.cookie } }));
     const receiptBody = await receipt.text();
     expect(receipt.status).toBe(200);
-    expect(receiptBody).toContain('<h2 id="application-heading">On its way to the page</h2>');
+    expect(receiptBody).toContain('<h1 id="application-heading">Applying</h1>');
     expect(receiptBody).toContain('Pull request #42</a> on your forge is still open. Close it there; this app never writes to your forge.');
   });
 
@@ -943,11 +957,12 @@ describe('privileged proposal review routes', () => {
     const ready = await eligible.fetch(request(`/owner/decisions/${REVIEW_QUEUE_ID}`, { headers: { Cookie: opened.cookie } }));
     const readyBody = await ready.text();
     expect(ready.status).toBe(200);
-    expect(readyBody).toContain('<h2 id="application-heading">Put it on the page</h2>');
+    expect(readyBody).toContain('<h1 id="application-heading">Approved</h1>');
+    expect(readyBody).toContain('The page has not changed. Applying is a separate step.');
     expect(readyBody).toContain('data-apply>Apply to page</button>');
     expect(readyBody).toContain('<script src="/owner/assets/apply.js" defer></script>');
     expect(readyBody).toContain(`data-queue-id="${REVIEW_QUEUE_ID}" data-csrf="${TOKENS.csrf}"`);
-    expect(readyBody).toContain('This changes the page and publishes it.');
+    expect(readyBody).toContain('This changes the page, commits and pushes it, and publishes it');
     const asset = await eligible.fetch(request('/owner/assets/apply.js', { headers: { Cookie: opened.cookie } }));
     expect(asset.status).toBe(200);
     expect(await asset.text()).toContain("/apply`");
@@ -957,7 +972,7 @@ describe('privileged proposal review routes', () => {
     const stale = await enabledFixture({ proposalReview: applicationServiceFixture({ status: { state: 'stale', reason: 'source-changed' } }) });
     const staleOpened = await openReview(stale.fetch);
     const staleBody = await (await stale.fetch(request(`/owner/decisions/${REVIEW_QUEUE_ID}`, { headers: { Cookie: staleOpened.cookie } }))).text();
-    expect(staleBody).toContain('<h2 id="application-heading">Cannot be applied as it is</h2>');
+    expect(staleBody).toContain('Approved, but the page has moved on</h1>');
     expect(staleBody).toContain('The page changed after you reviewed this suggestion');
     expect(staleBody).not.toContain('data-apply');
     expect(staleBody).not.toContain('/owner/assets/apply.js');
@@ -965,7 +980,7 @@ describe('privileged proposal review routes', () => {
     const blocked = await enabledFixture({ proposalReview: applicationServiceFixture({ status: { state: 'unapplicable', reason: 'frontmatter-change' } }) });
     const blockedOpened = await openReview(blocked.fetch);
     const blockedBody = await (await blocked.fetch(request(`/owner/decisions/${REVIEW_QUEUE_ID}`, { headers: { Cookie: blockedOpened.cookie } }))).text();
-    expect(blockedBody).toContain('<h2 id="application-heading">The page pipeline cannot apply this yet</h2>');
+    expect(blockedBody).toContain('Approved, but it can’t be applied</h1>');
     expect(blockedBody).toContain('metadata block at the top of the page');
     expect(blockedBody).not.toContain('data-apply');
 
@@ -980,11 +995,10 @@ describe('privileged proposal review routes', () => {
     const liveApi = await live.fetch(request('/api/review', { headers: { Cookie: liveOpened.cookie } }));
     expect((await liveApi.json()).history[0].application).toMatchObject({ state: 'live', jobId: 'OA-applied' });
     const appliedBody = await (await applied.fetch(request(`/owner/decisions/${REVIEW_QUEUE_ID}`, { headers: { Cookie: appliedOpened.cookie } }))).text();
-    expect(appliedBody).toContain('<h2 id="application-heading">On its way to the page</h2>');
+    expect(appliedBody).toContain('<h1 id="application-heading">Applying</h1>');
     expect(appliedBody).toContain('<strong>Pushing to your repository</strong>');
     expect(appliedBody).toContain('href="/owner/jobs/OA-applied">Follow it</a>');
-    expect(appliedBody).toContain('<strong>Applied</strong>');
-    expect(appliedBody).not.toContain('<strong>Source unchanged</strong>');
+    expect(appliedBody).toContain('Applied <time');
     expect(appliedBody).not.toContain('data-apply');
   });
 
@@ -1111,12 +1125,9 @@ describe('privileged proposal review routes', () => {
     }));
     const body = await history.text();
     expect(history.status).toBe(200);
-    expect(body).toContain('<h2>You approved this suggestion</h2>');
+    expect(body).toContain('<h1 id="application-heading">Approved</h1>');
     expect(body).toContain('The exact correction is appropriate.');
-    expect(body).toContain('<strong>Source unchanged</strong>');
-    expect(body).toContain('Nothing on the page changed when you approved. Putting it on the page is the separate step below.');
-    expect(body).toContain('<h2 id="application-heading">Putting it on the page</h2>');
-    expect(body).toContain('Not available in this setup.');
+    expect(body).toContain('The page has not changed. Putting it on the page isn’t available in this setup.');
     expect(body).not.toContain('/owner/assets/apply.js');
     expect(body).toContain('<summary>Details</summary>');
     expect(body).toContain('No longer retained; exact reviewed evidence is embedded here.');

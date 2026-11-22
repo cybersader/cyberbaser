@@ -167,13 +167,13 @@ test('signed agent enters the same inbox with escaped identity; only the owner c
   const cookie = login.headers.get('set-cookie').split(';', 1)[0];
   for (const pathname of ['/owner/review', `/owner/review/${receipt.queueId}`]) {
     const html = await view(handler, cookie, pathname);
-    expect(html).toContain('From &lt;b&gt;Draft agent&lt;/b&gt;, an agent');
+    expect(html).toMatch(/From (<b>)?&lt;b&gt;Draft agent&lt;\/b&gt;(<\/b>)?, one of your agents/u);
     expect(html).not.toContain('<b>Draft agent</b>');
     if (pathname === '/owner/review') expect(html).not.toContain(submitter.keyId);
     else expect(html).toContain('<dt>Submitter ID</dt><dd>agent-&quot;&lt;verified&gt;</dd>');
   }
   const oldHtml = await view(handler, cookie, `/owner/review/${oldId}`);
-  expect(oldHtml).toContain('From a visitor');
+  expect(oldHtml).toContain('From <b>a visitor</b>, not signed in.');
   expect(oldHtml).not.toContain('<dt>Submitter key ID</dt>');
   expect(oldHtml).toContain('Correct the misspelling.');
 
@@ -186,7 +186,7 @@ test('signed agent enters the same inbox with escaped identity; only the owner c
     reviewEvidence: { carrier: { metadata: { submitter } } } });
   expect(decision.application).toMatchObject({ state: 'eligible', attempts: [] });
   for (const pathname of ['/owner/review', `/owner/decisions/${receipt.queueId}`]) {
-    expect(await view(handler, cookie, pathname)).toContain('From &lt;b&gt;Draft agent&lt;/b&gt;, an agent');
+    expect(await view(handler, cookie, pathname)).toMatch(/From (<b>)?&lt;b&gt;Draft agent&lt;\/b&gt;(<\/b>)?, one of your agents/u);
   }
   expect(await issue(agent, 'submitProposal', artifact)).toEqual(receipt); // No decision status on replay either.
   expect(await readFile(path.join(f.checkout, SOURCE_PATH), 'utf8')).toBe(BASE_TEXT);

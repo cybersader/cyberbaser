@@ -20,6 +20,7 @@ import { prepareStore, storeContextFromConfig } from './store.js';
 import { startSuggestionIntake, suggestionFormOrigin, suggestionChallengeOrigin } from './suggestions.js';
 import { createOwnerPublicationRuntime, createPublicationSourceGuard } from './owner-publication-runtime.js';
 import { hasHiddenProposalSource, proposalDisplay, publicationDisplay } from './publication-display.js';
+import { excerptDocument, FRAME_CSP, frameDocument, noticeShell, receiptShell, reviewModel, reviewShell } from './proposal-review-page.js';
 
 import { createOwnerCommands, OwnerCommandPrecondition } from './core/commands.js';
 import { createBootstrapPrincipalAdapter, createDevicePrincipalAdapter } from './core/principal.js';
@@ -50,6 +51,9 @@ const OWNER_CSP = [
   "script-src-attr 'none'",
   "style-src 'self'",
 ].join('; ');
+
+// Review pages embed exactly one thing: the owner-only, sandboxed page frame.
+const REVIEW_SHELL_CSP = OWNER_CSP.replace("default-src 'none'", "default-src 'none'; frame-src 'self'");
 
 const READER_CSP = [
   "default-src 'none'",
@@ -190,7 +194,7 @@ function textareaText(value) {
   return value.startsWith('\n') ? `\n${escaped}` : escaped;
 }
 
-function pageShell({ title, body, script = null, bodyClass = null }) {
+function pageShell({ title, body, script = null, bodyClass = null, stylesheet = '/owner/assets/owner.css' }) {
   const scriptTag = [script].flat().filter(Boolean).map((source) => `<script src="${source}" defer></script>`).join('\n');
   const bodyAttribute = bodyClass === null ? '' : ` class="${escapeHtml(bodyClass)}"`;
   return `<!doctype html>
@@ -199,7 +203,7 @@ function pageShell({ title, body, script = null, bodyClass = null }) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
-<link rel="stylesheet" href="/owner/assets/owner.css">
+<link rel="stylesheet" href="${stylesheet}">
 ${scriptTag}
 </head>
 <body${bodyAttribute}>
@@ -594,9 +598,11 @@ function reviewListPage({ overlay, nextCursor }) {
   return pageShell({
     title: 'Proposals',
     script: '/owner/assets/review.js',
-    bodyClass: 'publication-page proposal-review-page proposal-inbox',
-    body: `<main class="owner-shell review-shell" id="owner-review-list">
-<header class="owner-header review-list-header"><h1>Proposals</h1></header>
+    stylesheet: '/owner/assets/review.css',
+    bodyClass: 'rv-doc rv-inbox',
+    body: `<header class="rv-topbar"><b>Cyberbaser</b><span class="rv-priv">private to you</span></header>
+<main class="rv-inbox-main" id="owner-review-list">
+<h1>Proposals</h1>
 <section class="review-section" id="needs-review" aria-labelledby="actionable-heading">
 <div class="section-heading"><h2 id="actionable-heading">Needs review</h2><span class="section-count">${waiting}</span></div>
 <div class="proposal-list">${actionable}</div>
@@ -605,9 +611,9 @@ ${next}
 <section class="review-section decided-section" id="decided" aria-labelledby="history-heading">
 <div class="section-heading"><h2 id="history-heading">Decided</h2>${decided}</div>
 <div class="proposal-list">${history}</div>
-${overlay.historyTruncated ? '<p class="status">Only the newest decisions are shown here.</p>' : ''}
+${overlay.historyTruncated ? '<p class="rv-note">Only the newest decisions are shown here.</p>' : ''}
 </section>
-<p class="review-return"><a href="/">Return to Cyberbase</a></p>
+<p class="review-return"><a href="/">Return to your site</a></p>
 </main>`,
   });
 }
@@ -1066,9 +1072,10 @@ function proposalSender(entry, { link = true } = {}) {
   const origin = forgeOrigin(entry);
   if (origin !== null) return link ? forgeOriginHtml(origin) : `From pull request #${origin.number} on your forge`;
   const carrier = entry.evidence.carrier;
-  if (carrier?.lane !== 'lane-signed') return 'From a visitor';
+  if (carrier?.lane !== 'lane-signed') return link ? 'From <b>a visitor</b>, not signed in.' : 'From a visitor';
   const { label, kind } = carrier.metadata.submitter;
-  return `From ${escapeHtml(label)}, an ${kind === 'agent' ? 'agent' : 'owner device'}`;
+  const whose = kind === 'agent' ? 'one of your agents' : 'one of your devices';
+  return link ? `From <b>${escapeHtml(label)}</b>, ${whose}.` : `From ${escapeHtml(label)}, ${whose}`;
 }
 
 function contributorReferences(entry) {
@@ -1078,98 +1085,66 @@ function contributorReferences(entry) {
   return fullNote + links;
 }
 
-function reviewIdentityHeader(entry, title) {
-  const rationale = compactReviewText(entry.evidence.proposal.submission.rationale, 180);
-  return `<header class="proposal-identity"><h1 title="${escapeHtml(title)}">${escapeHtml(title)}</h1>
-<p>${proposalSender(entry)} · ${reviewTime(entry.summary.receivedAt, { relative: true })}</p>
-${rationale ? `<blockquote>${escapeHtml(rationale)}</blockquote>` : ''}</header>`;
-}
-
-function decisionStep({ entry, csrfToken, view, title, display }) {
-  const { summary } = entry;
-  const count = view.operations.length;
-  const multi = count > 1;
-  const anchorCount = display?.anchors ? [...display.anchors.values()].flat().length : 0;
-  const canNavigate = multi && anchorCount === count;
-  const nav = (direction) => canNavigate ? `<button type="button" id="publication-${direction}-change" aria-label="${direction === 'previous' ? 'Previous' : 'Next'} change">${publicationIcon(direction)}</button>` : '';
-  const advisory = summary.route === 'reject'
-    ? '<p class="policy-advisory">Your policy recommends rejecting this one. Read the wording and references first.</p>' : '';
-  const properties = display?.available && (display.file.current.blocks.find((block) => block.kind === 'frontmatter')
-    || display.file.proposed.blocks.find((block) => block.kind === 'frontmatter'));
-  const propertySource = (blocks, text) => {
-    const block = blocks.find((item) => item.kind === 'frontmatter');
-    return block ? text.slice(block.start, block.end) : '';
-  };
-  const propertyNotice = properties && propertySource(display.file.current.blocks, entry.document.baseText)
-    !== propertySource(display.file.proposed.blocks, entry.document.candidateText)
-    ? '<p class="proposal-decision-notice">This changes page properties. You can decide on it, but the page pipeline cannot apply it.</p>' : '';
-  const change = escapeHtml(title);
-  return `<aside class="decision-bar" aria-label="Your decision">
-<div class="decision-bar-inner">
-${propertyNotice}<div class="publication-change-controls" aria-label="Change navigation">${nav('previous')}<output id="publication-change-count">${canNavigate ? `1 / ${count}` : `${count} ${multi ? 'changes' : 'change'}`}</output>${nav('next')}</div>
-<div class="decision-actions">
-<button type="button" data-action="reject" class="decision-reject">${multi ? 'Reject all' : 'Reject'}</button>
-<button type="button" data-action="approve" class="decision-approve">${multi ? 'Approve all' : 'Approve'}</button>
-</div>
-<noscript><p class="decision-noscript">Recording a decision needs scripting enabled in this browser.</p></noscript>
-<span id="publication-review-announcement" class="publication-sr-only" role="status" aria-live="polite" aria-atomic="true"></span>
-</div>
-</aside>
-<dialog id="decision-dialog" aria-labelledby="decision-dialog-title">
-<form id="review-decision-form" class="decision-sheet" data-queue-id="${escapeHtml(summary.queueId)}" data-review-evidence-digest="${escapeHtml(summary.reviewEvidenceDigest)}" data-csrf="${escapeHtml(csrfToken)}" data-max-reason-bytes="${OWNER_DECISION_REASON_MAX_BYTES}" data-suggestion-label="${change}" data-proposal-version="${view.version}" data-change-count="${count}">
-<h2 id="decision-dialog-title">Approve this suggestion?</h2>
-<p class="dialog-suggestion" id="decision-dialog-suggestion"><strong>${change}</strong></p>
-${advisory}
-<label for="decision-reason">Why?</label>
-<p class="field-help" id="decision-note-help">A short note, kept with your decision.</p>
-<textarea class="decision-reason" id="decision-reason" name="reason" rows="3" maxlength="${OWNER_DECISION_REASON_MAX_BYTES}" aria-describedby="decision-note-help decision-byte-count" required></textarea>
-<span id="decision-byte-count" class="byte-count" aria-live="polite"></span>
-<p id="decision-status" class="status" role="status" aria-live="polite" tabindex="-1"></p>
-<p id="decision-dialog-copy" class="decision-boundary">This records your decision and nothing else. The page stays exactly as it is.</p>
-<div class="dialog-actions"><button type="button" class="dialog-back" data-dialog-cancel>Cancel</button><button type="button" id="decision-confirm" data-action="approve">Approve suggestion</button></div>
-</form>
-</dialog>`;
-}
-
-function proposalAppbar({ details = false } = {}) {
-  return `<header class="publication-appbar proposal-appbar"><a class="back-link" href="/owner/review">${publicationIcon('previous')} Proposals</a>${details ? `<button type="button" id="publication-toggle-details" aria-expanded="false" aria-controls="publication-details-dialog" aria-haspopup="dialog" hidden>${publicationIcon('panel')} Details</button>` : ''}</header>`;
-}
-
-function reviewDetailPage({ entry, csrfToken, mode = REVIEW_MODE_KEYS[0] }) {
+// The pinned note, its exact operations, and what each one means to the owner.
+function reviewDisplay(entry) {
   const view = proposalView(entry);
-  const document = entry.document;
+  const document = entry.document ?? null;
   const operations = view.operations.map(({ start, end, expected, replacement }) => ({
     path: view.path, start, end, oldText: expected, replacementText: replacement,
   }));
   const display = document?.reason === null ? proposalDisplay({ path: view.path, ...document, operations }) : null;
   const hiddenUnavailable = document?.reason === 'hidden-content' || (!display?.available
     && [document?.baseText, document?.candidateText].some((text) => typeof text === 'string' && hasHiddenProposalSource(text)));
+  const model = reviewModel({ operations, display, document, hiddenUnavailable });
   const title = proposalTitle(entry, display);
   const firstBody = display?.tracked?.rows.find((row) => row.block?.kind !== 'frontmatter');
   // A plain, unchanged opening heading already appears as the page title.
   const repeatedTitle = firstBody?.block?.kind === 'heading' && firstBody.block.level === 1 && !firstBody.changed && !firstBody.hidden
     && firstBody.block.uninterpreted?.length === 0 && firstBody.block.tokens.every((token) => token.type === 'text')
     && firstBody.block.tokens.map((token) => token.text).join('') === title ? firstBody : null;
+  return { view, document, operations, display, hiddenUnavailable, model, title, repeatedTitle };
+}
+
+function reviewFramePage(entry, appearance) {
+  const { document, display, hiddenUnavailable, model, title, repeatedTitle } = reviewDisplay(entry);
+  const note = hiddenUnavailable ? 'Hidden content · source not shown'
+    : document?.reason ? `This page can’t be shown here: ${document.reason}. Every change is listed in the panel.`
+      : display && !display.available ? 'This page can’t be shown here. Every change is listed in the panel.' : null;
+  return frameDocument({ model, display, document, title, sourcePath: entry.summary.source.path,
+    colorScheme: appearance.colorScheme, repeatedTitle, note });
+}
+
+function frameResponse(body, status = 200) {
+  return response(body, status, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Content-Security-Policy': FRAME_CSP,
+    'X-Frame-Options': 'SAMEORIGIN',
+  });
+}
+
+function reviewPage({ title, body, script = null, appearance, receipt = false }) {
+  return pageShell({ title, body, script, stylesheet: '/owner/assets/review.css',
+    bodyClass: `rv-doc rv-scheme-${appearance.colorScheme}${receipt ? ' rv-doc-receipt' : ''}` });
+}
+
+function reviewDetailPage({ entry, csrfToken, mode = REVIEW_MODE_KEYS[0], appearance, detailsOpen = false }) {
+  const { model, title, hiddenUnavailable, operations, display } = reviewDisplay(entry);
   const hasHidden = hiddenUnavailable || display?.hasHidden || operations.some((op) => hasHiddenProposalSource(op.oldText + op.replacementText));
   const hiddenOperations = hiddenUnavailable ? new Set(operations.map((_, index) => index + 1)) : display?.hiddenOperations;
   const details = `<section id="publication-review-details">${changeInspection(entry, { hasHidden, hiddenOperations })}${contributorReferences(entry)}
 ${technicalEvidence(entry, { disclosure: false })}
 ${display?.available && !hasHidden ? `<details${mode === 'changes' ? '' : ' open'}><summary>Compare full versions</summary>${comparisonPanel(entry, mode)}</details>` : ''}</section>`;
-  const primary = display?.available ? publicationDocument(display, document.candidateText, { proposal: true, repeatedTitle })
-    : `<p class="proposal-source-unavailable">${escapeHtml(hiddenUnavailable ? 'Hidden content · source not shown' : document?.reason ?? display?.reason ?? 'The full note is not available. See the exact changes in Details.')}</p>`;
-  return pageShell({
-    title: `${title} · Proposal`,
-    script: ['/owner/assets/publication.js', '/owner/assets/review.js'],
-    bodyClass: 'publication-page publication-document-review proposal-review-page proposal-document-review',
-    body: `${proposalAppbar({ details: true })}<main class="publication-review-app" id="owner-review-detail" data-marks-visible="true" data-start-first-change>
-<div class="publication-document-scroll" id="publication-document-scroll" tabindex="0" aria-label="Reviewed document"><div class="publication-document-content">
-${reviewIdentityHeader(entry, title)}
-${display?.tracked?.coarse ? '<p class="publication-coarse">Whole-document review · see exact changes in Details</p>' : ''}
-<article class="publication-reviewed-document" aria-label="Proposed document">${primary}</article>
-<details id="publication-review-fallback"${mode === 'changes' ? '' : ' open'}><summary>Details</summary>${details}</details>
-</div></div>
-${decisionStep({ entry, csrfToken, view, title, display })}</main>${publicationDetailsDialog()}`,
-  });
+  const advisory = entry.summary.route === 'reject' ? '<p class="rv-note">Your policy recommends rejecting this one.</p>' : '';
+  return reviewPage({ title: `${title} · Proposal`, appearance, script: '/owner/assets/review.js',
+    body: reviewShell({ model, entry, title, siteTitle: appearance.siteTitle, senderHtml: proposalSender(entry),
+      frameUrl: `/owner/review/${encodeURIComponent(entry.summary.queueId)}/page`, csrfToken,
+      maxReasonBytes: OWNER_DECISION_REASON_MAX_BYTES, version: proposalView(entry).version, advisory, detailsHtml: details, detailsOpen }) });
+}
+
+// The server's half of "must see before Approve": a proposal with changes the
+// page cannot show is approved only with an explicit acknowledgement.
+function requiresAcknowledgement(entry) {
+  return reviewDisplay(entry).model.mustSee.length > 0;
 }
 
 const STALE_REASON_COPY = Object.freeze({
@@ -1191,99 +1166,73 @@ const UNAPPLICABLE_REASON_COPY = Object.freeze({
   'attempt-limit': 'Too many attempts have been made on this suggestion.',
   'derivation-failed': 'The change could not be prepared for the page pipeline.',
 });
-// The step after approval, in the owner's words: whether the change can go on
-// the page now, why not, or how far along it is. One button, one sheet.
-function applicationStep({ application, view, summary, csrfToken, entry = null }) {
-  const change = escapeHtml(changeName(view));
+// After a decision, in the owner's words: what was decided, whether the
+// change can go on the page now, why not, or how far along it is.
+function applicationPanel({ application, summary, csrfToken, entry = null }) {
   const sourcePath = escapeHtml(summary.source.path);
-  const jobLink = (attempt) => `<a class="application-job-link" href="/owner/jobs/${encodeURIComponent(attempt.jobId)}">Follow it</a>`;
+  const jobLink = (attempt) => `<a class="rv-link application-job-link" href="/owner/jobs/${encodeURIComponent(attempt.jobId)}">Follow it</a>`;
+  const note = (text) => `<p class="rv-note">${text}</p>`;
   if (application === null) {
-    return `<section class="application-step application-unavailable" aria-labelledby="application-heading">
-<h2 id="application-heading">Putting it on the page</h2>
-<p>Not available in this setup. Your approval is recorded; the page is unchanged.</p>
-</section>`;
+    return `<h1 id="application-heading">Approved</h1>${note('The page has not changed. Putting it on the page isn’t available in this setup.')}`;
   }
   const { state } = application;
   if (state === 'applied') {
     const latest = application.latest;
+    const live = latest.jobState === 'completed';
     const origin = entry === null ? null : forgeOrigin(entry);
-    const forgeFollowUp = origin === null
-      ? ''
-      : `<p class="forge-followup"><a href="${escapeHtml(origin.url)}" rel="noopener noreferrer">Pull request #${origin.number}</a> on your forge is still open. Close it there; this app never writes to your forge.</p>`;
-    return `<section class="application-step application-applied" aria-labelledby="application-heading">
-<h2 id="application-heading">On its way to the page</h2>
-<p class="application-stage"><strong>${escapeHtml(jobStageCopy(latest.jobState))}</strong> ${jobLink(latest)}</p>
-<p class="application-meta">Applied ${reviewTime(latest.appliedAt)}${latest.attempt > 1 ? ` · attempt ${latest.attempt}` : ''}</p>
-${forgeFollowUp}</section>`;
+    const forgeFollowUp = origin === null ? ''
+      : note(`<a href="${escapeHtml(origin.url)}" rel="noopener noreferrer">Pull request #${origin.number}</a> on your forge is still open. Close it there; this app never writes to your forge.`);
+    return `<h1 id="application-heading">${live ? 'Live on the page' : 'Applying'}</h1>
+<p class="rv-note application-stage"><strong>${escapeHtml(jobStageCopy(latest.jobState))}</strong> ${jobLink(latest)}</p>
+<p class="rv-meta">Applied ${reviewTime(latest.appliedAt)}${latest.attempt > 1 ? ` · attempt ${latest.attempt}` : ''}</p>${forgeFollowUp}`;
   }
-  const earlier = application.attempts.length === 0
-    ? ''
-    : `<p class="application-meta">An earlier attempt stopped before changing the page. ${jobLink(application.attempts.at(-1))}</p>`;
-  if (state === 'stale') {
-    return `<section class="application-step application-blocked" aria-labelledby="application-heading">
-<h2 id="application-heading">Cannot be applied as it is</h2>
-<p>${escapeHtml(STALE_REASON_COPY[application.reason] ?? 'The page is no longer exactly what you reviewed.')}</p>
-<p>Your approval stays recorded. To make this change now, edit the page yourself.</p>
-${earlier}</section>`;
-  }
-  if (state === 'unapplicable') {
-    return `<section class="application-step application-blocked" aria-labelledby="application-heading">
-<h2 id="application-heading">The page pipeline cannot apply this yet</h2>
-<p>${escapeHtml(UNAPPLICABLE_REASON_COPY[application.reason] ?? 'The change could not be prepared for the page pipeline.')}</p>
-<p>Your approval stays recorded. To make this change now, edit the page yourself.</p>
-${earlier}</section>`;
+  const earlier = application.attempts.length === 0 ? ''
+    : note(`An earlier attempt stopped before changing the page. ${jobLink(application.attempts.at(-1))}`);
+  if (state === 'stale' || state === 'unapplicable') {
+    const copy = state === 'stale'
+      ? STALE_REASON_COPY[application.reason] ?? 'The page is no longer exactly what you reviewed.'
+      : UNAPPLICABLE_REASON_COPY[application.reason] ?? 'The change could not be prepared for the page pipeline.';
+    return `<h1 id="application-heading" class="rv-blocked">${state === 'stale' ? 'Approved, but the page has moved on' : 'Approved, but it can’t be applied'}</h1>
+${note(escapeHtml(copy))}${note('Your approval stays recorded. To make this change now, edit the page yourself.')}${earlier}`;
   }
   if (state === 'eligible') {
-    return `<section class="application-step application-ready" aria-labelledby="application-heading">
-<h2 id="application-heading">Put it on the page</h2>
-<p>The page is still exactly as you reviewed it. Applying changes <span class="identity-path">${sourcePath}</span>, commits it, pushes it, and publishes it, the same way your own saves do.</p>
-<div class="application-actions"><button type="button" class="decision-approve" data-apply>Apply to page</button></div>
-<noscript><p class="decision-noscript">Applying needs scripting enabled in this browser.</p></noscript>
-${earlier}</section>
+    return `<h1 id="application-heading">Approved</h1>
+${note('The page has not changed. Applying is a separate step.')}
+<div class="rv-act"><button type="button" class="rv-pri" data-apply>Apply to page</button></div>
+<noscript><p class="rv-note">Applying needs scripting enabled in this browser.</p></noscript>${earlier}
 <dialog id="decision-dialog" aria-labelledby="apply-dialog-title">
 <form id="apply-form" class="decision-sheet" data-queue-id="${escapeHtml(summary.queueId)}" data-csrf="${escapeHtml(csrfToken)}">
-<h2 id="apply-dialog-title">Apply this suggestion to the page?</h2>
-<p class="dialog-suggestion"><strong>${change}</strong><span>${sourcePath}</span></p>
+<h2 id="apply-dialog-title">Apply to the page?</h2>
+<p class="dialog-suggestion"><span>${sourcePath}</span></p>
 <p id="apply-status" class="status" role="status" aria-live="polite" tabindex="-1"></p>
-<p class="decision-boundary">This changes the page and publishes it. It runs in the background, and the next screen follows it step by step.</p>
-<div class="dialog-actions"><button type="button" class="dialog-back" data-dialog-cancel>Cancel</button><button type="button" id="apply-confirm" class="decision-approve">Apply to page</button></div>
+<p class="decision-boundary">This changes the page, commits and pushes it, and publishes it, the same way your own saves do. The next screen follows it step by step.</p>
+<div class="dialog-actions"><button type="button" class="dialog-back" data-dialog-cancel>Cancel</button><button type="button" id="apply-confirm" class="rv-pri">Apply to page</button></div>
 </form>
 </dialog>`;
   }
-  return `<section class="application-step application-blocked" aria-labelledby="application-heading">
-<h2 id="application-heading">Putting it on the page</h2>
-<p>Could not check the page just now${application.reason ? ` (${escapeHtml(application.reason)})` : ''}. Reload to try again.</p>
-</section>`;
+  return `<h1 id="application-heading">Approved</h1>${note(`The page has not changed. Couldn’t check whether it can be applied just now${application.reason ? ` (${escapeHtml(application.reason)})` : ''}. Reload to try again.`)}`;
 }
 
-function decisionDetailPage({ decision, summary, queueRetained, application = null, csrfToken = '' }) {
+function decisionDetailPage({ decision, summary, queueRetained, application = null, csrfToken = '', appearance }) {
   const entry = decisionEntry(decision, summary);
-  const view = proposalView(entry);
   const title = proposalTitle(entry);
   const approved = decision.action === 'approve';
-  const applied = approved && application?.state === 'applied';
-  const consequence = approved
-    ? 'Nothing on the page changed when you approved. Putting it on the page is the separate step below.'
-    : 'Nothing on the page changed and nothing was published or scheduled.';
-  const boundary = applied
-    ? `<div class="source-unchanged source-applied"><strong>Applied</strong><span>Approving changed nothing. The change reached the page through the step below, by your own action.</span></div>`
-    : `<div class="source-unchanged"><strong>Source unchanged</strong><span>${consequence}</span></div>`;
-  return pageShell({
-    title: approved ? 'Suggestion approved' : 'Suggestion rejected',
-    bodyClass: 'publication-page proposal-review-page proposal-receipt',
+  const panel = approved
+    ? applicationPanel({ application, summary, csrfToken, entry })
+    : '<h1 id="application-heading">Rejected</h1><p class="rv-note">Nothing changed. The page is exactly as it was.</p>';
+  const note = `<p class="rv-meta">${approved ? 'Approved' : 'Rejected'} ${reviewTime(decision.decidedAt)}. Your note: <q class="decision-note">${escapeHtml(decision.reason)}</q></p>`;
+  return reviewPage({ title: approved ? 'Proposal approved' : 'Proposal rejected', appearance, receipt: true,
     script: ['/owner/assets/review.js', ...(application?.state === 'eligible' ? ['/owner/assets/apply.js'] : [])],
-    body: `${proposalAppbar()}<main class="publication-shell" id="owner-decision-detail">
-${reviewIdentityHeader(entry, title)}
-<section class="decision-result ${approved ? 'decision-approved' : 'decision-rejected'}" aria-label="Your decision">
-<h2>${approved ? 'You approved this suggestion' : 'You rejected this suggestion'}</h2>
-<p class="decision-time">${reviewTime(decision.decidedAt)}</p>
-<blockquote class="decision-note">${escapeHtml(decision.reason)}</blockquote>
-${boundary}
-</section>
-${approved ? applicationStep({ application, view, summary, csrfToken, entry }) : ''}
-<details class="technical-evidence"><summary>Details</summary>${changeInspection(entry)}${contributorReferences(entry)}${technicalEvidence(entry, { decision, queueRetained, disclosure: false })}</details>
-</main>`,
-  });
+    body: receiptShell({ siteTitle: appearance.siteTitle, title,
+      frameUrl: `/owner/decisions/${encodeURIComponent(summary.queueId)}/page`,
+      senderHtml: proposalSender(entry), panelHtml: `${panel}${note}`,
+      detailsHtml: `${changeInspection(entry)}${contributorReferences(entry)}${technicalEvidence(entry, { decision, queueRetained, disclosure: false })}` }) });
+}
+
+function decisionFramePage({ decision, summary }, appearance) {
+  const entry = decisionEntry(decision, summary);
+  return excerptDocument({ operations: proposalView(entry).operations, title: proposalTitle(entry),
+    sourcePath: summary.source.path, colorScheme: appearance.colorScheme });
 }
 
 function optionalQueryObject(url, allowed) {
@@ -1377,8 +1326,10 @@ function reviewQueueId(encoded) {
 function validateDecisionBody(value, routeQueueId) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
   const required = ['queueId', 'reviewEvidenceDigest', 'action', 'reason', 'csrf'];
-  const keys = Object.keys(value);
+  // The one optional field: an explicit "I've seen the changes the page can't show".
+  const keys = Object.keys(value).filter((key) => key !== 'acknowledgedInvisible');
   if (keys.length !== required.length || !required.every((key) => keys.includes(key))) return null;
+  if (Object.hasOwn(value, 'acknowledgedInvisible') && (value.acknowledgedInvisible !== true || value.action !== 'approve')) return null;
   if (value.queueId !== routeQueueId
     || !['approve', 'reject'].includes(value.action)
     || !exactToken(value.csrf)
@@ -1641,6 +1592,33 @@ function commandGate(commands, grant, principal) {
   }
 }
 
+// How the owner's site looks, for the review frame and its site line: only a
+// title and a colour scheme. Anything else falls back to the quiet default.
+const REVIEW_SCHEMES = Object.freeze(['light', 'dark', 'system']);
+function validReviewAppearance(value, config) {
+  const fallbackTitle = path.posix.basename(new URL(config.repository.remote.url).pathname).replace(/\.git$/u, '') || 'Your site';
+  const siteTitle = typeof value?.siteTitle === 'string' && value.siteTitle.trim().length > 0 && value.siteTitle.length <= 80
+    && !/\p{Cc}/u.test(value.siteTitle) ? value.siteTitle.trim() : fallbackTitle[0].toUpperCase() + fallbackTitle.slice(1);
+  const colorScheme = REVIEW_SCHEMES.includes(value?.colorScheme) ? value.colorScheme : 'light';
+  return Object.freeze({ siteTitle, colorScheme });
+}
+
+/** The vault's own `.cyberbaser/site.yml` title and colour scheme, when it is a regular file. */
+export async function readReviewAppearance(config) {
+  try {
+    const file = path.join(config.repository.checkout, '.cyberbaser', 'site.yml');
+    const info = await lstat(file);
+    if (!info.isFile() || info.size > 64 * 1024) return null;
+    const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+    let text;
+    try { text = await handle.readFile('utf8'); } finally { await handle.close(); }
+    const parsed = Bun.YAML.parse(text);
+    return { siteTitle: parsed?.site?.title, colorScheme: parsed?.appearance?.colorScheme };
+  } catch {
+    return null;
+  }
+}
+
 export function createOwnerAlphaHandler({
   config: configInput,
   projectRoot = PROJECT_ROOT,
@@ -1656,8 +1634,10 @@ export function createOwnerAlphaHandler({
   ownerPublication = null,
   createToken = token,
   createJobId = () => `OA-${randomUUID()}`,
+  reviewAppearance = null,
 } = {}) {
   const config = validateOwnerAlphaConfig(configInput);
+  const appearance = validReviewAppearance(reviewAppearance, config);
   if (typeof createEditSession !== 'function'
     || typeof saveEdit !== 'function'
     || typeof lookupJob !== 'function'
@@ -1851,6 +1831,7 @@ export function createOwnerAlphaHandler({
       '/owner/assets/apply.js': 'apply.js',
       '/owner/assets/publication.js': 'publication.js',
       '/owner/assets/owner.css': 'owner.css',
+      '/owner/assets/review.css': 'review.css',
     }[url.pathname];
     if (asset) {
       if (request.method !== 'GET' && request.method !== 'HEAD') return response(null, 405, { Allow: 'GET, HEAD' });
@@ -1977,6 +1958,19 @@ export function createOwnerAlphaHandler({
       const intent = validateDecisionBody(body, queueId);
       if (intent === null) return errorResponse(400, 'invalid-decision-request');
       if (!sameSecret(intent.csrf, csrfToken)) return errorResponse(403, 'invalid-csrf');
+      if (intent.action === 'approve' && intent.acknowledgedInvisible !== true) {
+        // Changes the page can't show must be seen before Approve. Recording
+        // still reloads and checks the evidence exactly as before.
+        let pending;
+        try {
+          pending = await commands.readProposal({ queueId }, principal);
+        } catch (error) {
+          return errorResponse(reviewErrorStatus(error), error instanceof OwnerAlphaError ? error.code : 'decision-record-failed');
+        }
+        if (pending.decision === null && pending.entry && requiresAcknowledgement(pending.entry)) {
+          return errorResponse(409, 'unseen-changes-not-acknowledged');
+        }
+      }
       try {
         const recorded = await commands.recordDecision({
           queueId,
@@ -2039,6 +2033,29 @@ export function createOwnerAlphaHandler({
       }
     }
 
+    const reviewFrameMatch = url.pathname.match(/^\/owner\/(review|decisions)\/([^/]+)\/page$/u);
+    if (reviewFrameMatch) {
+      const denied = commandGate(commands, 'review', principal);
+      if (denied) return denied;
+      if (request.method !== 'GET' && request.method !== 'HEAD') return response(null, 405, { Allow: 'GET, HEAD' });
+      if (url.search !== '') return errorResponse(400, 'unexpected-query');
+      const queueId = reviewQueueId(reviewFrameMatch[2]);
+      if (queueId === null) return errorResponse(400, 'invalid-queue-id');
+      const unavailable = (status) => frameResponse(request.method === 'HEAD' ? null
+        : '<!doctype html><html lang="en"><meta charset="utf-8"><title>Not available</title><p>This page isn’t available.</p></html>\n', status);
+      try {
+        if (reviewFrameMatch[1] === 'review') {
+          const loaded = await commands.readProposal({ queueId }, principal);
+          if (loaded.decision !== null || !loaded.entry) return unavailable(409);
+          return frameResponse(request.method === 'HEAD' ? null : reviewFramePage(loaded.entry, appearance));
+        }
+        const history = await commands.readDecision({ queueId }, principal);
+        return frameResponse(request.method === 'HEAD' ? null : decisionFramePage(history, appearance));
+      } catch (error) {
+        return unavailable(error instanceof OwnerCommandPrecondition && error.code === 'decision-not-found' ? 404 : reviewErrorStatus(error));
+      }
+    }
+
     const reviewDetailMatch = url.pathname.match(/^\/(owner\/review|api\/review)\/([^/]+)$/u);
     if (reviewDetailMatch) {
       const denied = commandGate(commands, 'review', principal);
@@ -2063,7 +2080,11 @@ export function createOwnerAlphaHandler({
         if (reviewDetailMatch[1] === 'owner/review' && ['review-expired', 'review-revision-unreachable'].includes(code)) {
           const expired = code === 'review-expired';
           const title = expired ? 'This proposal expired' : 'This proposal’s base is no longer available';
-          return html(request.method === 'HEAD' ? null : pageShell({ title, bodyClass: 'publication-page', body: `${proposalAppbar()}<main class="publication-shell"><h1>${title}</h1><p>${expired ? 'It can no longer be approved or rejected.' : 'The version it was written against is no longer on your branch. It cannot be reviewed as it is.'}</p></main>` }), status);
+          const message = expired
+            ? 'It can no longer be approved or rejected. If the change is still wanted, the sender can propose it again.'
+            : 'The version it was written against is no longer on your branch, so it can’t be reviewed as it is. A new proposal must use the current page.';
+          return html(request.method === 'HEAD' ? null : reviewPage({ title, appearance,
+            body: noticeShell({ siteTitle: appearance.siteTitle, heading: title, message }) }), status, { 'Content-Security-Policy': REVIEW_SHELL_CSP });
         }
         return errorResponse(status, code);
       }
@@ -2082,7 +2103,9 @@ export function createOwnerAlphaHandler({
         return json(apiEntry);
       }
       if (request.method === 'HEAD') return html(null);
-      return html(reviewDetailPage({ entry: loaded.entry, csrfToken, mode: reviewMode }));
+      // Choosing a comparison mode reopens Details where the owner left it.
+      return html(reviewDetailPage({ entry: loaded.entry, csrfToken, mode: reviewMode, appearance, detailsOpen: url.search !== '' }), 200,
+        { 'Content-Security-Policy': REVIEW_SHELL_CSP });
     }
 
     const decisionDetailMatch = url.pathname.match(/^\/(owner\/decisions|api\/decisions)\/([^/]+)$/u);
@@ -2105,7 +2128,7 @@ export function createOwnerAlphaHandler({
         return json(history);
       }
       if (request.method === 'HEAD') return html(null);
-      return html(decisionDetailPage({ ...history, csrfToken }));
+      return html(decisionDetailPage({ ...history, csrfToken, appearance }), 200, { 'Content-Security-Policy': REVIEW_SHELL_CSP });
     }
 
     if (url.pathname === '/owner/in-place') {
@@ -2435,6 +2458,7 @@ export async function runOwnerAlphaServer({
     saveEdit: pipeline.saveEdit,
     lookupJob,
     proposalReview,
+    reviewAppearance: config.proposalReview.enabled ? await readReviewAppearance(config) : null,
     ownerPublication: config.ownerPublication.enabled
       ? createOwnerPublicationRuntime({ config, context: storeContext, readNote: readAuthoringNote, pipeline }) : null,
   });

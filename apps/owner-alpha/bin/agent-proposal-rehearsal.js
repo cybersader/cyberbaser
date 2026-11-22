@@ -81,7 +81,7 @@ export async function createAgentProposalRehearsal({ port = 46527, before = defa
         const [list, detail, inbox] = await Promise.all([request('/api/review'), request(`/api/review/${queueId}`), request('/owner/review')]);
         const item = (await list.json()).actionable?.find(({ summary }) => summary.queueId === queueId);
         if (!list.ok || !detail.ok || !inbox.ok || item?.summary?.submitter?.label !== AGENT_LABEL
-          || !(await inbox.text()).includes(`From ${AGENT_LABEL}, an agent`)
+          || !(await inbox.text()).includes(`From ${AGENT_LABEL}, one of your agents`)
           || (await readFile(path.join(checkout, AGENT_REHEARSAL_DELIVERY_PATH), 'utf8')) !== before.text) {
           throw new Error('The signed proposal was not visible as an unapplied change in the real owner inbox.');
         }

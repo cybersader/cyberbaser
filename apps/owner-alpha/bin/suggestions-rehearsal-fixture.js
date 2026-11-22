@@ -286,6 +286,8 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
       const labelled = async (request) => {
         const result = await handler(request);
         if (request.method === 'HEAD' || !(result.headers.get('content-type') ?? '').startsWith('text/html')) return result;
+        // The sandboxed page frame is the site's look; the label belongs to the owner page around it.
+        if (/(^|; )sandbox(;|$)/u.test(result.headers.get('content-security-policy') ?? '')) return result;
         let body = await result.text();
         for (const [before, after] of [
           ['Published and confirmed.', 'Local rehearsal complete'],
@@ -296,7 +298,7 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
           ['Waiting for the site to build', 'Simulating deployment (local rehearsal)'],
           ['Checking the live page', 'Simulating live confirmation (local rehearsal)'],
         ]) body = body.replaceAll(before, after);
-        const proposalPage = body.includes('proposal-review-page');
+        const proposalPage = body.includes('class="rv-doc');
         const notice = proposalPage
           ? `<aside class="rehearsal-notice proposal-rehearsal-notice" aria-label="Synthetic rehearsal"><span>Rehearsal · ${simulatedRender ? 'Build and publication simulated' : 'Deployment and live checks simulated'}. No public changes.</span><button type="button" data-dismiss-rehearsal aria-label="Dismiss rehearsal notice">×</button></aside>`
           : simulatedRender

