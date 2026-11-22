@@ -31,6 +31,13 @@ async function inspectParent(socketPath) {
 
 export async function startSignedRequestSocket({ socketPath, commands, verifier }) {
   const parent = await inspectParent(socketPath);
+  // Refuse any existing entry before binding. Some Bun releases (1.3.11, the
+  // pinned container runtime) replace an existing non-socket file on listen()
+  // instead of failing with EADDRINUSE, so the bind itself cannot be trusted to
+  // protect what is already there. The owner-only parent limits the remaining
+  // race to the same user.
+  const existing = await lstat(socketPath).then(() => true, (error) => error?.code !== 'ENOENT');
+  if (existing) unsafe();
   const clients = new Set();
   const tasks = new Set();
   let ready = false;
