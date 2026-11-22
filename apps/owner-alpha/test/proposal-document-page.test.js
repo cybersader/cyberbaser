@@ -226,7 +226,7 @@ describe('proposal review: site frame and private panel', () => {
   test('rewritten paragraphs fold, many changes get a list, properties form their own group', async () => {
     const { page, frame } = await openFixture();
     const rewrite = await page('rewrite-three');
-    expect(rewrite.html).toContain('3 paragraphs rewritten');
+    expect(rewrite.html).toContain('3 changes, rewritten');
     const rewritten = (await frame('rewrite-three')).html;
     expect(rewritten.match(/class="chg rw"/gu)).toHaveLength(3);
     expect(rewritten.match(/Show what it said before/gu)).toHaveLength(3);

@@ -315,7 +315,10 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
         const headers = new Headers(result.headers); headers.delete('content-length');
         const labelledBody = body.includes('id="job-rehearsal-details"')
           ? body.replace('<div id="job-rehearsal-details"></div>', `<div id="job-rehearsal-details">${notice}</div>`)
-          : body.replace(/(<body[^>]*>)/u, `$1${notice}`);
+          : proposalPage && /<div class="rv-app"[^>]*>/u.test(body)
+            // Inside the full-height review layout, as its own row, so it never covers the page.
+            ? body.replace(/(<div class="rv-app"[^>]*>)/u, `$1${notice}`)
+            : body.replace(/(<body[^>]*>)/u, `$1${notice}`);
         return new Response(labelledBody, { status: result.status, headers });
       };
       Object.defineProperties(labelled, { bootstrapToken: { value: handler.bootstrapToken }, issueBootstrap: { value: handler.issueBootstrap } });

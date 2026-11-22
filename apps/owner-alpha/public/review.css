@@ -170,5 +170,5 @@ dialog::backdrop{background:rgba(20,26,23,.42)}
 .review-return{font-size:.86rem}
 
 /* Disposable rehearsals label the owner page; keep the label out of the way. */
-.proposal-rehearsal-notice{position:fixed;z-index:3;top:52px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:6px;max-width:calc(100% - 24px);padding:4px 4px 4px 12px;border-radius:999px;background:#fff4d6;color:#5a4300;border:1px solid #e7cf8a;font-size:.74rem;box-shadow:0 2px 8px rgba(20,30,25,.12)}
+.proposal-rehearsal-notice{flex:none;width:fit-content;margin:6px auto;display:flex;align-items:center;gap:6px;max-width:calc(100% - 24px);padding:4px 4px 4px 12px;border-radius:999px;background:#fff4d6;color:#5a4300;border:1px solid #e7cf8a;font-size:.74rem;box-shadow:0 2px 8px rgba(20,30,25,.12)}
 .proposal-rehearsal-notice button{font:inherit;font-size:1rem;line-height:1;background:none;border:0;color:inherit;min-width:32px;min-height:32px;cursor:pointer;border-radius:999px}

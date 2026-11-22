@@ -183,7 +183,7 @@ export function reviewModel({ operations, display, document, hiddenUnavailable =
       : mustSee[0].kind === 'hidden' ? 'A hidden comment would change'
         : 'A change you can’t see on the page';
   } else if (body.length > 0 && rewritten.length === body.length) {
-    title = `${rewritten.length} ${rewritten.length === 1 ? 'paragraph' : 'paragraphs'} rewritten`;
+    title = `${rewritten.length} ${rewritten.length === 1 ? 'change' : 'changes'}, rewritten`;
   } else title = `${changes.length} ${changes.length === 1 ? 'change' : 'changes'}`;
   return {
     pageAvailable, coarse, changes, body, properties, propertyRows, mustSee, unshown, title,
