@@ -54,7 +54,7 @@ An earlier version had renderer adapters declare the keys they use, a separate "
 
 ## Build order
 
-1. The single shared finder. *(Built 2026-11-21; not yet checked against the real vault.)*
+1. The single shared finder. *(Built 2026-11-21. Checked 2026-11-22 against a fresh copy of the real vault at `2b019b0`: the projection before and after the change is byte-identical, 934 pages and 374 assets.)*
 2. Address-map comparison beside the selected-set comparison. *(Built 2026-11-21.)*
 3. Let a property edit through on the owner's own paths when the block stays intact and both checks pass. Off unless the owner turns it on. Proposals from others keep today's refusal until the owner has used this. *(Built 2026-11-21 as `owner.allowProperties`; synthetic tests only.)*
 4. Review display that shows the old and new property text plainly.
