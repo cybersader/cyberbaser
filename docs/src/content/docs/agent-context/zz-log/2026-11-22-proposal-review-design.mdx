@@ -1,0 +1,22 @@
+---
+title: Proposal review design rounds
+description: The owner rejected two built versions of the proposal review page, preferred reviewing over the actual website on the phone, and asked for an explainer and a tappable prototype before any build. Records the rounds, the edge-case findings, and a socket bug CI caught on the pinned Bun.
+status: log
+---
+
+## What happened
+
+The click-through agent-proposal rehearsal exposed the owner's proposal review page. The owner called the existing page terrible and a first document-first rebuild "AI slop", and pointed back at the 2026-11-16 suggesting-mode prototype as the kind of design they meant. The rebuild had been specified in writing and handed to an implementation worker without that prototype as a visual reference.
+
+Three design rounds followed, all as local mockups under `.workspace/review-routes/` (gitignored), none built into the product:
+
+1. **Four routes.** A quiet Cyberbaser screen; the same screen themed from a handful of deployment tokens; review over the actual website with a private Cyberbaser panel; a quick phone decision card. The owner said Cyberbaser should be "minimal and quiet for the most part and functional where it needs to be", that review could feel like the deployed site if the deployment wants it, and that they liked route C (over the website) most on the phone.
+2. **Route C edge cases.** Twelve hard cases: heavy rewrites, whole-note rewrite, 24 scattered fixes, added, removed and moved sections, tables, code, images, list order, invisible changes (link destination, whitespace, hidden comments), properties, a change the owner's rules refuse, stale and expired proposals, long and missing reasons, after-approve, dark site. Findings: past a threshold a block reads as "rewritten" with the old text one tap away; a change with nothing visible must be acknowledged before Approve appears; a refused change shows no Approve. Weak spots: long rewrites strain memory when flipping versions; decisions are all-or-nothing per proposal; route C is the route with real security work, since the decision panel and the page content have different trust levels.
+3. **Explainer and prototype.** The owner could not tell what was what, or how the review design relates to the site's design, or whether everything they had asked for was covered. Round three is a labelled three-layer anatomy (your website, the marks, Cyberbaser's panel; the same review on three differently styled sites; what a site can and cannot change) and a tappable phone prototype covering five scenarios and three sender standings, with Approve then a separate Apply. A requirement-by-requirement coverage table was given in the thread. Properties and per-change acceptance are not in the prototype; trust standing and reviewer recommendations appear only as one line of text.
+
+No route is selected. The interim document-first page (commit `adb0d9e`) is kept for its display engine (whole-word change boundaries) and hidden-comment masking, not its look.
+
+## Other findings the same day
+
+- **Socket bug caught by CI on the pinned runtime.** The signed-request socket relied on `listen()` failing when the path already existed. On Bun 1.3.11, the version pinned in the owner-app container and CI, `listen()` replaced an existing regular file instead. The local Bun 1.3.14 masked it. Fixed by refusing any existing entry before binding (`af66287`). The publisher and the intake socket already checked first. Local and CI Bun versions differ; the descriptor defect behind the intermittent `EBADF` test failures is fixed upstream in Bun 1.4.0.
+- **Delegation lane.** The OpenAI/Codex worker pool ran out on 2026-11-22 (expected back around 2026-11-24). By owner direction workers move to Anthropic models; the round-three explainer and prototype were built in the main session after the guard refused an Opus worker route.
