@@ -38,9 +38,11 @@ export async function runAgentChild({ capture, checkout, key, socket }) {
   return { code, stdout: stdout.trim(), stderr: stderr.trim() };
 }
 
-export async function createAgentProposalRehearsal({ port = 46527, before = defaultBefore, after = defaultAfter } = {}) {
+// realQuartz renders the private site with the pinned Quartz (and its source
+// provenance) instead of the inert simulated pages. It is slow; tests opt in.
+export async function createAgentProposalRehearsal({ port = 46527, before = defaultBefore, after = defaultAfter, realQuartz = false, siteTitle = null } = {}) {
   if (before.source !== after.source || before.path !== after.path) throw new Error('Capture files must describe the same note.');
-  const fixture = await createSuggestionsFixture({ port, agentBase: before.text });
+  const fixture = await createSuggestionsFixture({ port, agentBase: before.text, siteTitle });
   try {
     const { root, config, git, checkout, remote } = fixture;
     const agent = path.join(root, 'agent');
@@ -57,7 +59,7 @@ export async function createAgentProposalRehearsal({ port = 46527, before = defa
     const entry = await generateKey({ label: AGENT_LABEL, kind: 'agent', grants: ['propose'], file: key });
     await writeFile(registryFile, JSON.stringify({ ownerId: config.owner.identity, entries: [entry] }), { mode: 0o600 });
     await writeFile(fixture.configFile, JSON.stringify({ ...config, deviceRegistryFile: registryFile, signedRequestSocket: socket }), { mode: 0o600 });
-    const runtime = await startSuggestionsRehearsal(fixture, { renderer: renderFixture, simulatedRender: true });
+    const runtime = await startSuggestionsRehearsal(fixture, realQuartz ? {} : { renderer: renderFixture, simulatedRender: true });
     const result = await runAgentChild({ capture, checkout: snapshot, key, socket });
     if (result.code !== 0) throw new Error(`Agent submission failed (${/^[a-z-]+$/u.test(result.stderr) ? result.stderr : 'unknown-refusal'}).`);
     if (result.stdout.startsWith('Unchanged;')) throw new Error('The captures are unchanged; nothing was submitted.');

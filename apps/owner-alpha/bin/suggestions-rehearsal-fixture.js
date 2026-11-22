@@ -83,7 +83,7 @@ export async function assertPrerequisites({ seed = RENDERER_SEED } = {}) {
 /** Only fresh fixture-owned files are written. The real owner config is never read. */
 export const AGENT_REHEARSAL_DELIVERY_PATH = 'workspace-note.md';
 
-export async function createSuggestionsFixture({ port = 46437, host = '127.0.0.1', keep = false, challenge = null, from = null, folder = null, ref = 'origin/main', maxPages = DEFAULT_MAX_PAGES, agentBase = null } = {}) {
+export async function createSuggestionsFixture({ port = 46437, host = '127.0.0.1', keep = false, challenge = null, from = null, folder = null, ref = 'origin/main', maxPages = DEFAULT_MAX_PAGES, agentBase = null, siteTitle = null } = {}) {
   optionsFromArgs(['--port', String(port), '--host', host, ...(challenge === null ? [] : ['--challenge', challenge])]);
   validateCopyOptions({ from, folder, ref, maxPages });
   if (agentBase !== null && (host !== '127.0.0.1' || from !== null || keep || challenge !== null || typeof agentBase !== 'string')) {
@@ -136,6 +136,11 @@ export async function createSuggestionsFixture({ port = 46437, host = '127.0.0.1
     const allow = copied === null ? ['*.md'] : ['index.md', folder];
     await writeFile(path.join(checkout, 'publish.yml'), copied === null ? 'allow:\n  - "*.md"\n' : `${JSON.stringify({ allow })}\n`, { mode: 0o600 });
     await writeFile(path.join(checkout, '.cyberbaser/trust.yml'), 'trusted: [rehearsal]\nagents: []\n', { mode: 0o600 });
+    // Optional synthetic site settings, so the private site carries a title.
+    if (siteTitle !== null) {
+      if (typeof siteTitle !== 'string' || !/^[\w .-]{1,40}$/u.test(siteTitle)) throw new Error('The rehearsal site title must be short plain text.');
+      await writeFile(path.join(checkout, '.cyberbaser/site.yml'), `site:\n  title: ${siteTitle}\nappearance:\n  colorScheme: light\n`, { mode: 0o600 });
+    }
     await git(checkout, ['init', '-q', '--initial-branch=main']);
     await git(checkout, ['config', 'user.name', 'Suggestions Rehearsal']);
     await git(checkout, ['config', 'user.email', 'rehearsal@example.invalid']);
@@ -177,7 +182,7 @@ export async function createSuggestionsFixture({ port = 46437, host = '127.0.0.1
 
 /** A fixture-local renderer seam reuses the pinned setup/build scripts offline. */
 export function createRehearsalRenderer({ seed = RENDERER_SEED } = {}) {
-  return async ({ contentDir, outputDir, workspaceDir, ownerOrigin, suggestions = null }) => {
+  return async ({ contentDir, outputDir, workspaceDir, ownerOrigin, suggestions = null, siteConfigPath = null, sourceCheckout = null }) => {
     const { PINNED_QUARTZ_COMMIT, PINNED_QUARTZ_REF, suggestionEnvironment } = await import('../src/quartz-renderer.js');
     const quartz = path.join(workspaceDir, 'quartz');
     const renderer = path.join(PROJECT_ROOT, 'renderers/quartz-cyberbase');
@@ -188,7 +193,10 @@ export function createRehearsalRenderer({ seed = RENDERER_SEED } = {}) {
       ...(form.CYBERBASER_SOURCE_PROVENANCE ? { CYBERBASER_SOURCE_PROVENANCE: form.CYBERBASER_SOURCE_PROVENANCE } : {}) };
     await command('bash', [path.join(renderer, 'setup.sh'), quartz], { env });
     await command('bash', [path.join(renderer, 'build.sh'), contentDir, quartz], { env: { ...env, COPY_CONTENT: '1', OUTPUT_DIR: outputDir,
-      CYBERBASER_EDIT_LINK_MODE: 'owner', CYBERBASER_OWNER_ORIGIN: ownerOrigin, ...form } });
+      CYBERBASER_EDIT_LINK_MODE: 'owner', CYBERBASER_OWNER_ORIGIN: ownerOrigin, ...form,
+      // The vault's own site settings and read-only note dates, as the real renderer passes them.
+      ...(siteConfigPath ? { CYBERBASER_SITE_CONFIG: siteConfigPath } : {}),
+      ...(sourceCheckout ? { CYBERBASER_SOURCE_CHECKOUT: sourceCheckout } : {}) } });
     return { renderer: 'quartz-cyberbase', revision: PINNED_QUARTZ_COMMIT, tag: PINNED_QUARTZ_REF, outputDir, suggestionForm: suggestions !== null };
   };
 }

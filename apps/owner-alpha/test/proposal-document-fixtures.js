@@ -29,7 +29,9 @@ const hostile = '# Restore notes\n\nRestore a small folder to the original drive
 const longReason = 'Several of the restore steps used different words for the same thing, which made the checklist harder to follow during an actual restore. This replaces them with one consistent set of terms. Nothing about the order of the steps changes. Each replacement is one word, so the page reads the same apart from the wording.';
 const listCode = '# Workshop checklist\n\nReview these steps before a session.\n\n- Put a label on the blue folder.\n- Check that all stations are clean.\n\n## Configuration\n\n```ini\nlocation = west\nmode = standard\n```\n\n> Ask the host before changing shared settings.\n\n| Item | Place |\n| --- | --- |\n| Pens | Desk |\n';
 
-export function createProposalDocumentFixture({ port = 47611, hostileLabel = false, extraHiddenCases = false, appearance = null } = {}) {
+export const FIXTURE_TEXTS = Object.freeze({ backup: backup(), rewriteBase, revision: 'a'.repeat(40) });
+
+export function createProposalDocumentFixture({ port = 47611, hostileLabel = false, extraHiddenCases = false, appearance = null, reviewSiteRoot = null } = {}) {
   const recorded = [];
   const cases = new Map();
   const add = (key, baseText, edits, lane = 'lane-b', options = {}) => {
@@ -129,7 +131,7 @@ export function createProposalDocumentFixture({ port = 47611, hostileLabel = fal
       const raw = JSON.parse(await readFile(new URL('../owner-alpha.example.json', import.meta.url), 'utf8'));
       Object.assign(raw.listen, { port, readerPort: port + 1 });
       Object.assign(raw.proposalReview, { enabled: true, socketPath: '/run/user/1000/cyberbaser/review.sock' });
-      return createOwnerAlphaHandler({ config: validateOwnerAlphaConfig(raw), proposalReview: review, reviewAppearance: appearance,
+      return createOwnerAlphaHandler({ config: validateOwnerAlphaConfig(raw), proposalReview: review, reviewAppearance: appearance, reviewSiteRoot,
         createEditSession: async () => { throw new Error('not available'); }, saveEdit: async () => { throw new Error('not available'); },
         lookupJob: async () => null });
     },

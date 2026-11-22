@@ -20,7 +20,8 @@ import { prepareStore, storeContextFromConfig } from './store.js';
 import { startSuggestionIntake, suggestionFormOrigin, suggestionChallengeOrigin } from './suggestions.js';
 import { createOwnerPublicationRuntime, createPublicationSourceGuard } from './owner-publication-runtime.js';
 import { hasHiddenProposalSource, proposalDisplay, publicationDisplay } from './publication-display.js';
-import { excerptDocument, FRAME_CSP, frameDocument, noticeShell, receiptShell, reviewModel, reviewShell } from './proposal-review-page.js';
+import { excerptDocument, escapeHtml as escapeReviewHtml, FRAME_CSP, frameDocument, noticeShell, receiptShell, reviewModel, reviewShell } from './proposal-review-page.js';
+import { SITE_FRAME_CSP, SITE_REVIEW_REASONS, siteReviewFrame } from './site-review-page.js';
 
 import { createOwnerCommands, OwnerCommandPrecondition } from './core/commands.js';
 import { createBootstrapPrincipalAdapter, createDevicePrincipalAdapter } from './core/principal.js';
@@ -1114,10 +1115,10 @@ function reviewFramePage(entry, appearance) {
     colorScheme: appearance.colorScheme, repeatedTitle, note });
 }
 
-function frameResponse(body, status = 200) {
+function frameResponse(body, status = 200, csp = FRAME_CSP) {
   return response(body, status, {
     'Content-Type': 'text/html; charset=utf-8',
-    'Content-Security-Policy': FRAME_CSP,
+    'Content-Security-Policy': csp,
     'X-Frame-Options': 'SAMEORIGIN',
   });
 }
@@ -1127,11 +1128,13 @@ function reviewPage({ title, body, script = null, appearance, receipt = false })
     bodyClass: `rv-doc rv-scheme-${appearance.colorScheme}${receipt ? ' rv-doc-receipt' : ''}` });
 }
 
-function reviewDetailPage({ entry, csrfToken, mode = REVIEW_MODE_KEYS[0], appearance, detailsOpen = false }) {
+function reviewDetailPage({ entry, csrfToken, mode = REVIEW_MODE_KEYS[0], appearance, detailsOpen = false, siteReason = null }) {
   const { model, title, hiddenUnavailable, operations, display } = reviewDisplay(entry);
   const hasHidden = hiddenUnavailable || display?.hasHidden || operations.some((op) => hasHiddenProposalSource(op.oldText + op.replacementText));
   const hiddenOperations = hiddenUnavailable ? new Set(operations.map((_, index) => index + 1)) : display?.hiddenOperations;
-  const details = `<section id="publication-review-details">${changeInspection(entry, { hasHidden, hiddenOperations })}${contributorReferences(entry)}
+  // One quiet line when the note is not shown on the site's own page.
+  const siteNote = siteReason === null ? '' : `<p class="rv-note rv-site-note">${escapeReviewHtml(SITE_REVIEW_REASONS[siteReason])}</p>`;
+  const details = `<section id="publication-review-details">${siteNote}${changeInspection(entry, { hasHidden, hiddenOperations })}${contributorReferences(entry)}
 ${technicalEvidence(entry, { disclosure: false })}
 ${display?.available && !hasHidden ? `<details${mode === 'changes' ? '' : ' open'}><summary>Compare full versions</summary>${comparisonPanel(entry, mode)}</details>` : ''}</section>`;
   const advisory = entry.summary.route === 'reject' ? '<p class="rv-note">Your policy recommends rejecting this one.</p>' : '';
@@ -1635,9 +1638,22 @@ export function createOwnerAlphaHandler({
   createToken = token,
   createJobId = () => `OA-${randomUUID()}`,
   reviewAppearance = null,
+  // The owner-private site build whose pages a proposal is shown on. Null
+  // shows every proposal on the simplified rendering.
+  reviewSiteRoot = null,
 } = {}) {
   const config = validateOwnerAlphaConfig(configInput);
   const appearance = validReviewAppearance(reviewAppearance, config);
+  if (reviewSiteRoot !== null && (typeof reviewSiteRoot !== 'string' || !path.isAbsolute(reviewSiteRoot))) {
+    throw new TypeError('reviewSiteRoot must be null or one absolute path');
+  }
+  // The site page with its changes, or why the simplified rendering is shown.
+  async function siteReview(entry) {
+    if (reviewSiteRoot === null) return { html: null, reason: null };
+    const { document, operations, model } = reviewDisplay(entry);
+    return siteReviewFrame({ siteRoot: reviewSiteRoot, sourcePath: entry.summary.source.path, revision: entry.summary.source.revision,
+      document, operations, model, colorScheme: appearance.colorScheme });
+  }
   if (typeof createEditSession !== 'function'
     || typeof saveEdit !== 'function'
     || typeof lookupJob !== 'function'
@@ -2047,6 +2063,8 @@ export function createOwnerAlphaHandler({
         if (reviewFrameMatch[1] === 'review') {
           const loaded = await commands.readProposal({ queueId }, principal);
           if (loaded.decision !== null || !loaded.entry) return unavailable(409);
+          const site = await siteReview(loaded.entry);
+          if (site.html !== null) return frameResponse(request.method === 'HEAD' ? null : site.html, 200, SITE_FRAME_CSP);
           return frameResponse(request.method === 'HEAD' ? null : reviewFramePage(loaded.entry, appearance));
         }
         const history = await commands.readDecision({ queueId }, principal);
@@ -2104,7 +2122,8 @@ export function createOwnerAlphaHandler({
       }
       if (request.method === 'HEAD') return html(null);
       // Choosing a comparison mode reopens Details where the owner left it.
-      return html(reviewDetailPage({ entry: loaded.entry, csrfToken, mode: reviewMode, appearance, detailsOpen: url.search !== '' }), 200,
+      const site = await siteReview(loaded.entry);
+      return html(reviewDetailPage({ entry: loaded.entry, csrfToken, mode: reviewMode, appearance, detailsOpen: url.search !== '', siteReason: site.reason }), 200,
         { 'Content-Security-Policy': REVIEW_SHELL_CSP });
     }
 
@@ -2459,6 +2478,7 @@ export async function runOwnerAlphaServer({
     lookupJob,
     proposalReview,
     reviewAppearance: config.proposalReview.enabled ? await readReviewAppearance(config) : null,
+    reviewSiteRoot: path.resolve(projectRoot, config.workspace.site),
     ownerPublication: config.ownerPublication.enabled
       ? createOwnerPublicationRuntime({ config, context: storeContext, readNote: readAuthoringNote, pipeline }) : null,
   });
