@@ -45,6 +45,29 @@ export function wordUnits(text, Segmenter = Intl.Segmenter) {
   if (pending) result.push(pending);
   return result;
 }
+
+// Keep punctuation independently alignable and use dictionary boundaries for
+// scripts without spaces. Trailing horizontal space travels with its word,
+// so it cannot split a two-word substitution into alternating old/new marks.
+function proposalWordUnits(text, Segmenter) {
+  if (text.length > 32_768) return [text];
+  const segment = typeof Segmenter === 'function';
+  const boundaries = segment ? new Set([text.length]) : null;
+  if (segment) for (const part of new Segmenter(undefined, { granularity: 'grapheme' }).segment(text)) boundaries.add(part.index);
+  const parts = segment ? new Segmenter(undefined, { granularity: 'word' }).segment(text)
+    : (text.match(/\s+|\S+/gu) ?? []).map((part) => ({ segment: part }));
+  const units = []; let pending = ''; let end = 0;
+  for (const part of parts) {
+    pending += part.segment;
+    end += part.segment.length;
+    if (boundaries ? !boundaries.has(end) : /^[\p{M}‍]/u.test(text.slice(end, end + 2))) continue;
+    if (units.length && /^[^\S\r\n]+$/u.test(pending) && !/\s$/u.test(units.at(-1))) units[units.length - 1] += pending;
+    else units.push(pending);
+    pending = '';
+  }
+  return units.length ? units : [''];
+}
+
 /** Reassemble original token entries, not just visible text. All metadata must
  * match, even for split text pieces; no endpoint token can disappear or reorder. */
 export function reconstruct(runs, side) {
@@ -64,7 +87,7 @@ export function reconstruct(runs, side) {
 export function verifyRuns(runs, before, after) {
   return identity(reconstruct(runs, 'base')) === identity(before) && identity(reconstruct(runs, 'candidate')) === identity(after);
 }
-function tokenRuns(before, after, limits, state, Segmenter) {
+function tokenRuns(before, after, limits, state, Segmenter, proposal) {
   const aligned = align(before, after, identity, limits.maxTokenCells, state, 'Token LCS');
   if (aligned.reason) return aligned;
   const runs = []; let note = null;
@@ -73,16 +96,24 @@ function tokenRuns(before, after, limits, state, Segmenter) {
     if (entry.kind === 'context') { runs.push({ ...entry, token: after[entry.next] }); index += 1; continue; }
     const changed = []; while (index < aligned.result.length && aligned.result[index].kind !== 'context') changed.push(aligned.result[index++]);
     const removed = changed.filter((part) => part.kind === 'removed'); const added = changed.filter((part) => part.kind === 'added');
-    if (removed.length === 1 && added.length === 1 && before[removed[0].old].type === 'text' && after[added[0].next].type === 'text'
+    const wordTypes = proposal ? ['text', 'code', 'strong', 'emphasis'] : ['text'];
+    if (removed.length === 1 && added.length === 1 && wordTypes.includes(before[removed[0].old].type)
       && identity({ ...before[removed[0].old], text: '' }) === identity({ ...after[added[0].next], text: '' })) {
       const old = removed[0].old; const next = added[0].next;
-      const a = wordUnits(before[old].text, Segmenter); const b = wordUnits(after[next].text, Segmenter);
+      const units = proposal ? proposalWordUnits : wordUnits;
+      const a = units(before[old].text, Segmenter); const b = units(after[next].text, Segmenter);
       if (a && b) {
         const words = align(a, b, (value) => value, limits.maxWordCells, state, 'Word LCS');
         if (words.reason) return words;
-        for (const word of words.result) runs.push({ kind: word.kind,
-          ...(word.old !== undefined ? { old } : {}), ...(word.next !== undefined ? { next } : {}),
-          token: { ...(word.kind === 'removed' ? before[old] : after[next]), text: word.kind === 'removed' ? a[word.old] : b[word.next] } });
+        const pieces = [];
+        for (const word of words.result) {
+          const piece = { kind: word.kind,
+            ...(word.old !== undefined ? { old } : {}), ...(word.next !== undefined ? { next } : {}),
+            token: { ...(word.kind === 'removed' ? before[old] : after[next]), text: word.kind === 'removed' ? a[word.old] : b[word.next] } };
+          if (proposal && pieces.at(-1)?.kind === piece.kind) pieces.at(-1).token.text += piece.token.text;
+          else pieces.push(piece);
+        }
+        runs.push(...pieces);
         continue;
       }
       note = 'Grapheme segmentation unavailable: whole text tokens are marked.';
@@ -91,7 +122,7 @@ function tokenRuns(before, after, limits, state, Segmenter) {
   }
   return verifyRuns(runs, before, after) ? { runs, note } : { reason: 'Two-way rendered-token reconstruction failed.' };
 }
-function refinePair(before, after, oldText, newText, limits, state, Segmenter) {
+function refinePair(before, after, oldText, newText, limits, state, Segmenter, proposal) {
   const a = comparable(before); const b = comparable(after);
   if (identity(a) === identity(b)) return { kind: 'source', reason: 'Source/formatting changed; this projection does not expose the difference.' };
   if (before.uninterpreted?.length || after.uninterpreted?.length) return { kind: 'exact', reason: 'Unsupported syntax: labelled exact-source fallback.' };
@@ -101,7 +132,7 @@ function refinePair(before, after, oldText, newText, limits, state, Segmenter) {
   state.eligible += 1;
   const groups = [];
   for (let index = 0; index < a.streams.length; index += 1) {
-    const result = tokenRuns(a.streams[index], b.streams[index], limits, state, Segmenter);
+    const result = tokenRuns(a.streams[index], b.streams[index], limits, state, Segmenter, proposal);
     if (result.reason) return { kind: 'block', reason: result.reason };
     groups.push(result);
   }
@@ -112,7 +143,7 @@ function refinePair(before, after, oldText, newText, limits, state, Segmenter) {
 }
 /** Input is an already source-replay-verified display. Never run this on an
  * unavailable projection. The two-way proof concerns projections, NOT bytes. */
-export function trackedChanges(display, { baseText, candidateText }, overrides = {}, Segmenter = Intl.Segmenter) {
+export function trackedChanges(display, { baseText, candidateText }, overrides = {}, Segmenter = Intl.Segmenter, { proposal = false } = {}) {
   if (!display.available) return { available: false, rows: [], counts: {}, reason: 'Source projection unavailable.' };
   const limits = { ...TRACKED_CHANGE_LIMITS, ...overrides }; const state = { cells: 0, limit: limits.maxTotalCells, eligible: 0, marks: 0 };
   const base = display.file.current.blocks.filter((block) => block.kind !== 'gap');
@@ -144,8 +175,9 @@ export function trackedChanges(display, { baseText, candidateText }, overrides =
     // search text to guess a moved/repeated block's location.
     if (old.length === next.length) {
       for (let index = 0; index < old.length; index += 1) {
-        const tracked = refinePair(old[index], next[index], source(old[index], baseText), source(next[index], candidateText), limits, state, Segmenter);
-        rows.push({ block: next[index], position: next[index].start, changed: true, previous: [source(old[index], baseText)], tracked }); counts[tracked.kind] += 1;
+        const tracked = refinePair(old[index], next[index], source(old[index], baseText), source(next[index], candidateText), limits, state, Segmenter, proposal);
+        rows.push({ block: next[index], position: next[index].start, changed: true, previous: [source(old[index], baseText)], tracked,
+          ...(proposal ? { baseBlock: old[index] } : {}) }); counts[tracked.kind] += 1;
       }
     } else {
       // Deleted blocks retain BASE spans for rendering/evidence, never for
@@ -165,6 +197,8 @@ export function trackedChanges(display, { baseText, candidateText }, overrides =
     const spans = display.file.current.segments.filter((part) => part.kind === 'removed' && part.operation === point.operation);
     if (spans.length !== 1) return false;
     const span = spans[0];
+    if (proposal && rows.some((row) => row.baseBlock && row.baseBlock.start <= span.start && span.end <= row.baseBlock.end
+      && row.tracked.groups?.some(({ runs }) => runs.some((run) => run.kind === 'removed')))) return true;
     if (!deleted.some((block) => block.start < span.end && block.end > span.start)) return false;
     const coverage = [...deleted, ...display.file.current.blocks.filter((block) => block.kind === 'gap')]
       .filter((block) => block.start < span.end && block.end > span.start)

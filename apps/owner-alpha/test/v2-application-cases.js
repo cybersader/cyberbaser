@@ -144,7 +144,8 @@ export function registerV2ApplicationCases(api) {
     expect(signIn.status).toBe(303);
     const cookie = signIn.headers.get('set-cookie').split(';')[0];
     const inbox = await handler(request('/owner/review', cookie));
-    expect(await inbox.text()).toContain('docs/multi.md — 2 changes');
+    expect(inbox.status).toBe(200);
+    expect(await inbox.text()).toMatch(new RegExp(`<a[^>]+href="/owner/review/${queueId}"[^>]*>[\\s\\S]*?class="proposal-row-count">2 changes</span>`));
     const detail = await handler(request(`/owner/review/${queueId}`, cookie));
     expect(detail.status).toBe(200);
     const html = await detail.text();

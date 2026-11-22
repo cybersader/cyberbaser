@@ -39,8 +39,8 @@ async function approve(owner, queueId) {
   const detail = await owner(`/owner/review/${queueId}`);
   expect(detail.status).toBe(200);
   const html = await detail.text();
-  expect(html).toContain(`Submitted by Agent: ${AGENT_LABEL}`);
-  expect(html).toContain('Build, deployment, live confirmation and rebuild are simulated.');
+  expect(html).toContain(`From ${AGENT_LABEL}, an agent`);
+  expect(html).toContain('Build and publication simulated. No public changes.');
   const csrf = html.match(/data-csrf="([^"]+)"/u)?.[1];
   const reviewEvidenceDigest = html.match(/data-review-evidence-digest="([^"]+)"/u)?.[1];
   expect(csrf).toBeTruthy();

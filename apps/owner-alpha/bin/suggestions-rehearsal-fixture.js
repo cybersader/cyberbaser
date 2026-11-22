@@ -296,9 +296,12 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
           ['Waiting for the site to build', 'Simulating deployment (local rehearsal)'],
           ['Checking the live page', 'Simulating live confirmation (local rehearsal)'],
         ]) body = body.replaceAll(before, after);
-        const notice = simulatedRender
-          ? '<aside class="owner-shell rehearsal-notice"><strong>Disposable agent proposal rehearsal.</strong> Real signed submission, review, exact change, commit and push to a local bare remote. Build, deployment, live confirmation and rebuild are simulated. No public site changes.</aside>'
-          : '<aside class="owner-shell rehearsal-notice"><strong>Disposable suggestions rehearsal.</strong> Real local render, review, exact change, commit and push to a local bare remote. Deployment and live confirmation are simulated. No public site changes.</aside>';
+        const proposalPage = body.includes('proposal-review-page');
+        const notice = proposalPage
+          ? `<aside class="rehearsal-notice proposal-rehearsal-notice" aria-label="Synthetic rehearsal"><span>Rehearsal · ${simulatedRender ? 'Build and publication simulated' : 'Deployment and live checks simulated'}. No public changes.</span><button type="button" data-dismiss-rehearsal aria-label="Dismiss rehearsal notice">×</button></aside>`
+          : simulatedRender
+            ? '<aside class="owner-shell rehearsal-notice"><strong>Disposable agent proposal rehearsal.</strong> Real signed submission, review, exact change, commit and push to a local bare remote. Build, deployment, live confirmation and rebuild are simulated. No public site changes.</aside>'
+            : '<aside class="owner-shell rehearsal-notice"><strong>Disposable suggestions rehearsal.</strong> Real local render, review, exact change, commit and push to a local bare remote. Deployment and live confirmation are simulated. No public site changes.</aside>';
         const headers = new Headers(result.headers); headers.delete('content-length');
         const labelledBody = body.includes('id="job-rehearsal-details"')
           ? body.replace('<div id="job-rehearsal-details"></div>', `<div id="job-rehearsal-details">${notice}</div>`)

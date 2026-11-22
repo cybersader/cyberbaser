@@ -19,7 +19,7 @@ import { createEditSession as createSourceEditSession, liveUrlForSlug } from './
 import { prepareStore, storeContextFromConfig } from './store.js';
 import { startSuggestionIntake, suggestionFormOrigin, suggestionChallengeOrigin } from './suggestions.js';
 import { createOwnerPublicationRuntime, createPublicationSourceGuard } from './owner-publication-runtime.js';
-import { publicationDisplay } from './publication-display.js';
+import { hasHiddenProposalSource, proposalDisplay, publicationDisplay } from './publication-display.js';
 
 import { createOwnerCommands, OwnerCommandPrecondition } from './core/commands.js';
 import { createBootstrapPrincipalAdapter, createDevicePrincipalAdapter } from './core/principal.js';
@@ -191,7 +191,7 @@ function textareaText(value) {
 }
 
 function pageShell({ title, body, script = null, bodyClass = null }) {
-  const scriptTag = script ? `<script src="${script}" defer></script>` : '';
+  const scriptTag = [script].flat().filter(Boolean).map((source) => `<script src="${source}" defer></script>`).join('\n');
   const bodyAttribute = bodyClass === null ? '' : ` class="${escapeHtml(bodyClass)}"`;
   return `<!doctype html>
 <html lang="en">
@@ -372,11 +372,11 @@ function compactReviewText(value, maximum = 160) {
 
 // Owners think in days, not minutes: show the date and keep the exact instant
 // on the element for anyone who needs it.
-function reviewTime(value) {
+function reviewTime(value, { relative = false } = {}) {
   const instant = new Date(value);
-  const visible = Number.isNaN(instant.getTime())
-    ? value
-    : new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeZone: 'UTC' }).format(instant);
+  const visible = Number.isNaN(instant.getTime()) ? value
+    : relative && instant.toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10) ? 'today'
+      : new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeZone: 'UTC' }).format(instant);
   return `<time datetime="${escapeHtml(value)}" title="${escapeHtml(value)}">${escapeHtml(visible)}</time>`;
 }
 
@@ -396,11 +396,15 @@ function proposalView(entry) {
   });
 }
 
-function changeInspection(entry) {
+function changeInspection(entry, { hiddenOperations = new Set(), hasHidden = false } = {}) {
   const view = proposalView(entry);
-  return `<section class="change-inspection" aria-label="Each exact change"><h2>${view.operations.length} ${view.operations.length === 1 ? 'change' : 'changes'}</h2>${view.operations.map((op, index) => {
+  return `<section class="change-inspection" aria-label="Each exact change"><h2>Exact changes</h2>${view.operations.map((op, index) => {
     const position = op.startPosition ? `Line ${op.startPosition.line}, column ${op.startPosition.column}` : `Bytes ${op.start}–${op.end}`;
-    return `<article class="inspected-change"><h3>Change ${index + 1} · ${escapeHtml(position)}</h3><p class="context-note">${escapeHtml(op.context?.before ?? '')}</p><div class="exact-change-grid"><div><h4>Before</h4><pre>${escapeHtml(op.expected)}</pre></div><div><h4>After</h4><pre>${escapeHtml(op.replacement)}</pre></div></div><p class="context-note">${escapeHtml(op.context?.after ?? '')}</p></article>`;
+    const context = (value) => hasHidden || hasHiddenProposalSource(value ?? '') ? '' : `<p class="context-note">${escapeHtml(value ?? '')}</p>`;
+    const hidden = hiddenOperations.has(index + 1) || hasHiddenProposalSource(op.expected + op.replacement);
+    const exact = hidden ? '<p>Hidden content · source not shown</p>'
+      : `${context(op.context?.before ?? (index === 0 ? view.prefix : ''))}<div class="exact-change-grid"><div><h4>Before</h4><pre>${escapeHtml(op.expected)}</pre></div><div><h4>After</h4><pre>${escapeHtml(op.replacement)}</pre></div></div>${context(op.context?.after ?? (index === 0 ? view.suffix : ''))}`;
+    return `<article class="inspected-change"><h3>Change ${index + 1} · ${escapeHtml(position)}</h3>${exact}</article>`;
   }).join('')}</section>`;
 }
 
@@ -548,23 +552,17 @@ function decisionLabel(decision, application) {
 }
 
 function reviewSummaryCard(entry, href, decision = null, application = null, earlier = []) {
-  const view = proposalView(entry);
-  const rationale = compactReviewText(entry.evidence.proposal.submission.rationale, 180);
-  const path = `<span class="proposal-row-path">${escapeHtml(entry.summary.source.path)}</span>`;
+  const count = proposalView(entry).operations.length;
   const label = decision === null ? null : decisionLabel(decision, application);
-  const origin = forgeOrigin(entry);
-  const originHtml = forgeOriginHtml(origin, { compact: true }) + signedSubmitterHtml(entry);
-  const meta = decision === null
-    ? `${path}<span>Received ${reviewTime(entry.summary.receivedAt)}</span><span>Expires ${reviewTime(entry.summary.expiresAt)}</span>${originHtml}${entry.summary.route === 'reject' ? '<span class="attention-note">Your policy suggests rejecting</span>' : ''}`
-    : `<span class="decision-label decision-${label.key}">${label.text}</span><span>${reviewTime(label.at)}</span>${path}${originHtml}<span class="proposal-row-note">\u201c${escapeHtml(compactReviewText(decision.reason, 120))}\u201d</span>`;
+  const title = escapeHtml(proposalTitle(entry));
+  const meta = `${proposalSender(entry, { link: false })} \u00b7 ${reviewTime(entry.summary.receivedAt, { relative: true })}`;
   const folded = earlier.length === 0
     ? ''
     : `<p class="earlier-versions">Earlier ${earlier.length === 1 ? 'version' : 'versions'} of this request: ${earlier.map((item) => `<a href="/owner/review/${encodeURIComponent(item.summary.queueId)}">received ${reviewTime(item.summary.receivedAt)}</a>`).join(', ')}</p>`;
   return `<article class="proposal-row">
 <a class="proposal-row-link" href="${escapeHtml(href)}">
-<span class="proposal-row-change">${changeSummaryHtml(view, { compact: true })}</span>
-<span class="proposal-row-rationale">${escapeHtml(rationale)}</span>
-<span class="proposal-row-meta">${meta}</span>
+<span class="proposal-row-text"><strong class="proposal-row-title" title="${title}">${title}</strong><small>${meta}</small></span>
+<span class="proposal-row-count">${label === null ? `${count} ${count === 1 ? 'change' : 'changes'}` : `<span class="decision-label decision-${label.key}">${label.text}</span>`}</span>
 </a>
 ${folded}</article>`;
 }
@@ -595,12 +593,10 @@ function reviewListPage({ overlay, nextCursor }) {
   const decided = overlay.history.length === 0 ? '' : `<span class="section-count">${overlay.history.length} shown</span>`;
   return pageShell({
     title: 'Proposals',
-    bodyClass: 'proposal-review-page',
+    script: '/owner/assets/review.js',
+    bodyClass: 'publication-page proposal-review-page proposal-inbox',
     body: `<main class="owner-shell review-shell" id="owner-review-list">
-<header class="owner-header review-list-header">
-<h1>Proposals</h1>
-<p class="lede">Suggested changes to your pages. Open one to read it in place and decide; deciding changes nothing on the page itself.</p>
-</header>
+<header class="owner-header review-list-header"><h1>Proposals</h1></header>
 <section class="review-section" id="needs-review" aria-labelledby="actionable-heading">
 <div class="section-heading"><h2 id="actionable-heading">Needs review</h2><span class="section-count">${waiting}</span></div>
 <div class="proposal-list">${actionable}</div>
@@ -927,12 +923,25 @@ function publicationIcon(name) {
   return `<svg class="publication-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths[name]}</svg>`;
 }
 
-function publicationDocument(display, text, { previous = false } = {}) {
+function publicationDocument(display, text, { previous = false, proposal = false, repeatedTitle = null } = {}) {
   if (display.exactOnly) return `<div class="publication-exact-document"><p class="publication-source-label">Exact source</p><pre>${escapeHtml(text)}</pre></div>`;
   const rows = previous ? display.file.current.blocks.filter((block) => block.kind !== 'gap').map((block) => ({ block })) : display.tracked.rows;
   return rows.map((row) => {
-    const content = row.block ? publicationBlock(row.deleted ? { ...row.block, start: 0, end: row.previous[0].length } : row.block,
-      row.deleted ? row.previous[0] : text, row.tracked) : `<p class="publication-removal">${row.removed ? 'Text removed at this position.' : 'Whitespace changed at this position.'}</p>`;
+    if (row === repeatedTitle) return '';
+    const kind = row.tracked?.kind;
+    const content = row.hidden ? '<p class="publication-source-label">Hidden content · source not shown</p>' : row.block
+      ? publicationBlock(row.deleted ? { ...row.block, start: 0, end: row.previous[0].length } : row.block,
+        row.deleted ? row.previous[0] : text, row.tracked)
+      : `<p class="publication-removal">${row.removed ? 'Text removed at this position.' : 'Whitespace changed at this position.'}</p>`;
+    if (proposal) {
+      const anchors = (display.anchors.get(row) ?? []).map((number) => `<span class="proposal-change-anchor" data-change="${number}" tabindex="-1" aria-label="Change ${number}"></span>`).join('');
+      const mark = (tag, label, html) => `<${tag} class="publication-${tag} proposal-block-mark" aria-label="${label}">${html}</${tag}>`;
+      const old = row.baseBlock && ['block', 'exact'].includes(kind) ? row.previous[0] : null;
+      const reading = row.hidden ? content : row.deleted ? mark('del', 'Removed block', content) : kind === 'added' || old !== null
+        ? `${old === null ? '' : mark('del', 'Removed block', publicationBlock({ ...row.baseBlock, start: 0, end: old.length }, old))}${mark('ins', 'Added block', content)}`
+        : content;
+      return `<section class="publication-block${row.changed ? ' proposal-changed-block' : ''}">${anchors}${reading}</section>`;
+    }
     const label = row.tracked && row.tracked.kind !== 'inline' ? `<p class="publication-change-label">${escapeHtml(row.tracked.reason)}</p>` : row.tracked?.note ? `<p class="publication-change-label">${escapeHtml(row.tracked.note)}</p>` : '';
     return `<section class="publication-block${row.mark ? ' publication-change' : ''}${row.deleted ? ' publication-deleted-block' : ''}${row.tracked?.kind === 'added' ? ' publication-added-block' : ''}"${row.mark ? ` id="publication-change-${row.mark}" tabindex="-1" data-change="${row.mark}"` : ''}>${row.mark ? `<span class="publication-margin-mark" aria-label="Change ${row.mark}">${row.mark}</span>` : ''}${label}${content}${row.changed && row.tracked?.kind !== 'inline' && row.previous?.some((part) => part.length) ? `<details class="publication-previous-fragment"><summary aria-label="Previous exact source${row.mark ? ` for change ${row.mark}` : ''}">${publicationIcon('previousSource')} Previous</summary><pre>${escapeHtml(row.previous.join('\n'))}</pre></details>` : ''}</section>`;
   }).join('');
@@ -992,9 +1001,9 @@ function publicationReviewPage(draft, job, modeKey, csrfToken, publishAvailable)
     body: `${publicationHeader(true)}<main class="publication-review-app" data-marks-visible="${marksVisible}"><header class="publication-toolbar" aria-label="Document review controls"><div class="publication-toolbar-title"><h1>${escapeHtml(title)}</h1></div><div class="publication-review-controls">${display.available && trackedCount > 0 ? `<div class="publication-change-controls" aria-label="Change navigation">${iconControl('previous-change', 'Previous change', 'previous')}<output id="publication-change-count" aria-hidden="true">${trackedCount} ${trackedCount === 1 ? 'change' : 'changes'}</output>${iconControl('next-change', 'Next change', 'next')}</div>` : ''}${display.available ? iconControl('toggle-marks', 'Show changes', 'eye', `aria-pressed="${marksVisible}"`, marksVisible ? 'Changes shown' : 'Changes hidden') : ''}<button type="button" id="publication-toggle-details" aria-expanded="false" aria-controls="publication-details-dialog" aria-haspopup="dialog" hidden>${publicationIcon('panel')}<span>Details</span></button></div><div class="publication-toolbar-publish">${action}</div><span id="publication-review-announcement" class="publication-sr-only" role="status" aria-live="polite" aria-atomic="true">${trackedCount} ${trackedCount === 1 ? 'change' : 'changes'}. ${marksVisible ? 'Changes shown.' : 'Changes hidden.'}</span></header><div class="publication-document-scroll" id="publication-document-scroll" tabindex="0" aria-label="Reviewed document"><div class="publication-document-content">${display.coarse ? '<aside class="publication-coarse" role="note">Whole-document review</aside>' : ''}<article class="publication-reviewed-document" aria-label="Proposed document">${primary}</article><details id="publication-review-fallback"${secondary ? ' open' : ''}><summary>Details</summary>${detailsContent}</details></div></div></main>${detailsDialog}${dialog}` });
 }
 
-function technicalEvidence(entry, { decision = null, queueRetained = null, title = 'Technical evidence' } = {}) {
+function technicalEvidence(entry, { decision = null, queueRetained = null, title = 'Technical evidence', disclosure = true } = {}) {
   const { evidence, summary, sourceVerification } = entry;
-  const trust = evidence.classification.classification;
+  const { classification: trust, verifiedSubject } = evidence.classification;
   const trustReasons = trust.reasons.length === 0
     ? '<p class="empty-state">No classification reason codes were recorded.</p>'
     : `<ul class="trust-reasons">${trust.reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join('')}</ul>`;
@@ -1011,9 +1020,8 @@ function technicalEvidence(entry, { decision = null, queueRetained = null, title
 <div><dt>Queue copy</dt><dd>${escapeHtml(retained)}</dd></div>
 </dl></section>`;
   }
-  return `<details class="technical-evidence">
-<summary>${escapeHtml(title)}</summary>
-<div class="technical-evidence-body">
+  const submitter = evidence.carrier?.lane === 'lane-signed' ? evidence.carrier.metadata.submitter : null;
+  const report = `<div class="technical-evidence-body">
 <section><h3>Source binding</h3><dl class="technical-facts">
 <div><dt>Path</dt><dd>${escapeHtml(summary.source.path)}</dd></div>
 <div><dt>Repository</dt><dd>${escapeHtml(summary.source.repository)}</dd></div>
@@ -1029,76 +1037,88 @@ function technicalEvidence(entry, { decision = null, queueRetained = null, title
 <div><dt>Review evidence</dt><dd>${escapeHtml(summary.reviewEvidenceDigest)}</dd></div>
 <div><dt>Received</dt><dd>${escapeHtml(summary.receivedAt)}</dd></div>
 <div><dt>Expires</dt><dd>${escapeHtml(summary.expiresAt)}</dd></div>
+${submitter ? `<div><dt>Submitter ID</dt><dd>${escapeHtml(submitter.id)}</dd></div><div><dt>Submitter key ID</dt><dd>${escapeHtml(submitter.keyId)}</dd></div>` : ''}
 </dl></section>
 <section><h3>Trust classification</h3><dl class="technical-facts">
 <div><dt>Tier</dt><dd>${escapeHtml(summary.tier)}</dd></div>
 <div><dt>Lane</dt><dd>${escapeHtml(summary.lane)}</dd></div>
 <div><dt>Route</dt><dd>${escapeHtml(summary.route)}</dd></div>
-<div><dt>Verified subject</dt><dd>${escapeHtml(evidence.classification.verifiedSubject ?? 'none')}</dd></div>
+<div><dt>Verified subject</dt><dd>${escapeHtml(verifiedSubject?.author ?? 'none')}${verifiedSubject?.authorType ? ` (${escapeHtml(verifiedSubject.authorType)})` : ''}</dd></div>
 <div><dt>Policy status</dt><dd>${escapeHtml(evidence.classification.policyStatus)}</dd></div>
 <div><dt>Policy digest</dt><dd>${escapeHtml(evidence.classification.policyDigest ?? 'none')}</dd></div>
 </dl><h4>Reason codes</h4>${trustReasons}</section>
 ${decisionFacts}
-</div>
-</details>`;
+</div>`;
+  return disclosure ? `<details class="technical-evidence"><summary>${escapeHtml(title)}</summary>${report}</details>` : report;
 }
 
-function reviewIdentityHeader(entry, view) {
-  const { summary } = entry;
-  const proposal = entry.evidence.proposal;
-  const rationale = proposal.submission.rationale;
-  const references = proposal.submission.evidence;
-  // The contributor's own words are the most useful thing on the page after
-  // the change itself, so they are shown rather than hidden behind a
-  // disclosure. Only an unusually long note folds.
-  const note = rationale.length <= 320
-    ? `<p class="contributor-rationale">${escapeHtml(rationale).replaceAll('\n', '<br>')}</p>`
-    : `<p class="contributor-rationale">${escapeHtml(compactReviewText(rationale, 320))}</p>
-<details class="identity-details"><summary>Read the whole note</summary><p class="contributor-rationale">${escapeHtml(rationale).replaceAll('\n', '<br>')}</p></details>`;
-  const links = references.length === 0
-    ? ''
-    : `<p class="identity-references">References: ${references.map((url, index) => `<a href="${escapeHtml(url)}" rel="noopener noreferrer">${escapeHtml(new URL(url).hostname)}${references.length > 1 ? ` (${index + 1})` : ''}</a>`).join(', ')}</p>`;
-  return `<header class="owner-header review-detail-header">
-<a class="back-link" href="/owner/review">Back to Proposals</a>
-<h1>${escapeHtml(changeName(view))}</h1>
-<div class="identity-meta">
-<span class="identity-path">${escapeHtml(summary.source.path)}</span>
-<span>Received ${reviewTime(summary.receivedAt)}</span>
-<span>Expires ${reviewTime(summary.expiresAt)}</span>
-${forgeOriginHtml(forgeOrigin(entry))}${signedSubmitterHtml(entry)}
-</div>
-<div class="contributor-note">
-<p class="section-kicker">Why the contributor suggests it</p>
-${note}
-${links}
-</div>
-</header>`;
+function proposalTitle(entry, display) {
+  const heading = display?.tracked?.rows.find((row) => !row.hidden && !row.deleted && row.block?.kind === 'heading');
+  const projected = heading?.block.tokens.map((token) => token.text).join('').trim();
+  const source = entry.document?.baseText ?? '';
+  const withoutHidden = hasHiddenProposalSource(source) ? '' : source;
+  const firstHeading = /^#{1,6}[^\S\r\n]+([^\r\n]+)$/mu.exec(withoutHidden)?.[1]?.replace(/\s+#+\s*$/u, '').trim();
+  const filename = path.posix.basename(entry.summary.source.path).replace(/\.md$/iu, '').replace(/[-_]+/gu, ' ').trim();
+  return projected || firstHeading || (filename ? filename[0].toUpperCase() + filename.slice(1) : 'Proposed change');
 }
 
-function decisionStep({ entry, csrfToken, view }) {
+function proposalSender(entry, { link = true } = {}) {
+  const origin = forgeOrigin(entry);
+  if (origin !== null) return link ? forgeOriginHtml(origin) : `From pull request #${origin.number} on your forge`;
+  const carrier = entry.evidence.carrier;
+  if (carrier?.lane !== 'lane-signed') return 'From a visitor';
+  const { label, kind } = carrier.metadata.submitter;
+  return `From ${escapeHtml(label)}, an ${kind === 'agent' ? 'agent' : 'owner device'}`;
+}
+
+function contributorReferences(entry) {
+  const { rationale, evidence } = entry.evidence.proposal.submission;
+  const fullNote = rationale.length > 180 ? `<blockquote>${escapeHtml(rationale)}</blockquote>` : '';
+  const links = evidence.length === 0 ? '' : `<p class="identity-references">References: ${evidence.map((url, index) => `<a href="${escapeHtml(url)}" rel="noopener noreferrer">${escapeHtml(new URL(url).hostname)}${evidence.length > 1 ? ` (${index + 1})` : ''}</a>`).join(', ')}</p>`;
+  return fullNote + links;
+}
+
+function reviewIdentityHeader(entry, title) {
+  const rationale = compactReviewText(entry.evidence.proposal.submission.rationale, 180);
+  return `<header class="proposal-identity"><h1 title="${escapeHtml(title)}">${escapeHtml(title)}</h1>
+<p>${proposalSender(entry)} · ${reviewTime(entry.summary.receivedAt, { relative: true })}</p>
+${rationale ? `<blockquote>${escapeHtml(rationale)}</blockquote>` : ''}</header>`;
+}
+
+function decisionStep({ entry, csrfToken, view, title, display }) {
   const { summary } = entry;
+  const count = view.operations.length;
+  const multi = count > 1;
+  const anchorCount = display?.anchors ? [...display.anchors.values()].flat().length : 0;
+  const canNavigate = multi && anchorCount === count;
+  const nav = (direction) => canNavigate ? `<button type="button" id="publication-${direction}-change" aria-label="${direction === 'previous' ? 'Previous' : 'Next'} change">${publicationIcon(direction)}</button>` : '';
   const advisory = summary.route === 'reject'
-    ? '<p class="policy-advisory">Your policy recommends rejecting this one. Read the wording and references first.</p>'
-    : '';
-  const change = escapeHtml(changeName(view));
-  const sourcePath = escapeHtml(summary.source.path);
-  // One sticky bar with the two real actions, and one sheet that asks the only
-  // question the owner has to answer. The boundary is stated once, in the sheet,
-  // in plain words, and again on the receipt.
+    ? '<p class="policy-advisory">Your policy recommends rejecting this one. Read the wording and references first.</p>' : '';
+  const properties = display?.available && (display.file.current.blocks.find((block) => block.kind === 'frontmatter')
+    || display.file.proposed.blocks.find((block) => block.kind === 'frontmatter'));
+  const propertySource = (blocks, text) => {
+    const block = blocks.find((item) => item.kind === 'frontmatter');
+    return block ? text.slice(block.start, block.end) : '';
+  };
+  const propertyNotice = properties && propertySource(display.file.current.blocks, entry.document.baseText)
+    !== propertySource(display.file.proposed.blocks, entry.document.candidateText)
+    ? '<p class="proposal-decision-notice">This changes page properties. You can decide on it, but the page pipeline cannot apply it.</p>' : '';
+  const change = escapeHtml(title);
   return `<aside class="decision-bar" aria-label="Your decision">
 <div class="decision-bar-inner">
-<p class="decision-bar-change"><strong>${change}</strong><span>${sourcePath}</span></p>
+${propertyNotice}<div class="publication-change-controls" aria-label="Change navigation">${nav('previous')}<output id="publication-change-count">${canNavigate ? `1 / ${count}` : `${count} ${multi ? 'changes' : 'change'}`}</output>${nav('next')}</div>
 <div class="decision-actions">
-<button type="button" data-action="reject" class="decision-reject">${view.version === 2 ? 'Reject all' : 'Reject'}</button>
-<button type="button" data-action="approve" class="decision-approve">${view.version === 2 ? 'Approve all' : 'Approve'}</button>
+<button type="button" data-action="reject" class="decision-reject">${multi ? 'Reject all' : 'Reject'}</button>
+<button type="button" data-action="approve" class="decision-approve">${multi ? 'Approve all' : 'Approve'}</button>
 </div>
 <noscript><p class="decision-noscript">Recording a decision needs scripting enabled in this browser.</p></noscript>
+<span id="publication-review-announcement" class="publication-sr-only" role="status" aria-live="polite" aria-atomic="true"></span>
 </div>
 </aside>
 <dialog id="decision-dialog" aria-labelledby="decision-dialog-title">
-<form id="review-decision-form" class="decision-sheet" data-queue-id="${escapeHtml(summary.queueId)}" data-review-evidence-digest="${escapeHtml(summary.reviewEvidenceDigest)}" data-csrf="${escapeHtml(csrfToken)}" data-max-reason-bytes="${OWNER_DECISION_REASON_MAX_BYTES}" data-suggestion-label="${change}" data-proposal-version="${view.version}">
+<form id="review-decision-form" class="decision-sheet" data-queue-id="${escapeHtml(summary.queueId)}" data-review-evidence-digest="${escapeHtml(summary.reviewEvidenceDigest)}" data-csrf="${escapeHtml(csrfToken)}" data-max-reason-bytes="${OWNER_DECISION_REASON_MAX_BYTES}" data-suggestion-label="${change}" data-proposal-version="${view.version}" data-change-count="${count}">
 <h2 id="decision-dialog-title">Approve this suggestion?</h2>
-<p class="dialog-suggestion" id="decision-dialog-suggestion"><strong>${change}</strong><span>${sourcePath}</span></p>
+<p class="dialog-suggestion" id="decision-dialog-suggestion"><strong>${change}</strong></p>
 ${advisory}
 <label for="decision-reason">Why?</label>
 <p class="field-help" id="decision-note-help">A short note, kept with your decision.</p>
@@ -1111,19 +1131,44 @@ ${advisory}
 </dialog>`;
 }
 
+function proposalAppbar({ details = false } = {}) {
+  return `<header class="publication-appbar proposal-appbar"><a class="back-link" href="/owner/review">${publicationIcon('previous')} Proposals</a>${details ? `<button type="button" id="publication-toggle-details" aria-expanded="false" aria-controls="publication-details-dialog" aria-haspopup="dialog" hidden>${publicationIcon('panel')} Details</button>` : ''}</header>`;
+}
+
 function reviewDetailPage({ entry, csrfToken, mode = REVIEW_MODE_KEYS[0] }) {
   const view = proposalView(entry);
+  const document = entry.document;
+  const operations = view.operations.map(({ start, end, expected, replacement }) => ({
+    path: view.path, start, end, oldText: expected, replacementText: replacement,
+  }));
+  const display = document?.reason === null ? proposalDisplay({ path: view.path, ...document, operations }) : null;
+  const hiddenUnavailable = document?.reason === 'hidden-content' || (!display?.available
+    && [document?.baseText, document?.candidateText].some((text) => typeof text === 'string' && hasHiddenProposalSource(text)));
+  const title = proposalTitle(entry, display);
+  const firstBody = display?.tracked?.rows.find((row) => row.block?.kind !== 'frontmatter');
+  // A plain, unchanged opening heading already appears as the page title.
+  const repeatedTitle = firstBody?.block?.kind === 'heading' && firstBody.block.level === 1 && !firstBody.changed && !firstBody.hidden
+    && firstBody.block.uninterpreted?.length === 0 && firstBody.block.tokens.every((token) => token.type === 'text')
+    && firstBody.block.tokens.map((token) => token.text).join('') === title ? firstBody : null;
+  const hasHidden = hiddenUnavailable || display?.hasHidden || operations.some((op) => hasHiddenProposalSource(op.oldText + op.replacementText));
+  const hiddenOperations = hiddenUnavailable ? new Set(operations.map((_, index) => index + 1)) : display?.hiddenOperations;
+  const details = `<section id="publication-review-details">${changeInspection(entry, { hasHidden, hiddenOperations })}${contributorReferences(entry)}
+${technicalEvidence(entry, { disclosure: false })}
+${display?.available && !hasHidden ? `<details${mode === 'changes' ? '' : ' open'}><summary>Compare full versions</summary>${comparisonPanel(entry, mode)}</details>` : ''}</section>`;
+  const primary = display?.available ? publicationDocument(display, document.candidateText, { proposal: true, repeatedTitle })
+    : `<p class="proposal-source-unavailable">${escapeHtml(hiddenUnavailable ? 'Hidden content · source not shown' : document?.reason ?? display?.reason ?? 'The full note is not available. See the exact changes in Details.')}</p>`;
   return pageShell({
-    title: `Review ${changeName(view)}`,
-    script: '/owner/assets/review.js',
-    bodyClass: 'proposal-review-page',
-    body: `<main class="owner-shell review-shell" id="owner-review-detail">
-${reviewIdentityHeader(entry, view)}
-${changeInspection(entry)}
-${comparisonPanel(entry, mode)}
-${technicalEvidence(entry, { title: 'Details for the record' })}
-</main>
-${decisionStep({ entry, csrfToken, view })}`,
+    title: `${title} · Proposal`,
+    script: ['/owner/assets/publication.js', '/owner/assets/review.js'],
+    bodyClass: 'publication-page publication-document-review proposal-review-page proposal-document-review',
+    body: `${proposalAppbar({ details: true })}<main class="publication-review-app" id="owner-review-detail" data-marks-visible="true" data-start-first-change>
+<div class="publication-document-scroll" id="publication-document-scroll" tabindex="0" aria-label="Reviewed document"><div class="publication-document-content">
+${reviewIdentityHeader(entry, title)}
+${display?.tracked?.coarse ? '<p class="publication-coarse">Whole-document review · see exact changes in Details</p>' : ''}
+<article class="publication-reviewed-document" aria-label="Proposed document">${primary}</article>
+<details id="publication-review-fallback"${mode === 'changes' ? '' : ' open'}><summary>Details</summary>${details}</details>
+</div></div>
+${decisionStep({ entry, csrfToken, view, title, display })}</main>${publicationDetailsDialog()}`,
   });
 }
 
@@ -1214,6 +1259,7 @@ ${earlier}</section>
 function decisionDetailPage({ decision, summary, queueRetained, application = null, csrfToken = '' }) {
   const entry = decisionEntry(decision, summary);
   const view = proposalView(entry);
+  const title = proposalTitle(entry);
   const approved = decision.action === 'approve';
   const applied = approved && application?.state === 'applied';
   const consequence = approved
@@ -1224,27 +1270,18 @@ function decisionDetailPage({ decision, summary, queueRetained, application = nu
     : `<div class="source-unchanged"><strong>Source unchanged</strong><span>${consequence}</span></div>`;
   return pageShell({
     title: approved ? 'Suggestion approved' : 'Suggestion rejected',
-    bodyClass: 'proposal-review-page',
-    script: application?.state === 'eligible' ? '/owner/assets/apply.js' : null,
-    body: `<main class="owner-shell review-shell" id="owner-decision-detail">
-<header class="owner-header decision-receipt-header">
-<a class="back-link" href="/owner/review">Back to Proposals</a>
-<h1>${approved ? 'You approved this suggestion' : 'You rejected this suggestion'}</h1>
-<p class="decision-time">${reviewTime(decision.decidedAt)}</p>
-</header>
+    bodyClass: 'publication-page proposal-review-page proposal-receipt',
+    script: ['/owner/assets/review.js', ...(application?.state === 'eligible' ? ['/owner/assets/apply.js'] : [])],
+    body: `${proposalAppbar()}<main class="publication-shell" id="owner-decision-detail">
+${reviewIdentityHeader(entry, title)}
 <section class="decision-result ${approved ? 'decision-approved' : 'decision-rejected'}" aria-label="Your decision">
-<p class="context-copy">${changeSummaryHtml(view)}</p>
-<p class="receipt-path">${escapeHtml(summary.source.path)}</p>
-${signedSubmitterHtml(entry)}<blockquote class="decision-note">${escapeHtml(decision.reason)}</blockquote>
+<h2>${approved ? 'You approved this suggestion' : 'You rejected this suggestion'}</h2>
+<p class="decision-time">${reviewTime(decision.decidedAt)}</p>
+<blockquote class="decision-note">${escapeHtml(decision.reason)}</blockquote>
 ${boundary}
 </section>
-${view.version === 2 ? changeInspection(entry) : ''}
 ${approved ? applicationStep({ application, view, summary, csrfToken, entry }) : ''}
-${technicalEvidence(entry, {
-  decision,
-  queueRetained,
-  title: 'Details for the record',
-})}
+<details class="technical-evidence"><summary>Details</summary>${changeInspection(entry)}${contributorReferences(entry)}${technicalEvidence(entry, { decision, queueRetained, disclosure: false })}</details>
 </main>`,
   });
 }
@@ -2021,7 +2058,14 @@ export function createOwnerAlphaHandler({
       try {
         loaded = await commands.readProposal({ queueId }, principal);
       } catch (error) {
-        return errorResponse(reviewErrorStatus(error), error instanceof OwnerAlphaError ? error.code : 'review-load-failed');
+        const code = error instanceof OwnerAlphaError ? error.code : 'review-load-failed';
+        const status = reviewErrorStatus(error);
+        if (reviewDetailMatch[1] === 'owner/review' && ['review-expired', 'review-revision-unreachable'].includes(code)) {
+          const expired = code === 'review-expired';
+          const title = expired ? 'This proposal expired' : 'This proposal’s base is no longer available';
+          return html(request.method === 'HEAD' ? null : pageShell({ title, bodyClass: 'publication-page', body: `${proposalAppbar()}<main class="publication-shell"><h1>${title}</h1><p>${expired ? 'It can no longer be approved or rejected.' : 'The version it was written against is no longer on your branch. It cannot be reviewed as it is.'}</p></main>` }), status);
+        }
+        return errorResponse(status, code);
       }
       if (loaded.decision !== null) {
         if (reviewDetailMatch[1] === 'owner/review') {

@@ -555,9 +555,10 @@ describe('privileged proposal review routes', () => {
     expect(opened.body).toContain('<h1>Proposals</h1>');
     expect(opened.body).toContain('Needs review');
     expect(opened.body).toContain('Decided');
-    expect(opened.body).toContain('docs/example.md');
-    expect(opened.body).toContain('changed-proposed');
-    expect(opened.body).toContain('deciding changes nothing on the page itself');
+    expect(opened.body).toContain(`href="/owner/review/${REVIEW_QUEUE_ID}"`);
+    expect(opened.body).toContain('class="proposal-row-title" title="Example">Example</strong>');
+    expect(opened.body).toContain('class="proposal-row-count">1 change</span>');
+    expect(opened.body).not.toContain('changed-proposed');
     expect(opened.body).not.toContain('<dt>Queue ID</dt>');
     expect(opened.body).not.toContain('<dt>Trust</dt>');
     expect(opened.response.headers.get('content-security-policy')).toContain("script-src 'self'");
@@ -573,17 +574,14 @@ describe('privileged proposal review routes', () => {
     }));
     const detailBody = await detail.text();
     expect(detail.status).toBe(200);
-    expect(detailBody).toContain('Review “teh” to “&lt;/pre&gt;&lt;script&gt;the&lt;/script&gt;”');
-    expect(detailBody).toContain('<nav class="review-modes" aria-label="Review mode">');
-    for (const mode of ['changes', 'proposed', 'current', 'compare']) {
-      expect(detailBody).toContain(`?mode=${mode}"`);
-    }
-    expect(detailBody).toContain('aria-current="page"');
-    expect(detailBody).toContain('<div class="mode-panel mode-panel-changes">');
+    expect(detailBody).toContain('The full note is not available. See the exact changes in Details.');
+    expect(detailBody).not.toContain('Compare full versions');
     expect(detailBody).toContain('<aside class="decision-bar" aria-label="Your decision">');
     expect(detailBody).toContain('Approve this suggestion?');
-    expect(detailBody).toContain('<details class="technical-evidence">');
-    expect(detailBody).toContain('<summary>Details for the record</summary>');
+    expect(detailBody).toContain('<details id="publication-review-fallback">');
+    expect(detailBody).toContain('<summary>Details</summary>');
+    expect(detailBody).toContain('<section id="publication-review-details">');
+    expect(detailBody).toContain('docs/example.md');
     expect(detailBody).toContain('id="decision-reason"');
     expect(detailBody).toContain('This records your decision and nothing else. The page stays exactly as it is.');
     expect(detailBody).toContain('type="button" data-action="reject"');
@@ -608,7 +606,7 @@ describe('privileged proposal review routes', () => {
     expect(assetBody).not.toContain('data-review-tab');
   });
 
-  test('labels offset-bound proposals honestly when no quote context is available', async () => {
+  test('shows exact byte bounds without inventing quote context or a complete note', async () => {
     const offsetEntry = structuredClone(REVIEW_ENTRY);
     offsetEntry.evidence.proposal.operation.type = 'offset';
     offsetEntry.evidence.proposal.operation.selector = null;
@@ -619,14 +617,10 @@ describe('privileged proposal review routes', () => {
     const { fetch } = await enabledFixture({ proposalReview: service });
     const opened = await openReview(fetch, `/owner/review/${REVIEW_QUEUE_ID}`);
     expect(opened.response.status).toBe(200);
-    expect(opened.body).toContain('Offset operation at bytes 13–16.');
-    const compared = await fetch(request(`/owner/review/${REVIEW_QUEUE_ID}?mode=compare`, {
-      headers: { Cookie: opened.cookie },
-    }));
-    const comparedBody = await compared.text();
-    expect(compared.status).toBe(200);
-    expect(comparedBody).toContain('This offset-bound proposal does not include surrounding quote context.');
-    expect(comparedBody).toContain('<div class="mode-panel mode-panel-compare">');
+    expect(opened.body).toContain('Change 1 · Bytes 13–16');
+    expect(opened.body).toContain('<h4>Before</h4><pre>teh</pre>');
+    expect(opened.body).toContain('The full note is not available.');
+    expect(opened.body).not.toContain('Compare full versions');
   });
 
   test('returns bounded review projections and rejects unknown or duplicate list queries', async () => {
@@ -681,11 +675,15 @@ describe('privileged proposal review routes', () => {
     const baseText = 'Intro\u200b text.\n\nMiddle para.\n\nTail changed.\n';
     const entry = projectedEntry({ baseText, oldText: 'changed', replacementText: 'edited' });
     const body = await renderMode(entry, 'changes');
-    expect(body.match(/Middle para\./gu)).toHaveLength(1);
-    expect(body.match(/⟦U\+200B ZERO WIDTH SPACE⟧/gu)).toHaveLength(1);
-    expect(body.match(/Exact source · changed passage/gu)).toHaveLength(1);
-    expect(body).toContain('<del class="doc-removed">changed</del>');
-    expect(body).toContain('<ins class="doc-added">edited</ins>');
+    const document = body.match(/<article class="publication-reviewed-document"[^>]*>([\s\S]*?)<\/article>/u)?.[1];
+    expect(document.match(/Middle para\./gu)).toHaveLength(1);
+    expect(document.match(/⟦U\+200B ZERO WIDTH SPACE⟧/gu)).toHaveLength(1);
+    expect(document).toContain('<del class="publication-del" aria-label="Removed">changed</del>');
+    expect(document).toContain('<ins class="publication-ins" aria-label="Added">edited</ins>');
+    const comparison = body.split('<summary>Compare full versions</summary>')[1];
+    expect(comparison.match(/Exact source · changed passage/gu)).toHaveLength(1);
+    expect(comparison).toContain('<del class="doc-removed">changed</del>');
+    expect(comparison).toContain('<ins class="doc-added">edited</ins>');
   });
 
   test('keeps a change appended at the end of the page visible in every mode', async () => {
@@ -921,7 +919,8 @@ describe('privileged proposal review routes', () => {
     const { fetch } = await enabledFixture({ proposalReview: service });
     const opened = await openReview(fetch);
     expect(opened.body).toContain('<span class="section-count">2 waiting</span>');
-    expect(opened.body).toContain('From <a href="https://forge.home.arpa:8443/cybersader/cyberbase/pulls/42" rel="noopener noreferrer">pull request #42</a> on your forge');
+    expect(opened.body).toContain('From pull request #42 on your forge');
+    expect(opened.body).not.toContain('href="https://forge.home.arpa:8443/cybersader/cyberbase/pulls/42"');
     expect(opened.body).toContain(`<a class="proposal-row-link" href="/owner/review/${newer.summary.queueId}">`);
     expect(opened.body).not.toContain(`<a class="proposal-row-link" href="/owner/review/${older.summary.queueId}">`);
     expect(opened.body).toContain(`Earlier version of this request: <a href="/owner/review/${older.summary.queueId}">received`);
@@ -1098,7 +1097,7 @@ describe('privileged proposal review routes', () => {
     const opened = await openReview(fetch);
     expect(opened.body).toContain('<h2 id="history-heading">Decided</h2>');
     expect(opened.body).toContain('decision-label decision-approve">Approved');
-    expect(opened.body).toContain('The exact correction is appropriate.');
+    expect(opened.body).not.toContain('The exact correction is appropriate.');
 
     const staleDetail = await fetch(request(`/owner/review/${REVIEW_QUEUE_ID}`, {
       headers: { Cookie: opened.cookie },
@@ -1112,13 +1111,14 @@ describe('privileged proposal review routes', () => {
     }));
     const body = await history.text();
     expect(history.status).toBe(200);
-    expect(body).toContain('<h1>You approved this suggestion</h1>');
+    expect(body).toContain('<h2>You approved this suggestion</h2>');
+    expect(body).toContain('The exact correction is appropriate.');
     expect(body).toContain('<strong>Source unchanged</strong>');
     expect(body).toContain('Nothing on the page changed when you approved. Putting it on the page is the separate step below.');
     expect(body).toContain('<h2 id="application-heading">Putting it on the page</h2>');
     expect(body).toContain('Not available in this setup.');
     expect(body).not.toContain('/owner/assets/apply.js');
-    expect(body).toContain('<summary>Details for the record</summary>');
+    expect(body).toContain('<summary>Details</summary>');
     expect(body).toContain('No longer retained; exact reviewed evidence is embedded here.');
     expect(body).not.toContain('data-action="approve"');
     expect(body).not.toContain('data-action="reject"');

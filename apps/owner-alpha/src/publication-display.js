@@ -57,8 +57,89 @@ export function verifiedDisplayProjection({ path, baseText, candidateText, opera
 
 export function publicationDisplay(input, overrides = {}) {
   const limits = { ...PUBLICATION_DISPLAY_LIMITS, ...overrides };
-  const refined = refineForDisplay(input.operation, limits);
-  const verified = verifiedDisplayProjection(input, refined);
+  return trackedDisplay(input, verifiedDisplayProjection(input, refineForDisplay(input.operation, limits)), limits);
+}
+
+// Proposals already have independently verified exact operations. Replay them
+// unchanged and refine only their rendered endpoints, not their byte ranges.
+export function proposalDisplay(input, Segmenter = Intl.Segmenter) {
+  const { path, baseText, candidateText, operations } = input;
+  const projection = documentProjection({ files: [{ path, exists: baseText !== null, baseText, candidateText }], operations });
+  const available = ['current', 'proposed', 'changes'].every((mode) => projection.modes[mode].available);
+  const verified = { available, projection, operations, coarseReason: null,
+    reason: projection.modes.proposed.reason ?? projection.modes.current.reason ?? projection.modes.changes.reason };
+  const display = trackedDisplay(input, verified, PUBLICATION_DISPLAY_LIMITS, { proposal: true, Segmenter });
+  if (!available) return display;
+  const baseComments = hiddenSpans(baseText, display.file.current.blocks);
+  const nextComments = hiddenSpans(candidateText, display.file.proposed.blocks);
+  const oldSegments = display.file.current.segments.filter((part) => part.operation);
+  const nextSegments = display.file.proposed.segments.filter((part) => part.operation);
+  const baseHidden = [...baseComments, ...carryHiddenSpans(nextComments, nextSegments, oldSegments, candidateText.length)];
+  const nextHidden = [...nextComments, ...carryHiddenSpans(baseComments, oldSegments, nextSegments, baseText.length)];
+  const hasHidden = baseHidden.length > 0 || nextHidden.length > 0;
+  const containing = (spans, span) => span && spans.some(({ start, end }) => span.start < end && span.end > start);
+  const hiddenOperations = new Set([...oldSegments.filter((part) => containing(baseHidden, part)),
+    ...nextSegments.filter((part) => containing(nextHidden, part))].map((part) => part.operation));
+  const rows = display.tracked.rows.map((row) => {
+    const proposed = !row.deleted && row.block;
+    const hidden = !row.block ? hasHidden && (!row.operation || hiddenOperations.has(row.operation))
+      : containing(baseHidden, row.deleted ? row.block : row.baseBlock) || containing(nextHidden, proposed)
+        || proposed && nextSegments.some((part) => hiddenOperations.has(part.operation) && containing([proposed], part));
+    return hidden ? { ...row, hidden: true } : row;
+  });
+  const anchors = new Map();
+  if (!display.tracked.coarse) for (let operation = 1; operation <= operations.length; operation += 1) {
+    const old = oldSegments.find((part) => part.operation === operation);
+    const next = nextSegments.find((part) => part.operation === operation);
+    const row = rows.find((item) => item.changed && !item.deleted && item.block && next?.kind === 'added' && containing([item.block], next))
+      ?? rows.find((item) => item.changed && containing([item.deleted ? item.block : item.baseBlock].filter(Boolean), old))
+      ?? rows.find((item) => item.operation === operation);
+    if (row) anchors.set(row, [...(anchors.get(row) ?? []), operation]);
+  }
+  return { ...display, exactOnly: display.exactOnly && !hasHidden, hasHidden, hiddenOperations, anchors,
+    tracked: { ...display.tracked, rows } };
+}
+
+export const hasHiddenProposalSource = (text) => /%%|<!--/u.test(text);
+
+// If an edit changes only a comment delimiter, mask the unchanged content in
+// both projections. Map shared text by replayed offsets, never by searching.
+function carryHiddenSpans(spans, oldSegments, nextSegments, length) {
+  const carried = [];
+  let cursor = 0;
+  let shift = 0;
+  for (let i = 0; i <= oldSegments.length; i += 1) {
+    const old = oldSegments[i];
+    const next = nextSegments[i];
+    for (const span of spans) {
+      const start = Math.max(span.start, cursor);
+      const end = Math.min(span.end, old?.start ?? length);
+      if (start < end) carried.push({ start: start + shift, end: end + shift });
+    }
+    if (old) { cursor = old.end; shift = next.end - cursor; }
+  }
+  return carried;
+}
+
+// Refuse the entire structural block and any intervening blocks a multiline
+// comment crosses, never just the delimiter. Nothing here modifies the source.
+function hiddenSpans(text, blocks) {
+  const comments = /%%|<!--/gu;
+  const ranges = []; let hit;
+  while ((hit = comments.exec(text)) !== null) {
+    const close = hit[0] === '%%' ? '%%' : '-->';
+    const end = text.indexOf(close, comments.lastIndex);
+    comments.lastIndex = end < 0 ? text.length : end + close.length;
+    ranges.push({ start: hit.index, end: comments.lastIndex });
+  }
+  let index = 0;
+  return blocks.filter((block) => {
+    while (index < ranges.length && ranges[index].end <= block.start) index += 1;
+    return index < ranges.length && ranges[index].start < block.end;
+  });
+}
+
+function trackedDisplay(input, verified, limits, options) {
   if (!verified.available) return { ...verified, rows: [], markCount: 0, coarse: false };
   const file = verified.projection.files[0]; const source = file.proposed;
   const blocks = source.blocks.filter((block) => block.kind !== 'gap');
@@ -90,5 +171,5 @@ export function publicationDisplay(input, overrides = {}) {
   const display = { ...verified, file, rows: rows.map((row) => ({ ...row, mark: row.changed && !coarse ? ++number : null })),
     coarse, coarseReason, markCount: coarse ? 0 : markCount, differingBlocks: markCount,
     exactOnly: source.blocks.length > limits.maxBlocks };
-  return { ...display, tracked: trackedChanges(display, input) };
+  return { ...display, tracked: trackedChanges(display, input, {}, options?.Segmenter, options) };
 }

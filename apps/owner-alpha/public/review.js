@@ -1,3 +1,12 @@
+{
+// This client can share a page with the publication reading controls or Apply.
+const rehearsalDismiss = document.querySelector('[data-dismiss-rehearsal]');
+if (rehearsalDismiss) {
+  rehearsalDismiss.addEventListener('click', () => {
+    rehearsalDismiss.closest('.proposal-rehearsal-notice').hidden = true;
+    document.querySelector('.proposal-appbar a, #owner-review-list h1')?.focus();
+  });
+}
 const form = document.querySelector('#review-decision-form');
 const reason = document.querySelector('#decision-reason');
 const status = document.querySelector('#decision-status');
@@ -66,7 +75,7 @@ if (form && reason && status && byteCount && dialog && dialogTitle && confirmBut
     selectedAction = action;
     actionTrigger = trigger;
     const approving = action === 'approve';
-    const multi = form.dataset.proposalVersion === '2';
+    const multi = Number(form.dataset.changeCount) > 1;
     dialogTitle.textContent = multi ? (approving ? 'Approve all changes?' : 'Reject all changes?') : (approving ? 'Approve this suggestion?' : 'Reject this suggestion?');
     confirmButton.dataset.action = action;
     confirmButton.textContent = multi ? (approving ? 'Approve all' : 'Reject all') : (approving ? 'Approve suggestion' : 'Reject suggestion');
@@ -159,4 +168,5 @@ if (form && reason && status && byteCount && dialog && dialogTitle && confirmBut
     if (!inFlight) actionTrigger?.focus();
   });
   updateByteCount();
+}
 }

@@ -1113,6 +1113,61 @@ body.publication-document-review { height: 100dvh; min-height: 0; margin: 0; pad
 .publication-document-review [data-marks-visible="false"] .publication-change-label { display: none; }
 .publication-document-review [data-marks-visible="false"] .publication-block:has(> .publication-removal) { display: none; }
 
+/* Proposals use the publication reading surface with a reserved decision footer. */
+.proposal-document-review .publication-document-content { min-height: 100%; padding: clamp(1.5rem, 5vw, 2.5rem); }
+.proposal-document-review .publication-reviewed-document { margin-top: 1.8rem; overflow-wrap: anywhere; }
+.proposal-document-review .publication-block .md-heading { margin-top: 1.4rem; }
+.proposal-identity h1 { overflow-wrap: anywhere; }
+.proposal-identity p { margin: 0.25rem 0; color: var(--review-muted); font-size: 0.8125rem; }
+.proposal-identity blockquote { margin: 0.9rem 0 0; padding-inline-start: 0.8rem; border-inline-start: 2px solid var(--review-line-strong); color: var(--review-muted); font-size: 0.875rem; }
+.publication-page .proposal-appbar { align-items: center; }
+.proposal-appbar a, .proposal-appbar button { gap: 0.35rem; }
+.publication-page .proposal-appbar button, .proposal-document-review .publication-change-controls button { min-width: 44px; padding: 0.35rem 0.55rem; background: transparent; color: var(--review-ink); font-size: 0.8125rem; }
+.proposal-document-review .publication-del { color: var(--review-muted); background: transparent; }
+.proposal-document-review .publication-del + .publication-ins { margin-inline-start: 0.25em; }
+.proposal-document-review .publication-ins, .proposal-document-review .publication-del { border-radius: 0.13em; }
+.proposal-document-review .proposal-block-mark { display: block; padding: 0.2rem 0.6rem; margin-block: 0.25rem; }
+.proposal-document-review .md-codeblock .md-code { padding: 0; background: transparent; color: inherit; }
+.proposal-change-anchor { display: inline-block; position: absolute; inset-inline-start: 0; top: 0; height: 0.1rem; width: 100%; }
+.proposal-changed-block:focus-within { outline: 2px solid var(--review-accent); outline-offset: 0.3rem; border-radius: 0.15rem; }
+.proposal-document-review :is(.publication-document-scroll, .proposal-appbar button):focus-visible { outline: 2px solid var(--review-accent); outline-offset: -2px; }
+.proposal-document-review .decision-bar { position: static; flex: none; margin: 0; box-shadow: none; border-color: var(--review-line); }
+.proposal-document-review .decision-bar-inner { width: min(52rem, 100%); gap: 0.3rem 0.5rem; padding: 0.55rem clamp(0.55rem, 3vw, 1.5rem) max(0.55rem, env(safe-area-inset-bottom)); }
+.proposal-document-review .decision-actions { width: auto; gap: 0.35rem; margin-inline-start: auto; }
+.proposal-document-review .decision-actions button { flex: none; padding-inline: clamp(0.5rem, 2vw, 1rem); font-size: 0.8125rem; white-space: nowrap; }
+.publication-page:is(.proposal-receipt, .proposal-document-review) :is(.decision-actions, .application-actions) button.decision-approve { color: var(--review-sheet); }
+.publication-page:is(.proposal-receipt, .proposal-document-review) #decision-confirm { color: var(--review-sheet); }
+.publication-page:is(.proposal-receipt, .proposal-document-review) .decision-reason { color: var(--review-ink); white-space: pre-wrap; }
+.proposal-document-review .dialog-suggestion { padding: 0; border: 0; background: none; color: var(--review-muted); }
+.proposal-document-review .dialog-actions { margin-top: 0.9rem; }
+.proposal-decision-notice { width: 100%; margin: 0; color: var(--review-attention); font-size: 0.8125rem; }
+.proposal-rehearsal-notice { display: flex; justify-content: space-between; align-items: center; padding-inline: max(1rem, calc((100% - 72rem) / 2)); background: var(--review-attention-soft); color: var(--review-attention); font-size: 0.75rem; }
+.proposal-rehearsal-notice[hidden] { display: none; }
+.proposal-rehearsal-notice button { min-width: 44px; min-height: 44px; padding: 0; background: transparent; color: inherit; }
+.proposal-document-review .inspected-change { border-top: 1px solid var(--review-line); padding-block: 0.85rem; }
+.proposal-document-review .inspected-change h3 { margin: 0; font-size: 0.9rem; text-align: start; }
+.proposal-document-review .inspected-change pre { margin-block: 0.15rem; }
+.proposal-document-review #publication-review-details .technical-evidence-body { display: block; margin-top: 1rem; }
+.proposal-document-review .technical-evidence-body section { padding-block: 0.85rem; border-top: 1px solid var(--review-line); }
+.proposal-document-review .proposal-source-unavailable { color: var(--review-muted); }
+.proposal-inbox .review-shell { max-width: 52rem; }
+.proposal-inbox .owner-header, .proposal-inbox .review-section { margin-block: 0 1.5rem; }
+.proposal-inbox .review-list-header { padding-block: 0.45rem; }
+.proposal-inbox .proposal-row-link { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.75rem; padding-block: 0.65rem; }
+.proposal-inbox .proposal-row-text { display: grid; min-width: 0; }
+.proposal-inbox .proposal-row-text > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proposal-inbox :is(.proposal-row-count, .proposal-row-text small) { color: var(--review-muted); font-size: 0.8rem; }
+.proposal-inbox .proposal-row-link:hover .proposal-row-title { color: var(--review-accent); }
+.proposal-receipt .publication-shell { max-width: 52rem; }
+.proposal-receipt .proposal-identity { margin-bottom: 1.5rem; }
+.proposal-receipt .decision-result { margin-top: 0; }
+.proposal-receipt .decision-result .decision-time { color: var(--review-muted); font-size: 0.82rem; }
+@media (max-width: 600px) {
+  .proposal-document-review #decision-dialog { max-width: 100%; width: 100%; max-height: calc(100dvh - 1rem); margin: auto 0 0; border-radius: 0.65rem 0.65rem 0 0; }
+  .proposal-document-review .decision-sheet { padding-bottom: max(1.25rem, env(safe-area-inset-bottom)); }
+  .proposal-document-review .publication-document-content { padding-inline: 1.15rem; }
+}
+
 /* Shared owner finish controls: never below a long source document. */
 .owner-finish { position: fixed; z-index: 50; bottom: 16px; right: 16px; display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 10px; background: #fff; color: #18202a; border: 1px solid #cbd2da; border-radius: 12px; box-shadow: 0 4px 24px #0002; }
 .owner-finish :is(button, a), .owner-cancel-sheet button { min-height: 44px; min-width: 44px; display: inline-flex; align-items: center; justify-content: center; }

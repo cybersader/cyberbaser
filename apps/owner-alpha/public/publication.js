@@ -74,7 +74,9 @@ if (review) {
   const marks = document.querySelector('#publication-toggle-marks');
   const announcement = document.querySelector('#publication-review-announcement');
   const marksTip = document.querySelector('#publication-toggle-marks-tip');
-  let current = -1;
+  const startAtFirst = review.dataset.startFirstChange !== undefined;
+  if (startAtFirst) anchors.sort((left, right) => Number(left.dataset.change) - Number(right.dataset.change));
+  let current = startAtFirst ? 0 : -1;
   const announce = (text) => { if (announcement) announcement.textContent = text; };
   const showMarks = (visible) => {
     review.dataset.marksVisible = String(visible);
@@ -122,6 +124,11 @@ if (review) {
   const body = document.querySelector('#publication-details-body');
   const close = document.querySelector('#publication-close-details');
   const scroller = document.querySelector('#publication-document-scroll');
+  if (startAtFirst && scroller && anchors[0]) {
+    const viewport = scroller.getBoundingClientRect();
+    const first = anchors[0].getBoundingClientRect();
+    if (first.top > viewport.bottom - 24) anchors[0].scrollIntoView({ block: 'center', behavior: 'instant' });
+  }
   if (tools && details && fallback && sheet && body && close && scroller && typeof sheet.showModal === 'function') {
     let scrollTop = 0; let scrollLeft = 0;
     const restoreScroll = () => { scroller.scrollTop = scrollTop; scroller.scrollLeft = scrollLeft; };
