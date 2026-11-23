@@ -117,3 +117,7 @@ Built on the existing [device-key registry](https://github.com/cybersader/cyberb
 2. **Install on a desktop:** a system service that asks for the admin password once and keeps the publishing key under a separate account (recommended) or a no-admin app with weaker, labelled isolation.
 3. **Pairing confirmation:** every pairing needs the matching short code and a Confirm tap (recommended; stops a photographed QR) or agents limited to proposing may pair from the QR alone.
 4. **Platforms first:** Linux desktop and home-server container first, then macOS, Windows later (recommended) or all three before the first install.
+
+## Decisions taken (2026-11-23)
+
+The owner chose: the Cyberbaser GitHub App for publishing access; a background service installed with the admin password once, with the publisher under its own account; matching words plus a Confirm tap for every pairing; Linux desktop and a home-server container first. On the setup screens they asked for a searchable, polished repository picker: the mocked checkboxes "look really crappy", while the approach itself is right. See `.claude/41-QUESTIONS-RESOLVED.md`.

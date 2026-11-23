@@ -4,6 +4,14 @@
 
 ## Log
 
+### Deployment and reach choices (2026-11-23, owner decisions)
+Asked in four question dialogs after the design in `design/deployment-and-reach.mdx` and its setup-flow mockups:
+- **GitHub access:** sign in with a Cyberbaser GitHub App, one repository, short-lived tokens held only by the publisher. Owner: "I like the sign-in with the GitHub app for sure", and: "make repository selection and all that like a searchable, nice user experience. Some of that kind of looks pretty crappy. Like the checkboxes and stuff looks really crappy, but I really do like the approach, it's a good start."
+- **Desktop key protection:** a background service that asks for the admin password once; the publisher runs under its own account.
+- **Pairing:** matching words and a Confirm tap, always, for phones and agents alike.
+- **Platforms:** Linux desktop and a home-server container first; Mac and Windows later.
+
+
 ### First real install waits for Iroh reach and a one-app setup (2026-11-23, owner decision)
 - **Asked** (question dialog, after review worked on real notes in rehearsal): install the owner node on this desktop against the real vault, review-only or with publishing? **Answer:** "Wait for Iroh and the one-app setup": build Iroh reach and the simple installer first, so the first real install is the one regular users would get.
 - **Owner's goal, in their words:** "I want the simplest deployment model possible, like regular users need to be able to set this stuff up. Ideally, it takes on and uses something kind of like iroh, you know, to get around the networking crap."
