@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
-// Pair this agent with an owner node: `cyberbaser-pair <code> [--state <new-file>]`.
+// Pair this agent with an owner node: `cyberbaser-pair <code or link> [--state <new-file>]`.
+// The link is the one the Devices page's QR code carries:
+// obsidian://cyberbaser-pair?code=<code>.
 // Generates the agent's own Ed25519 device key and Iroh identity, proves it
 // holds the pairing code without sending it, prints the four words the owner
 // must see on their screen, and waits for the owner's Confirm. Only then is the
@@ -30,8 +32,20 @@ async function writeState(file, state) {
   } finally { await handle.close(); }
 }
 
+// Accept the bare code or the pairing link; anything else is not a code.
+export function codeFromInput(input) {
+  if (typeof input !== 'string') return null;
+  const value = input.trim();
+  if (!value.startsWith('obsidian:')) return value;
+  let url;
+  try { url = new URL(value); } catch { return null; }
+  if (url.protocol !== 'obsidian:' || url.host !== 'cyberbaser-pair' || url.pathname !== '' || url.hash !== '') return null;
+  const codes = url.searchParams.getAll('code');
+  return codes.length === 1 && [...url.searchParams.keys()].length === 1 ? codes[0] : null;
+}
+
 export async function pairAgent({ code, stateFile, onWords = () => {} }) {
-  const parsed = parsePairingCode(code);
+  const parsed = parsePairingCode(codeFromInput(code) ?? '');
   if (!parsed) throw new Error('invalid-pairing-code');
   // Refuse before connecting if the state file already exists.
   await open(stateFile, constants.O_RDONLY).then((handle) => handle.close().then(() => { throw new Error('state-file-exists'); }),
@@ -82,7 +96,7 @@ async function main(args) {
 if (import.meta.main) {
   try { await main(process.argv.slice(2)); process.exit(0); }
   catch (error) {
-    console.error(error?.message === 'usage' ? 'Usage: cyberbaser-pair <code> [--state <absolute new file>]'
+    console.error(error?.message === 'usage' ? 'Usage: cyberbaser-pair <code or obsidian:// link> [--state <absolute new file>]'
       : ['invalid-pairing-code', 'state-file-exists'].includes(error?.message) ? error.message : PAIRING_REFUSAL);
     process.exit(1);
   }

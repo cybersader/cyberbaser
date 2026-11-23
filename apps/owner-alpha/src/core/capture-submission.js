@@ -66,10 +66,12 @@ export async function readCommittedDelivery({ config, relativePath, git = defaul
   }
 }
 
-export function createCaptureProposalBuilder({ config, readBase = readCommittedDelivery, clock = Date.now }) {
+// resolvePath: the owner's recorded note links (workspace path -> vault path),
+// consulted before the configured mapping and the same-path default.
+export function createCaptureProposalBuilder({ config, readBase = readCommittedDelivery, clock = Date.now, resolvePath = () => null }) {
   return async (input) => {
     const capture = validateCaptureInput(input, config.limits.maxSourceBytes);
-    const relativePath = deliveryPathFor(config, capture.path);
+    const relativePath = resolvePath(capture.path) ?? deliveryPathFor(config, capture.path);
     if (path.posix.normalize(relativePath) !== relativePath) refusePath();
     try { pathMatchesPolicy(relativePath, config.paths); } catch { refusePath(); }
     const { repository, revision, base } = await readBase({ config, relativePath });

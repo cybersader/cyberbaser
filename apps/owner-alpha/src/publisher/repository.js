@@ -22,6 +22,8 @@ const SETTINGS = [
   'http.followRedirects=false', 'gc.auto=0',
 ];
 
+const FORGE_CREDENTIAL_HELPER = `!f() { test "$1" = get || exit 0; printf 'username=%s\\npassword=%s\\n' "$CYBERBASER_PUSH_USERNAME" "$CYBERBASER_PUSH_PASSWORD"; }; f`;
+
 function unsafeRepository() {
   fail('publisher-unsafe-repository', 'publisher needs its own protected, template-free bare repository');
 }
@@ -49,14 +51,19 @@ function makeRunner(repository, environment) {
     GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_ATTR_NOSYSTEM: '1',
     GIT_TERMINAL_PROMPT: '0', GIT_NO_REPLACE_OBJECTS: '1', GIT_NO_LAZY_FETCH: '1',
   });
-  return async function run(args, { encoding = 'buffer', objects, input } = {}) {
+  return async function run(args, { encoding = 'buffer', objects, input, credential = null } = {}) {
     const transport = args[0] === 'ls-remote' || args[0] === 'push';
+    // A ForgeAccess credential reaches only this one transport child, through
+    // its environment, never its arguments; the inline helper answers "get" only.
+    const forge = transport && credential !== null;
+    const helper = forge ? FORGE_CREDENTIAL_HELPER : credentialHelper;
+    const childEnv = { ...env, ...(objects === undefined ? {} : { GIT_OBJECT_DIRECTORY: objects }),
+      ...(forge ? { CYBERBASER_PUSH_USERNAME: credential.username, CYBERBASER_PUSH_PASSWORD: credential.password } : {}) };
     const invocation = exec('git', [
       '--git-dir', repository, '--no-pager', ...SETTINGS.flatMap((setting) => ['-c', setting]),
-      ...(transport && credentialHelper ? ['-c', `credential.helper=${credentialHelper}`] : []), ...args,
+      ...(transport && helper ? ['-c', `credential.helper=${helper}`] : []), ...args,
     ], {
-      cwd: repository, encoding, maxBuffer: 64 * 1024 * 1024,
-      env: objects === undefined ? env : { ...env, GIT_OBJECT_DIRECTORY: objects },
+      cwd: repository, encoding, maxBuffer: 64 * 1024 * 1024, env: childEnv,
     });
     invocation.child.stdin.on('error', () => {}); // report the Git failure, not an EPIPE
     invocation.child.stdin.end(input);
@@ -187,7 +194,7 @@ async function snapshotObjects(checkout, output) {
   return packs;
 }
 
-export async function createIsolatedPush({ repository, checkout, uid, environment = process.env }) {
+export async function createIsolatedPush({ repository, checkout, uid, environment = process.env, forgeAccess = null }) {
   if (!normalizedAbsolute(repository) || !normalizedAbsolute(checkout)
     || nested(checkout, repository) || nested(repository, checkout) || process.platform !== 'linux') unsafeRepository();
   const run = makeRunner(repository, environment);
@@ -215,7 +222,10 @@ export async function createIsolatedPush({ repository, checkout, uid, environmen
       // Validate the exact pack with no other object stores available. This
       // hashes objects and checks links and structure before verification/push.
       await run(['index-pack', '--strict', `${prefix}-${packId}.pack`], { objects: checked });
-      const git = (_repository, args, options) => run(args, { ...options, objects: checked });
+      // A short-lived credential for exactly this push, fetched after the commit
+      // is proven and dropped when this function returns.
+      const credential = forgeAccess === null ? null : await forgeAccess.pushCredential(request.remoteUrl);
+      const git = (_repository, args, options) => run(args, { ...options, objects: checked, credential });
       return await pushExactCommitFromBare({ ...request, checkout: repository }, { git, mutateGit: git });
     } finally {
       await rm(scratch, { recursive: true, force: true });

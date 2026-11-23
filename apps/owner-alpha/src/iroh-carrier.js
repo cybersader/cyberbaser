@@ -40,7 +40,8 @@ export const IROH_REFUSAL_REASONS = Object.freeze(['proposal-budget-exhausted', 
   'capture-base-unavailable', 'capture-too-large', 'delivery-not-round-trippable', 'workspace-diff-too-complex',
   'publication-candidate-mismatch', 'publication-expected-source-mismatch', 'workspace-unbound',
   'delivery-moved-since-baseline', 'workspace-diverged', 'publication-read-only', 'publication-disabled',
-  'workspace-text-repeated', 'workspace-properties-invalid', 'retired-material', 'publication-draft-not-found']);
+  'workspace-text-repeated', 'workspace-properties-invalid', 'retired-material', 'publication-draft-not-found',
+  'note-needs-linking']);
 const PAIR_WAIT_MS = 6 * 60_000;
 
 const alpnBytes = (name) => [...Buffer.from(name, 'utf8')];

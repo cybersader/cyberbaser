@@ -1332,3 +1332,136 @@ body.save-page :focus-visible { outline: 2px solid var(--sp-acc); outline-offset
   .devices-shell .field input { background: #151b22; border-color: #4a5563; }
   .devices-shell button.quiet-danger[data-armed="yes"] { color: #1b222b; }
 }
+
+/* Pairing by QR: the code image and its text side by side, stacked on phones.
+ * The QR keeps a white quiet zone in both themes so cameras read it. */
+.pair-scan { display: grid; grid-template-columns: minmax(0, 13rem) minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+.pair-scan > * { margin: 0; min-width: 0; }
+.pair-qr-frame { margin: 0; padding: 0; border-radius: 0.5rem; overflow: hidden; border: 1px solid var(--dev-line); background: #fff; }
+.pair-qr { display: block; width: 100%; height: auto; }
+.pair-scan-text { display: grid; gap: 0.75rem; }
+.pair-scan-text p { margin: 0; line-height: 1.5; }
+.pair-hint-inline { color: var(--dev-muted); font-size: 0.9rem; }
+.pair-scan .pair-code { max-height: 7.5rem; overflow: auto; font-size: 0.72rem; }
+@media (max-width: 34rem) {
+  .pair-scan { grid-template-columns: minmax(0, 1fr); }
+  .pair-qr-frame { width: min(100%, 17rem); justify-self: center; }
+}
+
+/* Notes to link: what the device sent, and the vault file it maps to. */
+.devices-section[hidden] { display: none; }
+.section-note { margin: -0.25rem 0 1rem; color: var(--dev-muted); line-height: 1.5; max-width: 38rem; }
+.link-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.75rem; }
+.link-row {
+  display: grid; gap: 1rem; padding: 1.1rem 1.25rem; border: 1px solid var(--dev-line); border-radius: 0.75rem;
+  background: var(--dev-sheet); box-shadow: 0 0.4rem 1.2rem rgb(24 32 42 / 6%);
+}
+.link-row > * { margin: 0; }
+.link-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.link-side { display: grid; gap: 0.35rem; min-width: 0; align-content: start; }
+.link-label { color: var(--dev-muted); font-size: 0.85rem; font-weight: 600; }
+.link-path {
+  display: block; padding: 0.62rem 0.75rem; border-radius: 0.45rem; background: #f1f3f6; color: var(--dev-ink);
+  font: 0.85rem/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere;
+}
+.path-picker { position: relative; min-width: 0; }
+.path-input {
+  width: 100%; box-sizing: border-box; padding: 0.6rem 0.75rem; border: 1px solid #9ca8b6; border-radius: 0.45rem;
+  font: 0.85rem/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; background: #fbfcfd; color: var(--dev-ink);
+}
+.path-input:focus { outline: 3px solid #4c7dff; outline-offset: 1px; }
+.path-input[readonly] { background: #f1f3f6; border-color: var(--dev-line); }
+.path-options {
+  position: absolute; z-index: 2; inset: calc(100% + 0.3rem) 0 auto; margin: 0; padding: 0.3rem; list-style: none;
+  border: 1px solid var(--dev-line); border-radius: 0.55rem; background: var(--dev-sheet); box-shadow: 0 0.6rem 1.6rem rgb(24 32 42 / 14%);
+  max-height: 16rem; overflow: auto;
+}
+.path-options[hidden] { display: none; }
+.path-options li {
+  padding: 0.5rem 0.6rem; border-radius: 0.35rem; cursor: pointer; overflow-wrap: anywhere;
+  font: 0.82rem/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; color: var(--dev-ink);
+}
+.path-options li:hover, .path-options li:focus { background: var(--dev-accent-soft); outline: none; }
+.link-result { color: var(--dev-muted); line-height: 1.5; }
+.link-result:empty { display: none; }
+.link-row.is-done .link-result { color: var(--dev-ink); font-weight: 600; }
+.link-row.is-refused .link-result { color: var(--dev-danger); }
+@media (max-width: 34rem) { .link-pair { grid-template-columns: minmax(0, 1fr); } }
+@media (prefers-color-scheme: dark) {
+  .link-path, .path-input[readonly] { background: #232b35; }
+  .path-input { background: #151b22; border-color: #4a5563; }
+}
+
+/* Publishing to GitHub: same quiet sheet as Devices. The user code is the one
+ * emphasized moment; the repository picker is a searchable list, no checkboxes. */
+.forge-page { --dev-ok: #1d7a4f; --dev-wait: #a86a12; }
+.forge-page ::selection { background: var(--dev-accent-soft); color: var(--dev-ink); }
+.forge-sheet, .forge-status {
+  display: grid; gap: 1.1rem; min-width: 0; padding: 1.25rem; border: 1px solid var(--dev-line); border-radius: 0.75rem;
+  background: var(--dev-sheet); box-shadow: 0 0.4rem 1.2rem rgb(24 32 42 / 6%);
+}
+.forge-sheet h3 { margin: 0; font-size: 1.15rem; text-wrap: balance; }
+.forge-sheet > .pair-hint { margin: -0.6rem 0 0; max-width: 34rem; }
+.forge-actions { justify-content: flex-start; }
+.forge-problem { margin: 0; color: var(--dev-danger); line-height: 1.5; }
+.forge-code-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
+.forge-code {
+  padding: 0.7rem 1rem; border-radius: 0.5rem; background: var(--dev-accent-soft); color: var(--dev-ink);
+  font: 700 clamp(1.6rem, 6vw, 2.1rem)/1.1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.08em; user-select: all;
+}
+.forge-link-button {
+  display: inline-block; padding: 0.75rem 1rem; border-radius: 0.45rem; background: #1f5bd7; color: #fff; font-weight: 750; text-decoration: none;
+}
+.forge-link-button:hover { background: #194bb3; }
+.forge-waiting { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0; color: var(--dev-muted); }
+.forge-waiting .pair-timer { flex: 0 1 auto; margin-left: auto; }
+.forge-pulse { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--dev-wait); }
+@media (prefers-reduced-motion: no-preference) {
+  .forge-pulse { animation: forge-pulse 1.6s cubic-bezier(0.16, 1, 0.3, 1) infinite; }
+  @keyframes forge-pulse { 0% { opacity: 1; } 60% { opacity: 0.25; } 100% { opacity: 1; } }
+}
+.forge-search-wrap { position: relative; display: flex; align-items: center; min-width: 0; }
+.forge-search {
+  width: 100%; min-width: 0; padding: 0.75rem 6.5rem 0.75rem 0.85rem; border: 1px solid #9ca8b6; border-radius: 0.5rem;
+  font: inherit; font-size: 1rem; background: #fbfcfd; color: var(--dev-ink);
+}
+.forge-search:focus { outline: 3px solid #4c7dff; outline-offset: 1px; }
+.forge-search::-webkit-search-cancel-button { appearance: none; }
+.forge-count { position: absolute; right: 0.85rem; margin: 0; color: var(--dev-muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; pointer-events: none; }
+.forge-options {
+  margin: -0.4rem 0 0; padding: 0.25rem; list-style: none; max-height: min(22rem, 52vh); overflow-y: auto; overscroll-behavior: contain;
+  border: 1px solid var(--dev-line); border-radius: 0.5rem; scrollbar-width: thin; scrollbar-color: var(--dev-line) transparent;
+}
+.forge-option {
+  display: grid; gap: 0.1rem; min-width: 0; min-height: 2.75rem; padding: 0.6rem 0.75rem; border-radius: 0.4rem; cursor: pointer;
+}
+.forge-option + .forge-option { margin-top: 0.1rem; }
+.forge-option:hover { background: #f1f4f8; }
+.forge-option.is-active { background: var(--dev-accent-soft); box-shadow: inset 0 0 0 1px #9db4ec; }
+.forge-option.is-unusable { cursor: not-allowed; }
+.forge-option.is-unusable .forge-option-name { opacity: 0.6; }
+.forge-option.is-unusable .forge-option-meta { color: var(--dev-danger); white-space: normal; }
+.forge-option-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.forge-owner { color: var(--dev-muted); }
+.forge-option-meta { color: var(--dev-muted); font-size: 0.88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.forge-empty { padding: 1rem 0.75rem; color: var(--dev-muted); line-height: 1.5; }
+.forge-confirm-slot:empty { display: none; }
+.forge-confirm { display: grid; gap: 0.75rem; padding-top: 1rem; border-top: 1px solid var(--dev-line); }
+.forge-confirm p { margin: 0; line-height: 1.5; }
+.forge-confirm button { overflow-wrap: anywhere; }
+.forge-status-main { display: flex; align-items: flex-start; gap: 0.75rem; min-width: 0; }
+.forge-state-dot { flex: none; width: 0.65rem; height: 0.65rem; margin-top: 0.4rem; border-radius: 50%; background: var(--dev-ok); }
+.forge-status.is-pending .forge-state-dot { background: var(--dev-wait); }
+.forge-status .device-name span { line-height: 1.45; white-space: normal; }
+.forge-status-actions { justify-content: flex-end; }
+.forge-page button.quiet, .forge-page button.quiet-danger { min-height: 2.75rem; }
+@media (max-width: 30rem) {
+  .forge-actions > *, .forge-status-actions > * { flex: 1 1 auto; text-align: center; }
+  .forge-waiting .pair-timer { margin-left: 0; width: 100%; }
+}
+@media (prefers-color-scheme: dark) {
+  .forge-page { --dev-ok: #5fcf97; --dev-wait: #e3b25a; }
+  .forge-search { background: #151b22; border-color: #4a5563; }
+  .forge-option:hover { background: #222a34; }
+  .forge-option.is-active { box-shadow: inset 0 0 0 1px #4f6aa8; }
+}

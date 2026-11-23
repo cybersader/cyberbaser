@@ -784,6 +784,54 @@ function validateIroh(value) {
   return { enabled: input.enabled, stateDirectory, relay, ...(bindAddress === null ? {} : { bindAddress }) };
 }
 
+// Where the publisher gets its short-lived push credential. Only the provider
+// and the public GitHub App client ID are policy; the state directory is the
+// publisher's private storage and never enters the policy revision.
+const FORGE_ACCESS_PROVIDERS = Object.freeze(['github-app', 'token']);
+
+function validateForgeAccess(value, provider) {
+  const keys = isPlainObject(value) && value.provider === 'github-app'
+    ? ['provider', 'clientId', 'stateDirectory'] : ['provider', 'stateDirectory'];
+  const input = objectAt(value, '$.forgeAccess', keys);
+  if (!FORGE_ACCESS_PROVIDERS.includes(input.provider)) {
+    fail('invalid-config', '$.forgeAccess.provider must be "github-app" or "token"');
+  }
+  if (provider !== 'github-actions') {
+    fail('invalid-config', '$.forgeAccess is only available for a GitHub repository today');
+  }
+  const stateDirectory = absoluteCheckout(input.stateDirectory, '$.forgeAccess.stateDirectory');
+  if (input.provider === 'token') return { provider: 'token', stateDirectory };
+  const clientId = exactString(input.clientId, '$.forgeAccess.clientId', { max: 64 });
+  if (!/^Iv[0-9A-Za-z.]{6,40}$/u.test(clientId)) {
+    fail('invalid-config', '$.forgeAccess.clientId must be a GitHub App client ID (it starts with Iv)');
+  }
+  return { provider: 'github-app', clientId, stateDirectory };
+}
+
+/**
+ * The raw config with its GitHub repository changed to `fullName` ("owner/name").
+ * Every GitHub field is derived from that one identity, so the result changes the
+ * policy revision exactly as editing the repository by hand would.
+ */
+export function retargetGithubRepository(raw, fullName) {
+  const identity = typeof fullName === 'string' ? githubIdentityFromRemote(`https://github.com/${fullName}.git`) : null;
+  if (identity === null || identity.slug !== fullName) fail('invalid-repository', 'repository must be one exact owner/name');
+  const current = validateOwnerAlphaConfig(raw);
+  if (current.workflow.provider !== 'github-actions') fail('invalid-config', 'only a GitHub repository can be picked this way');
+  const pagesHost = `${identity.owner.toLowerCase()}.github.io`;
+  const next = structuredClone(raw);
+  next.repository.remote.url = `https://github.com/${identity.slug}.git`;
+  next.workflow.repository = identity.slug;
+  next.owner.identity = identity.owner;
+  next.live.baseUrl = `https://${pagesHost}${identity.repository.toLowerCase() === pagesHost ? '/' : `/${identity.repository}/`}`;
+  if (Array.isArray(next.repository.aliases)) {
+    next.repository.aliases = next.repository.aliases.filter((alias) => alias !== next.repository.remote.url);
+    if (next.repository.aliases.length === 0) delete next.repository.aliases;
+  }
+  validateOwnerAlphaConfig(next);
+  return next;
+}
+
 function validatePublisher(value) {
   const { socketPath } = objectAt(value, '$.publisher', ['socketPath']);
   if (!validSocketPath(socketPath)) {
@@ -813,6 +861,7 @@ export function validateOwnerAlphaConfig(value) {
     ...(isPlainObject(value) && Object.hasOwn(value, 'deviceRegistryFile') ? ['deviceRegistryFile'] : []),
     ...(isPlainObject(value) && Object.hasOwn(value, 'signedRequestSocket') ? ['signedRequestSocket'] : []),
     ...(isPlainObject(value) && Object.hasOwn(value, 'iroh') ? ['iroh'] : []),
+    ...(isPlainObject(value) && Object.hasOwn(value, 'forgeAccess') ? ['forgeAccess'] : []),
   ]);
   if (input.schemaVersion !== CONFIG_SCHEMA_VERSION) {
     fail('unsupported-config-version', `schemaVersion must be ${CONFIG_SCHEMA_VERSION}`);
@@ -869,6 +918,7 @@ export function validateOwnerAlphaConfig(value) {
     ...(Object.hasOwn(input, 'signedRequestSocket') ? { signedRequestSocket: input.signedRequestSocket } : {}),
     // Local reach routing, not publication policy: it never enters the policy revision.
     ...(iroh === null ? {} : { iroh }),
+    ...(Object.hasOwn(input, 'forgeAccess') ? { forgeAccess: validateForgeAccess(input.forgeAccess, provider) } : {}),
   };
   return deepFreeze(normalized);
 }
@@ -895,6 +945,9 @@ export function policyDocument(configInput) {
     // Only lane authority enters the policy revision. editEntry is presentation only.
     ...(suggestionsEnabled(config) ? { suggestions: { form: config.suggestions.form, forge: config.suggestions.forge } } : {}),
     ...(config.ownerPublication.enabled ? { ownerPublication: config.ownerPublication } : {}),
+    // Only present when declared, so existing policy revisions are unchanged.
+    ...(config.forgeAccess ? { forgeAccess: { provider: config.forgeAccess.provider,
+      ...(config.forgeAccess.clientId ? { clientId: config.forgeAccess.clientId } : {}) } } : {}),
   });
 }
 

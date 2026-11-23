@@ -465,4 +465,31 @@ export function select(vaultDir, opts = {}) {
   return selectFiles(files, config, { audience });
 }
 
+/**
+ * Select from an in-memory tree, for callers that read a Git commit rather
+ * than a directory. `publishYml` is the raw publish.yml text, or null when the
+ * commit has none. Same fail-closed rules as select().
+ *
+ * @param {Object<string, string|null>} fileMap
+ * @param {string|null} publishYml
+ * @param {{audience?: string}} opts
+ */
+export function selectTree(fileMap, publishYml, opts = {}) {
+  const audience = opts.audience ?? 'public';
+  const closed = (code, message) => {
+    const report = emptyReport(audience);
+    report.errors.push({ code, path: CONFIG_FILENAME, message });
+    report.counts.errors = 1;
+    return { published: [], errors: report.errors, report };
+  };
+  if (typeof publishYml !== 'string') return closed('config-missing', `${CONFIG_FILENAME} is missing. Failing closed: nothing publishes.`);
+  let config;
+  try { config = yaml.load(publishYml); } catch (e) {
+    return closed('config-unparseable', `${CONFIG_FILENAME} is not valid YAML (${e.message}). Failing closed: nothing publishes.`);
+  }
+  const files = { ...fileMap };
+  delete files[CONFIG_FILENAME];
+  return selectFiles(files, config, { audience });
+}
+
 export default select;

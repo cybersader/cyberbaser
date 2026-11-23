@@ -12,12 +12,23 @@ export const STATUS = Object.freeze({
   checking: 'Checking',
 });
 
-// Short forms for the phone's note header, where space is tight. The full
-// label is the button's accessible name and appears in the Send window.
-export const SHORT = Object.freeze({
-  live: 'Live', older: 'Older live', pending: 'Not confirmed', notSelected: 'Not public', notPaired: 'Not paired',
-  unreachable: 'Offline', noAccess: 'No status', checking: '…',
-});
+// Only this state earns a mark on the note: there is something to send or
+// publish. Everything else stays out of the way until the owner asks.
+export const MARK_KEYS = Object.freeze(['older']);
+export function needsMark(status) {
+  return MARK_KEYS.includes(status?.key);
+}
+
+// The on-demand sentence: the status plus when the node confirmed it live.
+export function describeStatus(status) {
+  if (!status?.label) return '';
+  const at = typeof status.at === 'string' ? new Date(status.at) : null;
+  if (!at || Number.isNaN(at.getTime())) return status.label;
+  const when = at.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  if (status.key === 'live') return `Live. Confirmed on your site ${when}.`;
+  if (status.key === 'older') return `Live, older version. Your site has the version confirmed ${when}; this note has changes since.`;
+  return status.label;
+}
 
 // Same folding as the node's workspace binding: one leading byte-order mark
 // dropped, CRLF and CR become LF. Null when the node would refuse the text.
@@ -47,7 +58,8 @@ export function statusFor(state, digests) {
   if (!reply || reply.selected !== true) return { key: 'notSelected', label: STATUS.notSelected };
   if (!reply.live) return { key: 'pending', label: STATUS.pending };
   const current = reply.live.folded ? digests?.folded : digests?.exact;
+  const extra = { version: reply.live.version, ...(typeof reply.live.at === 'string' ? { at: reply.live.at } : {}) };
   return current && current === reply.live.digest
-    ? { key: 'live', label: STATUS.live, version: reply.live.version }
-    : { key: 'older', label: STATUS.older, version: reply.live.version };
+    ? { key: 'live', label: STATUS.live, ...extra }
+    : { key: 'older', label: STATUS.older, ...extra };
 }

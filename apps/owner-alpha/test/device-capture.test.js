@@ -147,17 +147,20 @@ test('submitCapture: queues as the paired device with the propose grant and shar
   expect(submitted.length).toBe(PROPOSAL_BUDGET.attempts - 1);
 });
 
-test('submitCapture and readNoteStatus refuse devices without the grant; status needs publication', async () => {
+test('submitCapture and readNoteStatus refuse devices without the grant; propose-only status is the public tier', async () => {
   const checkout = await vault();
   const config = configFor(checkout);
   // A device without propose cannot capture.
   const reader = commandsFor({ config, grants: ['read'] });
   await expect(reader.run('submitCapture', { path: 'garden.md', text: 'x' })).rejects.toHaveProperty('code', 'invalid-session');
-  // A propose-only phone or agent cannot read publication status.
+  // A device without propose or publication gets no status at all.
+  await expect(reader.run('readNoteStatus', { path: 'garden.md' })).rejects.toHaveProperty('code', 'invalid-session');
+  // A propose-only phone or agent gets only the public tier: no drafts, no
+  // mapping, no publishing (here the node has no selection, so not public).
   const proposer = commandsFor({ config, grants: ['propose'] });
-  await expect(proposer.run('readNoteStatus', { path: 'garden.md' })).rejects.toHaveProperty('code', 'invalid-session');
+  expect(await proposer.run('readNoteStatus', { path: 'Notes/Garden.md' })).toEqual({ path: 'Notes/Garden.md', selected: false, live: null });
   const agent = commandsFor({ config, grants: ['propose'], kind: 'agent' });
-  await expect(agent.run('readNoteStatus', { path: 'garden.md' })).rejects.toHaveProperty('code', 'invalid-session');
+  expect(await agent.run('readNoteStatus', { path: 'garden.md' })).toEqual({ path: 'garden.md', selected: false, live: null });
   // Paths outside the vault policy are refused before any Git read.
   let reads = 0;
   const counted = commandsFor({ config, grants: ['propose'], readCaptureBase: async (input) => { reads += 1; return readCommittedDelivery(input); } });
@@ -175,9 +178,11 @@ test('readNoteStatus: the configured page reports its live version; other notes 
   expect(await run('readNoteStatus', { path: 'Notes/Garden.md' })).toEqual({ path: 'Notes/Garden.md', selected: true, mappingId: 'garden', workspace: true,
     live: { version: 3, digest: 'sha-256=:AAAA:', folded: true }, latest: { version: 4, state: 'running', draftId: 'd'.repeat(64) }, publishAvailable: true });
   expect(await run('readNoteStatus', { path: 'other.md' })).toEqual({ path: 'other.md', selected: false, publishAvailable: true });
-  // With publication off the command refuses rather than guessing.
+  // With publication off, only the public tier remains.
   const off = commandsFor({ config: configFor(checkout, { publication: false }), grants: ['publication', 'propose'] });
-  await expect(off.run('readNoteStatus', { path: 'garden.md' })).rejects.toHaveProperty('code', 'publication-disabled');
+  expect(await off.run('readNoteStatus', { path: 'garden.md' })).toEqual({ path: 'garden.md', selected: false, live: null });
+  const offOnly = commandsFor({ config: configFor(checkout, { publication: false }), grants: ['publication'] });
+  expect(await offOnly.run('readNoteStatus', { path: 'garden.md' })).toEqual({ path: 'garden.md', selected: false, live: null });
 });
 
 // ---- Over the Iroh carrier ----
@@ -208,8 +213,8 @@ test('carrier: a paired phone captures over Iroh; refusals carry only fixed reas
   expect(ok).toEqual({ ok: true, receipt: { queueId, acceptedAt: '2026-11-23T10:00:00Z', baseBound: true, deliveryPath: 'garden.md' } });
   expect(submitted.length).toBe(1);
   expect(await send('submitCapture', { path: 'missing.md', text: 'x' })).toEqual({ ok: false, code: 'proposal-submission-refused', reason: 'capture-base-unavailable' });
-  // No publication grant: the generic refusal, no reason.
-  expect(await send('readNoteStatus', { path: 'garden.md' })).toEqual({ ok: false, code: 'proposal-submission-refused' });
+  // Propose only: the public tier, never the publication page's drafts.
+  expect(await send('readNoteStatus', { path: 'garden.md' })).toEqual({ ok: true, receipt: { path: 'garden.md', selected: false, live: null } });
   // Commands outside the device surface stay refused.
   expect(IROH_COMMANDS).not.toContain('applyProposal');
   expect(await send('applyProposal', { queueId: 'x' })).toEqual({ ok: false, code: 'proposal-submission-refused' });

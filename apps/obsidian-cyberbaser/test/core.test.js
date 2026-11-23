@@ -16,7 +16,8 @@ import { capturePayload, createNodeClient, MAX_NOTE_BYTES, NodeError } from '../
 import { createController, messageFor, publicSettings } from '../src/core/controller.js';
 import { createDeviceStore, memoryBackend } from '../src/core/device-store.js';
 import { codeFromLink, pairingLink, parsePairingCode } from '../src/core/pairing-code.js';
-import { foldText, SHORT, STATUS, statusFor, textDigests } from '../src/core/status.js';
+import { describeStatus, foldText, needsMark, STATUS, statusFor, textDigests } from '../src/core/status.js';
+import { createNoteStatus } from '../../owner-alpha/src/note-status.js';
 import * as wire from '../src/core/wire.js';
 
 const cleanup = [];
@@ -87,8 +88,26 @@ test('status: every node answer maps to one plain label', async () => {
   expect(statusFor({ paired: false }).label).toBe('Not paired');
   expect(statusFor({ unreachable: true }).label).toBe("Can't reach your node");
   expect(statusFor({ refused: true }).label).toBe('Status needs full access');
-  // Every status has a short form for the phone's note header.
-  expect(Object.keys(SHORT).sort()).toEqual(Object.keys(STATUS).sort());
+  // Quiet by default: only a note with changes the site lacks earns a mark.
+  const keys = ['live', 'older', 'pending', 'notSelected', 'notPaired', 'unreachable', 'noAccess', 'checking'];
+  expect(keys.filter((key) => needsMark({ key }))).toEqual(['older']);
+  // On demand, with the time the node confirmed it live.
+  const at = '2026-11-23T10:00:00.000Z';
+  const withTime = statusFor({ reply: { selected: true, live: { digest: digests.folded, folded: true, at } } }, digests);
+  expect(withTime).toMatchObject({ key: 'live', at });
+  expect(describeStatus(withTime)).toStartWith('Live. Confirmed on your site ');
+  expect(describeStatus(statusFor({ reply: { selected: true, live: { digest: 'sha-256=:x:', folded: true, at } } }, digests)))
+    .toContain('this note has changes since');
+  expect(describeStatus(statusFor({ reply: { selected: false } }, digests))).toBe('Not public');
+});
+
+test('links: the obsidian:// link the QR carries opens pairing with the exact code', () => {
+  const code = `cb1.endpointabc123.${'0'.repeat(32)}.${randomBytes(32).toString('base64url')}`;
+  const link = pairingLink(code);
+  // Obsidian hands the handler the decoded query, as URLSearchParams would.
+  const params = Object.fromEntries(new URL(link).searchParams);
+  expect(codeFromLink(params)).toBe(code);
+  expect(parsePairingCode(codeFromLink(params))).not.toBe(null);
 });
 
 // ---- Capture payload ----
@@ -100,6 +119,7 @@ test('capture: the path and text exactly as open, bounded below the node frame l
   expect(MAX_NOTE_BYTES).toBeLessThan(512 * 1024);
   expect(messageFor(new NodeError('refused', 'capture-base-unavailable'))).toBe('Your vault has no committed copy of this note yet.');
   expect(messageFor(new NodeError('unreachable'))).toBe("Can't reach your node.");
+  expect(messageFor(new NodeError('refused', 'note-needs-linking'))).toContain('open Devices and link it');
 });
 
 // ---- Storage: never in synced plugin data ----
@@ -114,11 +134,13 @@ test('storage: the pairing goes to device storage only; synced settings carry di
   const client = { pair: async () => record, request: async () => { throw new NodeError('unreachable'); } };
   const controller = createController({ client, store });
   // A plugin that (wrongly) merged everything into its settings would leak; publicSettings drops it.
-  const settings = { showStatus: true };
+  const settings = { showMark: true };
   const paired = await controller.pair('cb1.x');
   Object.assign(settings, paired, { pairing: record });
   const synced = JSON.stringify(publicSettings(settings));
-  expect(synced).toBe('{"showStatus":true}');
+  expect(synced).toBe('{"showMark":true}');
+  // The older setting name keeps its choice.
+  expect(publicSettings({ showStatus: false })).toEqual({ showMark: false });
   for (const secret of [Buffer.from(irohSecret).toString('base64'), 'phone-abc', device.publicKey]) expect(synced).not.toContain(secret);
   expect(backend.map.get('vault:test').irohSecret).toBe(irohSecret);
   expect(await controller.paired()).toEqual({ keyId: 'phone-abc', grants: ['propose'], pairedAt: 1 });
@@ -163,6 +185,8 @@ test('client: pairs with the real pairing manager, then sends a capture and asks
   const checkout = path.join(root, 'vault');
   await mkdir(checkout);
   await writeFile(path.join(checkout, 'garden.md'), '# Garden\n\nWater daily.\n');
+  await writeFile(path.join(checkout, 'private.md'), '# Private\n');
+  await writeFile(path.join(checkout, 'publish.yml'), 'allow:\n  - garden.md\n');
   const git = (...args) => execFileSync('git', ['-C', checkout, '-c', 'commit.gpgSign=false', ...args]);
   git('init', '-q', '--initial-branch=main'); git('config', 'user.name', 'T'); git('config', 'user.email', 't@example.invalid');
   git('add', '-A'); git('commit', '-q', '-m', 'base');
@@ -174,7 +198,8 @@ test('client: pairs with the real pairing manager, then sends a capture and asks
   const nodeId = endpoint.id().toString();
   const verifier = createDevicePrincipalAdapter({ registry: store.registry, audience: irohAudience(nodeId), requireChannelBinding: true });
   const submitted = [];
-  const commands = createOwnerCommands({ config, devicePrincipalAdapter: verifier,
+  const noteStatus = createNoteStatus({ config, context: null, listJobs: async () => [] });
+  const commands = createOwnerCommands({ config, devicePrincipalAdapter: verifier, noteStatus,
     proposalReview: { submitSigned: async (input) => { submitted.push(input); return { queueId: `Q-${crypto.randomUUID()}`, acceptedAt: '2026-11-23T10:00:00Z', baseBound: true }; } } });
   const carrier = startIrohCarrier({ endpoint, commands, verifier, pairing, relay: 'none' });
   pairing.attachNode({ nodeId, ticket: carrier.ticket });
@@ -206,8 +231,11 @@ test('client: pairs with the real pairing manager, then sends a capture and asks
   expect(submitted[0].submitter).toMatchObject({ kind: 'owner-device', label: 'Phone', keyId: record.keyId });
   expect(await controller.propose({ path: 'garden.md' }, '# Garden\n\nWater daily.\n')).toMatchObject({ kind: 'unchanged' });
   await expect(controller.propose({ path: 'missing.md' }, 'x')).rejects.toMatchObject({ kind: 'refused', reason: 'capture-base-unavailable' });
-  // A propose-only phone does not ask for status: it says so.
-  expect((await controller.status({ path: 'garden.md' }, 'x')).status.label).toBe('Status needs full access');
+  // A propose-only phone sees what the public site shows, nothing more.
+  const publicReply = await controller.status({ path: 'garden.md' }, 'x');
+  expect(publicReply.status.label).toBe('Public, not confirmed yet');
+  expect(Object.keys(publicReply.reply).sort()).toEqual(['live', 'path', 'selected']);
+  expect((await controller.status({ path: 'private.md' }, 'x')).status.label).toBe('Not public');
   // Revoked on the node: refused from then on.
   await store.revoke(record.keyId);
   await expect(controller.propose({ path: 'garden.md' }, '# Garden\n\nWater hourly.\n')).rejects.toMatchObject({ kind: 'refused', reason: null });

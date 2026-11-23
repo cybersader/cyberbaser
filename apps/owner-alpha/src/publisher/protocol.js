@@ -7,7 +7,7 @@ export const REJECTION_CODES = Object.freeze([
   'publisher-invalid-request', 'publisher-request-timeout', 'publisher-busy',
   'publisher-job-not-found', 'publisher-job-not-admitted', 'publication-evidence-missing',
   'publisher-receipt-mismatch', 'remote-destination-mismatch', 'remote-advanced',
-  'git-push-failed', 'publisher-failed',
+  'git-push-failed', 'forge-access-unavailable', 'publisher-failed',
 ]);
 
 const UTF8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });

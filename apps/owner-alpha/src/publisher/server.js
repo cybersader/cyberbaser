@@ -9,6 +9,8 @@ import { validateJobId } from '../job-state.js';
 import { createJobPublisher } from '../pipeline.js';
 import { createPublisherStoreContext } from '../store.js';
 import { READ_TIMEOUT_MS, REJECTION_CODES, readFrame, validSocketPath } from './protocol.js';
+import { FORGE_PROBLEMS, createForgeAccess } from './forge-access.js';
+import { startForgeControl } from './forge-control.js';
 import { createIsolatedPush } from './repository.js';
 
 async function socketStat(socketPath) {
@@ -94,10 +96,11 @@ function parseRequest(text) {
 function rejectionCode(error) {
   if (!(error instanceof OwnerAlphaError)) return 'publisher-failed';
   if (error.code === 'artifact-not-found') return 'publisher-job-not-found';
+  if (Object.hasOwn(FORGE_PROBLEMS, error.code)) return 'forge-access-unavailable';
   return REJECTION_CODES.includes(error.code) ? error.code : 'publisher-failed';
 }
 
-export async function startPublisher({ config, context, socketPath, repository } = {}) {
+export async function startPublisher({ config, context, socketPath, repository, forgeAccess, forgeOptions } = {}) {
   if (!validSocketPath(socketPath) || typeof process.getuid !== 'function') {
     fail('publisher-unsafe-socket', 'publisher needs a private local Unix socket');
   }
@@ -109,6 +112,7 @@ export async function startPublisher({ config, context, socketPath, repository }
   let ready = false;
   let closing;
   let ownedSocket;
+  let forgeControl = null;
   const server = net.createServer((socket) => {
     socket.on('error', () => socket.destroy());
     const reply = (response) => socket.end(`${JSON.stringify(response)}\n`, () => socket.destroy());
@@ -168,7 +172,9 @@ export async function startPublisher({ config, context, socketPath, repository }
     await clearStaleSocket(socketPath, uid, ownerFile);
     const checkout = config.repository.checkout;
     const publisherContext = await createPublisherStoreContext(context, checkout);
-    const pushCommit = await createIsolatedPush({ repository, checkout, uid: Number(uid) });
+    // Undefined means "from config"; null means this publisher pushes with no forge credential.
+    forgeAccess = forgeAccess === undefined ? createForgeAccess(config, forgeOptions) : forgeAccess;
+    const pushCommit = await createIsolatedPush({ repository, checkout, uid: Number(uid), forgeAccess });
     // The caller holds the pipeline mutation lock; taking it here would deadlock.
     publish = createJobPublisher({ config, context: publisherContext, pushCommit, bindCommitMessage: true });
     await listen(server, socketPath);
@@ -181,9 +187,11 @@ export async function startPublisher({ config, context, socketPath, repository }
     await ownerFile.truncate(0);
     await ownerFile.writeFile(fingerprint(ownedSocket));
     await ownerFile.sync();
+    if (forgeAccess !== null) forgeControl = await startForgeControl({ socketPath, forgeAccess, uid: Number(uid) });
     ready = true;
   } catch (error) {
     if (server.listening) await new Promise((resolve) => server.close(resolve));
+    forgeAccess?.close?.();
     await ownerFile?.close();
     if (error instanceof OwnerAlphaError && [
       'publisher-unsafe-socket', 'publisher-socket-in-use', 'publisher-unsafe-repository', 'publisher-unsafe-store',
@@ -194,12 +202,15 @@ export async function startPublisher({ config, context, socketPath, repository }
   return Object.freeze({ close() {
     closing ??= (async () => {
       ready = false;
+      forgeAccess?.close?.();
+      const forgeClosed = forgeControl?.close();
       const idle = new Promise((resolve) => server.close(resolve));
       const pending = active;
       if (pending?.task === null) pending.socket.destroy();
       try {
         await pending?.task;
         await idle;
+        await forgeClosed;
         // net.Server normally removes the socket itself. Don't unlink a successor.
         if (unchanged(ownedSocket, await socketStat(socketPath))) await unlink(socketPath);
       } finally {

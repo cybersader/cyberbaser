@@ -126,7 +126,7 @@ test('headless client reviews an exact revision and follows one publication thro
   const receipt = await b.receipt(draftId);
   const status = await b.status();
   expect(receipt).toEqual(live);
-  expect(status).toEqual({ ...page, selected: true, live: { version: 7, digest: digest(EDITED), jobId, verified: true, liveKind: 'text', attribution }, latest: expectedLatest(live) });
+  expect(status).toEqual({ ...page, selected: true, live: { version: 7, digest: digest(EDITED), jobId, verified: true, liveKind: 'text', attribution, confirmedAt: expect.any(String) }, latest: expectedLatest(live) });
   for (const payload of [receipt, status, prepared, publishing]) assertNoPrivateData(payload);
 });
 
@@ -140,7 +140,7 @@ test('failed, missing, or wrongly bound live evidence never replaces the previou
   // Local rebuild failure does not undo the already recorded public check.
   await f.advance(old.jobId, 'live-confirmed', 'rebuilding-local', 'failed');
   expect(await client.receipt(first.draftId)).toEqual(expectedReceipt(first.draftId, 7, EDITED, old.jobId, 'needs-attention', true));
-  const previous = { version: 7, digest: digest(EDITED), jobId: old.jobId, verified: true, liveKind: 'text', attribution: 'unknown' };
+  const previous = { version: 7, digest: digest(EDITED), jobId: old.jobId, verified: true, liveKind: 'text', attribution: 'unknown', confirmedAt: expect.any(String) };
   expect((await client.status()).live).toEqual(previous);
 
   f.setSource(secondText, 8);
@@ -166,7 +166,7 @@ test('failed, missing, or wrongly bound live evidence never replaces the previou
   expect(await client.status()).toEqual(expectedStatus);
   await unlink(liveFile);
   await f.witness(newer.jobId);
-  expect((await client.status()).live).toEqual({ version: 8, digest: digest(secondText), jobId: newer.jobId, verified: true, liveKind: 'text', attribution: 'unknown' });
+  expect((await client.status()).live).toEqual({ version: 8, digest: digest(secondText), jobId: newer.jobId, verified: true, liveKind: 'text', attribution: 'unknown', confirmedAt: expect.any(String) });
 });
 
 test('headless receipt and status distinguish an unchanged render from a text transition', async () => {

@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
+import { spawnSync } from 'node:child_process';
 import { lstat } from 'node:fs/promises';
+import jsQR from 'jsqr';
 import path from 'node:path';
 import { AGENT_LABEL, createAgentProposalRehearsal } from '../bin/agent-proposal-rehearsal.js';
 import { agentProcessEnvironment } from '../bin/agent-propose.js';
@@ -42,6 +44,16 @@ async function ownerSession(fixture) {
   return { call, csrf };
 }
 
+// Decode the Devices page's QR the way a camera would: render, then read it
+// with an independent decoder.
+function decodeQr(qr) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${qr.size} ${qr.size}" shape-rendering="crispEdges">`
+    + `<rect width="${qr.size}" height="${qr.size}" fill="#fff"/><path fill="#000" d="${qr.path}"/></svg>`;
+  const raster = spawnSync('magick', ['-density', String(96 * 6), 'svg:-', '-depth', '8', 'rgba:-'], { input: svg, maxBuffer: 1 << 26 });
+  const side = qr.size * 6;
+  return jsQR(new Uint8ClampedArray(raster.stdout), side, side)?.data ?? null;
+}
+
 function spawn(args) {
   return Bun.spawn([process.execPath, ...args], { env: agentProcessEnvironment(), stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
 }
@@ -77,7 +89,10 @@ export async function pairSubmitRevoke(relay) {
     let t = performance.now();
     const started = await (await call('/owner/devices/pair', { kind: 'agent', access: 'propose', label: 'Iroh agent', csrf })).json();
     expect(started.code.startsWith('cb1.')).toBe(true);
-    const child = spawn([bin('cyberbaser-pair.js'), started.code, '--state', stateFile]);
+    // The QR carries the obsidian:// link; the agent CLI accepts that link too.
+    expect(started.link).toBe(`obsidian://cyberbaser-pair?code=${encodeURIComponent(started.code)}`);
+    expect(decodeQr(started.qr)).toBe(started.link);
+    const child = spawn([bin('cyberbaser-pair.js'), started.link, '--state', stateFile]);
     const stdout = new Response(child.stdout).text();
     const pending = await waitFor(async () => {
       const state = await (await call('/owner/devices/state')).json();
@@ -98,6 +113,16 @@ export async function pairSubmitRevoke(relay) {
     const devices = (await (await call('/owner/devices/state')).json()).devices;
     const paired = devices.find((d) => d.label === 'Iroh agent');
     expect(paired).toMatchObject({ kind: 'agent', grants: ['propose'], revoked: false, paired: true });
+
+    // The linking step: owner session only; nothing waiting; unknown requests refused.
+    const linking = await (await call('/owner/devices/links')).json();
+    expect(linking.requests).toEqual([]);
+    expect(Array.isArray(linking.paths)).toBe(true);
+    const unknown = await call('/owner/devices/link', { requestId: '0'.repeat(32), vaultPath: 'draft.md', csrf });
+    expect(unknown.status).toBe(409);
+    expect((await unknown.json()).reason).toBe('link-request-expired');
+    expect((await call('/owner/devices/link', { requestId: '0'.repeat(32), vaultPath: 'draft.md', csrf: 'A'.repeat(43) })).status).toBe(403);
+    expect((await fetch(`${fixture.ownerOrigin}/owner/devices/links`, { redirect: 'manual' })).status).toBe(403);
 
     // Reusing the same code enrols nothing.
     const reuse = spawn([bin('cyberbaser-pair.js'), started.code, '--state', path.join(fixture.root, 'agent', 'second.json')]);

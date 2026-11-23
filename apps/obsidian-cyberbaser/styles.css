@@ -3,8 +3,9 @@
 .cyberbaser-modal .cyberbaser-path { color: var(--text-muted); word-break: break-all; }
 .cyberbaser-modal .cyberbaser-actions { display: flex; flex-wrap: wrap; gap: 0.5em; margin: 0.75em 0; }
 .cyberbaser-modal .cyberbaser-result { font-weight: 500; }
-.cyberbaser-header-status { display: inline-flex; align-items: center; gap: 0.25em; width: auto; margin-inline-end: 6px; }
-.cyberbaser-header-text { font-size: var(--font-ui-smaller); white-space: nowrap; }
-[data-status="live"] .cyberbaser-header-text, .cyberbaser-status[data-status="live"] { color: var(--color-green); }
-[data-status="older"] .cyberbaser-header-text, .cyberbaser-status[data-status="older"] { color: var(--color-orange); }
-[data-status="unreachable"] .cyberbaser-header-text, .cyberbaser-status[data-status="unreachable"] { color: var(--text-error); }
+.cyberbaser-modal .cyberbaser-status-sentence { font-size: var(--font-ui-medium); line-height: var(--line-height-normal); }
+/* The only standing indicator: a theme-coloured icon when a note has changes your site lacks. */
+.cyberbaser-status { display: inline-flex; align-items: center; gap: var(--size-4-1); color: var(--text-muted); }
+.cyberbaser-status .cyberbaser-status-icon { display: inline-flex; color: var(--text-accent); }
+.cyberbaser-status .cyberbaser-status-icon svg { width: var(--icon-xs); height: var(--icon-xs); }
+.view-action.cyberbaser-mark { color: var(--text-accent); }

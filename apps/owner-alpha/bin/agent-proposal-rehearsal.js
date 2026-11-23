@@ -86,7 +86,13 @@ export async function createAgentProposalRehearsal({ port = 46527, before = defa
       ...(iroh === null ? {} : { iroh: { enabled: true, stateDirectory: irohState, relay: iroh, ...(iroh !== 'n0' ? { bindAddress: '127.0.0.1:0' } : {}) } }) }), { mode: 0o600 });
     const runtime = await startSuggestionsRehearsal(fixture, { ...(realQuartz ? {} : { renderer: renderFixture, simulatedRender: true }),
       ...(publication === null ? {} : { readAuthoringNote }) });
-    if (publication !== null) {
+    // publication.bind === false leaves the link to the owner's linking step on
+    // the Devices page; syncWorkspace() then delivers the newer text.
+    const syncWorkspace = async () => {
+      await writeFile(path.join(workspaceDir, AGENT_REHEARSAL_DELIVERY_PATH), publication.workspaceText, { mode: 0o600 });
+      workspaceVersion += 1;
+    };
+    if (publication !== null && publication.bind !== false) {
       // The owner's explicit bind of the workspace copy to the vault, then the
       // workspace receives the newer text (as a sync would).
       const { bindWorkspaceBaseline } = await import('../src/owner-publication-store.js');
@@ -105,7 +111,7 @@ export async function createAgentProposalRehearsal({ port = 46527, before = defa
     const issueSignInUrl = () => `${runtime.ownerOrigin}/owner/bootstrap?token=${runtime.issueBootstrap()}`;
     let verified = false;
     return {
-      ...fixture, agent: { capture, checkout: snapshot, key, socket }, queueId, entry, issueSignInUrl, runtime,
+      ...fixture, agent: { capture, checkout: snapshot, key, socket }, queueId, entry, issueSignInUrl, runtime, syncWorkspace,
       panelUrl: `${runtime.ownerOrigin}/owner/review`,
       instructions: [
         `Submitted ${queueId} for ${AGENT_REHEARSAL_DELIVERY_PATH} as ${AGENT_LABEL}.`,

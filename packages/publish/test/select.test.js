@@ -2,7 +2,7 @@ import { test, expect } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { select, selectFiles, RULES } from '../src/select.js';
+import { select, selectFiles, selectTree, RULES } from '../src/select.js';
 import { extractRefs } from '../src/links.js';
 
 const fm = (obj, body = 'body\n') => `---\n${Object.entries(obj).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join('\n')}\n---\n\n${body}`;
@@ -342,4 +342,13 @@ test('raw HTML media in a published note makes its asset reachable; code and ext
   expect(deniedRule(report, 'shared/secret.png')).toBe(RULES.ASSET_UNREACHABLE);
   const refs = extractRefs('<IMG SRC="a b.png"> <img data-src="no.png"> <source src=\'c.webp\'>');
   expect(refs.htmlSrcs.map((x) => x.target)).toEqual(['a b.png', 'c.webp']);
+});
+
+test('selectTree: same answer as select() from an in-memory tree; missing or bad publish.yml fails closed', () => {
+  const files = vault();
+  const yml = 'allow:\n  - cyber/**\n  - tools/**\n';
+  expect(selectTree(files, yml).published).toEqual(run(files).published);
+  expect(selectTree({ ...files, 'publish.yml': yml }, yml).published).toEqual(run(files).published);
+  expect(selectTree(files, null)).toMatchObject({ published: [], errors: [{ code: 'config-missing' }] });
+  expect(selectTree(files, 'allow: [')).toMatchObject({ published: [], errors: [{ code: 'config-unparseable' }] });
 });

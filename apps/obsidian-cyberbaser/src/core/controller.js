@@ -21,6 +21,7 @@ const MESSAGES = Object.freeze({
   'retired-material': 'This text contains material your vault has retired.',
   'workspace-text-repeated': 'This note repeats the vault text; check for a sync conflict.',
   'workspace-properties-invalid': "This note's properties block is broken.",
+  'note-needs-linking': "Your node hasn't linked this note to your vault yet. On your node, open Devices and link it under Notes to link, then send again.",
 });
 
 export function messageFor(error) {
@@ -35,9 +36,12 @@ export function messageFor(error) {
 }
 
 // data.json syncs with the vault: only these display settings ever go there.
-export const DEFAULT_SETTINGS = Object.freeze({ showStatus: true });
+// showMark: a quiet mark when the open note has changes your site lacks.
+// (Older versions stored the same choice as showStatus.)
+export const DEFAULT_SETTINGS = Object.freeze({ showMark: true });
 export function publicSettings(settings) {
-  return { showStatus: settings?.showStatus !== false };
+  const value = settings?.showMark ?? settings?.showStatus;
+  return { showMark: value !== false };
 }
 
 export function createController({ client, store }) {
@@ -70,7 +74,11 @@ export function createController({ client, store }) {
       const current = await loaded().catch(() => null);
       if (current === null) return { status: statusFor({ paired: false }), reply: null };
       const digests = await textDigests(text);
-      if (!current.grants.includes('publication')) return { status: statusFor({ refused: true }), reply: null };
+      // Full access sees drafts and publishing; a device that may only
+      // propose still sees what the public site shows: public, and live.
+      if (!current.grants.includes('publication') && !current.grants.includes('propose')) {
+        return { status: statusFor({ refused: true }), reply: null };
+      }
       try {
         const reply = await client.request(current, 'readNoteStatus', { path: file.path });
         return { status: statusFor({ reply }, digests), reply };

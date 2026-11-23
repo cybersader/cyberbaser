@@ -7,7 +7,7 @@ import { isPublicationDigest } from '../owner-publication.js';
 import { validatePublicationDraftId } from '../owner-publication-store.js';
 import { storeContextFromConfig } from '../store.js';
 import { actorAllowsGrant } from './grants.js';
-import { createCaptureProposalBuilder } from './capture-submission.js';
+import { createCaptureProposalBuilder, deliveryPathFor } from './capture-submission.js';
 import { createProposalSubmission } from './proposal-submission.js';
 import { refuseSignedRequest } from './signed-request.js';
 
@@ -60,6 +60,8 @@ export function createOwnerCommands({
   config: configInput, projectRoot, principalAdapter, devicePrincipalAdapter = null, createEditSession,
   editSessions, handoffs, directEdits, saveEdit, lookupJob, createJobId,
   proposalReview = null, publication = null, proposalClock = Date.now, readCaptureBase,
+  // Optional: status for every published note, and the owner's note links.
+  noteStatus = null, noteLinks = null,
 }) {
   const config = validateOwnerAlphaConfig(configInput);
   if (devicePrincipalAdapter !== null && devicePrincipalAdapter.ownerId !== config.owner.identity) {
@@ -72,7 +74,21 @@ export function createOwnerCommands({
     submit: (input) => proposalReview.submitSigned(input),
   });
   const buildCapture = createCaptureProposalBuilder({ config, clock: proposalClock,
+    resolvePath: (notePath) => noteLinks?.resolve(notePath) ?? null,
     ...(readCaptureBase === undefined ? {} : { readBase: readCaptureBase }) });
+  const isOwnerDevice = (principal) => principal?.method === 'device-key' && principal.actor?.kind === 'owner-device'
+    && principal.id === config.owner.identity;
+  // A device Send the node cannot place: leave a request for the owner's
+  // linking step and give the device one plain reason.
+  const needsLinking = (principal, notePath, text = null) => {
+    if (noteLinks === null || !isOwnerDevice(principal)) return false;
+    return noteLinks.request({ notePath, text }) !== null;
+  };
+  // The public tier of note status: what the public site shows anyway.
+  const publicStatusAllowed = (principal) => devicePrincipalAdapter?.isVerified(principal) === true
+    && principal.method === 'device-key'
+    && ['publication', 'propose'].some((grant) => actorAllowsGrant(principal.actor.kind, grant)
+      && devicePrincipalAdapter.hasGrant(principal, grant));
 
   function requireGrant(grant, principal) {
     const bootstrap = principalAdapter?.isVerified(principal) && principal.method === 'bootstrap-session';
@@ -111,13 +127,14 @@ export function createOwnerCommands({
 
   function command(grant, fallback, execute, { preserveCode = false } = {}) {
     const run = async (input, principal) => {
-      requireGrant(grant, principal);
+      // A function grant decides for itself and passes its tier to execute.
+      const tier = typeof grant === 'function' ? grant(principal) : requireGrant(grant, principal);
       // A device attestation authorizes only its one signed request, even if
       // an in-process binding invokes the core without executeSigned().
       if (principal.method === 'device-key'
         && !devicePrincipalAdapter.consumeRequest(principal, signedHandlers.get(run), input)) refuseSignedRequest();
       try {
-        return await execute(input, principal);
+        return await execute(input, principal, tier);
       } catch (error) {
         if (error instanceof OwnerAlphaError) throw error;
         fail(preserveCode ? error?.code ?? fallback : fallback, 'owner command failed');
@@ -218,28 +235,60 @@ export function createOwnerCommands({
     submitCapture: command('propose', 'proposal-submission-refused', async (input, principal) => {
       let deliveryPath = null;
       const receipt = await submitProposal.submitBuilt(async () => {
-        const built = await buildCapture(input);
+        let built;
+        try { built = await buildCapture(input); } catch (error) {
+          // No committed file at the path the node would use, and the owner
+          // has not linked this note: ask the owner to link it on the node.
+          if (error instanceof OwnerAlphaError && error.code === 'capture-base-unavailable'
+            && noteLinks?.resolve(input.path) === null && needsLinking(principal, input.path, input.text)) {
+            fail('note-needs-linking', 'link this note to the vault on the node first');
+          }
+          throw error;
+        }
         deliveryPath = built.deliveryPath;
         return built.unchanged ? null : built.proposal;
       }, principal);
       return receipt === null ? { unchanged: true, deliveryPath } : { ...receipt, deliveryPath };
     }, { preserveCode: true }),
 
-    // Whether the device's open note is the configured publication page, and
-    // which version was last confirmed live. Paths, never note text.
-    readNoteStatus: command('publication', 'publication-status-unavailable', async (input) => {
+    // Whether the device's open note is public and which version is live.
+    // Owner devices with the publication grant get the full answer (drafts,
+    // the publication page, publishing). Any device holding `propose` gets
+    // only what the public site shows: public or not, and the live version.
+    // Paths, never note text; only the path the device asked about.
+    readNoteStatus: command((principal) => {
+      try { requireGrant('publication', principal); return 'owner'; } catch (error) {
+        if (!publicStatusAllowed(principal)) throw error;
+        return 'public';
+      }
+    }, 'publication-status-unavailable', async (input, principal, tier) => {
       const { path: notePath } = closedInput(input, 'path');
       if (typeof notePath !== 'string' || notePath.length > 1024) fail('invalid-command-input', 'path must be text');
-      const mapping = config.ownerPublication.mappings.find((entry) => entry.source.path === notePath
-        || entry.relativePath === notePath);
-      if (!mapping) return { path: notePath, selected: false, publishAvailable: publication?.publishAvailable === true };
-      const status = await publication.readStatus({ mappingId: mapping.id });
-      const live = status.live === null ? null : { version: status.live.version,
-        digest: status.live.foldedTextDigest ?? status.live.digest, folded: status.live.foldedTextDigest !== undefined };
-      const latest = status.latest === null ? null : { version: status.latest.version, state: status.latest.state,
-        draftId: status.latest.draftId };
-      return { path: notePath, selected: true, mappingId: mapping.id, workspace: mapping.source.kind === 'workspace',
-        live, latest, publishAvailable: publication?.publishAvailable === true };
+      const publishAvailable = tier === 'owner' && publication?.publishAvailable === true;
+      const mapping = tier === 'owner' ? config.ownerPublication.mappings.find((entry) => entry.source.path === notePath
+        || entry.relativePath === notePath) : undefined;
+      if (mapping && publication !== null) {
+        const status = await publication.readStatus({ mappingId: mapping.id });
+        const live = status.live === null ? null : { version: status.live.version,
+          digest: status.live.foldedTextDigest ?? status.live.digest, folded: status.live.foldedTextDigest !== undefined };
+        // When it was confirmed live: the publication job's own record, else
+        // the verified deployment when it carries this same text.
+        if (live !== null && typeof status.live.confirmedAt === 'string') live.at = status.live.confirmedAt;
+        else if (live !== null && noteStatus !== null) {
+          const general = await noteStatus.status(mapping.relativePath).catch(() => null);
+          if (general?.live?.digest === live.digest) live.at = general.live.at;
+        }
+        const latest = status.latest === null ? null : { version: status.latest.version, state: status.latest.state,
+          draftId: status.latest.draftId };
+        return { path: notePath, selected: true, mappingId: mapping.id, workspace: mapping.source.kind === 'workspace',
+          live, latest, publishAvailable };
+      }
+      if (noteStatus === null) return tier === 'owner' ? { path: notePath, selected: false, publishAvailable } : { path: notePath, selected: false, live: null };
+      const vaultPath = noteLinks?.resolve(notePath) ?? deliveryPathFor(config, notePath);
+      const found = await noteStatus.status(vaultPath);
+      const live = found.live === null ? null : { digest: found.live.digest, folded: true, at: found.live.at };
+      return tier === 'owner' ? { path: notePath, selected: found.selected, live, publishAvailable: false }
+        : { path: notePath, selected: found.selected, live };
     }),
 
     listProposals: command('review', 'review-list-failed', async (input) => {
@@ -280,7 +329,7 @@ export function createOwnerCommands({
       return proposalReview.apply(input.queueId);
     }),
 
-    preparePublication: command('publication', 'publication-prepare-failed', async (input) => {
+    preparePublication: command('publication', 'publication-prepare-failed', async (input, principal) => {
       const request = mappingInput(input, ['expectedVersion', 'expectedDigest']);
       if (Object.hasOwn(request, 'expectedVersion')
         && (!Number.isSafeInteger(request.expectedVersion) || request.expectedVersion <= 0)) {
@@ -289,7 +338,17 @@ export function createOwnerCommands({
       if (Object.hasOwn(request, 'expectedDigest') && !isPublicationDigest(request.expectedDigest)) {
         fail('invalid-publication-expected-digest', 'expected digest must be one canonical SHA-256 digest');
       }
-      return publication.prepare(request);
+      try {
+        return await publication.prepare(request);
+      } catch (error) {
+        // The publication page has no baseline yet: the owner links it on the node.
+        const mapping = config.ownerPublication.mappings.find((entry) => entry.id === request.mappingId);
+        if (error instanceof OwnerAlphaError && error.code === 'workspace-unbound' && mapping
+          && needsLinking(principal, mapping.source.path)) {
+          fail('note-needs-linking', 'link this note to the vault on the node first');
+        }
+        throw error;
+      }
     }),
 
     readPublicationStatus: command('publication', 'publication-status-unavailable', async (input) => {

@@ -653,7 +653,7 @@ export async function readOwnerPublicationStatus({ context: contextInput, config
       latestOrder = order;
     }
     if (result.liveOrder !== null && isLater(result.liveOrder, liveOrder)) {
-      live = { version, ...digest, attribution, jobId, verified: true, liveKind };
+      live = { version, ...digest, attribution, jobId, verified: true, liveKind, confirmedAt: result.liveOrder[0] };
       liveOrder = result.liveOrder;
     }
   };
