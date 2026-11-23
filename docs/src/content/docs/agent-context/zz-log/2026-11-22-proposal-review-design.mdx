@@ -36,6 +36,10 @@ The second and third runs reached review. Fixed after the second: notes with a f
 
 Still open: the home page loads third-party badge images from its own HTML; a review frame can be about 1 MB; after Apply the decided view falls back to an excerpt once the site is rebuilt; a rewrite that also changes bold or link text in the same paragraph falls back; change anchors such as `c1` could collide with a heading id; on desktop, opening at the change scrolls the title out of view.
 
+## What comes next (owner decision, 2026-11-23)
+
+Asked whether to install the owner node on this desktop against the real vault, the owner chose to wait for Iroh reach and a one-app setup, so the first real install is the one regular users would get. See `.claude/41-QUESTIONS-RESOLVED.md`.
+
 ## Other findings the same day
 
 - **Socket bug caught by CI on the pinned runtime.** The signed-request socket relied on `listen()` failing when the path already existed. On Bun 1.3.11, the version pinned in the owner-app container and CI, `listen()` replaced an existing regular file instead. The local Bun 1.3.14 masked it. Fixed by refusing any existing entry before binding (`af66287`). The publisher and the intake socket already checked first. Local and CI Bun versions differ; the descriptor defect behind the intermittent `EBADF` test failures is fixed upstream in Bun 1.4.0.

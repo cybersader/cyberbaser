@@ -4,6 +4,13 @@
 
 ## Log
 
+### First real install waits for Iroh reach and a one-app setup (2026-11-23, owner decision)
+- **Asked** (question dialog, after review worked on real notes in rehearsal): install the owner node on this desktop against the real vault, review-only or with publishing? **Answer:** "Wait for Iroh and the one-app setup": build Iroh reach and the simple installer first, so the first real install is the one regular users would get.
+- **Owner's goal, in their words:** "I want the simplest deployment model possible, like regular users need to be able to set this stuff up. Ideally, it takes on and uses something kind of like iroh, you know, to get around the networking crap."
+- **Also said:** "if you need to install things on here to actually test it easier in a more easy fashion, then I'm good with that". Installing development and test tooling on this machine is allowed; installing the owner node against the real vault is not part of that.
+- **Target shape:** one app on an always-on machine of the owner's; sign in to GitHub once and pick the vault; pair each phone or agent by QR code; Iroh connects them from anywhere with no ports, domains or certificates. The node is not a plugin; plugins are thin clients.
+
+
 ### [R25] Property changes are judged by effect, asked of the component that owns it (2026-11-21)
 - **Asked:** after the first live workspace rehearsal refused a property edit, whether publishing from a writing tool may change properties. The owner asked for a principled structure, not a thin special case, then for an independent check against the architecture.
 - **Decided (owner, question dialog, after an independent Fable 5.2 review):** adopt effect-based handling with **no property names in the core**. "Changes what is public" and "changes an address" are computed by running selection and the address map before and after, for body edits too; the renderer adapter declares the keys it uses; unclaimed keys get full review until vault policy names them harmless; structural breakage is refused. Serious effects cannot be lightened by policy. Cyberbaser never authors a field.
