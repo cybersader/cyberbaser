@@ -7,6 +7,7 @@ import { isPublicationDigest } from '../owner-publication.js';
 import { validatePublicationDraftId } from '../owner-publication-store.js';
 import { storeContextFromConfig } from '../store.js';
 import { actorAllowsGrant } from './grants.js';
+import { createCaptureProposalBuilder } from './capture-submission.js';
 import { createProposalSubmission } from './proposal-submission.js';
 import { refuseSignedRequest } from './signed-request.js';
 
@@ -58,7 +59,7 @@ export class OwnerCommandPrecondition extends OwnerAlphaError {}
 export function createOwnerCommands({
   config: configInput, projectRoot, principalAdapter, devicePrincipalAdapter = null, createEditSession,
   editSessions, handoffs, directEdits, saveEdit, lookupJob, createJobId,
-  proposalReview = null, publication = null, proposalClock = Date.now,
+  proposalReview = null, publication = null, proposalClock = Date.now, readCaptureBase,
 }) {
   const config = validateOwnerAlphaConfig(configInput);
   if (devicePrincipalAdapter !== null && devicePrincipalAdapter.ownerId !== config.owner.identity) {
@@ -70,6 +71,8 @@ export function createOwnerCommands({
     clock: proposalClock,
     submit: (input) => proposalReview.submitSigned(input),
   });
+  const buildCapture = createCaptureProposalBuilder({ config, clock: proposalClock,
+    ...(readCaptureBase === undefined ? {} : { readBase: readCaptureBase }) });
 
   function requireGrant(grant, principal) {
     const bootstrap = principalAdapter?.isVerified(principal) && principal.method === 'bootstrap-session';
@@ -208,6 +211,36 @@ export function createOwnerCommands({
     }),
 
     submitProposal: command('propose', 'proposal-submission-refused', submitProposal),
+
+    // A paired device's open note, bound by the node to the committed vault
+    // text and queued as an ordinary proposal: same grant, budget and queue
+    // rules as submitProposal.
+    submitCapture: command('propose', 'proposal-submission-refused', async (input, principal) => {
+      let deliveryPath = null;
+      const receipt = await submitProposal.submitBuilt(async () => {
+        const built = await buildCapture(input);
+        deliveryPath = built.deliveryPath;
+        return built.unchanged ? null : built.proposal;
+      }, principal);
+      return receipt === null ? { unchanged: true, deliveryPath } : { ...receipt, deliveryPath };
+    }, { preserveCode: true }),
+
+    // Whether the device's open note is the configured publication page, and
+    // which version was last confirmed live. Paths, never note text.
+    readNoteStatus: command('publication', 'publication-status-unavailable', async (input) => {
+      const { path: notePath } = closedInput(input, 'path');
+      if (typeof notePath !== 'string' || notePath.length > 1024) fail('invalid-command-input', 'path must be text');
+      const mapping = config.ownerPublication.mappings.find((entry) => entry.source.path === notePath
+        || entry.relativePath === notePath);
+      if (!mapping) return { path: notePath, selected: false, publishAvailable: publication?.publishAvailable === true };
+      const status = await publication.readStatus({ mappingId: mapping.id });
+      const live = status.live === null ? null : { version: status.live.version,
+        digest: status.live.foldedTextDigest ?? status.live.digest, folded: status.live.foldedTextDigest !== undefined };
+      const latest = status.latest === null ? null : { version: status.latest.version, state: status.latest.state,
+        draftId: status.latest.draftId };
+      return { path: notePath, selected: true, mappingId: mapping.id, workspace: mapping.source.kind === 'workspace',
+        live, latest, publishAvailable: publication?.publishAvailable === true };
+    }),
 
     listProposals: command('review', 'review-list-failed', async (input) => {
       return proposalReview.list(input);

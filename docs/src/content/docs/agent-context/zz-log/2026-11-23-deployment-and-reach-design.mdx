@@ -33,3 +33,14 @@ Iroh reach and agent pairing now run inside the owner node, tested on synthetic 
 - **Tests.** Unit tests cover replay on another connection, another endpoint, missing or reused challenges, durable enrol and revoke, expiry, reuse, wrong secret, wrong words, no Confirm and grant tampering. A loopback test pairs the real CLI, confirms, submits into the queue, revokes and is refused. The opt-in relay test (`CYBERBASER_IROH_RELAY_TEST=1`) passed once through n0's public relay: about 1.4 s from code to words, 0.6 s per submission.
 
 **Still missing:** a QR image (the code is plain text, to avoid a new dependency), the phone client, a shared proposal budget across carriers (today a key gets one budget per carrier), and any real-vault install.
+
+## Build step 2 built: the Obsidian plugin (later the same day)
+
+The owner can now pair Obsidian with their node, see whether the open note is live, send an edit for review, and publish the node's page, all over Iroh. Tested in a disposable browser with Obsidian's mobile layout, not on a phone.
+
+- **Iroh in the plugin.** No official browser package exists, so `apps/obsidian-cyberbaser/carrier` compiles the `iroh` 1.2.0 crate to WebAssembly (2.6 MB, 0.95 MB gzipped), embedded in a 3.5 MB `main.js`. A first probe loaded it inside Obsidian 1.12.7 in the OpenClast harness and reached the owner node's real carrier: about 1.0 s through a loopback relay, 0.4 s through n0's public relay.
+- **Where the key lives.** In the app's IndexedDB on the device, never in `data.json` (which is a vault file and syncs). The signing key is a non-extractable WebCrypto key. The harness run checked both.
+- **New node commands, no HTTP.** `submitCapture` (propose grant) lets the node bind a phone's note to the committed vault text and queue a proposal, sharing the agent budget. `readNoteStatus` (publication grant) reports the configured page's live version. The Iroh carrier also accepts the existing prepare, publish and receipt commands, with small fixed result projections and a fixed list of refusal reasons.
+- **Tests.** 7 new node tests and 7 plugin tests (including byte-for-byte checks against the node's envelope, binding and pairing code, and a pairing plus capture against the real node carrier); the required node suites passed (1077 pass, 10 skipped, 0 fail). The harness acceptance (`test/harness/phone-step.mjs`) passed 11 assertions on loopback and, opt-in, through n0's public relay (1.0 s to words, 6.0 s from Publish to *Live*, 0.6 s per send). Screenshots are in `.workspace/phone-step/` (not tracked).
+
+**Still missing:** a real-phone run, a QR image, live status for notes outside the one configured page, and a production screen for binding the workspace baseline.

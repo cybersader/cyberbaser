@@ -2537,6 +2537,7 @@ export async function runOwnerAlphaServer({
   recordDecision = recordProposalDecision,
   startSuggestions = startSuggestionIntake,
   readAuthoringNote,
+  createPublication = createOwnerPublicationRuntime,
 } = {}) {
   if (typeof rebuildSite !== 'function'
     || typeof loadPipeline !== 'function'
@@ -2611,6 +2612,10 @@ export async function runOwnerAlphaServer({
       },
     });
   }
+  // One publication runtime: the owner pages and paired devices see the same
+  // drafts, views and publish lock.
+  const ownerPublication = config.ownerPublication.enabled
+    ? createPublication({ config, context: storeContext, readNote: readAuthoringNote, pipeline }) : null;
   const ownerFetch = createHandler({
     config,
     projectRoot,
@@ -2619,8 +2624,7 @@ export async function runOwnerAlphaServer({
     proposalReview,
     reviewAppearance: config.proposalReview.enabled ? await readReviewAppearance(config) : null,
     reviewSiteRoot: path.resolve(projectRoot, config.workspace.site),
-    ownerPublication: config.ownerPublication.enabled
-      ? createOwnerPublicationRuntime({ config, context: storeContext, readNote: readAuthoringNote, pipeline }) : null,
+    ownerPublication,
     devices,
   });
   const readerFetch = createReader({ config, projectRoot });
@@ -2642,7 +2646,8 @@ export async function runOwnerAlphaServer({
       secretKey.fill(0);
       const nodeId = endpoint.id().toString();
       const verifier = createDevicePrincipalAdapter({ registry, audience: irohAudience(nodeId), requireChannelBinding: true });
-      const commands = createOwnerCommands({ config, projectRoot, devicePrincipalAdapter: verifier, proposalReview });
+      const commands = createOwnerCommands({ config, projectRoot, devicePrincipalAdapter: verifier, proposalReview,
+        publication: ownerPublication });
       iroh = startIrohCarrier({ endpoint, commands, verifier, pairing: devices.pairing, relay: config.iroh.relay });
       devices.store.setRevokeListener((key) => { if (key.irohNodeId) iroh.closePeer(key.irohNodeId); });
       devices.pairing.attachNode({ nodeId, ticket: iroh.ticket });

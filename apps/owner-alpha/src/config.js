@@ -765,8 +765,13 @@ function validateIroh(value) {
   if (relay !== 'n0' && relay !== 'none') {
     let url;
     try { url = new URL(relay); } catch { url = null; }
-    if (typeof relay !== 'string' || relay.length > 512 || url?.protocol !== 'https:' || url.username || url.password
-      || url.search || url.hash) fail('invalid-config', "$.iroh.relay must be 'n0', 'none', or one https relay URL");
+    // Plain HTTP only for a relay on this machine's loopback address (local
+    // tests and browser clients on the same machine); anything else is https.
+    const loopbackHttp = url?.protocol === 'http:' && url.hostname === '127.0.0.1' && url.port !== '';
+    if (typeof relay !== 'string' || relay.length > 512 || (url?.protocol !== 'https:' && !loopbackHttp)
+      || url.username || url.password || url.search || url.hash) {
+      fail('invalid-config', "$.iroh.relay must be 'n0', 'none', one https relay URL, or an http://127.0.0.1:<port>/ relay");
+    }
   }
   let bindAddress = null;
   if (Object.hasOwn(input, 'bindAddress')) {

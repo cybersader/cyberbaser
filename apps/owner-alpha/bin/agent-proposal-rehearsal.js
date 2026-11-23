@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { createHash } from 'node:crypto';
 import { lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { PINNED_QUARTZ_COMMIT, PINNED_QUARTZ_REF } from '../src/quartz-renderer.js';
@@ -40,9 +41,14 @@ export async function runAgentChild({ capture, checkout, key, socket }) {
 
 // realQuartz renders the private site with the pinned Quartz (and its source
 // provenance) instead of the inert simulated pages. It is slow; tests opt in.
-// iroh: null (off), 'none' (direct loopback paths only) or 'n0' (n0's public
-// relay) turns on the node's Iroh carrier with a disposable state directory.
-export async function createAgentProposalRehearsal({ port = 46527, before = defaultBefore, after = defaultAfter, realQuartz = false, siteTitle = null, iroh = null } = {}) {
+// iroh: null (off), 'none' (direct loopback paths only), 'n0' (n0's public
+// relay) or an http://127.0.0.1:<port>/ test relay turns on the node's Iroh
+// carrier with a disposable state directory.
+// publication: null, or { workspaceText } to turn on owner publication of the
+// delivery note from a synthetic workspace copy (workspace/<delivery path>)
+// that starts equal to the vault, is bound to it, then holds workspaceText.
+export const PUBLICATION_MAPPING_ID = 'workspace-note';
+export async function createAgentProposalRehearsal({ port = 46527, before = defaultBefore, after = defaultAfter, realQuartz = false, siteTitle = null, iroh = null, publication = null } = {}) {
   if (before.source !== after.source || before.path !== after.path) throw new Error('Capture files must describe the same note.');
   const fixture = await createSuggestionsFixture({ port, agentBase: before.text, siteTitle });
   try {
@@ -62,9 +68,36 @@ export async function createAgentProposalRehearsal({ port = 46527, before = defa
     await writeFile(registryFile, JSON.stringify({ ownerId: config.owner.identity, entries: [entry] }), { mode: 0o600 });
     const irohState = path.join(root, 'iroh');
     if (iroh !== null) await mkdir(irohState, { mode: 0o700 });
+    const workspaceDir = path.join(root, 'workspace');
+    const mapping = { id: PUBLICATION_MAPPING_ID, source: { identity: 'synthetic-workspace', path: AGENT_REHEARSAL_DELIVERY_PATH, kind: 'workspace' },
+      relativePath: AGENT_REHEARSAL_DELIVERY_PATH, slug: AGENT_REHEARSAL_DELIVERY_PATH.slice(0, -3) };
+    let workspaceVersion = 1;
+    const readAuthoringNote = async () => {
+      const bytes = await readFile(path.join(workspaceDir, AGENT_REHEARSAL_DELIVERY_PATH));
+      return { identity: mapping.source.identity, path: mapping.source.path, version: workspaceVersion, text: bytes.toString('utf8'),
+        bytesBase64: bytes.toString('base64'), byteLength: bytes.length, digest: `sha-256=:${createHash('sha256').update(bytes).digest('base64')}:` };
+    };
+    if (publication !== null) {
+      await mkdir(workspaceDir, { mode: 0o700 });
+      await writeFile(path.join(workspaceDir, AGENT_REHEARSAL_DELIVERY_PATH), before.text, { mode: 0o600 });
+    }
     await writeFile(fixture.configFile, JSON.stringify({ ...config, deviceRegistryFile: registryFile, signedRequestSocket: socket,
-      ...(iroh === null ? {} : { iroh: { enabled: true, stateDirectory: irohState, relay: iroh, ...(iroh === 'none' ? { bindAddress: '127.0.0.1:0' } : {}) } }) }), { mode: 0o600 });
-    const runtime = await startSuggestionsRehearsal(fixture, realQuartz ? {} : { renderer: renderFixture, simulatedRender: true });
+      ...(publication === null ? {} : { ownerPublication: { enabled: true, mappings: [mapping] } }),
+      ...(iroh === null ? {} : { iroh: { enabled: true, stateDirectory: irohState, relay: iroh, ...(iroh !== 'n0' ? { bindAddress: '127.0.0.1:0' } : {}) } }) }), { mode: 0o600 });
+    const runtime = await startSuggestionsRehearsal(fixture, { ...(realQuartz ? {} : { renderer: renderFixture, simulatedRender: true }),
+      ...(publication === null ? {} : { readAuthoringNote }) });
+    if (publication !== null) {
+      // The owner's explicit bind of the workspace copy to the vault, then the
+      // workspace receives the newer text (as a sync would).
+      const { bindWorkspaceBaseline } = await import('../src/owner-publication-store.js');
+      const { storeContextFromConfig } = await import('../src/store.js');
+      const { loadOwnerAlphaConfig } = await import('../src/config.js');
+      const loaded = await loadOwnerAlphaConfig(fixture.configFile);
+      await bindWorkspaceBaseline({ context: storeContextFromConfig(loaded, fixture.projectRoot), config: loaded,
+        mappingId: PUBLICATION_MAPPING_ID, readNote: readAuthoringNote });
+      await writeFile(path.join(workspaceDir, AGENT_REHEARSAL_DELIVERY_PATH), publication.workspaceText, { mode: 0o600 });
+      workspaceVersion += 1;
+    }
     const result = await runAgentChild({ capture, checkout: snapshot, key, socket });
     if (result.code !== 0) throw new Error(`Agent submission failed (${/^[a-z-]+$/u.test(result.stderr) ? result.stderr : 'unknown-refusal'}).`);
     if (result.stdout.startsWith('Unchanged;')) throw new Error('The captures are unchanged; nothing was submitted.');

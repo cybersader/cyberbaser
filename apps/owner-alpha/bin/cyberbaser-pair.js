@@ -50,7 +50,7 @@ export async function pairAgent({ code, stateFile, onWords = () => {} }) {
     parsed.secret.fill(0);
     if (reply?.ok !== true) throw new Error(PAIRING_REFUSAL);
     onWords(words);
-    const outcome = plainData(await exchange(session.connection, { type: 'await' }, 7 * 60_000), ['ok', 'keyId', 'audience']);
+    const outcome = plainData(await exchange(session.connection, { type: 'await' }, 7 * 60_000), ['ok', 'keyId', 'audience'], ['grants']);
     if (outcome?.ok !== true || !isKeyId(outcome.keyId)) throw new Error(PAIRING_REFUSAL);
     await writeState(stateFile, { keyId: outcome.keyId, pkcs8: privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64'),
       iroh: { secretKey: irohSecret.toString('base64'), ticket: parsed.ticket } });

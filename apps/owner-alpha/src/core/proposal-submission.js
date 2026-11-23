@@ -40,8 +40,17 @@ export function createProposalSubmission({ clock, submit }) {
     return counter;
   }
 
-  return async (input, principal) => {
+  // `build` runs after the attempt is charged, so a device cannot make the node
+  // read Git repeatedly for free. It returns the proposal input, or null when
+  // there is nothing to submit.
+  async function submitBuilt(build, principal) {
     const counter = chargeAttempt(principal.keyId);
+    const input = await build();
+    if (input === null) return null;
+    return submitCharged(counter, input, principal);
+  }
+
+  async function submitCharged(counter, input, principal) {
     const { kind, id, label } = principal.actor;
     const submitter = Object.freeze({ kind, id, label, keyId: principal.keyId });
     let validated;
@@ -62,5 +71,9 @@ export function createProposalSubmission({ clock, submit }) {
     } catch {
       refuseProposal();
     }
-  };
+  }
+
+  const run = (input, principal) => submitCharged(chargeAttempt(principal.keyId), input, principal);
+  run.submitBuilt = submitBuilt;
+  return run;
 }

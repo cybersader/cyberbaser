@@ -221,7 +221,7 @@ async function assertLocalAgentConfiguration(fixture) {
   }
 }
 
-export async function startSuggestionsRehearsal(fixture, { renderer = createRehearsalRenderer(), simulatedRender = false } = {}) {
+export async function startSuggestionsRehearsal(fixture, { renderer = createRehearsalRenderer(), simulatedRender = false, readAuthoringNote } = {}) {
   if (simulatedRender) await assertLocalAgentConfiguration(fixture);
   // The site manifest hashes actual runtime resources. Copy, never symlink,
   // this small code/resource closure into the owned runtime project.
@@ -240,6 +240,7 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
   const { applyAcceptedOperation } = await import('../src/apply.js');
   const { commitAppliedCandidate, pushExactCommit, verifyExactCommit } = await import('../src/git-publish.js');
   const { startSuggestionIntake } = await import('../src/suggestions.js');
+  const { createOwnerPublicationRuntime } = await import('../src/owner-publication-runtime.js');
   // The policy's HTTPS identity is not a destination. Verify both real remote
   // directions before mapping identity for the normal fail-closed policy checks.
   const policyGit = async (cwd, args, options) => {
@@ -254,6 +255,10 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
   const rebuild = ({ config }) => rebuildOwnerSite({ config, projectRoot: fixture.projectRoot, renderer }, { assertCheckoutReady: ready });
   const simulated = (stage, value) => ({ ...value, synthetic: true, evidence: `local-rehearsal-simulated-${stage}; no deployment or live verification` });
   const runtime = await runOwnerAlphaServer({ configFile: fixture.configFile, projectRoot: fixture.projectRoot,
+    ...(readAuthoringNote === undefined ? {} : { readAuthoringNote,
+      // Publication reads the same disposable checkout through the policy seam.
+      createPublication: (input) => createOwnerPublicationRuntime({ ...input, git: reviewGit, checkoutReady: ready,
+        sourceSession: (session) => createEditSession({ ...session, git: policyGit }) }) }),
     rebuildSite: rebuild,
     startSuggestions: (input) => startSuggestionIntake({ ...input, intakeEntry: path.join(PROJECT_ROOT, 'apps/account-free-intake/bin/server.js') }),
     createReviewSource: (input) => createOwnerProposalReviewSource({ ...input, git: reviewGit }),

@@ -135,7 +135,7 @@ test('pairing: words match, Confirm enrols exactly the picked grants once', asyn
   expect(manager.attempt(clientEndpointId, message).words).toEqual(words);
   const waiting = manager.result(started.enrollmentId, clientEndpointId);
   expect(await manager.confirm({ enrollmentId: started.enrollmentId, words })).toEqual({ keyId: 'agent-1' });
-  expect(await waiting).toEqual({ ok: true, keyId: 'agent-1' });
+  expect(await waiting).toEqual({ ok: true, keyId: 'agent-1', grants: ['propose'] });
   expect(enrolled).toEqual([{ kind: 'agent', label: 'Writer', grants: ['propose'], publicKey: message.devicePublicKey, irohNodeId: clientEndpointId }]);
   await expect(manager.confirm({ enrollmentId: started.enrollmentId, words })).rejects.toThrow();
   expect(() => manager.attempt(clientEndpointId, message)).toThrow();

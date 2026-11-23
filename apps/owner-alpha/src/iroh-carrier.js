@@ -28,6 +28,19 @@ const MAX_CONNECTIONS = 8;
 const MAX_REQUESTS_PER_CONNECTION = 16;
 const READ_TIMEOUT_MS = 5000;
 const IDLE_TIMEOUT_MS = 30_000;
+
+// Signed commands this carrier accepts. Everything else gets the generic
+// refusal before any verification work.
+export const IROH_COMMANDS = Object.freeze(['submitProposal', 'submitCapture', 'readNoteStatus',
+  'preparePublication', 'publish', 'readPublicationReceipt']);
+// After a request verified, a command's own refusal may name one of these
+// fixed reasons so the device can say something useful. Signature, key, grant
+// and binding failures stay the single generic refusal.
+export const IROH_REFUSAL_REASONS = Object.freeze(['proposal-budget-exhausted', 'capture-path-refused',
+  'capture-base-unavailable', 'capture-too-large', 'delivery-not-round-trippable', 'workspace-diff-too-complex',
+  'publication-candidate-mismatch', 'publication-expected-source-mismatch', 'workspace-unbound',
+  'delivery-moved-since-baseline', 'workspace-diverged', 'publication-read-only', 'publication-disabled',
+  'workspace-text-repeated', 'workspace-properties-invalid', 'retired-material', 'publication-draft-not-found']);
 const PAIR_WAIT_MS = 6 * 60_000;
 
 const alpnBytes = (name) => [...Buffer.from(name, 'utf8')];
@@ -110,6 +123,20 @@ async function readFrame(recv) {
   return value;
 }
 
+// What a device gets back: a small fixed projection per command, never a
+// draft's text, session or private references.
+const PROJECTIONS = Object.freeze({
+  preparePublication: (result) => (result.outcome === 'unchanged' ? { outcome: 'unchanged' } : {
+    outcome: 'prepared', draftId: result.summary.draftId, jobId: result.summary.jobId,
+    capturedVersion: result.summary.capturedVersion, candidateDigest: result.summary.candidateDigest }),
+  publish: (result) => ({ draftId: result.draftId, jobId: result.jobId, state: result.state,
+    capturedVersion: result.capturedVersion, replayed: result.replayed }),
+});
+
+function plainReceipt(command, value) {
+  return JSON.parse(JSON.stringify(PROJECTIONS[command]?.(value) ?? value));
+}
+
 async function writeFrame(send, value) {
   await send.writeAll([...Buffer.from(`${canonicalJson(value)}\n`, 'utf8')]);
   await send.finish();
@@ -136,13 +163,15 @@ export function startIrohCarrier({ endpoint, commands, verifier, pairing = null,
         } else {
           const issued = challenge;
           challenge = null;
-          if (issued !== null && message?.command === 'submitProposal') {
+          if (issued !== null && IROH_COMMANDS.includes(message?.command)) {
             const binding = irohChannelBinding({ nodeId, clientEndpointId: remote, challenge: issued });
             const receipt = await executeSigned(commands, verifier.forChannel(binding, { peer: remote }), message);
-            response = { ok: true, receipt };
+            response = { ok: true, receipt: plainReceipt(message.command, receipt) };
           }
         }
-      } catch { response = REFUSED; }
+      } catch (error) {
+        response = IROH_REFUSAL_REASONS.includes(error?.code) ? { ...REFUSED, reason: error.code } : REFUSED;
+      }
       await writeFrame(stream.send, response).catch(() => {});
     }
   }
@@ -164,7 +193,10 @@ export function startIrohCarrier({ endpoint, commands, verifier, pairing = null,
     try {
       if (plainData(await readFrame(second.recv), ['type'])?.type !== 'await') throw new Error('frame');
       const outcome = await withTimeout(pairing.result(enrollmentId, remote), PAIR_WAIT_MS);
-      await writeFrame(second.send, outcome.ok ? { ok: true, keyId: outcome.keyId, audience: irohAudience(nodeId) } : PAIR_REFUSED);
+      // The device learns the grants the owner picked, so it can offer only
+      // what it may do. The node still checks every grant on every request.
+      await writeFrame(second.send, outcome.ok
+        ? { ok: true, keyId: outcome.keyId, audience: irohAudience(nodeId), grants: outcome.grants } : PAIR_REFUSED);
     } catch {
       await writeFrame(second.send, PAIR_REFUSED).catch(() => {});
     }

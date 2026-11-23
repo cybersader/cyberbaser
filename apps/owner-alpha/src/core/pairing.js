@@ -188,7 +188,7 @@ export function createPairingManager({ ownerId, store, clock = Date.now, random 
     result(enrollmentId, clientEndpointId) {
       const record = pairings.get(enrollmentId);
       if (!record || record.clientEndpointId !== clientEndpointId) return Promise.resolve({ ok: false });
-      if (record.state === 'enrolled') return Promise.resolve({ ok: true, keyId: record.keyId });
+      if (record.state === 'enrolled') return Promise.resolve({ ok: true, keyId: record.keyId, grants: [...record.grants] });
       if (record.state !== 'awaiting' && record.state !== 'confirming') return Promise.resolve({ ok: false });
       return new Promise((resolve) => record.waiters.push(resolve));
     },
@@ -210,7 +210,7 @@ export function createPairingManager({ ownerId, store, clock = Date.now, random 
           publicKey: record.devicePublicKey, irohNodeId: record.clientEndpointId });
         record.keyId = entry.keyId;
         record.state = 'awaiting';
-        settle(record, { ok: true, keyId: entry.keyId });
+        settle(record, { ok: true, keyId: entry.keyId, grants: [...record.grants] });
         return Object.freeze({ keyId: entry.keyId });
       } catch {
         record.state = 'awaiting';
