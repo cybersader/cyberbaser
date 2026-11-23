@@ -4,6 +4,10 @@
 
 ## Log
 
+### Packaging should reach Windows and Mac, and clients may be a browser app (2026-11-23, owner direction)
+While the Linux-first one-app work started, the owner added: "Needs to work on Windows ideally too, or even Mac if we can make it really simple. The GPUI or even Tauri plus Rust, maybe those are some routes to go"; "Ideally, you can do this with a from the browser as a progressive web app too or something"; and "Good first principles system design, though. Good security. Those are the things I care about. Malleability." Linux and the home-server container remain first (earlier decision); the packaging is to be designed so Windows and Mac follow without rework, with a desktop shell evaluated (Tauri favoured for reusing the web UI). A browser app (PWA) is a client, reaching the node over Iroh in the page, alongside the Obsidian plugin and agents; the node still runs on an always-on machine and alone holds publishing authority.
+
+
 ### First real-phone test waits for QR pairing and the installer (2026-11-23, owner decision)
 Asked how to get the Obsidian plugin onto the owner's real phone for a first test (separate test vault with a pre-release via BRAT; wait for QR and installer; keep testing without the phone), the owner chose "Wait for the QR code and installer first". Build QR pairing, the GitHub App sign-in and the one-app installer before asking the owner to test on a phone.
 
