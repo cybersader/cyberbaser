@@ -1210,3 +1210,38 @@ body.publication-document-review { height: 100dvh; min-height: 0; margin: 0; pad
   .owner-finish { background: #18212b; color: #e9edf2; border-color: #394654; }
   .owner-finish button[type=submit], .save-view-page, .save-view-page:hover { color: #10151c; }
 }
+
+/* The save and apply progress page follows the owner's site colour scheme,
+   with the same palette as the proposal review page. */
+body.save-page {
+  --sp-bg: #f8f8f5; --sp-card: #fff; --sp-ink: #1d2320; --sp-soft: #55605a; --sp-line: #dfe3df;
+  --sp-acc: #0b6b4b; --sp-on-acc: #fff; --sp-done: #1f8a4c; --sp-stop: #a32121;
+  color-scheme: light;
+  background: var(--sp-bg); color: var(--sp-ink);
+}
+body.save-page.owner-scheme-dark {
+  --sp-bg: #1c2420; --sp-card: #232d28; --sp-ink: #e4ebe6; --sp-soft: #a8b5ad; --sp-line: #34413a;
+  --sp-acc: #7fd1a8; --sp-on-acc: #10221a; --sp-done: #7fd1a8; --sp-stop: #f3a49b;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  body.save-page.owner-scheme-system {
+    --sp-bg: #1c2420; --sp-card: #232d28; --sp-ink: #e4ebe6; --sp-soft: #a8b5ad; --sp-line: #34413a;
+    --sp-acc: #7fd1a8; --sp-on-acc: #10221a; --sp-done: #7fd1a8; --sp-stop: #f3a49b;
+    color-scheme: dark;
+  }
+}
+body.save-page ::selection { background: var(--sp-line); color: var(--sp-ink); }
+body.save-page .job-card { border-color: var(--sp-line); background: var(--sp-card); box-shadow: 0 6px 18px rgb(20 30 25 / 8%); }
+body.save-page .job-step { color: var(--sp-soft); }
+body.save-page .job-step::before { border-color: var(--sp-soft); }
+body.save-page :is(.job-step-done, .job-step-current) { color: var(--sp-ink); }
+body.save-page .job-step-done::before { border-color: var(--sp-done); background: var(--sp-done); }
+body.save-page .job-step-current::before { border-color: var(--sp-acc); background: var(--sp-card); }
+body.save-page .job-step-stopped { color: var(--sp-stop); }
+body.save-page .job-step-stopped::before { border-color: var(--sp-stop); background: var(--sp-stop); }
+body.save-page :is(a, .job-details summary) { color: var(--sp-acc); text-underline-offset: 3px; }
+body.save-page a.save-view-page, body.save-page a.save-view-page:hover { background: var(--sp-acc); color: var(--sp-on-acc); text-decoration: none; }
+body.save-page :is(.job-technical, .status, .job-details) { color: var(--sp-soft); }
+body.save-page .error { color: var(--sp-stop); }
+body.save-page :focus-visible { outline: 2px solid var(--sp-acc); outline-offset: 2px; }

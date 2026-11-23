@@ -29,7 +29,8 @@ const hostile = '# Restore notes\n\nRestore a small folder to the original drive
 const longReason = 'Several of the restore steps used different words for the same thing, which made the checklist harder to follow during an actual restore. This replaces them with one consistent set of terms. Nothing about the order of the steps changes. Each replacement is one word, so the page reads the same apart from the wording.';
 const listCode = '# Workshop checklist\n\nReview these steps before a session.\n\n- Put a label on the blue folder.\n- Check that all stations are clean.\n\n## Configuration\n\n```ini\nlocation = west\nmode = standard\n```\n\n> Ask the host before changing shared settings.\n\n| Item | Place |\n| --- | --- |\n| Pens | Desk |\n';
 
-export const FIXTURE_TEXTS = Object.freeze({ backup: backup(), rewriteBase, revision: 'a'.repeat(40) });
+const homeSlug = `---\ntitle: Welcome\nslug: index\n---\n${backup()}`;
+export const FIXTURE_TEXTS = Object.freeze({ backup: backup(), rewriteBase, homeSlug, revision: 'a'.repeat(40) });
 
 export function createProposalDocumentFixture({ port = 47611, hostileLabel = false, extraHiddenCases = false, appearance = null, reviewSiteRoot = null } = {}) {
   const recorded = [];
@@ -92,6 +93,13 @@ export function createProposalDocumentFixture({ port = 47611, hostileLabel = fal
   add('applied', backup(), [['original drive', 'original drive', 'spare drive']], 'lane-signed', { path: backupPath, reason: 'Keep the restore off the working drive.', decision: 'approve', application: 'applied' });
   add('approved-backup', backup(), [['original drive', 'original drive', 'spare drive']], 'lane-signed', { path: backupPath, reason: 'Keep the restore off the working drive.', decision: 'approve', application: 'eligible' });
   add('rejected-backup', backup(), [['original drive', 'original drive', 'spare drive']], 'lane-b', { path: backupPath, decision: 'reject' });
+  // A change inside a raw HTML block, which the simplified page shows as its exact source.
+  add('hostile-html-changed', hostile, [['Read more', 'Read more', 'Read on']], 'lane-b', { path: 'restore-notes.md' });
+  // Decided, while the queue still holds the pinned page text.
+  add('approved-with-page', backup(), [['original drive', 'original', 'spare']], 'lane-signed', { path: backupPath, decision: 'approve', application: 'eligible', retainDocument: true });
+  add('approved-split-word', backup(), [['riginal drive', 'riginal', 'ffsite']], 'lane-signed', { path: backupPath, decision: 'approve', application: 'eligible', retainDocument: true });
+  // The home page: a frontmatter `slug: index` moves this note to the site root.
+  add('home-slug', homeSlug, [['original drive', 'original', 'spare']], 'lane-signed', { path: 'README.md' });
   if (extraHiddenCases) {
     add('obsidian-hidden', '# Safe visible title\n\nLook in the folder.\n\n%% OBSIDIAN_CONTEXT_CANARY %%\n\nThe ending stays.\n', [['folder', 'folder', 'binder']]);
     add('added-hidden-delimiters', '# Safe visible title\n\nHTML_NEW_COMMENT_CANARY.\n\nThe ending stays.\n',
@@ -101,7 +109,8 @@ export function createProposalDocumentFixture({ port = 47611, hostileLabel = fal
   }
   const values = [...cases.values()];
   const find = (id) => values.find(({ queueId }) => id === queueId);
-  const receipt = ({ decision, entry }) => ({ decision, summary: entry.summary, queueRetained: true });
+  const receipt = ({ decision, entry, options }) => ({ decision, summary: entry.summary, queueRetained: true,
+    ...(options.retainDocument ? { document: entry.document } : {}) });
   const review = {
     applicationAvailable: true,
     async list() { return { actionable: values.filter((item) => !item.decision && !item.options.error).map((item) => item.entry), history: values.filter((item) => item.decision).map(receipt), historyTruncated: false, nextCursor: null }; },

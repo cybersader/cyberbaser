@@ -4,8 +4,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { proposalDisplay } from '../src/publication-display.js';
-import { FRAME_CSP, reviewModel } from '../src/proposal-review-page.js';
-import { SITE_FRAME_CSP, SITE_REVIEW_REASONS, loadSitePage, markSitePage, prepareSiteFrame, quartzSlug } from '../src/site-review-page.js';
+import { excerptDocument, FRAME_CSP, reviewModel } from '../src/proposal-review-page.js';
+import { SITE_FRAME_CSP, SITE_REVIEW_REASONS, loadSitePage, markSitePage, prepareSiteFrame, quartzSlug, sitePageSlug } from '../src/site-review-page.js';
 import { createProposalDocumentFixture, FIXTURE_TEXTS } from './proposal-document-fixtures.js';
 
 // Captured from a real pinned Quartz 4.5.2 build with source provenance of
@@ -115,6 +115,41 @@ describe('marking changes on the built site page', () => {
     expect(html).toContain('body:has(#c1:target) .cbr-n1 :is(ins,del)');
   });
 
+  // The site renders some characters differently from their source (curly
+  // quotes, dashes): provenance records them as atom runs inside a text node.
+  async function withAtom() {
+    const { html, provenance } = await fixture('rewrite');
+    const leaves = provenance.leaves.map((leaf) => {
+      const at = leaf.text.indexOf('worked.');
+      if (at < 0) return leaf;
+      const k = at + 'worked'.length; const [r0, r1] = leaf.runs[0].rendered; const [s0, s1] = leaf.runs[0].source;
+      return { ...leaf, exact: undefined, runs: [{ rendered: [r0, k], source: [s0, s0 + k], kind: 'exact' },
+        { rendered: [k, k + 1], source: [s0 + k, s0 + k + 1], kind: 'atom' }, { rendered: [k + 1, r1], source: [s0 + k + 1, s1], kind: 'exact' }] };
+    });
+    return { html, provenance: { ...provenance, leaves } };
+  }
+
+  test('a rewrite across differently rendered characters is placed when every block maps exactly, folded as Rewritten', async () => {
+    const { html, provenance } = await withAtom();
+    const old = REWRITES.map(([before]) => before).join('\n\n');
+    const next = REWRITES.map(([, after]) => after).join('\n\n');
+    const { operations, model } = proposal(FIXTURE_TEXTS.rewriteBase, [[old, old, next]]);
+    const marked = markSitePage({ html, provenance, baseText: FIXTURE_TEXTS.rewriteBase, operations, model });
+    expect(marked.match(/<div class="cbr-rw">/gu)).toHaveLength(3);
+    expect(marked).toContain(`<div class="cbr-was">${REWRITES[0][0]}</div>`);
+    expect(marked.match(/id="c1"/gu)).toHaveLength(1);
+  });
+
+  test('a small change across a differently rendered character is never guessed', async () => {
+    const { html, provenance } = await withAtom();
+    const { operations, model } = proposal(FIXTURE_TEXTS.rewriteBase, [['worked. If', 'worked. If', 'worked, so if']]);
+    expect(markSitePage({ html, provenance, baseText: FIXTURE_TEXTS.rewriteBase, operations, model })).toBeNull();
+    // A rewrite that crosses from one rendered text node into another is not placed either.
+    const crossing = `${REWRITES[0][0]}\n\n${REWRITES[1][0]}`;
+    const crossed = proposal(FIXTURE_TEXTS.rewriteBase, [[crossing, crossing, `${REWRITES[0][1]} ${REWRITES[1][1]}`]]);
+    expect(markSitePage({ html, provenance, baseText: FIXTURE_TEXTS.rewriteBase, operations: crossed.operations, model: crossed.model })).toBeNull();
+  });
+
   test('a list item change is placed inside its list item', async () => {
     const html = await mark('markup', MARKUP_BASE, [['green binder', 'green', 'blue']]);
     expect(html).toContain('Keep the <span class="cbr-c cbr-n1" id="c1"><del>green</del> <ins>blue</ins></span> binder by the door.');
@@ -172,7 +207,18 @@ describe('making the built page safe for the frame', () => {
 const roots = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 
-async function siteRoot({ head = FIXTURE_TEXTS.revision, page = 'backup', withPage = true, dropLeaf = null } = {}) {
+// The backup capture, moved to the site root the way `slug: index` moves the
+// home page: same rendered page, provenance shifted past the frontmatter.
+async function homeCapture() {
+  const { html, provenance } = await fixture('backup');
+  const shift = Buffer.byteLength(FIXTURE_TEXTS.homeSlug) - Buffer.byteLength(FIXTURE_TEXTS.backup);
+  const move = (range) => (Array.isArray(range) ? range.map((value) => value + shift) : range);
+  return { html, provenance: { ...provenance,
+    source: { path: 'README.md', byteLength: Buffer.byteLength(FIXTURE_TEXTS.homeSlug), sha256: createHash('sha256').update(FIXTURE_TEXTS.homeSlug).digest('hex') },
+    leaves: provenance.leaves.map((leaf) => ({ ...leaf, exact: move(leaf.exact), runs: leaf.runs.map((run) => ({ ...run, source: move(run.source) })) })) } };
+}
+
+async function siteRoot({ head = FIXTURE_TEXTS.revision, page = 'backup', withPage = true, dropLeaf = null, home = false } = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'owner-alpha-review-site-'));
   roots.push(root);
   await writeFile(path.join(root, 'owner-alpha-site-manifest.json'), `${JSON.stringify({ schemaVersion: 1, artifactType: 'owner-alpha-site-manifest',
@@ -185,6 +231,11 @@ async function siteRoot({ head = FIXTURE_TEXTS.revision, page = 'backup', withPa
     await writeFile(path.join(root, 'curations/backups/testing-a-backup.provenance.json'),
       JSON.stringify({ ...provenance, source: { ...provenance.source, path: 'curations/backups/testing-a-backup.md' },
         leaves: provenance.leaves.filter((leaf) => dropLeaf === null || !leaf.text.includes(dropLeaf)) }));
+  }
+  if (home) {
+    const { html, provenance } = await homeCapture();
+    await writeFile(path.join(root, 'index.html'), html);
+    await writeFile(path.join(root, 'index.provenance.json'), JSON.stringify(provenance));
   }
   return root;
 }
@@ -200,6 +251,8 @@ async function open(options) {
   return {
     shell: (key) => get(`/owner/review/${value.cases.get(key).queueId}`),
     frame: (key) => get(`/owner/review/${value.cases.get(key).queueId}/page`),
+    receipt: (key) => get(`/owner/decisions/${value.cases.get(key).queueId}`),
+    decidedFrame: (key) => get(`/owner/decisions/${value.cases.get(key).queueId}/page`),
   };
 }
 const details = (html) => /<details class="rv-details"[^>]*>([\s\S]*?)<\/details>\s*<\/div>\s*<\/section>/u.exec(html)?.[1] ?? '';
@@ -216,7 +269,63 @@ describe('review page: the site’s own page when the private build matches', ()
     expect(framed.html).not.toMatch(/<script\b/iu);
     const page = await shell('one-word');
     expect(page.html).toContain('data-anchors="1"');
+    // The frame opens at the first change, so a phone shows it above the panel.
+    expect(page.html).toMatch(/<iframe [^>]*src="\/owner\/review\/Q-[^"]+\/page#c1"/u);
     expect(details(page.html)).not.toContain('rv-site-note');
+  });
+
+  test('a note with a frontmatter slug of index is found at the site root, as the renderer addresses it', async () => {
+    const { frame, shell } = await open({ port: 47821, reviewSiteRoot: await siteRoot({ home: true }) });
+    const framed = await frame('home-slug');
+    expect(framed.headers.get('content-security-policy')).toBe(SITE_FRAME_CSP);
+    expect(framed.html).toContain('<span class="cbr-c cbr-n1" id="c1"><del>original</del> <ins>spare</ins></span>');
+    expect(details((await shell('home-slug')).html)).not.toContain('rv-site-note');
+  });
+
+  test('the page address follows the renderer: frontmatter slug, else the path; a malformed slug is ignored', () => {
+    expect(sitePageSlug('README.md', FIXTURE_TEXTS.homeSlug)).toBe('index');
+    expect(sitePageSlug('notes/a.md', '---\nslug: /guides/Start here.md\n---\nBody\n')).toBe('guides/Start-here');
+    expect(sitePageSlug('notes/a.md', '---\nslug: ../escape\n---\n')).toBe('notes/a');
+    expect(sitePageSlug('notes/a.md', '---\nslug: 2024\n---\n')).toBe('notes/a');
+    expect(sitePageSlug('notes/a.md', 'No frontmatter.\n')).toBe('notes/a');
+    expect(sitePageSlug('../a.md', FIXTURE_TEXTS.homeSlug)).toBeNull();
+  });
+
+  test('a decided proposal stays on the site page, read-only, while the queue holds the page text', async () => {
+    const { receipt, decidedFrame } = await open({ port: 47823, reviewSiteRoot: await siteRoot() });
+    const framed = await decidedFrame('approved-with-page');
+    expect(framed.headers.get('content-security-policy')).toBe(SITE_FRAME_CSP);
+    expect(framed.html).toContain('<span class="cbr-c cbr-n1" id="c1"><del>original</del> <ins>spare</ins></span>');
+    expect(framed.html).not.toMatch(/<(script|form|iframe)\b/iu);
+    const shellPage = await receipt('approved-with-page');
+    expect(shellPage.html).toMatch(/<iframe [^>]*sandbox=""[^>]*src="\/owner\/decisions\/Q-[^"]+\/page#c1"/u);
+    expect(shellPage.html).toContain('Apply to page');
+    // Without a matching build, the excerpt keeps whole words.
+    const { decidedFrame: noSite } = await open({ port: 47825, reviewSiteRoot: await siteRoot({ head: 'b'.repeat(40) }) });
+    const excerpt = await noSite('approved-split-word');
+    expect(excerpt.headers.get('content-security-policy')).toBe(FRAME_CSP);
+    expect(excerpt.html).toContain('Restore a small folder to the <del>original</del> <ins>offsite</ins> drive.');
+  });
+});
+
+describe('the decided excerpt', () => {
+  const op = (base, find, expected, replacement) => {
+    const start = Buffer.from(base).indexOf(find);
+    return { start, end: start + Buffer.byteLength(expected), expected, replacement };
+  };
+  test('marks whole words with the line around them, never a split word', () => {
+    const base = '# Corporate\n\n- [ ] Create guide for Obsidian corporate use 🔺 ➕ 2024-10-30\n';
+    const html = excerptDocument({ operations: [op(base, 'corporate use', 'corporat', 'enterpris')], title: 'Corporate', sourcePath: 'a/b.md', baseText: base });
+    expect(html).toContain('<p>Create guide for Obsidian <del>corporate</del> <ins>enterprise</ins> use 🔺 ➕ 2024-10-30</p>');
+    expect(html).not.toContain('<del>corporat</del>');
+  });
+  test('without the page text, only the exact characters, said plainly; hidden content stays masked', () => {
+    const base = 'One %% SECRET_CANARY %% line with words.\n';
+    const html = excerptDocument({ operations: [op(base, 'words', 'words', 'terms')], title: 'T', sourcePath: 'a.md' });
+    expect(html).toContain('only the exact characters are shown');
+    const masked = excerptDocument({ operations: [op(base, 'words', 'words', 'terms'), op(base, 'SECRET_CANARY', 'SECRET_CANARY', 'X')], title: 'T', sourcePath: 'a.md', baseText: base });
+    expect(masked).not.toContain('CANARY');
+    expect(masked.match(/Hidden content/gu)).toHaveLength(1);
   });
 
   test('head different: the simplified rendering, with the reason in Details', async () => {

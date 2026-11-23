@@ -8,7 +8,8 @@ import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { open, realpath } from 'node:fs/promises';
 import path from 'node:path';
-import { escapeHtml, REWRITE_THRESHOLD } from './proposal-review-page.js';
+import { parseFrontmatter } from '@cyberbaser/publish';
+import { escapeHtml, REWRITE_THRESHOLD, wholeWordChange } from './proposal-review-page.js';
 import { hasHiddenProposalSource, refineForDisplay } from './publication-display.js';
 
 export const SITE_REVIEW_REASONS = Object.freeze({
@@ -71,6 +72,24 @@ export function quartzSlug(sourcePath) {
   return slug.split('/').some((part) => part === '' || part === '.' || part === '..') ? null : slug;
 }
 
+/**
+ * The built page for a note, addressed the way the renderer addresses it: a
+ * plain frontmatter `slug:` moves the page (`slug: index` is the site's home
+ * page), otherwise the page follows its path. Same rules as the renderer's
+ * FrontmatterSlug and the projection's slugTarget. Reads only the pinned base
+ * text; the page's provenance must still name this path and these bytes.
+ */
+export function sitePageSlug(sourcePath, baseText) {
+  const own = quartzSlug(sourcePath);
+  if (own === null || typeof baseText !== 'string') return own;
+  const slug = parseFrontmatter(baseText).data?.slug;
+  if (typeof slug !== 'string') return own;
+  const target = slug.trim().replace(/^\/+|\/+$/gu, '').replace(/\.(md|html)$/iu, '');
+  if (target === '' || target.includes('\\') || /[\u0000-\u001F\u007F]/u.test(target)) return own;
+  if (target.split('/').some((part) => part === '' || part === '.' || part === '..' || part.trim() !== part)) return own;
+  return quartzSlug(`${target}.md`);
+}
+
 async function readManifest(siteRoot) {
   const bytes = await readContained(siteRoot, MANIFEST, LIMITS.manifest);
   if (bytes === null) return null;
@@ -100,7 +119,7 @@ export async function loadSitePage({ siteRoot, sourcePath, revision, baseText })
   const before = await readManifest(siteRoot);
   if (before === null) return { reason: 'unavailable' };
   if (before.head !== revision) return { reason: 'changed' };
-  const slug = quartzSlug(sourcePath);
+  const slug = sitePageSlug(sourcePath, baseText);
   if (slug === null) return { reason: 'unavailable' };
   const [page, sidecar] = await Promise.all([
     readContained(siteRoot, `${slug}.html`, LIMITS.page),
@@ -224,41 +243,18 @@ function* elements(node) {
 // ---------------------------------------------------------------------------
 // Placing each exact change at whole words.
 
-const WORD = /[\p{L}\p{N}\p{M}_'’-]/u;
 // New text that the site would render as something other than itself (markup,
 // links, math, tags, entities, new blocks) cannot be shown as plain words.
 const MARKDOWN = /[\\`*_[\]<>#|~$]|==|%%|&[#\w]+;|https?:\/\/|www\.|\n[^\S\n]*\n|\n[^\S\n]*(?:[-+*>]|\d+[.)])\s|^\s*(?:[-+*>]|\d+[.)])\s|\r/iu;
 
 function wordSpan(baseText, operation) {
   const base = Buffer.from(baseText, 'utf8');
-  const before = Array.from(base.subarray(0, operation.start).toString('utf8'));
-  const old = Array.from(operation.oldText);
-  const next = Array.from(operation.replacementText);
-  const after = Array.from(base.subarray(operation.end).toString('utf8'));
   if (base.subarray(operation.start, operation.end).toString('utf8') !== operation.oldText) return false;
-  // Shared ends of old and new are context, not change.
-  let prefix = 0;
-  while (prefix < old.length && prefix < next.length && old[prefix] === next[prefix]) prefix += 1;
-  let suffix = 0;
-  while (suffix < old.length - prefix && suffix < next.length - prefix
-    && old[old.length - 1 - suffix] === next[next.length - 1 - suffix]) suffix += 1;
-  let lead = [...before, ...old.slice(0, prefix)];
-  let trail = [...old.slice(old.length - suffix), ...after];
-  let oldCore = old.slice(prefix, old.length - suffix);
-  let newCore = next.slice(prefix, next.length - suffix);
-  if (oldCore.length === 0 && newCore.length === 0) return null;
-  // Grow to whole words where the change starts or ends inside one.
-  const touchesStart = (core) => core.length > 0 && WORD.test(core[0]);
-  const touchesEnd = (core) => core.length > 0 && WORD.test(core.at(-1));
-  while (lead.length && WORD.test(lead.at(-1)) && (touchesStart(oldCore) || touchesStart(newCore))) {
-    const char = lead.pop(); oldCore = [char, ...oldCore]; newCore = [char, ...newCore];
-  }
-  while (trail.length && WORD.test(trail[0]) && (touchesEnd(oldCore) || touchesEnd(newCore))) {
-    const char = trail.shift(); oldCore = [...oldCore, char]; newCore = [...newCore, char];
-  }
-  const start = Buffer.byteLength(lead.join(''), 'utf8');
-  const oldText = oldCore.join('');
-  return { start, end: start + Buffer.byteLength(oldText, 'utf8'), oldText, newText: newCore.join('') };
+  const change = wholeWordChange(Array.from(base.subarray(0, operation.start).toString('utf8')), Array.from(operation.oldText),
+    Array.from(operation.replacementText), Array.from(base.subarray(operation.end).toString('utf8')));
+  if (change === null) return null;
+  const start = Buffer.byteLength(change.lead.join(''), 'utf8');
+  return { start, end: start + Buffer.byteLength(change.oldText, 'utf8'), oldText: change.oldText, newText: change.newText };
 }
 
 function locate(leaves, base, span) {
@@ -281,7 +277,40 @@ function locate(leaves, base, span) {
   const from = renderedStart + base.subarray(run.source[0], span.start).toString('utf8').length;
   const to = from + base.subarray(span.start, span.end).toString('utf8').length;
   if (leaf.text.slice(from, to) !== span.oldText) return null;
-  return { leaf, from, to };
+  return { leaf, from, to, inexact: false };
+}
+
+// A rewrite of a whole paragraph usually crosses characters the site renders
+// differently from their source (curly quotes, dashes). Its location is still
+// exact when every source byte of the change lies in one rendered text node,
+// in runs that follow each other without gaps, and both ends fall in exactly
+// mapped runs. Such a change can only be shown folded as Rewritten, never as
+// word marks, because the old text on the page differs from the source.
+function locateSpanning(leaves, base, span) {
+  if (span.start === span.end) return null;
+  const touching = [];
+  for (const leaf of leaves) {
+    for (const run of leaf.runs ?? []) {
+      if (Array.isArray(run.source) && run.source[0] < span.end && run.source[1] > span.start) touching.push({ leaf, run });
+    }
+  }
+  if (touching.length === 0 || touching.some((item) => item.leaf !== touching[0].leaf)) return null;
+  const { leaf } = touching[0];
+  if (typeof leaf.text !== 'string') return null;
+  const indexes = touching.map((item) => leaf.runs.indexOf(item.run));
+  const first = Math.min(...indexes); const last = Math.max(...indexes);
+  for (let index = first; index <= last; index += 1) {
+    const run = leaf.runs[index];
+    if (!Array.isArray(run.source) || !Array.isArray(run.rendered) || !['exact', 'atom'].includes(run.kind)) return null;
+    if (index > first && (run.source[0] !== leaf.runs[index - 1].source[1] || run.rendered[0] !== leaf.runs[index - 1].rendered[1])) return null;
+    if (run.kind === 'exact' && leaf.text.slice(run.rendered[0], run.rendered[1]) !== base.subarray(run.source[0], run.source[1]).toString('utf8')) return null;
+  }
+  const head = leaf.runs[first]; const tail = leaf.runs[last];
+  if (head.source[0] > span.start || tail.source[1] < span.end) return null;
+  if ((head.kind !== 'exact' && head.source[0] !== span.start) || (tail.kind !== 'exact' && tail.source[1] !== span.end)) return null;
+  const from = head.rendered[0] + base.subarray(head.source[0], span.start).toString('utf8').length;
+  const to = tail.rendered[1] - base.subarray(span.end, tail.source[1]).toString('utf8').length;
+  return from <= to ? { leaf, from, to, inexact: true } : null;
 }
 
 const BLOCKS = new Set(['p', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'td', 'th', 'dd', 'dt', 'figcaption', 'pre']);
@@ -364,14 +393,14 @@ export function markSitePage({ html, provenance, baseText, operations, model }) 
       if (span === false) return null;
       if (span === null) continue;
       if (MARKDOWN.test(span.newText) || hasHiddenProposalSource(span.oldText + span.newText)) return null;
-      const located = locate(provenance.leaves, base, span);
+      const located = locate(provenance.leaves, base, span) ?? locateSpanning(provenance.leaves, base, span);
       if (located === null) return null;
       const parent = located.leaf.parent === '$body' ? article : byId.get(located.leaf.parent);
       const node = parent?.children[located.leaf.child];
       if (node?.tag !== '#text' || decodeText(html.slice(node.token.start, node.token.end)) !== located.leaf.text) return null;
       let block = node.parent;
       while (block && block !== article && !BLOCKS.has(block.tag)) block = block.parent;
-      placements.push({ number, first, span, node, block, from: located.from, to: located.to, leaf: located.leaf });
+      placements.push({ number, first, span, node, block, from: located.from, to: located.to, leaf: located.leaf, inexact: located.inexact });
       first = false;
     }
     if (first) return null;
@@ -391,6 +420,8 @@ export function markSitePage({ html, provenance, baseText, operations, model }) 
     after += text.slice(cursor);
     const block = list[0].block;
     const fold = rewritten(text, after) && block && block !== article && block.close;
+    // A change located across differently rendered characters is shown only as a rewrite.
+    if (!fold && list.some((item) => item.inexact)) return null;
     if (fold) folded.add(block);
     let out = ''; cursor = 0;
     for (const item of list) { out += escapeHtml(text.slice(cursor, item.from)) + changeHtml({ ...item, rewritten: Boolean(fold) }); cursor = item.to; }

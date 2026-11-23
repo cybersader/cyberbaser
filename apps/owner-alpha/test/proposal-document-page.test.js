@@ -104,7 +104,7 @@ describe('proposal review: site frame and private panel', () => {
       expect(html).toContain(text);
       expect(html).not.toContain('id="review-decision-form"');
       expect(html.includes('data-apply>Apply to page')).toBe(apply);
-      expect(html).toMatch(/<iframe [^>]*sandbox=""[^>]*src="\/owner\/decisions\/Q-[^"]+\/page"/u);
+      expect(html).toMatch(/<iframe [^>]*sandbox=""[^>]*src="\/owner\/decisions\/Q-[^"]+\/page(?:#c1)?"/u);
       expect((await frame(key, 'decisions')).status).toBe(200);
     }
     for (const [key, text] of [['expired', 'This proposal expired'], ['base-unreachable', 'This proposal’s base is no longer available']]) {
@@ -155,10 +155,19 @@ describe('proposal review: site frame and private panel', () => {
     expect(framed.html).not.toMatch(/<(script|img|form|input|iframe|a|object|embed|link|base|meta http-equiv)\b/iu);
     expect(framed.html).not.toMatch(/<[a-z][^>]*\son[a-z]+\s*=/iu);
     expect(framed.html).not.toContain('target="_top"');
-    expect(framed.html).toContain('&lt;script&gt;window.HOSTILE_SCRIPT = 1&lt;/script&gt;');
-    expect(framed.html).toContain('onerror=&quot;window.HOSTILE_IMG = 1&quot;');
-    expect(framed.html).toContain('target=&quot;_top&quot;');
+    // Unchanged HTML blocks are page markup: one quiet line, not their source.
+    expect(framed.html).toContain('<p class="hid">5 HTML blocks, unchanged</p>');
+    expect(framed.html).not.toContain('HOSTILE');
     expect(framed.html).toContain('The ending stays.');
+    // A changed HTML block still arrives as its exact source, as visible text.
+    const changed = await frame('hostile-html-changed');
+    expect(changed.html).not.toMatch(/<(script|img|form|input|iframe|a|object|embed|link|base|meta http-equiv)\b/iu);
+    expect(changed.html).not.toMatch(/<[a-z][^>]*\son[a-z]+\s*=/iu);
+    expect(changed.html).toContain('target=&quot;_top&quot;');
+    expect(changed.html).toContain('target=&quot;_top&quot;&gt;Read on&lt;/a&gt;</pre>');
+    expect(changed.html).toContain('target=&quot;_top&quot;&gt;Read more&lt;/a&gt;</pre>');
+    expect(changed.html).toContain('<p class="hid">3 HTML blocks, unchanged</p>');
+    expect(changed.html).toContain('<p class="hid">HTML block, unchanged</p>');
     // Links in the review copy are inert spans.
     expect((await frame('one-word')).html).toContain('<span class="lnk">restore guide</span>');
   });
@@ -175,7 +184,9 @@ describe('proposal review: site frame and private panel', () => {
       }
       const framed = (await frame(key)).html;
       expect(framed.includes('_CANARY')).toBe(false);
-      expect(framed).toContain('Hidden content · source not shown');
+      expect(framed).toMatch(/Hidden content(?: · \d+ blocks)? · source not shown/u);
+      // Consecutive hidden blocks read as one line.
+      expect(framed.match(/Hidden content/gu)).toHaveLength(1);
       expect(framed).toContain('The ending stays.');
     }
     const unavailable = await page('replay-unavailable');
@@ -184,7 +195,7 @@ describe('proposal review: site frame and private panel', () => {
     expect(unavailable.html).not.toContain('amended');
     const unavailableFrame = (await frame('replay-unavailable')).html;
     expect(unavailableFrame.includes('_CANARY')).toBe(false);
-    expect(unavailableFrame).toContain('Hidden content · source not shown');
+    expect(unavailableFrame).toMatch(/Hidden content(?: · \d+ blocks)? · source not shown/u);
     expect(unavailableFrame).not.toContain('amended');
   });
 

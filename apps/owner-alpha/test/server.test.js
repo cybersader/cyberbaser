@@ -203,6 +203,7 @@ async function handlerFixture({
   publicRoot,
   config: configInput,
   proposalReview = null,
+  reviewAppearance = null,
 } = {}) {
   const config = configInput ?? await exampleConfig();
   const calls = [];
@@ -223,6 +224,7 @@ async function handlerFixture({
     saveEdit,
     lookupJob,
     proposalReview,
+    reviewAppearance,
   });
   return { config, fetch, calls };
 }
@@ -1952,6 +1954,21 @@ describe('job status routes', () => {
     expect(stoppedBody).toContain('data-step="check" data-status="stopped"');
     expect(stoppedBody).toContain('Stopped (ofm-damage).');
     expect(stoppedBody).not.toContain('must-not-leak');
+  });
+
+  test('a finished job follows the site colour scheme, and only the owner’s own edit offers Edit again', async () => {
+    for (const [origin, colorScheme, editAgain] of [
+      [{ type: 'approved-proposal', queueId: REVIEW_QUEUE_ID, relativePath: 'docs/example.md' }, 'dark', false],
+      [{ type: 'owner-edit', relativePath: 'docs/example.md' }, 'light', true],
+    ]) {
+      const { fetch } = await handlerFixture({ reviewAppearance: { siteTitle: 'Cyberbase', colorScheme },
+        lookupJob: async (jobId) => ({ ...fixtureJob(jobId), state: 'completed', origin }) });
+      const opened = await openEdit(fetch);
+      const html = await (await fetch(request('/owner/jobs/OA-done', { headers: { Cookie: opened.cookie } }))).text();
+      expect(html).toContain(`<body class="save-page owner-scheme-${colorScheme}">`);
+      expect(html).toContain('>View page</a>');
+      expect(html.includes('>Edit again</a>')).toBe(editAgain);
+    }
   });
 
   test('reports an unchanged render as published without implying a text transition', async () => {

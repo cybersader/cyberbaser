@@ -2,6 +2,7 @@
 // the note as the site shows it, inside a locked frame on its own route, and
 // Cyberbaser's private panel beside or below it. Pure presentation: nothing
 // here reads files, records decisions, or changes what a decision does.
+import { Buffer } from 'node:buffer';
 import { hasHiddenProposalSource } from './publication-display.js';
 
 export const REWRITE_THRESHOLD = Object.freeze({ minimumWords: 12, changedShare: 0.6 });
@@ -99,6 +100,38 @@ export function isRewritten(row) {
   const { share, before, after } = rewriteShare(row.tracked);
   return before >= REWRITE_THRESHOLD.minimumWords && after >= REWRITE_THRESHOLD.minimumWords
     && share >= REWRITE_THRESHOLD.changedShare;
+}
+
+// Letters, digits, marks and the joiners that keep a word whole.
+export const WORD_CHARACTER = /[\p{L}\p{N}\p{M}_'’-]/u;
+
+/**
+ * One exact change grown to whole words, for display only. Takes the text
+ * before, the old text, the new text and the text after as arrays of code
+ * points. Shared ends of old and new become context; a change that starts or
+ * ends inside a word takes in the rest of that word on both sides. Returns
+ * null when old and new are the same.
+ */
+export function wholeWordChange(before, old, next, after) {
+  let prefix = 0;
+  while (prefix < old.length && prefix < next.length && old[prefix] === next[prefix]) prefix += 1;
+  let suffix = 0;
+  while (suffix < old.length - prefix && suffix < next.length - prefix
+    && old[old.length - 1 - suffix] === next[next.length - 1 - suffix]) suffix += 1;
+  const lead = [...before, ...old.slice(0, prefix)];
+  const trail = [...old.slice(old.length - suffix), ...after];
+  let oldCore = old.slice(prefix, old.length - suffix);
+  let newCore = next.slice(prefix, next.length - suffix);
+  if (oldCore.length === 0 && newCore.length === 0) return null;
+  const touchesStart = (core) => core.length > 0 && WORD_CHARACTER.test(core[0]);
+  const touchesEnd = (core) => core.length > 0 && WORD_CHARACTER.test(core.at(-1));
+  while (lead.length && WORD_CHARACTER.test(lead.at(-1)) && (touchesStart(oldCore) || touchesStart(newCore))) {
+    const char = lead.pop(); oldCore = [char, ...oldCore]; newCore = [char, ...newCore];
+  }
+  while (trail.length && WORD_CHARACTER.test(trail[0]) && (touchesEnd(oldCore) || touchesEnd(newCore))) {
+    const char = trail.shift(); oldCore = [...oldCore, char]; newCore = [...newCore, char];
+  }
+  return { lead, trail, oldText: oldCore.join(''), newText: newCore.join('') };
 }
 
 function showSpaces(value) {
@@ -259,12 +292,56 @@ function changeTag(label) {
   return `<span class="tag">${escapeHtml(label)}</span>`;
 }
 
+// A raw HTML block (one that opens with a tag) is page markup, not prose.
+// Unchanged, it is summarised rather than shown as source.
+function isHtmlBlock(block, text) {
+  if (!block?.uninterpreted?.includes('inline HTML')) return false;
+  const slice = text.slice(block.start, block.end);
+  return /^\s*<\/?[A-Za-z][\w-]*(?:[\s/>]|$)/u.test(slice) && !hasHiddenProposalSource(slice);
+}
+
+function anchorsHtml(row, model, display) {
+  // The first change is highlighted before any navigation.
+  return (display.anchors.get(row) ?? []).map((number) => `<span class="anc${number === model.anchors[0] ? ' first' : ''}" id="c${number}"></span>`).join('');
+}
+
+// Runs of hidden content, and runs of unchanged HTML blocks, each read as one
+// quiet line with a count instead of a stack of identical lines.
+const QUIET_LINES = Object.freeze({
+  hidden: (count) => (count === 1 ? 'Hidden content · source not shown' : `Hidden content · ${count} blocks · source not shown`),
+  html: (count) => (count === 1 ? 'HTML block, unchanged' : `${count} HTML blocks, unchanged`),
+  hiddenChanges: (count) => (count === 1 ? 'Hidden content · source not shown' : `Hidden content · ${count} changes · source not shown`),
+});
+
+function rowPiece(row, model, document, display) {
+  if (row.block?.kind === 'frontmatter' || row.baseBlock?.kind === 'frontmatter') return null;
+  if (row.hidden) return { quiet: 'hidden', anchors: anchorsHtml(row, model, display) };
+  if (!row.changed && isHtmlBlock(row.block, document.candidateText)) return { quiet: 'html', anchors: '' };
+  return { html: rowHtml(row, model, document, display) };
+}
+
+function rowsHtml(rows, model, document, display, repeatedTitle) {
+  const out = [];
+  let run = null;
+  const flush = () => {
+    if (run) out.push(`<div class="row">${run.anchors}<p class="hid">${QUIET_LINES[run.quiet](run.count)}</p></div>`);
+    run = null;
+  };
+  for (const row of rows) {
+    if (row === repeatedTitle) continue;
+    const piece = rowPiece(row, model, document, display);
+    if (piece === null) continue;
+    if (piece.quiet && run?.quiet === piece.quiet) { run.count += 1; run.anchors += piece.anchors; continue; }
+    flush();
+    if (piece.quiet) run = { quiet: piece.quiet, count: 1, anchors: piece.anchors };
+    else out.push(piece.html);
+  }
+  flush();
+  return out.join('');
+}
+
 function rowHtml(row, model, document, display) {
-  if (row.block?.kind === 'frontmatter' || row.baseBlock?.kind === 'frontmatter') return '';
-  const numbers = display.anchors.get(row) ?? [];
-  // The first change is highlighted before any navigation, without scrolling.
-  const anchors = numbers.map((number) => `<span class="anc${number === model.anchors[0] ? ' first' : ''}" id="c${number}"></span>`).join('');
-  if (row.hidden) return `<div class="row">${anchors}<p class="hid">Hidden content · source not shown</p></div>`;
+  const anchors = anchorsHtml(row, model, display);
   const base = document.baseText; const next = document.candidateText;
   if (!row.changed) return plainBlock(row.block, next);
   if (!row.block) {
@@ -361,7 +438,7 @@ main:not(:has(.anc:target)) .chg:has(>.anc.first){box-shadow:0 0 0 2px var(--acc
 export function frameDocument({ model, display, document, title, sourcePath, colorScheme = 'light', repeatedTitle = null, note = null }) {
   let body;
   if (model.pageAvailable) {
-    body = display.tracked.rows.map((row) => (row === repeatedTitle ? '' : rowHtml(row, model, document, display))).join('');
+    body = rowsHtml(display.tracked.rows, model, document, display, repeatedTitle);
   } else {
     body = `<p class="unavailable">${escapeHtml(note ?? 'This page can’t be shown here. Every change is listed in the panel.')}</p>`;
   }
@@ -381,18 +458,68 @@ export function frameDocument({ model, display, document, title, sourcePath, col
 `;
 }
 
-// After a decision the pinned page text is no longer held, only the exact
-// changes. Show each one in its own words, never a reconstructed page.
-export function excerptDocument({ operations, title, sourcePath, colorScheme = 'light' }) {
-  const items = operations.map((operation, index) => {
-    const hidden = hasHiddenProposalSource(`${operation.expected}${operation.replacement}${operation.context?.before ?? ''}${operation.context?.after ?? ''}`);
-    if (hidden) return `<div class="row"><span class="anc" id="c${index + 1}"></span><p class="hid">Hidden content · source not shown</p></div>`;
-    const before = operation.context?.before ? `…${escapeHtml(compact(operation.context.before.split('\n').at(-1), 80).replace(/^…/u, ''))}` : '';
-    const after = operation.context?.after ? `${escapeHtml(compact(operation.context.after.split('\n')[0], 80))}…` : '';
+// One line of source text around a change, cut at a word boundary. A list or
+// task marker at the start of the line is structure, not words, so it goes.
+function excerptSide(text, side, maximum = 80) {
+  const line = side === 'before' ? text.split('\n').at(-1).replace(/^\s*(?:[-+*]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/u, '') : text.split('\n')[0];
+  if (line.length <= maximum) return escapeHtml(line);
+  return side === 'before'
+    ? `…${escapeHtml(line.slice(-maximum).replace(/^\S*\s/u, ''))}`
+    : `${escapeHtml(line.slice(0, maximum).replace(/\s\S*$/u, ''))}…`;
+}
+
+function excerptMark(tag, text) {
+  const [, lead, words, trail] = /^(\s*)([\s\S]*?)(\s*)$/u.exec(text);
+  return words === '' ? escapeHtml(text) : `${escapeHtml(lead)}<${tag}>${escapeHtml(words)}</${tag}>${escapeHtml(trail)}`;
+}
+
+// The exact change at whole words, in its own line of the page source. Needs
+// the pinned page text; without it only the exact characters can be shown.
+function excerptItem(operation, number, baseBytes) {
+  const anchor = `<span class="anc" id="c${number}"></span>`;
+  if (hasHiddenProposalSource(`${operation.expected}${operation.replacement}`)) return { quiet: true, html: anchor };
+  let change = null;
+  if (baseBytes !== null && Number.isSafeInteger(operation.start) && Number.isSafeInteger(operation.end)
+    && baseBytes.subarray(operation.start, operation.end).toString('utf8') === operation.expected) {
+    change = wholeWordChange(Array.from(baseBytes.subarray(0, operation.start).toString('utf8')), Array.from(operation.expected),
+      Array.from(operation.replacement), Array.from(baseBytes.subarray(operation.end).toString('utf8')));
+  }
+  if (change === null) {
+    // No page text: only the exact characters, said plainly.
     const removed = operation.expected ? `<del>${escapeHtml(operation.expected)}</del>` : '';
     const added = operation.replacement ? `<ins>${escapeHtml(operation.replacement)}</ins>` : '';
-    return `<div class="row mk"><span class="anc" id="c${index + 1}"></span><p>${before}${removed}${removed && added ? ' ' : ''}${added}${after}</p></div>`;
-  }).join('');
+    return { html: `<div class="row mk">${anchor}<p><code>${removed}</code>${removed && added ? ' → ' : ''}<code>${added}</code></p></div>` };
+  }
+  const before = change.lead.slice(-400).join('');
+  const after = change.trail.slice(0, 400).join('');
+  if (hasHiddenProposalSource(before.split('\n').at(-1) + after.split('\n')[0])) return { quiet: true, html: anchor };
+  if (/\n/u.test(change.oldText + change.newText)) {
+    return { html: `<div class="chg rw">${anchor}<span class="tag">Changed</span><pre class="src">${excerptMark('del', change.oldText)}</pre><pre class="src">${excerptMark('ins', change.newText)}</pre></div>` };
+  }
+  const removed = change.oldText === '' ? '' : excerptMark('del', change.oldText);
+  const added = change.newText === '' ? '' : excerptMark('ins', change.newText);
+  const gap = removed && added && !/\s$/u.test(change.oldText) && !/^\s/u.test(change.newText) ? ' ' : '';
+  return { html: `<div class="row mk">${anchor}<p>${excerptSide(before, 'before')}${removed}${gap}${added}${excerptSide(after, 'after')}</p></div>` };
+}
+
+// After a decision, when the site's page can't be shown: each change in its
+// own line of the page, at whole words. Never a reconstructed page.
+export function excerptDocument({ operations, title, sourcePath, colorScheme = 'light', baseText = null }) {
+  const baseBytes = typeof baseText === 'string' ? Buffer.from(baseText, 'utf8') : null;
+  const out = []; let quiet = null;
+  const flush = () => {
+    if (quiet) out.push(`<div class="row">${quiet.anchors}<p class="hid">${QUIET_LINES.hiddenChanges(quiet.count)}</p></div>`);
+    quiet = null;
+  };
+  operations.forEach((operation, index) => {
+    const item = excerptItem(operation, index + 1, baseBytes);
+    if (item.quiet) { quiet = quiet ? { count: quiet.count + 1, anchors: quiet.anchors + item.html } : { count: 1, anchors: item.html }; return; }
+    flush(); out.push(item.html);
+  });
+  flush();
+  const lede = baseBytes === null
+    ? 'The changes you decided on. The page text is no longer kept, so only the exact characters are shown.'
+    : 'The changes you decided on, each in its line of the page.';
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -403,7 +530,7 @@ export function excerptDocument({ operations, title, sourcePath, colorScheme = '
 <style>${schemeCss(colorScheme, 'html')}${FRAME_STYLE}</style>
 </head>
 <body>
-<main>${crumbs(sourcePath)}<h1>${escapeHtml(title)}</h1><p class="hid">The changes you decided on, each in its own sentence.</p>${items}</main>
+<main>${crumbs(sourcePath)}<h1>${escapeHtml(title)}</h1><p class="hid">${lede}</p>${out.join('')}</main>
 </body>
 </html>
 `;
@@ -494,9 +621,11 @@ export function reviewShell({ model, entry, title, siteTitle, senderHtml, frameU
     : model.mustSee.length > 0
       ? `<div class="rv-act"><button type="button" data-action="reject" class="rv-sec">Reject</button><button type="button" id="rv-seen" class="rv-pri">I’ve seen ${model.mustSee.length === 1 ? 'this' : 'these'}</button><button type="button" data-action="approve" class="rv-pri" hidden>Approve</button></div>`
       : '<div class="rv-act"><button type="button" data-action="reject" class="rv-sec">Reject</button><button type="button" data-action="approve" class="rv-pri">Approve</button></div>';
+  // The frame opens at the first change, so a phone shows it above the panel.
+  const firstChange = model.anchors.length > 0 ? `${frameUrl}#c${model.anchors[0]}` : frameUrl;
   return `<div class="rv-app" id="owner-review-detail" data-anchors="${model.anchors.join(',')}" data-frame="${escapeHtml(frameUrl)}">
 ${siteLine(siteTitle)}
-<main class="rv-page"><iframe id="rv-frame" name="rv-frame" title="${escapeHtml(title)}, as your site shows it" sandbox="" referrerpolicy="no-referrer" loading="eager" src="${escapeHtml(frameUrl)}"></iframe></main>
+<main class="rv-page"><iframe id="rv-frame" name="rv-frame" title="${escapeHtml(title)}, as your site shows it" sandbox="" referrerpolicy="no-referrer" loading="eager" src="${escapeHtml(firstChange)}"></iframe></main>
 <section class="rv-sheet" id="rv-sheet" aria-label="Cyberbaser, private to you">
 ${bar({ count: navCount })}
 <div class="rv-body" id="rv-body">
@@ -515,10 +644,11 @@ ${actions}
 ${decisionDialog({ queueId: summary.queueId, reviewEvidenceDigest: summary.reviewEvidenceDigest, csrfToken, maxReasonBytes, title, version, count: model.changes.length, mustSee: model.mustSee.length > 0 })}`;
 }
 
-export function receiptShell({ siteTitle, title, frameUrl, senderHtml, panelHtml, detailsHtml }) {
+export function receiptShell({ siteTitle, title, frameUrl, senderHtml, panelHtml, detailsHtml, firstAnchor = null }) {
+  const src = firstAnchor === null ? frameUrl : `${frameUrl}#c${firstAnchor}`;
   return `<div class="rv-app rv-receipt" id="owner-decision-detail">
 ${siteLine(siteTitle)}
-<main class="rv-page"><iframe id="rv-frame" name="rv-frame" title="${escapeHtml(title)}, the changes you decided on" sandbox="" referrerpolicy="no-referrer" src="${escapeHtml(frameUrl)}"></iframe></main>
+<main class="rv-page"><iframe id="rv-frame" name="rv-frame" title="${escapeHtml(title)}, the changes you decided on" sandbox="" referrerpolicy="no-referrer" src="${escapeHtml(src)}"></iframe></main>
 <section class="rv-sheet" id="rv-sheet" aria-label="Cyberbaser, private to you">
 ${bar()}
 <div class="rv-body" id="rv-body">

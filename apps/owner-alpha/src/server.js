@@ -332,7 +332,7 @@ const SAVE_STOPS = Object.freeze(Object.fromEntries(Object.entries(JOB_STOPS).ma
   step: state === 'completed' ? 3 : value.step === 0 ? 0 : value.step < 3 ? 1 : 2,
   copy: state === 'completed' ? 'Saved' : state === 'live-verification-failed' ? 'Updating the site' : 'The save did not finish. Open Details for what happened.',
 }])));
-function jobPage(job, readerOrigin) {
+function jobPage(job, readerOrigin, appearance = null) {
   const safe = publicJob(job);
   if (safe.origin?.type === 'owner-publication') return publicationJobPage(safe);
   const done = safe.state === 'completed';
@@ -349,13 +349,18 @@ function jobPage(job, readerOrigin) {
     return `<li class="job-step job-step-${status}" data-step="${step.key}" data-status="${status}">${step.label}</li>`;
   }).join('');
   const stages = escapeHtml(JSON.stringify({ steps: SAVE_STEPS, stops: SAVE_STOPS, technical: { steps: JOB_STEPS, stops: JOB_STOPS } }));
+  // Edit again reopens the owner's own edit. A proposal someone else sent is not
+  // the owner's draft, so it gets no such link.
+  const ownEdit = safe.origin?.type !== 'approved-proposal';
   return pageShell({
     title, script: '/owner/assets/job.js',
+    // The same colour scheme as the owner's site, as on the review page.
+    bodyClass: `save-page owner-scheme-${appearance?.colorScheme ?? 'system'}`,
     body: `<main class="owner-shell save-progress" id="owner-job" data-job-id="${escapeHtml(safe.jobId)}" data-stages="${stages}">
 <header class="owner-header"><h1 id="save-heading">${escapeHtml(title)}</h1></header>
 <section class="job-card" aria-live="polite"><p class="job-stage"><strong id="job-stage">${escapeHtml(copy)}</strong></p>
 <ol class="job-steps" id="job-steps"${done || stopped ? ' hidden' : ''}>${steps}</ol>
-<div class="save-result-links" id="save-result-links"${done ? '' : ' hidden'}><a class="save-view-page" href="${escapeHtml(view)}">View page</a><a href="${escapeHtml(edit)}">Edit again</a></div>
+<div class="save-result-links" id="save-result-links"${done ? '' : ' hidden'}><a class="save-view-page" href="${escapeHtml(view)}">View page</a>${ownEdit ? `<a href="${escapeHtml(edit)}">Edit again</a>` : ''}</div>
 </section>
 <details class="job-details" id="job-details"><summary>Details</summary><div id="job-rehearsal-details"></div>
 <p id="job-technical-stage">${escapeHtml(jobStageCopy(safe.state))}</p><p id="job-recovery" class="status">${escapeHtml(safe.recovery?.instruction ?? '')}</p>
@@ -1216,7 +1221,14 @@ ${note('The page has not changed. Applying is a separate step.')}
   return `<h1 id="application-heading">Approved</h1>${note(`The page has not changed. Couldn’t check whether it can be applied just now${application.reason ? ` (${escapeHtml(application.reason)})` : ''}. Reload to try again.`)}`;
 }
 
-function decisionDetailPage({ decision, summary, queueRetained, application = null, csrfToken = '', appearance }) {
+// A decided proposal, with the pinned page text while the queue still holds it
+// (display only; the decision record itself never keeps page text).
+function decidedEntry({ decision, summary, document = null }) {
+  const entry = decisionEntry(decision, summary);
+  return document === null ? entry : Object.freeze({ ...entry, document });
+}
+
+function decisionDetailPage({ decision, summary, queueRetained, application = null, csrfToken = '', appearance, firstAnchor = null }) {
   const entry = decisionEntry(decision, summary);
   const title = proposalTitle(entry);
   const approved = decision.action === 'approve';
@@ -1227,15 +1239,16 @@ function decisionDetailPage({ decision, summary, queueRetained, application = nu
   return reviewPage({ title: approved ? 'Proposal approved' : 'Proposal rejected', appearance, receipt: true,
     script: ['/owner/assets/review.js', ...(application?.state === 'eligible' ? ['/owner/assets/apply.js'] : [])],
     body: receiptShell({ siteTitle: appearance.siteTitle, title,
-      frameUrl: `/owner/decisions/${encodeURIComponent(summary.queueId)}/page`,
+      frameUrl: `/owner/decisions/${encodeURIComponent(summary.queueId)}/page`, firstAnchor,
       senderHtml: proposalSender(entry), panelHtml: `${panel}${note}`,
       detailsHtml: `${changeInspection(entry)}${contributorReferences(entry)}${technicalEvidence(entry, { decision, queueRetained, disclosure: false })}` }) });
 }
 
-function decisionFramePage({ decision, summary }, appearance) {
+function decisionFramePage({ decision, summary, document = null }, appearance) {
   const entry = decisionEntry(decision, summary);
   return excerptDocument({ operations: proposalView(entry).operations, title: proposalTitle(entry),
-    sourcePath: summary.source.path, colorScheme: appearance.colorScheme });
+    sourcePath: summary.source.path, colorScheme: appearance.colorScheme,
+    baseText: document?.reason === null && typeof document.baseText === 'string' ? document.baseText : null });
 }
 
 function optionalQueryObject(url, allowed) {
@@ -2068,6 +2081,12 @@ export function createOwnerAlphaHandler({
           return frameResponse(request.method === 'HEAD' ? null : reviewFramePage(loaded.entry, appearance));
         }
         const history = await commands.readDecision({ queueId }, principal);
+        // While the queue still holds the page text and the private build
+        // matches, the decided proposal stays on the site's own page, read-only.
+        if (history.document) {
+          const site = await siteReview(decidedEntry(history));
+          if (site.html !== null) return frameResponse(request.method === 'HEAD' ? null : site.html, 200, SITE_FRAME_CSP);
+        }
         return frameResponse(request.method === 'HEAD' ? null : decisionFramePage(history, appearance));
       } catch (error) {
         return unavailable(error instanceof OwnerCommandPrecondition && error.code === 'decision-not-found' ? 404 : reviewErrorStatus(error));
@@ -2144,10 +2163,16 @@ export function createOwnerAlphaHandler({
       }
       if (decisionDetailMatch[1] === 'api/decisions') {
         if (request.method === 'HEAD') return json(null);
-        return json(history);
+        const { document: _decidedDocument, ...apiHistory } = history;
+        return json(apiHistory);
       }
       if (request.method === 'HEAD') return html(null);
-      return html(decisionDetailPage({ ...history, csrfToken, appearance }), 200, { 'Content-Security-Policy': REVIEW_SHELL_CSP });
+      let firstAnchor = proposalView(decisionEntry(history.decision, history.summary)).operations.length > 0 ? 1 : null;
+      if (history.document) {
+        const entry = decidedEntry(history);
+        if ((await siteReview(entry)).html !== null) firstAnchor = reviewDisplay(entry).model.anchors[0] ?? null;
+      }
+      return html(decisionDetailPage({ ...history, csrfToken, appearance, firstAnchor }), 200, { 'Content-Security-Policy': REVIEW_SHELL_CSP });
     }
 
     if (url.pathname === '/owner/in-place') {
@@ -2282,7 +2307,7 @@ export function createOwnerAlphaHandler({
         return json(publicJob(job));
       }
       if (request.method === 'HEAD') return html(null);
-      return html(jobPage(job, readerOrigin));
+      return html(jobPage(job, readerOrigin, appearance));
     }
 
     return errorResponse(404, 'not-found');

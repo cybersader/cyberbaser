@@ -118,10 +118,14 @@ export function createOwnerProposalReviewService({
       const decision = local.decisions.find((entry) => entry.queueId === queueId) ?? null;
       if (decision === null) return null;
       let queueRetained = null;
+      let document = null;
       try {
         const current = await source.load(queueId);
         createProposalDecisionOverlay({ entries: [current], decisions: [decision] });
         queueRetained = true;
+        // The overlay proved this entry is the decided one. Its pinned page
+        // text is kept for display only, never written into the decision.
+        document = current.document ?? null;
       } catch (error) {
         if (error instanceof OwnerAlphaError
           && ['review-ipc-not-found', 'review-ipc-queue-entry-not-found'].includes(error.code)) {
@@ -135,7 +139,7 @@ export function createOwnerProposalReviewService({
         }
       }
       const overlay = createProposalDecisionOverlay({ entries: [], decisions: [decision] });
-      return Object.freeze({ ...overlay.history[0], queueRetained });
+      return Object.freeze({ ...overlay.history[0], queueRetained, ...(document === null ? {} : { document }) });
     },
     async record(intent) {
       const result = await recordDecision({
