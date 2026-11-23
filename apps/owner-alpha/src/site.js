@@ -990,6 +990,8 @@ export async function rebuildOwnerSite({
       rendererWorkspace,
       manifest,
       publication,
+      // Notes rendered without source provenance (review falls back for them).
+      provenanceSkipped: rendererResult.provenanceSkipped ?? null,
     });
   } finally {
     if (!published) {

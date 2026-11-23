@@ -135,7 +135,9 @@ dialog::backdrop{background:rgba(20,26,23,.42)}
 /* Desktop: the same panel, floating beside the page */
 @media (min-width:900px){
   .rv-app{display:grid;grid-template-columns:minmax(0,1fr) 392px;grid-template-rows:auto minmax(0,1fr)}
-  .rv-site{grid-column:1/-1;padding-left:12px}
+  .rv-site{grid-column:1/-1;grid-row:1;padding-left:12px}
+  /* Rehearsal label: out of the grid, centred over the site line where there is room. */
+  .proposal-rehearsal-notice{position:fixed;z-index:3;top:6px;left:50%;transform:translateX(-50%);margin:0}
   .rv-page{grid-column:1;grid-row:2}
   .rv-sheet{grid-column:2;grid-row:2;align-self:start;margin:24px 24px 24px 8px;border:1px solid #c9cfca;border-radius:10px;overflow:hidden;box-shadow:0 10px 28px rgba(20,30,25,.14)}
   .rv-body{max-height:calc(100dvh - 160px)}

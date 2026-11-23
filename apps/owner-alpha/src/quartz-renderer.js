@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { lstat, mkdir, realpath } from 'node:fs/promises';
+import { lstat, mkdir, readFile, realpath, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -129,6 +129,30 @@ export function suggestionEnvironment(suggestions) {
   };
 }
 
+// Notes the private build emitted without source provenance. The renderer
+// writes this report (paths only) beside, never inside, the published output.
+export const PROVENANCE_REPORT_FILE = 'provenance-skipped.json';
+
+export async function provenanceReportEnvironment(workspaceDir, formEnvironment) {
+  if (!formEnvironment.CYBERBASER_SOURCE_PROVENANCE) return {};
+  const file = path.join(workspaceDir, PROVENANCE_REPORT_FILE);
+  await rm(file, { force: true });
+  return { CYBERBASER_PROVENANCE_REPORT: file };
+}
+
+export async function readProvenanceReport(environment) {
+  const file = environment.CYBERBASER_PROVENANCE_REPORT;
+  if (!file) return null;
+  try {
+    const report = JSON.parse(await readFile(file, 'utf8'));
+    const notes = Array.isArray(report?.notes) ? report.notes.map(({ path: notePath, step }) => ({ path: notePath, step })) : [];
+    return { count: notes.length, notes, file };
+  } catch (error) {
+    if (error?.code === 'ENOENT') return { count: 0, notes: [], file };
+    throw error;
+  }
+}
+
 export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, ownerOrigin, suggestions = null, siteConfigPath = null, sourceCheckout = null }) {
   // The vault's own site settings (.cyberbaser/site.yml), when it has one.
   if (sourceCheckout !== null && (typeof sourceCheckout !== 'string' || !path.isAbsolute(sourceCheckout) || path.normalize(sourceCheckout) !== sourceCheckout)) {
@@ -146,6 +170,7 @@ export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, 
   const seedEnvironment = await offlineSeedEnvironment();
 
   await mkdir(workspace, { recursive: true });
+  const reportEnvironment = await provenanceReportEnvironment(workspace, formEnvironment);
   const setup = await runFixed(
     'bash',
     [SETUP_SCRIPT, quartzDir],
@@ -177,10 +202,12 @@ export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, 
         // Read-only: dates for notes without frontmatter dates come from its git history.
         ...(sourceCheckout ? { CYBERBASER_SOURCE_CHECKOUT: sourceCheckout } : {}),
         ...formEnvironment,
+        ...reportEnvironment,
       }),
     },
     'quartz-build-failed',
   );
+  const provenanceSkipped = await readProvenanceReport(reportEnvironment);
 
   return {
     renderer: 'quartz-cyberbase',
@@ -188,6 +215,7 @@ export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, 
     tag: PINNED_QUARTZ_REF,
     outputDir: output,
     suggestionForm: formEnvironment.CYBERBASER_ACCOUNT_FREE_INTAKE === 'enabled',
+    provenanceSkipped,
     commands: {
       setup: ['bash', SETUP_SCRIPT, quartzDir],
       build: ['bash', BUILD_SCRIPT, content, quartzDir],

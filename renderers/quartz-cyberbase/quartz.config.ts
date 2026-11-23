@@ -9,6 +9,7 @@ import { FrontmatterSlug } from "./quartz/cyberbase/FrontmatterSlug"
 import { GitDates } from "./quartz/cyberbase/GitDates"
 import { siteBasePath } from "./quartz/cyberbase/siteBase"
 import { loadSiteConfig } from "./quartz/cyberbase/siteConfigFile"
+import { applyPrivateBuild, privateBuildMode } from "./quartz/cyberbase/privateBuild"
 
 // Instance settings from the vault (.cyberbaser/site.yml); neutral without one.
 const SITE = loadSiteConfig(process.env)
@@ -156,5 +157,9 @@ if (provenanceMode(process.env.CYBERBASER_SOURCE_PROVENANCE)) {
 if (SITE.appearance?.favicon) {
   config.plugins.emitters = config.plugins.emitters.filter((emitter) => emitter.name !== "Favicon")
 }
+
+// Owner-private builds stay offline: no social images, Google fonts or math CDN.
+// Public builds (the vault's workflow) never set owner mode and are unchanged.
+if (privateBuildMode(process.env)) applyPrivateBuild(config)
 
 export default config

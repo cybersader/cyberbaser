@@ -183,21 +183,23 @@ export async function createSuggestionsFixture({ port = 46437, host = '127.0.0.1
 /** A fixture-local renderer seam reuses the pinned setup/build scripts offline. */
 export function createRehearsalRenderer({ seed = RENDERER_SEED } = {}) {
   return async ({ contentDir, outputDir, workspaceDir, ownerOrigin, suggestions = null, siteConfigPath = null, sourceCheckout = null }) => {
-    const { PINNED_QUARTZ_COMMIT, PINNED_QUARTZ_REF, suggestionEnvironment } = await import('../src/quartz-renderer.js');
+    const { PINNED_QUARTZ_COMMIT, PINNED_QUARTZ_REF, suggestionEnvironment, provenanceReportEnvironment, readProvenanceReport } = await import('../src/quartz-renderer.js');
     const quartz = path.join(workspaceDir, 'quartz');
     const renderer = path.join(PROJECT_ROOT, 'renderers/quartz-cyberbase');
     await mkdir(workspaceDir, { recursive: true });
     // Same build inputs as the real owner renderer (form, challenge, provenance).
     const form = suggestionEnvironment(suggestions);
+    const report = await provenanceReportEnvironment(workspaceDir, form);
     const env = { ...environment(), QUARTZ_OFFLINE: '1', QUARTZ_SEED_DIR: seed,
       ...(form.CYBERBASER_SOURCE_PROVENANCE ? { CYBERBASER_SOURCE_PROVENANCE: form.CYBERBASER_SOURCE_PROVENANCE } : {}) };
     await command('bash', [path.join(renderer, 'setup.sh'), quartz], { env });
     await command('bash', [path.join(renderer, 'build.sh'), contentDir, quartz], { env: { ...env, COPY_CONTENT: '1', OUTPUT_DIR: outputDir,
-      CYBERBASER_EDIT_LINK_MODE: 'owner', CYBERBASER_OWNER_ORIGIN: ownerOrigin, ...form,
+      CYBERBASER_EDIT_LINK_MODE: 'owner', CYBERBASER_OWNER_ORIGIN: ownerOrigin, ...form, ...report,
       // The vault's own site settings and read-only note dates, as the real renderer passes them.
       ...(siteConfigPath ? { CYBERBASER_SITE_CONFIG: siteConfigPath } : {}),
       ...(sourceCheckout ? { CYBERBASER_SOURCE_CHECKOUT: sourceCheckout } : {}) } });
-    return { renderer: 'quartz-cyberbase', revision: PINNED_QUARTZ_COMMIT, tag: PINNED_QUARTZ_REF, outputDir, suggestionForm: suggestions !== null };
+    return { renderer: 'quartz-cyberbase', revision: PINNED_QUARTZ_COMMIT, tag: PINNED_QUARTZ_REF, outputDir, suggestionForm: suggestions !== null,
+      provenanceSkipped: await readProvenanceReport(report) };
   };
 }
 
