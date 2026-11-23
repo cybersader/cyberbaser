@@ -1,0 +1,19 @@
+---
+title: Deployment and reach design
+description: Design for the one-app install with Iroh reach, QR pairing and GitHub access given once, written after the owner chose to wait for these before the first real install. Includes a check that n0's JavaScript Iroh bindings work under Bun, through n0's relay, and inside one compiled binary.
+status: log
+---
+
+## What happened
+
+The owner decided the first real install waits for Iroh reach and a one-app setup, so it is the install regular users would get. A design pass produced [Deployment and reach](/cyberbaser/design/deployment-and-reach/) and phone-sized first-run mockups for the owner (`.workspace/deploy-design/setup-flow.html`, not tracked).
+
+## Evidence gathered
+
+- `@number0/iroh` 1.2.0 (released 2026-10-22, N-API) installed under Bun 1.3.14. In a scratch directory: a loopback connection exchanged a stream and reported the authenticated peer ID under both Bun and Node 22; a dial by endpoint ID and n0 relay URL connected in about 350 ms and then selected a direct path; `bun build --compile` produced a 131 MB binary that ran the loopback check from an empty directory.
+- The bindings' `Connection` has `remoteId()` but no TLS exporter. The design binds signed requests to the authenticated peer ID plus a node nonce through the existing `forChannel` verifier instead.
+- GitHub App user tokens via device flow: 8-hour tokens, 6-month refresh tokens, limited to repositories where the app is installed and the user has access. Fine-grained tokens: one repository, Contents write, expiry up to 366 days or none.
+
+## Not done
+
+No code changed. Nothing was installed against the real vault. Obsidian mobile WASM, phone key custody, the workflow-file refusal for an app token without the Workflows permission, and macOS or Windows builds were not tested.
