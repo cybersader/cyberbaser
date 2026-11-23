@@ -44,3 +44,7 @@ The owner can now pair Obsidian with their node, see whether the open note is li
 - **Tests.** 7 new node tests and 7 plugin tests (including byte-for-byte checks against the node's envelope, binding and pairing code, and a pairing plus capture against the real node carrier); the required node suites passed (1077 pass, 10 skipped, 0 fail). The harness acceptance (`test/harness/phone-step.mjs`) passed 11 assertions on loopback and, opt-in, through n0's public relay (1.0 s to words, 6.0 s from Publish to *Live*, 0.6 s per send). Screenshots are in `.workspace/phone-step/` (not tracked).
 
 **Still missing:** a real-phone run, a QR image, live status for notes outside the one configured page, and a production screen for binding the workspace baseline.
+
+## Real-phone test deferred (owner decision)
+
+The owner chose to wait for QR pairing and the installer before the first test on their real phone. Next: QR pairing with an `obsidian://` link, status for every published note, the note-linking screen, the GitHub App sign-in, then the one-app installer.

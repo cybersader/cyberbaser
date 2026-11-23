@@ -4,6 +4,10 @@
 
 ## Log
 
+### First real-phone test waits for QR pairing and the installer (2026-11-23, owner decision)
+Asked how to get the Obsidian plugin onto the owner's real phone for a first test (separate test vault with a pre-release via BRAT; wait for QR and installer; keep testing without the phone), the owner chose "Wait for the QR code and installer first". Build QR pairing, the GitHub App sign-in and the one-app installer before asking the owner to test on a phone.
+
+
 ### Deployment and reach choices (2026-11-23, owner decisions)
 Asked in four question dialogs after the design in `design/deployment-and-reach.mdx` and its setup-flow mockups:
 - **GitHub access:** sign in with a Cyberbaser GitHub App, one repository, short-lived tokens held only by the publisher. Owner: "I like the sign-in with the GitHub app for sure", and: "make repository selection and all that like a searchable, nice user experience. Some of that kind of looks pretty crappy. Like the checkboxes and stuff looks really crappy, but I really do like the approach, it's a good start."
