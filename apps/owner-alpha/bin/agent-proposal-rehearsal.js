@@ -40,7 +40,9 @@ export async function runAgentChild({ capture, checkout, key, socket }) {
 
 // realQuartz renders the private site with the pinned Quartz (and its source
 // provenance) instead of the inert simulated pages. It is slow; tests opt in.
-export async function createAgentProposalRehearsal({ port = 46527, before = defaultBefore, after = defaultAfter, realQuartz = false, siteTitle = null } = {}) {
+// iroh: null (off), 'none' (direct loopback paths only) or 'n0' (n0's public
+// relay) turns on the node's Iroh carrier with a disposable state directory.
+export async function createAgentProposalRehearsal({ port = 46527, before = defaultBefore, after = defaultAfter, realQuartz = false, siteTitle = null, iroh = null } = {}) {
   if (before.source !== after.source || before.path !== after.path) throw new Error('Capture files must describe the same note.');
   const fixture = await createSuggestionsFixture({ port, agentBase: before.text, siteTitle });
   try {
@@ -58,7 +60,10 @@ export async function createAgentProposalRehearsal({ port = 46527, before = defa
     await writeFile(capture, JSON.stringify(after), { mode: 0o600 });
     const entry = await generateKey({ label: AGENT_LABEL, kind: 'agent', grants: ['propose'], file: key });
     await writeFile(registryFile, JSON.stringify({ ownerId: config.owner.identity, entries: [entry] }), { mode: 0o600 });
-    await writeFile(fixture.configFile, JSON.stringify({ ...config, deviceRegistryFile: registryFile, signedRequestSocket: socket }), { mode: 0o600 });
+    const irohState = path.join(root, 'iroh');
+    if (iroh !== null) await mkdir(irohState, { mode: 0o700 });
+    await writeFile(fixture.configFile, JSON.stringify({ ...config, deviceRegistryFile: registryFile, signedRequestSocket: socket,
+      ...(iroh === null ? {} : { iroh: { enabled: true, stateDirectory: irohState, relay: iroh, ...(iroh === 'none' ? { bindAddress: '127.0.0.1:0' } : {}) } }) }), { mode: 0o600 });
     const runtime = await startSuggestionsRehearsal(fixture, realQuartz ? {} : { renderer: renderFixture, simulatedRender: true });
     const result = await runAgentChild({ capture, checkout: snapshot, key, socket });
     if (result.code !== 0) throw new Error(`Agent submission failed (${/^[a-z-]+$/u.test(result.stderr) ? result.stderr : 'unknown-refusal'}).`);
@@ -67,7 +72,7 @@ export async function createAgentProposalRehearsal({ port = 46527, before = defa
     const issueSignInUrl = () => `${runtime.ownerOrigin}/owner/bootstrap?token=${runtime.issueBootstrap()}`;
     let verified = false;
     return {
-      ...fixture, agent: { capture, checkout: snapshot, key, socket }, queueId, entry, issueSignInUrl,
+      ...fixture, agent: { capture, checkout: snapshot, key, socket }, queueId, entry, issueSignInUrl, runtime,
       panelUrl: `${runtime.ownerOrigin}/owner/review`,
       instructions: [
         `Submitted ${queueId} for ${AGENT_REHEARSAL_DELIVERY_PATH} as ${AGENT_LABEL}.`,

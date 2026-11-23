@@ -117,7 +117,7 @@ export function createSignedRequestVerifier({ registry, audience, now = Date.now
     try { void Promise.resolve(audit(Object.freeze(event))).catch(() => {}); } catch { /* isolated sink */ }
   }
 
-  function verifyFor(expectedBinding) {
+  function verifyFor(expectedBinding, peer = null) {
     function check(envelope, acceptsCommand) {
       let command = null;
       let key = null;
@@ -144,6 +144,9 @@ export function createSignedRequestVerifier({ registry, audience, now = Date.now
       if (request.audience !== audience) return reject('audience-mismatch');
       if (!key) return reject('unknown-key');
       if (key.revoked) return reject('revoked-key');
+      // A carrier that authenticates the remote endpoint (Iroh) names it here.
+      // The key must have been enrolled for exactly that endpoint.
+      if (peer !== null && key.irohNodeId !== peer) return reject('peer-mismatch');
       if (at < key.notBefore) return reject('key-not-yet-valid');
       if (at >= key.notAfter) return reject('expired-key');
       if (request.issuedAt < at - windowMs) return reject('timestamp-too-old');
@@ -190,6 +193,9 @@ export function createSignedRequestVerifier({ registry, audience, now = Date.now
   return Object.freeze({
     ownerId: registry.ownerId,
     verify: verifyFor(channelBinding === undefined ? null : connectionBytes(channelBinding)),
-    forChannel: (binding) => Object.freeze({ verify: verifyFor(connectionBytes(binding)) }),
+    forChannel: (binding, { peer = null } = {}) => {
+      if (peer !== null && !/^[0-9a-f]{64}$/u.test(peer)) throw new TypeError('invalid carrier peer');
+      return Object.freeze({ verify: verifyFor(connectionBytes(binding), peer) });
+    },
   });
 }

@@ -45,7 +45,7 @@ export function createDevicePrincipalAdapter(options) {
   return Object.freeze({
     ownerId: verifier.ownerId,
     verify: bind(verifier),
-    forChannel: (binding) => Object.freeze({ verify: bind(verifier.forChannel(binding)) }),
+    forChannel: (binding, options) => Object.freeze({ verify: bind(verifier.forChannel(binding, options)) }),
     isVerified,
     hasGrant: (principal, grant) => requests.get(principal)?.grants.includes(grant) === true,
     consumeRequest(principal, command, input) {

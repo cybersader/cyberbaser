@@ -74,7 +74,11 @@ function validPublicPoint(bytes) {
   return residue === 1n;
 }
 
-export function createDeviceKeyRegistry(input) {
+export function isIrohNodeId(value) {
+  return typeof value === 'string' && /^[0-9a-f]{64}$/u.test(value);
+}
+
+function parseRegistry(input) {
   const config = plainData(input, ['ownerId', 'entries']);
   const entries = config && denseDataArray(config.entries, MAX_KEYS);
   if (!entries || !boundedText(config.ownerId, 128)) rejectEnrollment();
@@ -82,11 +86,14 @@ export function createDeviceKeyRegistry(input) {
   const keys = new Map();
   const publicKeys = new Set();
   for (const value of entries) {
-    const entry = plainData(value, ['keyId', 'publicKey', 'actor', 'grants', 'notBefore', 'notAfter', 'revoked']);
+    // irohNodeId is optional: a key enrolled by pairing names the one Iroh
+    // endpoint allowed to present it; a key without one cannot use Iroh.
+    const entry = plainData(value, ['keyId', 'publicKey', 'actor', 'grants', 'notBefore', 'notAfter', 'revoked'], ['irohNodeId']);
     if (!entry || !isKeyId(entry.keyId) || keys.has(entry.keyId)
       || !Number.isSafeInteger(entry.notBefore) || entry.notBefore < 0
       || !Number.isSafeInteger(entry.notAfter) || entry.notAfter <= entry.notBefore
-      || typeof entry.revoked !== 'boolean') rejectEnrollment();
+      || typeof entry.revoked !== 'boolean'
+      || (Object.hasOwn(entry, 'irohNodeId') && !isIrohNodeId(entry.irohNodeId))) rejectEnrollment();
     const bytes = decodeBase64(entry.publicKey, 32);
     if (!bytes || publicKeys.has(entry.publicKey) || !validPublicPoint(bytes)) rejectEnrollment();
 
@@ -105,13 +112,55 @@ export function createDeviceKeyRegistry(input) {
     }
     publicKeys.add(entry.publicKey);
     keys.set(entry.keyId, Object.freeze({
-      keyId: entry.keyId, publicKey, actor: Object.freeze({ ...actor }), grants: Object.freeze(grants),
+      keyId: entry.keyId, publicKey, publicKeyText: entry.publicKey, actor: Object.freeze({ ...actor }), grants: Object.freeze(grants),
       notBefore: entry.notBefore, notAfter: entry.notAfter, revoked: entry.revoked,
+      irohNodeId: Object.hasOwn(entry, 'irohNodeId') ? entry.irohNodeId : null,
     }));
   }
-  const registry = Object.freeze({ ownerId: config.ownerId, find: (keyId) => keys.get(keyId) ?? null });
+  return { ownerId: config.ownerId, keys };
+}
+
+export function createDeviceKeyRegistry(input) {
+  const { ownerId, keys } = parseRegistry(input);
+  const registry = Object.freeze({ ownerId, find: (keyId) => keys.get(keyId) ?? null });
   registries.add(registry);
   return registry;
+}
+
+// A registry the running node can change. `replace` validates the whole next
+// set before swapping it in, so a lookup sees either the old or the new set.
+// A key or public key once seen revoked stays revoked for this process even if
+// a later set omits or un-revokes it; the durable store enforces the same.
+export function createLiveDeviceKeyRegistry(input) {
+  let current = parseRegistry(input);
+  const ownerId = current.ownerId;
+  const revokedIds = new Set();
+  const revokedPublicKeys = new Set();
+  const remember = (keys) => {
+    for (const key of keys.values()) {
+      if (key.revoked) { revokedIds.add(key.keyId); revokedPublicKeys.add(key.publicKeyText); }
+    }
+  };
+  remember(current.keys);
+  const registry = Object.freeze({
+    ownerId,
+    find(keyId) {
+      const key = current.keys.get(keyId) ?? null;
+      if (!key || key.revoked || (!revokedIds.has(key.keyId) && !revokedPublicKeys.has(key.publicKeyText))) return key;
+      return Object.freeze({ ...key, revoked: true });
+    },
+    entries: () => [...current.keys.values()],
+  });
+  registries.add(registry);
+  return Object.freeze({
+    registry,
+    replace(next) {
+      const parsed = parseRegistry(next);
+      if (parsed.ownerId !== ownerId) rejectEnrollment();
+      remember(parsed.keys);
+      current = parsed;
+    },
+  });
 }
 
 export function isDeviceKeyRegistry(registry) {

@@ -31,17 +31,26 @@ export async function readEnrollment(file) {
   return { input, registry: createDeviceKeyRegistry(input) };
 }
 
-export async function loadDeviceKeyRegistry(config) {
-  const file = config.deviceRegistryFile;
-  if (file === undefined) return null;
-  try {
-    const checkout = await realpath(config.repository.checkout);
-    for (const root of [config.repository.checkout, checkout]) {
-      if (file === root || file.startsWith(`${root}${path.sep}`)) throw new Error('registry is in the vault');
+export async function assertOutsideVault(config, file) {
+  const checkout = await realpath(config.repository.checkout);
+  const real = await realpath(file).catch(() => file);
+  for (const root of [config.repository.checkout, checkout]) {
+    for (const candidate of [file, real]) {
+      if (candidate === root || candidate.startsWith(`${root}${path.sep}`) || root.startsWith(`${candidate}${path.sep}`)) {
+        throw new Error('private state is in the vault');
+      }
     }
-    const { registry } = await readEnrollment(file);
+  }
+}
+
+export async function loadDeviceKeyRegistry(config, { withInput = false } = {}) {
+  const file = config.deviceRegistryFile;
+  if (file === undefined) return withInput ? { registry: null, input: null } : null;
+  try {
+    await assertOutsideVault(config, file);
+    const { registry, input } = await readEnrollment(file);
     if (registry.ownerId !== config.owner.identity) throw new Error('registry owner mismatch');
-    return registry;
+    return withInput ? { registry, input } : registry;
   } catch {
     fail('device-registry-invalid', 'Device registry must be valid, owner-owned, private JSON in a regular file outside the vault, and name the configured owner.');
   }

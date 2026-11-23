@@ -25,7 +25,10 @@ import { SITE_FRAME_CSP, SITE_REVIEW_REASONS, siteReviewFrame } from './site-rev
 
 import { createOwnerCommands, OwnerCommandPrecondition } from './core/commands.js';
 import { createBootstrapPrincipalAdapter, createDevicePrincipalAdapter } from './core/principal.js';
-import { loadDeviceKeyRegistry } from './core/device-key-files.js';
+import { assertOutsideVault, loadDeviceKeyRegistry } from './core/device-key-files.js';
+import { openDeviceStore } from './core/device-store.js';
+import { createPairingManager } from './core/pairing.js';
+import { bindEndpoint, CMD_ALPN, irohAudience, loadNodeSecret, PAIR_ALPN, startIrohCarrier } from './iroh-carrier.js';
 import { createMemoryEditSessionStore } from './core/edit-sessions.js';
 import { signedSocketAudience, startSignedRequestSocket } from './signed-request-socket.js';
 
@@ -1635,6 +1638,68 @@ export async function readReviewAppearance(config) {
   }
 }
 
+const KIND_LABELS = Object.freeze({ agent: 'Agent', 'owner-device': 'Phone or computer' });
+const ACCESS_LABELS = Object.freeze({ propose: 'Suggest changes', review: 'Review and suggest', full: 'Everything you can do' });
+
+function grantSummary(kind, grants) {
+  const set = new Set(grants);
+  if (set.size === 1 && set.has('propose')) return 'Suggests changes for you to review';
+  if (['read', 'review', 'propose'].every((grant) => set.has(grant)) && set.size === 3) return 'Reviews and suggests changes';
+  if (set.size === 7) return 'Everything you can do';
+  return grants.join(', ');
+}
+
+function deviceRow(device) {
+  const kind = KIND_LABELS[device.kind] ?? device.kind;
+  return `<li class="device-row${device.revoked ? ' is-revoked' : ''}" data-key-id="${escapeHtml(device.keyId)}">
+<div class="device-name"><strong>${escapeHtml(device.label)}</strong><span>${escapeHtml(kind)} · ${escapeHtml(grantSummary(device.kind, device.grants))}</span></div>
+${device.revoked ? '<span class="device-state">Revoked</span>' : `<button type="button" class="quiet-danger" data-revoke="${escapeHtml(device.keyId)}">Revoke</button>`}
+</li>`;
+}
+
+function segmented(name, legend, options, checked) {
+  return `<fieldset class="segmented" data-field="${name}"><legend>${escapeHtml(legend)}</legend><div class="segmented-track">${options.map(([value, label]) => `<label class="segment"><input type="radio" name="${name}" value="${escapeHtml(value)}"${value === checked ? ' checked' : ''}><span>${escapeHtml(label)}</span></label>`).join('')}</div></fieldset>`;
+}
+
+function devicesPage({ csrfToken, devices, reachable }) {
+  const active = devices.filter((device) => !device.revoked);
+  const revoked = devices.filter((device) => device.revoked);
+  const list = active.length === 0
+    ? '<p class="devices-empty">Nothing paired yet. Pair an agent or phone below.</p>'
+    : `<ul class="device-list" id="device-list">${active.map(deviceRow).join('')}</ul>`;
+  return pageShell({
+    title: 'Devices and agents',
+    script: '/owner/assets/devices.js',
+    bodyClass: 'devices-page',
+    body: `<main class="owner-shell devices-shell" id="devices" data-csrf="${escapeHtml(csrfToken)}">
+<header class="owner-header"><h1>Devices and agents</h1><p class="lede">Each one can do only what you picked when you paired it. Revoke takes effect at once.</p></header>
+<section class="devices-section" aria-labelledby="paired-heading"><h2 id="paired-heading">Paired</h2><div id="device-list-slot">${list}</div>
+${revoked.length ? `<details class="revoked-list"><summary>Revoked (${revoked.length})</summary><ul class="device-list">${revoked.map(deviceRow).join('')}</ul></details>` : ''}</section>
+<section class="devices-section" aria-labelledby="pair-heading"><h2 id="pair-heading">Pair a new one</h2>
+${reachable ? `<form id="pair-form" class="pair-form">
+${segmented('kind', 'What is it?', [['agent', 'Agent'], ['owner-device', 'Phone or computer']], 'agent')}
+${segmented('access', 'What may it do?', Object.entries(ACCESS_LABELS), 'propose')}
+<p class="access-note" id="access-note">Agents can only suggest changes. You review each one.</p>
+<label class="field" for="pair-label">Name<input id="pair-label" name="label" maxlength="64" autocomplete="off" value="My agent" required></label>
+<div class="pair-actions"><button type="submit">Get pairing code</button></div>
+<p class="status" id="pair-status" role="status" aria-live="polite"></p>
+</form>
+<div id="pair-live" class="pair-live" hidden aria-live="polite"></div>` : '<p class="devices-empty">Pairing needs Iroh reach turned on for this node.</p>'}
+<noscript><p>Pairing and Revoke need scripting enabled in this browser.</p></noscript>
+</section>
+</main>`,
+  });
+}
+
+function parseDevicesBody(fields) {
+  return (text) => {
+    const value = JSON.parse(text);
+    if (!value || typeof value !== 'object' || Array.isArray(value)
+      || Object.keys(value).sort().join(',') !== [...fields, 'csrf'].sort().join(',') || !exactToken(value.csrf)) throw new Error('fields');
+    return value;
+  };
+}
+
 export function createOwnerAlphaHandler({
   config: configInput,
   projectRoot = PROJECT_ROOT,
@@ -1654,6 +1719,8 @@ export function createOwnerAlphaHandler({
   // The owner-private site build whose pages a proposal is shown on. Null
   // shows every proposal on the simplified rendering.
   reviewSiteRoot = null,
+  // { store, pairing } when Iroh reach is on: the Devices and agents page.
+  devices = null,
 } = {}) {
   const config = validateOwnerAlphaConfig(configInput);
   const appearance = validReviewAppearance(reviewAppearance, config);
@@ -1859,6 +1926,7 @@ export function createOwnerAlphaHandler({
       '/owner/assets/review.js': 'review.js',
       '/owner/assets/apply.js': 'apply.js',
       '/owner/assets/publication.js': 'publication.js',
+      '/owner/assets/devices.js': 'devices.js',
       '/owner/assets/owner.css': 'owner.css',
       '/owner/assets/review.css': 'review.css',
     }[url.pathname];
@@ -1866,6 +1934,38 @@ export function createOwnerAlphaHandler({
       if (request.method !== 'GET' && request.method !== 'HEAD') return response(null, 405, { Allow: 'GET, HEAD' });
       if (url.search !== '') return errorResponse(400, 'unexpected-query');
       return staticResponse(publicRoot, asset, request, { directoryIndex: false });
+    }
+
+    if (url.pathname === '/owner/devices' || url.pathname.startsWith('/owner/devices/')) {
+      if (devices === null) return errorResponse(404, 'devices-unavailable');
+      const { store, pairing } = devices;
+      if (url.search !== '') return errorResponse(400, 'unexpected-query');
+      if (url.pathname === '/owner/devices') {
+        if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
+        return html(request.method === 'HEAD' ? null : devicesPage({ csrfToken, devices: store.list(), reachable: pairing.available() }));
+      }
+      if (url.pathname === '/owner/devices/state') {
+        if (request.method !== 'GET') return response(null, 405, { Allow: 'GET' });
+        return json({ devices: store.list(), pairings: pairing.list() });
+      }
+      const action = { '/owner/devices/pair': ['kind', 'access', 'label'], '/owner/devices/confirm': ['enrollmentId', 'words'],
+        '/owner/devices/cancel': ['enrollmentId'], '/owner/devices/revoke': ['keyId'] }[url.pathname];
+      if (!action) return errorResponse(404, 'not-found');
+      if (request.method !== 'POST') return response(null, 405, { Allow: 'POST' });
+      let body;
+      try { body = await readBoundedJson(request, 2048, parseDevicesBody(action)); }
+      catch (error) { return errorResponse(error?.status ?? 400, 'invalid-devices-body'); }
+      if (!sameSecret(body.csrf, csrfToken)) return errorResponse(403, 'invalid-csrf');
+      try {
+        if (url.pathname === '/owner/devices/pair') {
+          const started = pairing.start({ kind: body.kind, access: body.access, label: typeof body.label === 'string' ? body.label.trim() : null });
+          return json({ ok: true, ...started });
+        }
+        if (url.pathname === '/owner/devices/confirm') return json({ ok: true, ...(await pairing.confirm({ enrollmentId: body.enrollmentId, words: body.words })) });
+        if (url.pathname === '/owner/devices/cancel') { pairing.cancel(body.enrollmentId); return json({ ok: true }); }
+        await store.revoke(body.keyId);
+        return json({ ok: true });
+      } catch { return errorResponse(409, 'devices-refused'); }
     }
 
     if (url.pathname === '/owner/publication' || url.pathname.startsWith('/owner/publication/')
@@ -2454,7 +2554,22 @@ export async function runOwnerAlphaServer({
     throw new TypeError('site, pipeline, handlers, servers, review, recovery, and suggestion dependencies are required');
   }
   const config = await loadOwnerAlphaConfig(configFile);
-  const registry = await loadDeviceKeyRegistry(config);
+  const loaded = await loadDeviceKeyRegistry(config, { withInput: true });
+  let registry = loaded.registry;
+  let devices = null;
+  if (config.iroh?.enabled) {
+    // Paired devices live in an owner-only directory outside the vault and
+    // change at runtime; both carriers verify against the same live registry.
+    try {
+      await assertOutsideVault(config, config.iroh.stateDirectory);
+      const store = await openDeviceStore({ directory: path.join(config.iroh.stateDirectory, 'devices'),
+        ownerId: config.owner.identity, staticInput: loaded.input, parentDirectory: config.iroh.stateDirectory });
+      registry = store.registry;
+      devices = { store, pairing: createPairingManager({ ownerId: config.owner.identity, store }) };
+    } catch {
+      fail('iroh-state-invalid', 'Iroh state must be an owner-only directory outside the vault holding valid device records.');
+    }
+  }
   const storeContext = storeContextFromConfig(config, projectRoot);
   await prepareStore(storeContext);
   // The site build retains the publication binding the form needs, so the
@@ -2506,10 +2621,12 @@ export async function runOwnerAlphaServer({
     reviewSiteRoot: path.resolve(projectRoot, config.workspace.site),
     ownerPublication: config.ownerPublication.enabled
       ? createOwnerPublicationRuntime({ config, context: storeContext, readNote: readAuthoringNote, pipeline }) : null,
+    devices,
   });
   const readerFetch = createReader({ config, projectRoot });
   let runtime;
   let signed;
+  let iroh;
   try {
     runtime = startServers({ config, ownerFetch, readerFetch, serve });
     if (config.signedRequestSocket !== undefined) {
@@ -2518,7 +2635,21 @@ export async function runOwnerAlphaServer({
       const commands = createOwnerCommands({ config, projectRoot, devicePrincipalAdapter: verifier, proposalReview });
       signed = await startSignedRequestSocket({ socketPath, commands, verifier });
     }
+    if (devices !== null) {
+      const secretKey = await loadNodeSecret(config.iroh.stateDirectory);
+      const endpoint = await bindEndpoint({ secretKey, relay: config.iroh.relay, bindAddress: config.iroh.bindAddress ?? null,
+        alpns: [CMD_ALPN, PAIR_ALPN] });
+      secretKey.fill(0);
+      const nodeId = endpoint.id().toString();
+      const verifier = createDevicePrincipalAdapter({ registry, audience: irohAudience(nodeId), requireChannelBinding: true });
+      const commands = createOwnerCommands({ config, projectRoot, devicePrincipalAdapter: verifier, proposalReview });
+      iroh = startIrohCarrier({ endpoint, commands, verifier, pairing: devices.pairing, relay: config.iroh.relay });
+      devices.store.setRevokeListener((key) => { if (key.irohNodeId) iroh.closePeer(key.irohNodeId); });
+      devices.pairing.attachNode({ nodeId, ticket: iroh.ticket });
+    }
   } catch (error) {
+    await iroh?.close().catch(() => {});
+    await signed?.close().catch(() => {});
     runtime?.stop(true);
     await suggestions?.close().catch(() => {});
     throw error;
@@ -2538,11 +2669,13 @@ export async function runOwnerAlphaServer({
       ? null
       : Object.freeze({ formOrigin: suggestions.formOrigin, forge: suggestions.forge }),
     recovery,
+    iroh: iroh === undefined ? null : Object.freeze({ nodeId: iroh.nodeId, ticket: iroh.ticket }),
     stop(closeActiveConnections) {
       runtime.stop?.(closeActiveConnections);
-      return signed === undefined
+      const carriers = [signed, iroh].filter(Boolean);
+      return carriers.length === 0
         ? suggestions?.close() ?? Promise.resolve(null)
-        : signed.close().finally(() => suggestions?.close());
+        : Promise.allSettled(carriers.map((carrier) => carrier.close())).then(() => suggestions?.close() ?? null);
     },
   });
 }

@@ -752,6 +752,33 @@ export function suggestionsEnabled(config) {
   return config.suggestions.form.enabled || config.suggestions.forge.enabled;
 }
 
+// Off unless present with enabled: true. The relay is configuration: 'n0'
+// (n0's public relay, the explicit default when enabled), 'none' (direct
+// paths only), or one https relay URL the owner runs. Nothing falls back.
+function validateIroh(value) {
+  const keys = isPlainObject(value) ? Object.keys(value) : [];
+  const input = objectAt(value, '$.iroh', ['enabled', 'stateDirectory',
+    ...['relay', 'bindAddress'].filter((key) => keys.includes(key))]);
+  if (typeof input.enabled !== 'boolean') fail('invalid-config', '$.iroh.enabled must be a boolean');
+  const stateDirectory = absoluteCheckout(input.stateDirectory, '$.iroh.stateDirectory');
+  const relay = Object.hasOwn(input, 'relay') ? input.relay : 'n0';
+  if (relay !== 'n0' && relay !== 'none') {
+    let url;
+    try { url = new URL(relay); } catch { url = null; }
+    if (typeof relay !== 'string' || relay.length > 512 || url?.protocol !== 'https:' || url.username || url.password
+      || url.search || url.hash) fail('invalid-config', "$.iroh.relay must be 'n0', 'none', or one https relay URL");
+  }
+  let bindAddress = null;
+  if (Object.hasOwn(input, 'bindAddress')) {
+    const match = typeof input.bindAddress === 'string' && /^(\d{1,3}(?:\.\d{1,3}){3}):(\d{1,5})$/u.exec(input.bindAddress);
+    if (!match || match[1].split('.').some((part) => Number(part) > 255) || Number(match[2]) > 65535) {
+      fail('invalid-config', '$.iroh.bindAddress must be one IPv4 address and port');
+    }
+    bindAddress = input.bindAddress;
+  }
+  return { enabled: input.enabled, stateDirectory, relay, ...(bindAddress === null ? {} : { bindAddress }) };
+}
+
 function validatePublisher(value) {
   const { socketPath } = objectAt(value, '$.publisher', ['socketPath']);
   if (!validSocketPath(socketPath)) {
@@ -780,6 +807,7 @@ export function validateOwnerAlphaConfig(value) {
     ...(isPlainObject(value) && Object.hasOwn(value, 'publisher') ? ['publisher'] : []),
     ...(isPlainObject(value) && Object.hasOwn(value, 'deviceRegistryFile') ? ['deviceRegistryFile'] : []),
     ...(isPlainObject(value) && Object.hasOwn(value, 'signedRequestSocket') ? ['signedRequestSocket'] : []),
+    ...(isPlainObject(value) && Object.hasOwn(value, 'iroh') ? ['iroh'] : []),
   ]);
   if (input.schemaVersion !== CONFIG_SCHEMA_VERSION) {
     fail('unsupported-config-version', `schemaVersion must be ${CONFIG_SCHEMA_VERSION}`);
@@ -807,6 +835,10 @@ export function validateOwnerAlphaConfig(value) {
       fail('signed-socket-path-conflict', '$.signedRequestSocket must not share another socket path');
     }
   }
+  const iroh = Object.hasOwn(input, 'iroh') ? validateIroh(input.iroh) : null;
+  if (iroh?.enabled && !proposalReview.enabled) {
+    fail('iroh-requires-review', '$.iroh requires proposal review, where paired agents send proposals');
+  }
   const normalized = {
     schemaVersion: CONFIG_SCHEMA_VERSION,
     listen,
@@ -830,6 +862,8 @@ export function validateOwnerAlphaConfig(value) {
     ...(Object.hasOwn(input, 'publisher') ? { publisher: validatePublisher(input.publisher) } : {}),
     ...(deviceRegistryFile === undefined ? {} : { deviceRegistryFile }),
     ...(Object.hasOwn(input, 'signedRequestSocket') ? { signedRequestSocket: input.signedRequestSocket } : {}),
+    // Local reach routing, not publication policy: it never enters the policy revision.
+    ...(iroh === null ? {} : { iroh }),
   };
   return deepFreeze(normalized);
 }

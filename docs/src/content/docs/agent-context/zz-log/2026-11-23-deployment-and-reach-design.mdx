@@ -21,3 +21,15 @@ No code changed. Nothing was installed against the real vault. Obsidian mobile W
 ## Owner decisions the same day
 
 GitHub App sign-in (with a searchable, better-looking repository picker than the mockup), an admin-once background service with the publisher under its own account, words plus Confirm for every pairing, and Linux plus home-server container first. Next build: Iroh inside the node and code-based pairing for an agent on this machine, on a synthetic vault.
+
+## Build step 1 built (later the same day)
+
+Iroh reach and agent pairing now run inside the owner node, tested on synthetic vaults only.
+
+- **Turned on by config, off by default.** A new `iroh` section (`enabled`, an owner-only `stateDirectory` outside the vault, `relay`: `n0`, `none` or one https URL). `n0` is the explicit default when enabled and is never a fallback. The node's Iroh key lives in that directory and stays out of the policy revision, logs and responses. `@number0/iroh` is pinned at exactly 1.2.0.
+- **Same requests, bound to the connection.** The node accepts the same signed proposal envelopes as the local socket, one per stream, with the same size cap, deadline and single refusal. Each request needs a fresh challenge the node issued on that connection, and the signature covers the node ID, the authenticated client endpoint ID and that challenge. A paired key names its Iroh endpoint; any other endpoint is refused.
+- **Paired devices change at runtime.** Enrolments and revocations are create-once private files; revocation takes effect at once and survives restarts. Agents can only hold `propose`.
+- **Pairing.** The new Devices and agents page (owner session plus CSRF) issues a five-minute, one-use code. `bun apps/owner-alpha/bin/cyberbaser-pair.js <code>` makes the agent's keys, connects over Iroh and prints four words; the page shows the same words and Confirm. `agent-propose.js` can now send with `iroh` instead of a socket path.
+- **Tests.** Unit tests cover replay on another connection, another endpoint, missing or reused challenges, durable enrol and revoke, expiry, reuse, wrong secret, wrong words, no Confirm and grant tampering. A loopback test pairs the real CLI, confirms, submits into the queue, revokes and is refused. The opt-in relay test (`CYBERBASER_IROH_RELAY_TEST=1`) passed once through n0's public relay: about 1.4 s from code to words, 0.6 s per submission.
+
+**Still missing:** a QR image (the code is plain text, to avoid a new dependency), the phone client, a shared proposal budget across carriers (today a key gets one budget per carrier), and any real-vault install.
