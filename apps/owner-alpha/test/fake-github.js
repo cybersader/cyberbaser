@@ -30,6 +30,9 @@ const state = {
   pollLog: [],
   refreshes: 0,
   apiCalls: 0,
+  // Every request path that is not Git transport or a control (no query, so no
+  // token): proves what the node and publisher asked GitHub for.
+  routes: new Set(),
 };
 
 function repo(fullName, { isPrivate = true, pushed = '2026-11-20T10:00:00Z', push = true } = {}) {
@@ -51,8 +54,10 @@ function installations() {
     'over-broad': [
       { id: 11, account: { login: 'cybersader' }, repository_selection: 'selected', permissions: { contents: 'write', metadata: 'read', administration: 'write' }, repos: [repo('cybersader/cyberbase')] },
     ],
+    // The app installed on exactly one repository (scenario.repository, by default cybersader/cyberbase).
     exact: [
-      { id: 11, account: { login: 'cybersader' }, repository_selection: 'selected', permissions: RIGHT, repos: [repo('cybersader/cyberbase')] },
+      { id: 11, account: { login: 'cybersader' }, repository_selection: 'selected', permissions: RIGHT,
+        repos: [repo(state.scenario.repository ?? 'cybersader/cyberbase')] },
     ],
   };
   return sets[state.scenario.installations] ?? sets.mixed;
@@ -160,6 +165,7 @@ const server = Bun.serve({
   async fetch(request) {
     const url = new URL(request.url);
     const route = url.pathname;
+    if (!route.startsWith('/git/') && !route.startsWith('/_control/')) state.routes.add(`${request.method} ${route.replace(/\/[0-9a-f]{40}\b/gu, '/<sha>')}`);
 
     if (route === '/login/device') {
       return new Response('<!doctype html><title>Device activation</title><h1>Device activation</h1><p>Fake GitHub: enter the code.</p>', { headers: { 'Content-Type': 'text/html' } });
@@ -248,7 +254,7 @@ const server = Bun.serve({
     }
     if (route === '/_control/report') {
       return json({ generation: state.generation, refreshes: state.refreshes, pushes: state.pushes, fetches: state.fetches,
-        denied: state.denied, polls: state.pollLog, apiCalls: state.apiCalls });
+        denied: state.denied, polls: state.pollLog, apiCalls: state.apiCalls, routes: [...state.routes].sort() });
     }
     return json({ message: 'Not Found' }, 404);
   },

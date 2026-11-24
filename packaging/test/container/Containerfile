@@ -2,7 +2,7 @@
 # Never pushed anywhere.
 FROM registry.fedoraproject.org/fedora:44
 RUN dnf -y install --setopt=install_weak_deps=False \
-      systemd dbus-broker git-core rsync util-linux shadow-utils zstd tar curl procps-ng iproute findutils \
+      systemd dbus-broker git-core rsync util-linux shadow-utils zstd tar curl procps-ng iproute findutils patch \
     && dnf clean all \
     && systemctl mask systemd-logind.service getty.target console-getty.service systemd-firstboot.service \
     && systemctl set-default multi-user.target

@@ -2,6 +2,7 @@
 // requests the setup, devices and review pages make. Run with the program's runtime:
 //   BUN_BE_BUN=1 /test/cyberbaser owner-browser.mjs <command> [arguments...] <cookie-file>
 //   setup-to-phone <setup-link>     GitHub, the repository, notes, the starter publish.yml, website skipped
+//   setup-private <setup-link> <owner/name>   GitHub, that repository (publish.yml kept), Keep it private
 //   step <action>                   one setup action on the step on screen
 //   phone-page                      what the phone step shows
 //   pair-start <page> <kind> <access> <label>   start pairing from /setup or /owner/devices
@@ -95,6 +96,45 @@ async function setupToPhone(link) {
   done({ ok: true, count: notes.count, multiSelect, starterWaiting });
 }
 
+// Setup for a private-only site (install --site private) on a repository that
+// already has its publish.yml: GitHub, the repository, the notes copy, then
+// "Keep it private" on the website step.
+async function setupPrivate(link, repository) {
+  const opened = await call(link.slice(ORIGIN.length));
+  if (opened.status !== 303) failed('open-link', opened.status);
+  const { step, csrf } = await stepper();
+  if ((await step('start')).value?.step !== 'github') failed('start', 'not on github');
+  const started = await call('/owner/github/start', { csrf });
+  if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}$/u.test(started.value?.userCode ?? '')) failed('sign-in', started.text);
+  let state;
+  for (let i = 0; i < 90; i++) {
+    state = (await call('/owner/github/state')).value;
+    if (state?.state !== 'waiting-for-code') break;
+    await sleep(1000);
+  }
+  if (state?.state !== 'pick-repository') failed('sign-in', JSON.stringify(state));
+  const listing = (await call('/owner/github/repositories')).value;
+  const row = listing?.repositories?.find((entry) => entry.fullName === repository);
+  if (!row || row.problem !== null || row.private !== true) failed('picker', JSON.stringify(listing));
+  const picked = await call('/owner/github/select', { csrf, repository });
+  if (picked.value?.ok !== true) failed('pick', picked.text);
+  if ((await step('continue')).value?.step !== 'notes') failed('continue-notes', 'refused');
+  let notes;
+  for (let i = 0; i < 300; i++) {
+    notes = (await call('/setup/state')).value?.notes;
+    if (['ready', 'failed'].includes(notes?.phase)) break;
+    await sleep(1000);
+  }
+  if (notes?.phase !== 'ready') failed('notes', JSON.stringify(notes));
+  const notesPage = (await call('/setup')).text;
+  const publishYmlKept = notesPage.includes('decides what goes on your website');
+  if ((await step('continue')).value?.step !== 'website') failed('continue-website', 'refused');
+  const website = (await call('/setup')).text;
+  const privateOffered = website.includes('Keep it private') && website.includes('http://127.0.0.1:4318/');
+  if ((await step('private')).value?.step !== 'phone') failed('website', 'refused');
+  done({ ok: true, count: notes.count, publishYmlKept, privateOffered });
+}
+
 async function setupStep(action) {
   const { step } = await stepper();
   const result = await step(action);
@@ -183,6 +223,7 @@ async function post(route) {
 
 try {
   if (command === 'setup-to-phone') await setupToPhone(rest[0]);
+  else if (command === 'setup-private') await setupPrivate(rest[0], rest[1]);
   else if (command === 'step') await setupStep(rest[0]);
   else if (command === 'phone-page') await setupPhonePage();
   else if (command === 'pair-start') await pairStart(...rest);

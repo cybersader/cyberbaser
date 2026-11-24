@@ -14,6 +14,7 @@ import { createController } from '/src/apps/obsidian-cyberbaser/src/core/control
 import { createDeviceStore, memoryBackend } from '/src/apps/obsidian-cyberbaser/src/core/device-store.js';
 import { approvalFor, createSigningStore, intentDigest } from '/src/apps/obsidian-cyberbaser/src/core/signing.js';
 import { createTapGate } from '/src/apps/obsidian-cyberbaser/src/core/tap.js';
+import { notePublicStatus } from '/src/apps/obsidian-cyberbaser/src/core/new-page.js';
 
 const port = Number(process.argv[2]);
 const taps = new WeakSet();
@@ -94,6 +95,38 @@ const commands = {
     const template = { ...intent, keyId: key.keyId };
     return { ok: true, record: { intent: template, approval: await approvalFor(key.privateKey, await intentDigest(template)) } };
   },
+  // The New post form's Publish, as the plugin sends it: the note text (and
+  // one cover image, already cleaned) as a page bundle. publishYml and siteYml
+  // are the vault's own files, which the plugin reads from the vault.
+  async newPost({ path, text, publishYml, siteYml, image = null }) {
+    const images = [];
+    if (image !== null) {
+      const bytes = new Uint8Array(await Bun.file(image.file).arrayBuffer());
+      images.push({ path: image.path, bytes, size: bytes.length, refused: null });
+    }
+    const status = notePublicStatus({ path, text, publishYml, siteYml });
+    const outcome = await controller.publishNewPage({ path }, text, { status, images, remote: [] });
+    return { ok: true, status, ...outcome };
+  },
+  // Approve the waiting request that includes this path (a bundle: note and images).
+  // publishYml / siteYml: the phone vault's own files, which the plugin reads
+  // to work out new public pages itself (without them it refuses).
+  async approveIncluding({ path, publishYml = null, siteYml = null }) {
+    let found = null;
+    for (let i = 0; i < 600 && found === null; i++) {
+      for (const entry of await controller.waitingApprovals()) {
+        const prepared = await controller.readApproval(entry.requestId, { publishYml, siteYml });
+        if (prepared.summary.files.some((file) => file.path === path)) { found = prepared; break; }
+      }
+      if (found === null) await Bun.sleep(1000);
+    }
+    if (found === null) return { ok: false, code: 'nothing-waiting' };
+    await controller.approve(found, tap());
+    return { ok: true, files: found.summary.files.map((file) => ({ path: file.path, kind: file.kind })),
+      pages: (found.pages ?? found.summary.pages ?? []).map((page) => ({ title: page.title, address: page.address })),
+      commit: found.template.commit?.id ?? null };
+  },
+  async progress({ bundleId }) { return { ok: true, ...(await controller.bundleProgress(bundleId)) }; },
   async lastApproved() { return approved.length === 0 ? { ok: false } : { ok: true, record: approved.at(-1) }; },
 };
 
