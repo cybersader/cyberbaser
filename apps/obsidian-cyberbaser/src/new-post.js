@@ -371,6 +371,21 @@ export class NewPostModal extends Modal {
           const bytes = source.file ? await source.file.arrayBuffer() : await vault.adapter.readBinary(source.vaultPath);
           await vault.createBinary(path, bytes);
         },
+        // Where Obsidian itself puts a new attachment for this note (Settings,
+        // Files and links, "Default location for new attachments"); the
+        // returned path is from the vault root and never taken. Obsidian
+        // before 1.5.7 lacks it: the photo then goes beside the note.
+        attachmentPath: typeof this.app.fileManager?.getAvailablePathForAttachment === 'function'
+          ? (filename, notePath) => this.app.fileManager.getAvailablePathForAttachment(filename, notePath) : undefined,
+        replaceText: async (path, text) => {
+          const file = vault.getAbstractFileByPath(path);
+          if (!(file instanceof TFile)) throw new Error(`${path} is missing`);
+          await vault.modify(file, text);
+        },
+        remove: async (path) => {
+          const file = vault.getAbstractFileByPath(path);
+          if (file instanceof TFile) await vault.delete(file);
+        },
       });
     } catch (error) {
       button.disabled = false;

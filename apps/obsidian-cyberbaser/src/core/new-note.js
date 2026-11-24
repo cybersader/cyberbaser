@@ -284,10 +284,14 @@ function propertyEntries(type, values, context, errors, prefix = '') {
         const name = String(value.name ?? '');
         const extension = name.includes('.') ? name.split('.').at(-1).toLowerCase() : '';
         if (!IMAGE_EXTENSIONS.includes(extension)) { errors[key] = 'Pick a PNG, JPEG, WebP or GIF image.'; break; }
-        // Beside the note: "<name> cover.jpg" (readable names) or "<slug>-cover.jpg".
-        const target = join(context.folder, `${context.slug}${context.model.names ? ' ' : '-'}${field.name}.${extension === 'jpeg' ? 'jpg' : extension}`);
-        if (context.exists(target)) { errors[key] = `There is already a file named ${target.split('/').at(-1)} there.`; break; }
-        context.images.push({ path: target, source: value.source });
+        // Named after the note: "<name> cover.jpg" (readable names) or "<slug>-cover.jpg".
+        // Where it goes is the vault's own attachment setting, worked out when
+        // the note is created (applyPlan, io.attachmentPath). Until then, and
+        // for callers without that, it sits beside the note with Obsidian's
+        // " 1", " 2" … suffix if the name is taken.
+        const filename = `${context.slug}${context.model.names ? ' ' : '-'}${field.name}.${extension === 'jpeg' ? 'jpg' : extension}`;
+        const target = availablePath(join(context.folder, filename), context.exists);
+        context.images.push({ field: field.name, filename, path: target, source: value.source });
         entries.push([field.name, target]);
         break;
       }
@@ -382,22 +386,63 @@ export function planNewNote({ model, typeName, values = {}, paths = [], today, a
   const images = [];
   const entries = propertyEntries(type, values, { model, today, authorNote, exists, images, folder: notePath ? dirname(notePath) : '', slug }, errors);
   if (Object.keys(errors).length > 0) return { ok: false, errors, notePath, address };
-  for (const image of images) steps.push({ kind: 'image', path: image.path, source: image.source });
-  steps.push({ kind: 'note', path: notePath, text: `${frontmatterText(entries)}\n` });
+  for (const image of images) steps.push({ kind: 'image', field: image.field, filename: image.filename, path: image.path, source: image.source });
+  steps.push({ kind: 'note', path: notePath, text: `${frontmatterText(entries)}\n`, entries });
   return { ok: true, notePath, address, steps };
+}
+
+/** "a/b cover.jpg", or "a/b cover 1.jpg", "a/b cover 2.jpg" … when taken (Obsidian's rule). */
+function availablePath(path, exists) {
+  const dot = path.lastIndexOf('.');
+  const [stem, extension] = dot > path.lastIndexOf('/') ? [path.slice(0, dot), path.slice(dot)] : [path, ''];
+  let candidate = path;
+  for (let n = 1; exists(candidate); n += 1) candidate = `${stem} ${n}${extension}`;
+  return candidate;
 }
 
 /**
  * Carry out a plan in order: folder, folder note, images, then the note last,
  * so a failure never leaves a note pointing at a missing photo.
- * io: { createFolder(path), writeText(path, text), copyImage(source, path) }.
+ * io: { createFolder(path), writeText(path, text), copyImage(source, path) },
+ * and, to place photos where the vault puts new attachments,
+ * { attachmentPath(filename, notePath), replaceText(path, text), remove(path) }:
+ * attachmentPath is Obsidian's fileManager.getAvailablePathForAttachment,
+ * which reads the vault's "Default location for new attachments" from the
+ * note's own folder and needs the note to exist. So with photos the note is
+ * first created empty, the photos are placed and copied, then its text is
+ * written; if a photo fails the empty note is removed again. The property
+ * keeps the exact vault path the photo landed at.
  */
 export async function applyPlan(plan, io) {
   if (!plan?.ok) throw new Error('plan has errors');
+  const images = plan.steps.filter((step) => step.kind === 'image');
+  const placed = typeof io.attachmentPath === 'function' && images.length > 0;
+  const last = plan.steps.at(-1);
   for (const step of plan.steps) {
     if (step.kind === 'folder') await io.createFolder(step.path);
-    else if (step.kind === 'image') await io.copyImage(step.source, step.path);
-    else await io.writeText(step.path, step.text);
+    else if (step.kind === 'image') { if (!placed) await io.copyImage(step.source, step.path); }
+    else if (step !== last) await io.writeText(step.path, step.text);
+  }
+  if (!placed) {
+    await io.writeText(last.path, last.text);
+    return plan.notePath;
+  }
+  await io.writeText(last.path, '');
+  try {
+    const paths = new Map();
+    for (const image of images) {
+      const path = await io.attachmentPath(image.filename, last.path);
+      if (typeof path !== 'string' || path === '' || path.startsWith('/') || path.split('/').includes('..')) {
+        throw new Error(`no place for ${image.filename}`);
+      }
+      await io.copyImage(image.source, path);
+      paths.set(image.field, path);
+    }
+    const entries = last.entries.map(([name, value, ...rest]) => (paths.has(name) ? [name, paths.get(name), ...rest] : [name, value, ...rest]));
+    await io.replaceText(last.path, `${frontmatterText(entries)}\n`);
+  } catch (error) {
+    try { await io.remove(last.path); } catch { /* the original error matters more */ }
+    throw error;
   }
   return plan.notePath;
 }
