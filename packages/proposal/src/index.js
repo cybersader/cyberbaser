@@ -39,3 +39,17 @@ export {
   criticMarkupAdapter,
   changeSetDisplayAdapters,
 } from './change-set-display.js';
+export {
+  PAGE_BUNDLE_SCHEMA_VERSION,
+  PAGE_BUNDLE_ARTIFACT_TYPE,
+  PAGE_BUNDLE_LIMITS,
+  ASSET_MEDIA_TYPES,
+  BUNDLE_KINDS,
+  requireBundlePath,
+  validatePageBundle,
+  serializePageBundle,
+  parsePageBundle,
+  pageBundleDigest,
+  createPageBundle,
+  bundleCandidates,
+} from './page-bundle.js';

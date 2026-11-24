@@ -27,7 +27,7 @@ function fileBinding(value, label) {
   return { byteLength, digest: requireDigest(value.digest, `${label}.digest`) };
 }
 
-function normalizeOperations(values, baseLength) {
+export function normalizeOperations(values, baseLength) {
   if (!Array.isArray(values) || values.length < 1 || values.length > CHANGE_SET_MAX_OPERATIONS) {
     fail('operation-count', `change set requires 1-${CHANGE_SET_MAX_OPERATIONS} operations`);
   }
@@ -118,7 +118,7 @@ function checkBoundary(base, offset) {
   }
 }
 
-function constructCandidate(base, operations) {
+export function constructCandidate(base, operations) {
   const pieces = [];
   let cursor = 0;
   for (const operation of operations) {
