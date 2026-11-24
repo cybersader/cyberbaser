@@ -122,6 +122,9 @@ export class NewPostModal extends Modal {
     const last = patternSegments(type.location.pattern).at(-1);
     const nameLabel = NAME_PLACEHOLDERS.includes(last?.name) ? 'File name' : 'Folder name';
     for (const field of type.fields) this.renderField(form, field, this.values, '', { nameLabel });
+    // "Advanced" (a separate short name) closes the form, after every field.
+    const advanced = form.querySelector(':scope > details.cyberbaser-advanced');
+    if (advanced) form.appendChild(advanced);
     this.updateAddress();
     if (this.errors.type) form.createDiv({ cls: 'cyberbaser-field-error', text: this.errors.type });
     const actions = contentEl.createDiv({ cls: 'cyberbaser-actions' });
@@ -160,12 +163,14 @@ export class NewPostModal extends Modal {
           if (field.type === 'url') { text.inputEl.inputMode = 'url'; text.setPlaceholder(field.required ? 'Paste a link' : 'Paste a link (optional)'); }
           if (field.type === 'number') text.inputEl.inputMode = 'numeric';
           if (field.name === 'title') {
+            // The one field that names the post: full width, the address under it.
+            setting.settingEl.addClass('cyberbaser-form-wide');
             text.inputEl.addClass('cyberbaser-title-input');
             // The name row below follows the title until the author edits it.
             text.inputEl.addEventListener('input', () => this.followTitle(values, key));
           }
         });
-        if (field.name === 'title' && nameLabel) this.renderName(container, values, key, nameLabel);
+        if (field.name === 'title' && nameLabel) this.renderName(container, values, key, nameLabel, setting);
         break;
       case 'long-text':
         setting.settingEl.addClass('cyberbaser-form-wide');
@@ -200,17 +205,26 @@ export class NewPostModal extends Modal {
     showError();
   }
 
-  // The name in the vault (file or folder), made from the title by the site
-  // model's rule (readable names in version 2) and editable before Create.
-  // values.name is set only once the author edits it; until then it follows
-  // the title. The note's own name row also shows where it will be on the site.
-  renderName(container, values, titleKey, label) {
+  // The name in the vault (file or folder) follows the title by the site
+  // model's rule (readable names in version 2: the title minus characters file
+  // systems refuse). A separate, shorter name is only under "Advanced";
+  // values.name is set only once the author edits it there. The web address
+  // stays in view under the title.
+  renderName(container, values, titleKey, label, titleSetting) {
     const prefix = titleKey.slice(0, -'title'.length);
     const key = `${prefix}name`;
-    const setting = new Setting(container).setName(label);
+    if (prefix === '') titleSetting.descEl.createDiv({ cls: 'cyberbaser-address-preview' });
+    const error = this.errors[key];
+    const advanced = container.createEl('details', { cls: 'cyberbaser-advanced' });
+    advanced.dataset.for = key;
+    if (values.name !== undefined || error) advanced.open = true;
+    advanced.createEl('summary', { text: 'Advanced' });
+    const short = label === 'File name' ? 'Short file name' : 'Short folder name';
+    const setting = new Setting(advanced).setName(short);
     setting.settingEl.addClass('cyberbaser-form-row', 'cyberbaser-name-row');
     setting.settingEl.dataset.field = key;
-    setting.setDesc(label === 'File name' ? 'Made from the title. Change it if you like.' : 'Made from the folder title. Change it if you like.');
+    setting.setDesc(label === 'File name' ? 'Follows the title. Change it only if you want a shorter name.'
+      : 'Follows the folder title. Change it only if you want a shorter name.');
     setting.addText((text) => {
       text.inputEl.addClass('cyberbaser-name-input');
       text.inputEl.spellcheck = false;
@@ -219,17 +233,21 @@ export class NewPostModal extends Modal {
         if (this.errors[key]) { delete this.errors[key]; setting.settingEl.removeClass('cyberbaser-has-error'); setting.descEl.querySelector('.cyberbaser-field-error')?.remove(); }
         this.updateAddress();
       });
-      // Show the cleaned name once the author leaves the field.
+      // Show the cleaned name once the author leaves the field; empty (or the
+      // title's own name) goes back to following the title.
       text.inputEl.addEventListener('blur', () => {
         if (values.name === undefined) return;
         const cleaned = nameFromTitle(this.model, values.name);
-        if (String(values.name).trim() === '') { delete values.name; text.setValue(nameFromTitle(this.model, values.title)); this.updateAddress(); return; }
+        if (String(values.name).trim() === '' || cleaned === nameFromTitle(this.model, values.title)) {
+          delete values.name;
+          text.setValue(nameFromTitle(this.model, values.title));
+          this.updateAddress();
+          return;
+        }
         if (cleaned !== '') { values.name = cleaned; text.setValue(cleaned); }
         this.updateAddress();
       });
     });
-    if (prefix === '') setting.descEl.createDiv({ cls: 'cyberbaser-address-preview' });
-    const error = this.errors[key];
     if (error) { setting.settingEl.addClass('cyberbaser-has-error'); setting.descEl.createDiv({ cls: 'cyberbaser-field-error', text: error }); }
   }
 
@@ -276,6 +294,8 @@ export class NewPostModal extends Modal {
     for (const folderField of folderType.fields) {
       this.renderField(box, folderField, answer.new.values, `${field.name}.new.`, { only: (candidate) => candidate.required, labelPrefix: 'Folder', nameLabel: 'Folder name' });
     }
+    const folderAdvanced = box.querySelector(':scope > details.cyberbaser-advanced');
+    if (folderAdvanced) box.appendChild(folderAdvanced);
   }
 
   renderTags(setting, field, values, touched) {
