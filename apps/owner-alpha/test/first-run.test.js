@@ -282,6 +282,8 @@ describe('setup steps', () => {
     // No phone yet: nothing to enrol with.
     let page = await h.call('/setup');
     expect(page.text).not.toContain('setup-enrol-frame');
+    // The phone paired here approves publishing, which only full access allows.
+    expect(page.text).toContain('<input type="radio" name="access" value="full" checked>');
     fixture.devices.push({ keyId: 'k1', kind: 'owner-device', label: 'Pixel', grants: ['publish'], revoked: false });
     page = await h.call('/setup');
     expect(page.text).toContain('<iframe class="setup-enrol-frame" src="http://127.0.0.1:4319/enroll"');

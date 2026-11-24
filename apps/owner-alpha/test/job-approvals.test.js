@@ -37,7 +37,10 @@ test('the starter publish.yml waits for the phone, then goes through publish-sta
   await starter.save(commit);
   const publisher = createStubPublisher();
   const pushed = [];
+  const rebuilt = [];
   const jobs = createJobApprovals({ config, context: null, pipeline: { resumeJob: async () => {} }, listJobs: async () => [],
+    // The vault published nothing before the starter: the node rebuilds its preview once it lands.
+    afterStarter: async () => { rebuilt.push(git('rev-parse', 'HEAD')); },
     git: gitIn(checkout), starter, publishStarter: async ({ commit: given, record }) => {
       expect(publisher.verifyPublish(record)).toEqual({ ok: true });
       expect((await checkCommit(gitIn(checkout), record.intent, given)).ok).toBe(true);
@@ -63,7 +66,9 @@ test('the starter publish.yml waits for the phone, then goes through publish-sta
   for (let i = 0; i < 100 && git('rev-parse', 'HEAD') !== commit; i += 1) await Bun.sleep(20);
   expect(pushed).toEqual([commit]);
   expect(git('rev-parse', 'HEAD')).toBe(commit);
+  for (let i = 0; i < 100 && rebuilt.length === 0; i += 1) await Bun.sleep(20);
   expect(await starter.read()).toBe(null);
+  expect(rebuilt).toEqual([commit]);
   expect(await relay.list()).toEqual([]);
 });
 

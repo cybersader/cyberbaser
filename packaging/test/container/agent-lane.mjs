@@ -24,7 +24,11 @@ git('-C', snapshot, 'config', '--local', 'cyberbaser.repository', config.reposit
 const base = readFileSync(path.join(snapshot, notePath), 'utf8');
 if (!base.includes(oldText)) throw new Error('old text missing');
 writeFileSync(path.join(agentDir, 'capture.json'), JSON.stringify({ source: 'synthetic-agent', path: notePath, text: base.replace(oldText, newText) }), { mode: 0o600 });
-const next = { ...config, deviceRegistryFile: registry, signedRequestSocket: '/run/cyberbaser/signed.sock' };
+// Test-only: the stand-in GitHub has no Actions, so a pushed job's deployment
+// check can only time out; a shorter wait keeps the test moving.
+const wait = Number(process.env.CB_TEST_NETWORK_TIMEOUT_MS ?? 0);
+const next = { ...config, deviceRegistryFile: registry, signedRequestSocket: '/run/cyberbaser/signed.sock',
+  ...(wait > 0 ? { limits: { ...config.limits, networkTimeoutMs: wait } } : {}) };
 writeFileSync(`${configFile}.tmp`, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
 renameSync(`${configFile}.tmp`, configFile);
 process.stdout.write(`${JSON.stringify({ keyId: entry.keyId })}\n`);

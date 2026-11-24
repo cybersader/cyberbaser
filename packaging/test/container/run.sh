@@ -7,6 +7,8 @@
 #   CYBERBASER_QUARTZ_SEED_ARCHIVE=/path/quartz-seed-v4.5.2.tar.zst packaging/test/container/run.sh [install-test.sh|setup-e2e.sh]
 #
 # setup-e2e.sh runs with no network but loopback (its stand-in GitHub is inside).
+# It also needs the plugin's test Iroh relay, built once with
+# (cd apps/obsidian-cyberbaser && bun run build:wasm).
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
@@ -35,6 +37,15 @@ rsync -a --chmod=a+rX,go-w --exclude node_modules "$REPO/renderers/quartz-cyberb
 mkdir -p "$WORK/src/apps/account-free-intake"
 rsync -aL --chmod=a+rX,go-w "$REPO/apps/account-free-intake/src" "$REPO/apps/account-free-intake/node_modules" \
   "$WORK/src/apps/account-free-intake/"
+# The owner's phone in setup-e2e.sh is the Obsidian plugin's own core, headless,
+# reaching the node through a test-only Iroh relay on the container's loopback.
+mkdir -p "$WORK/src/apps/obsidian-cyberbaser" "$WORK/src/bin"
+rsync -a --chmod=a+rX,go-w "$REPO/apps/obsidian-cyberbaser/src" "$WORK/src/apps/obsidian-cyberbaser/"
+RELAY="$REPO/apps/obsidian-cyberbaser/carrier/target/release/loopback-relay"
+if [ "$SCRIPT" = setup-e2e.sh ]; then
+  [ -x "$RELAY" ] || { echo "setup-e2e.sh needs the test relay: (cd apps/obsidian-cyberbaser && bun run build:wasm)" >&2; exit 2; }
+  install -m 0755 "$RELAY" "$WORK/src/bin/loopback-relay"
+fi
 chmod -R a+rX,go-w "$WORK/src"
 podman build -q -t "$IMAGE" -f "$HERE/Containerfile" "$HERE" >/dev/null
 NETWORK=()

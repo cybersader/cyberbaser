@@ -1,17 +1,20 @@
 // The owner's browser in the container setup test, as plain HTTP: the same
-// requests the setup and review pages make. Run with the program's runtime:
-//   BUN_BE_BUN=1 /test/cyberbaser owner-browser.mjs setup <setup-link> <cookie-file>
-//   BUN_BE_BUN=1 /test/cyberbaser owner-browser.mjs landed <cookie-file>
-//   BUN_BE_BUN=1 /test/cyberbaser owner-browser.mjs sign-in <bootstrap-link> <cookie-file>
-//   BUN_BE_BUN=1 /test/cyberbaser owner-browser.mjs approve <queue-id> <cookie-file>
-//   BUN_BE_BUN=1 /test/cyberbaser owner-browser.mjs page <path> <cookie-file>
+// requests the setup, devices and review pages make. Run with the program's runtime:
+//   BUN_BE_BUN=1 /test/cyberbaser owner-browser.mjs <command> [arguments...] <cookie-file>
+//   setup-to-phone <setup-link>     GitHub, the repository, notes, the starter publish.yml, website skipped
+//   step <action>                   one setup action on the step on screen
+//   phone-page                      what the phone step shows
+//   pair-start <page> <kind> <access> <label>   start pairing from /setup or /owner/devices
+//   pair-confirm <page> <enrollmentId>          compare the words and confirm
+//   devices                         paired devices and open pairings
+//   landed | sign-in <link> | approve <queue-id> | job <job-id> | post <path> | page <path>
 // Prints one JSON line. Synthetic data only.
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const ORIGIN = 'http://127.0.0.1:4317';
 const args = process.argv.slice(2);
 const command = args[0];
-const argument = args.length === 3 ? args[1] : null;
+const rest = args.slice(1, -1);
 const cookieFile = args.at(-1);
 let cookie = null;
 try { cookie = readFileSync(cookieFile, 'utf8').trim() || null; } catch { cookie = null; }
@@ -28,28 +31,35 @@ async function call(route, body, { redirect = 'manual' } = {}) {
   const text = await response.text();
   let value = null;
   try { value = JSON.parse(text); } catch { value = null; }
-  return { status: response.status, text, value, location: response.headers.get('location') };
+  return { status: response.status, text, value, location: response.headers.get('location'), headers: response.headers };
 }
 
 function done(value) { process.stdout.write(`${JSON.stringify(value)}\n`); process.exit(0); }
 function failed(stage, detail) { process.stdout.write(`${JSON.stringify({ ok: false, stage, detail: String(detail).slice(0, 400) })}\n`); process.exit(1); }
 
-async function stepper() {
-  const page = await call('/setup');
+async function csrfFrom(route) {
+  const page = await call(route);
   const csrf = /data-csrf="([^"]+)"/u.exec(page.text)?.[1];
-  return async (action, value = null) => {
+  if (!csrf) failed('csrf', `${route} ${page.status}`);
+  return csrf;
+}
+
+async function stepper() {
+  const csrf = await csrfFrom('/setup');
+  const step = async (action, value = null) => {
     const current = /data-step="([^"]+)"/u.exec((await call('/setup')).text)?.[1];
     return call('/setup/step', { csrf, step: current, action, value });
   };
+  return { step, csrf };
 }
 
-// signed: stop after the notes copy; the unsigned starter must be refused
-// (the owner's device publishes it, see signing-device.mjs). setup-finish goes on.
-async function setup(link, { signed = false } = {}) {
+// Setup up to the phone step: GitHub, the private repository, the notes copy,
+// and the starter publish.yml chosen on screen. The starter is prepared as one
+// commit and waits for the owner's phone; nothing reaches GitHub here.
+async function setupToPhone(link) {
   const opened = await call(link.slice(ORIGIN.length));
   if (opened.status !== 303) failed('open-link', opened.status);
-  let page;
-  const step = await stepper();
+  const { step, csrf } = await stepper();
   if ((await step('start')).value?.step !== 'github') failed('start', 'not on github');
   const started = await call('/owner/github/start', { csrf });
   if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}$/u.test(started.value?.userCode ?? '')) failed('sign-in', started.text);
@@ -73,34 +83,57 @@ async function setup(link, { signed = false } = {}) {
     await sleep(1000);
   }
   if (notes?.phase !== 'ready') failed('notes', JSON.stringify(notes));
-  page = await call('/setup');
+  let page = await call('/setup');
   const multiSelect = page.text.includes('<input type="checkbox" name="folder" value="Garden">') && !page.text.includes(' checked')
     && page.text.includes('<summary>Show the file</summary>');
-  if (signed) {
-    const unsigned = await step('starter', ['Garden']);
-    done({ ok: true, count: notes.count, multiSelect, unsignedStarterRefused: unsigned.value?.ok !== true });
-  }
   const starter = await step('starter', ['Garden']);
   if (starter.value?.ok !== true) failed('starter', starter.text);
-  const afterStarter = (await call('/setup')).text.includes('You added it just now.');
+  page = await call('/setup');
+  const starterWaiting = page.text.includes('It goes to GitHub when you approve it on your phone');
   if ((await step('continue')).value?.step !== 'website') failed('continue-website', 'refused');
   if ((await step('skip')).value?.step !== 'phone') failed('website', 'refused');
-  if ((await step('skip')).value?.step !== 'agent') failed('phone', 'refused');
-  const finished = await step('skip');
-  if (finished.value?.step !== 'done') failed('done', finished.text);
-  done({ ok: true, count: notes.count, multiSelect, afterStarter });
+  done({ ok: true, count: notes.count, multiSelect, starterWaiting });
 }
 
-async function setupFinish() {
-  const step = await stepper();
-  const chose = await step('nothing-yet');
-  if (chose.value?.ok !== true) failed('nothing-yet', chose.text);
-  if ((await step('continue')).value?.step !== 'website') failed('continue-website', 'refused');
-  if ((await step('skip')).value?.step !== 'phone') failed('website', 'refused');
-  if ((await step('skip')).value?.step !== 'agent') failed('phone', 'refused');
-  const finished = await step('skip');
-  if (finished.value?.step !== 'done') failed('done', finished.text);
-  done({ ok: true });
+async function setupStep(action) {
+  const { step } = await stepper();
+  const result = await step(action);
+  done({ ok: result.value?.ok === true, step: result.value?.step ?? null, code: result.value?.code ?? null });
+}
+
+async function setupPhonePage() {
+  const page = await call('/setup');
+  done({ ok: page.status === 200, access: /name="access" value="([a-z]+)" checked/u.exec(page.text)?.[1] ?? null, enrolFrame: page.text.includes('src="http://127.0.0.1:4319/enroll"'),
+    frameAllowed: (page.headers.get('content-security-policy') ?? '').includes('frame-src http://127.0.0.1:4319'),
+    paired: page.text.includes('is paired'), starterNote: page.text.includes('Approvals waiting') });
+}
+
+// Pairing as the Devices section does it: start, then compare words and confirm.
+async function pairStart(route, kind, access, label) {
+  const csrf = await csrfFrom(route);
+  const started = await call('/owner/devices/pair', { csrf, kind, access, label });
+  if (started.value?.ok !== true) failed('pair-start', started.text);
+  done({ ok: true, code: started.value.code, enrollmentId: started.value.enrollmentId });
+}
+
+async function pairConfirm(route, enrollmentId) {
+  const csrf = await csrfFrom(route);
+  let pairing = null;
+  for (let i = 0; i < 120; i++) {
+    pairing = (await call('/owner/devices/state')).value?.pairings?.find((item) => item.enrollmentId === enrollmentId);
+    if (pairing?.state === 'awaiting' && pairing.words) break;
+    await sleep(500);
+  }
+  if (!pairing?.words) failed('pair-words', JSON.stringify(pairing));
+  const confirmed = await call('/owner/devices/confirm', { csrf, enrollmentId, words: pairing.words });
+  if (confirmed.value?.ok !== true) failed('pair-confirm', confirmed.text);
+  done({ ok: true, words: pairing.words });
+}
+
+async function devicesState() {
+  const state = (await call('/owner/devices/state')).value;
+  done({ ok: state !== null, devices: (state?.devices ?? []).filter((device) => !device.revoked).map((device) => device.kind),
+    pairings: (state?.pairings ?? []).length });
 }
 
 async function landed() {
@@ -111,9 +144,7 @@ async function landed() {
     if (review?.status === 200 && review.text.includes('Proposals')) return done({ ok: true, waited: i });
     await sleep(1000);
   }
-  const { createHash } = await import('node:crypto');
-  const mark = createHash('sha256').update(String(cookie).split('=')[1] ?? '').digest('hex').slice(0, 8);
-  failed('landed', `the node never answered the owner: ${review?.status} ${review?.text?.slice(0, 120)} cookie ${mark}`);
+  failed('landed', `the node never answered the owner: ${review?.status} ${review?.text?.slice(0, 120)}`);
 }
 
 async function approve(queueId) {
@@ -133,23 +164,39 @@ async function approve(queueId) {
     // Until the job is past its push (later states wait on the forge's deployment, which this test has none of).
     if (job && !['accepted', 'preflighting', 'checking', 'rendering', 'ready-to-apply', 'applying', 'source-applied', 'committing',
       'committed', 'pushing'].includes(job.state)) break;
-    if (job?.state === 'awaiting-approval') break;
     await sleep(1000);
   }
   done({ ok: true, jobId, state: job?.state ?? null, failure: job?.failure?.code ?? null });
 }
 
+async function job(jobId) {
+  const value = (await call(`/api/jobs/${jobId}`)).value;
+  done({ ok: value !== null, state: value?.state ?? null, failure: value?.failure?.code ?? null });
+}
+
+// A signed-in owner act (any POST), to see whether it is held back.
+async function post(route) {
+  const csrf = await csrfFrom('/owner/devices');
+  const result = await call(route, { csrf });
+  done({ ok: result.status < 400, status: result.status, code: result.value?.error?.code ?? null, message: result.value?.error?.message ?? null });
+}
+
 try {
-  if (command === 'setup') await setup(argument);
-  else if (command === 'setup-signed') await setup(argument, { signed: true });
-  else if (command === 'setup-finish') await setupFinish();
+  if (command === 'setup-to-phone') await setupToPhone(rest[0]);
+  else if (command === 'step') await setupStep(rest[0]);
+  else if (command === 'phone-page') await setupPhonePage();
+  else if (command === 'pair-start') await pairStart(...rest);
+  else if (command === 'pair-confirm') await pairConfirm(...rest);
+  else if (command === 'devices') await devicesState();
   else if (command === 'landed') await landed();
   else if (command === 'sign-in') {
-    const signed = await call(argument.slice(ORIGIN.length));
+    const signed = await call(rest[0].slice(ORIGIN.length));
     done({ ok: signed.status === 303, status: signed.status });
-  } else if (command === 'approve') await approve(argument);
+  } else if (command === 'approve') await approve(rest[0]);
+  else if (command === 'job') await job(rest[0]);
+  else if (command === 'post') await post(rest[0]);
   else if (command === 'page') {
-    const page = await call(argument);
+    const page = await call(rest[0]);
     done({ ok: page.status === 200, status: page.status, unreachable: page.text.includes("Can't reach GitHub") });
   } else failed('usage', command);
 } catch (error) {

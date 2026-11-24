@@ -47,10 +47,12 @@ async function committedCommit(context, jobId) {
 }
 
 // starter: pendingStarterFile(...) or null. publishStarter({ commit, record }):
-// the publisher's signed publish-starter; then the checkout moves to the commit.
+// the publisher's signed publish-starter; then the checkout moves to the commit
+// and afterStarter() runs (the node rebuilds its preview: the vault may have
+// published nothing before).
 export function createJobApprovals({ config, context, pipeline, listJobs = listDurableJobs, git = gitIn(config.repository.checkout),
   readCommit = committedCommit, attach = attachOwnerApproval, clock = Date.now, log = () => {},
-  starter = null, publishStarter = null }) {
+  starter = null, publishStarter = null, afterStarter = async () => {} }) {
   const offered = new Map(); // jobId -> requestId
   const quiet = new Map(); // jobId -> time before which it is not offered again ("Not now", or it could not be offered)
   let running = null;
@@ -93,6 +95,7 @@ export function createJobApprovals({ config, context, pipeline, listJobs = listD
       await publishStarter({ commit, record });
       await git(['merge', '--ff-only', '--quiet', commit]);
       await starter.clear();
+      await Promise.resolve(afterStarter()).catch((error) => log(`the preview was not rebuilt after the starter: ${error?.code ?? 'failed'}`));
     }, (error) => {
       offered.delete('starter');
       if (error?.code === 'approval-declined') quiet.set('starter', clock() + NOT_NOW_MS);

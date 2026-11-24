@@ -89,7 +89,7 @@ function parse(args, known) {
     else if (arg === '--github-client-id' && known.includes(arg) && /^[A-Za-z0-9._-]{8,64}$/u.test(args[i + 1] ?? '')) options.clientId = args[++i];
     // GitHub Enterprise, or a stand-in GitHub for tests: the web and API origin.
     else if (arg === '--github-origin' && known.includes(arg) && /^https?:\/\/[A-Za-z0-9.:[\]-]+$/u.test(args[i + 1] ?? '')) options.githubOrigin = args[++i];
-    else if (arg === '--iroh-relay' && known.includes(arg) && /^(none|n0|https:\/\/\S+)$/u.test(args[i + 1] ?? '')) options.relay = args[++i];
+    else if (arg === '--iroh-relay' && known.includes(arg) && /^(none|n0|https:\/\/\S+|http:\/\/127\.0\.0\.1:\d{1,5}\/)$/u.test(args[i + 1] ?? '')) options.relay = args[++i];
     else throw new Error(`unknown option: ${arg}`);
   }
   return options;

@@ -198,7 +198,11 @@ export async function startPublisher({ config, context, socketPath, repository, 
     const pushCommit = await createIsolatedPush({ repository, checkout, uid: Number(uid), forgeAccess,
       onPushed: mirror === null ? null : (pushed) => mirror.adoptPack(pushed) });
     if (owners !== null) {
+      // With a mirror, the starter publish.yml setup prepared can still be
+      // published here once the owner's device signs it: setup ends before the
+      // phone is enrolled, so the approval usually arrives in normal mode.
       ownerServices = await startOwnerServices({ owners, socketPath, uid: Number(uid), socketGroup,
+        ...(mirror === null ? {} : { mirror, starterCheckout: checkout }),
         ...(log === undefined ? {} : { log }) });
     }
     // The caller holds the pipeline mutation lock; taking it here would deadlock.

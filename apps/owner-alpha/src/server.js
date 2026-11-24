@@ -1715,13 +1715,14 @@ function segmented(name, legend, options, checked) {
 
 // The pairing form shared by Devices and first-run setup. A fixed kind
 // renders as a hidden field, so setup asks only what matters for that step.
-export function pairFormHtml({ kind = null, label = 'My agent' } = {}) {
+// `access` is the preselected choice for a phone or computer.
+export function pairFormHtml({ kind = null, label = 'My agent', access = null } = {}) {
   const kindField = kind === null
     ? segmented('kind', 'What is it?', [['agent', 'Agent'], ['owner-device', 'Phone or computer']], 'agent')
     : `<input type="hidden" name="kind" value="${escapeHtml(kind)}">`;
   const accessField = kind === 'agent'
     ? '<input type="hidden" name="access" value="propose">'
-    : segmented('access', 'What may it do?', Object.entries(ACCESS_LABELS), kind === 'owner-device' ? 'review' : 'propose');
+    : segmented('access', 'What may it do?', Object.entries(ACCESS_LABELS), access ?? (kind === 'owner-device' ? 'review' : 'propose'));
   return `<form id="pair-form" class="pair-form">
 ${kindField}
 ${accessField}
@@ -2721,7 +2722,16 @@ export async function runOwnerAlphaServer({
   upstreamTimer?.unref?.();
   // The site build retains the publication binding the form needs, so the
   // intake starts after it and before anything reads the review socket.
-  await rebuildSite({ config, projectRoot });
+  // A vault that publishes nothing yet (no publish.yml, or setup's starter
+  // still waiting for the owner's phone) has no preview to build. The node
+  // starts anyway: sign-in, devices and the phone's approvals need it. The
+  // preview is built once the starter lands, or by the next job.
+  try {
+    await rebuildSite({ config, projectRoot });
+  } catch (error) {
+    if (!(error instanceof OwnerAlphaError) || error.code !== 'site-publication-empty') throw error;
+    console.error('Owner alpha: nothing is published yet, so the private preview waits until publish.yml lists notes.');
+  }
   const suggestions = await startSuggestions({ config, projectRoot });
   let pipeline;
   try {
@@ -2783,6 +2793,7 @@ export async function runOwnerAlphaServer({
   if (starterFile !== null && pendingStarter !== null) await starterFile.save(pendingStarter);
   const jobApprovals = devices === null ? null : createJobApprovals({ config, context: storeContext, pipeline: recoveringPipeline,
     log: (line) => console.error(`Owner alpha: ${line}`), starter: starterFile,
+    afterStarter: () => rebuildSite({ config, projectRoot }),
     publishStarter: config.publisher ? ({ commit, record }) => ownerRequest({ socketPath: config.publisher.socketPath,
       op: 'publish-starter', commit, record }) : null });
   const approvals = devices === null ? null : createApprovalRelay({ publisher: signingPublisher,

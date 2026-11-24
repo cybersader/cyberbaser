@@ -34,7 +34,9 @@ class PairModal extends Modal {
     const words = contentEl.createDiv({ cls: 'cyberbaser-words' });
     const message = contentEl.createEl('p', { cls: 'cyberbaser-message' });
     const button = contentEl.createEl('button', { text: 'Pair', cls: 'mod-cta cyberbaser-pair-button' });
-    button.addEventListener('click', async () => {
+    // One handler for Pair; once paired, the same button closes the dialog and
+    // must not pair again (the code is spent, and a second request is refused).
+    const pair = async () => {
       button.disabled = true;
       input.disabled = true;
       message.setText('Connecting to your node…');
@@ -47,9 +49,10 @@ class PairModal extends Modal {
         } });
         words.empty();
         message.setText(`Paired. This device can ${describeGrants(result.grants)}.`);
+        button.removeEventListener('click', pair);
+        button.addEventListener('click', () => this.close());
         button.setText('Done');
         button.disabled = false;
-        button.onclick = () => this.close();
         this.plugin.refreshStatus(true);
       } catch (error) {
         words.empty();
@@ -57,7 +60,8 @@ class PairModal extends Modal {
         button.disabled = false;
         input.disabled = false;
       }
-    });
+    };
+    button.addEventListener('click', pair);
   }
 
   onClose() { this.contentEl.empty(); }

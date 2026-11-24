@@ -587,11 +587,13 @@ ${field}`;
     const kind = step === 'phone' ? 'owner-device' : 'agent';
     const paired = deviceList(e, dev, kind);
     const reachable = dev !== null && dev.pairing.available();
+    // The phone paired here is the one that approves publishing, which only
+    // full access allows; the owner can still choose less.
     const intro = step === 'phone'
       ? '<h1>Pair your phone</h1>\n<p class="setup-lede">Review and approve suggestions from anywhere. Scan the code with the phone, then check that both screens show the same four words.</p>'
       : '<h1>Pair an agent</h1>\n<p class="setup-lede">This is optional. An agent can only suggest changes, and you review each one. Run the line Cyberbaser shows where the agent works, then compare four words.</p>';
     const form = reachable
-      ? `<div id="devices" class="setup-devices" data-csrf="${e(csrfToken)}" data-pair-command="${e(pairCommand)}">${pairFormHtml({ kind, label: step === 'phone' ? 'My phone' : 'My agent' })}</div>`
+      ? `<div id="devices" class="setup-devices" data-csrf="${e(csrfToken)}" data-pair-command="${e(pairCommand)}">${pairFormHtml({ kind, label: step === 'phone' ? 'My phone' : 'My agent', ...(step === 'phone' ? { access: 'full' } : {}) })}</div>`
       : '<p class="setup-note">Pairing needs Cyberbaser\'s connection, which is not running yet. You can pair later from Devices.</p>';
     const skip = step === 'phone' ? 'Pair later' : 'Skip';
     const approve = step === 'phone' && paired && enrolPort !== null ? enrolBlock(e, enrolPort, state) : '';
