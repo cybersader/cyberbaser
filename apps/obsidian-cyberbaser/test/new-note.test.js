@@ -124,7 +124,7 @@ test('missing and wrong answers come back per field, and nothing is written', ()
   const plan = planNewNote({ model, typeName: 'post', values: { title: '', topic: { existing: 'kb' }, youtube: 'javascript:alert(1)',
     tags: ['strategy'], cover: { name: 'logo.svg', source: {} } }, paths: PATHS, today: '2026-11-24', titleOf });
   expect(plan.ok).toBe(false);
-  expect(plan.errors).toMatchObject({ title: 'Add title.', topic: 'Pick a topic.', description: 'Add summary.',
+  expect(plan.errors).toMatchObject({ title: 'Add a title.', topic: 'Pick a topic.', description: 'Add a summary.',
     youtube: 'YouTube link should be a web address starting with https://.', cover: 'Pick a PNG, JPEG, WebP or GIF image.' });
   expect(plan.errors.tags).toContain('group and a value');
   const taken = planNewNote({ model, typeName: 'post', values: { title: 'A security strategy that fits on one page', topic: { existing: 'leadership-and-strategy' },
@@ -151,7 +151,7 @@ test('a knowledge base page in a new sub-folder: the folder, its index note, the
 
 test('new sub-folders: required fields asked, depth and duplicates refused', () => {
   const plan = (folder) => planNewNote({ model, typeName: 'kb-page', values: { title: 'X', description: 'y', folder }, paths: PATHS, titleOf });
-  expect(plan({ new: { parent: 'risk-and-governance', values: { title: 'Exercises' } } }).errors['folder.new.description']).toBe('Add summary.');
+  expect(plan({ new: { parent: 'risk-and-governance', values: { title: 'Exercises' } } }).errors['folder.new.description']).toBe('Add a summary.');
   expect(plan({ new: { parent: 'risk-and-governance/frameworks', values: { title: 'Too deep', description: 'd' } } }).errors['folder.new.parent'])
     .toBe('Pick where the new folder goes.');
   expect(plan({ new: { parent: 'risk-and-governance', values: { title: 'Frameworks', description: 'd' } } }).errors['folder.new.title'])

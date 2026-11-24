@@ -139,7 +139,7 @@ function propertyEntries(type, values, context, errors, prefix = '') {
     if (field.hidden || field.type === 'choice-from-folder') continue;
     const key = `${prefix}${field.name}`;
     const value = values[field.name];
-    const missing = () => { if (field.required) errors[key] = `Add ${field.label.toLowerCase()}.`; };
+    const missing = () => { if (field.required) errors[key] = `Add a ${field.label.toLowerCase()}.`; };
     switch (field.type) {
       case 'text':
       case 'long-text': {
