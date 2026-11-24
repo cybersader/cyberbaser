@@ -5,6 +5,7 @@ import { MarkdownView, Modal, Notice, Platform, Plugin, PluginSettingTab, Settin
 import { lazyCarrier } from './carrier.js';
 import { createNodeClient } from './core/client.js';
 import { createController, DEFAULT_SETTINGS, messageFor, publicSettings } from './core/controller.js';
+import { embeddedImages, notePublicStatus, prepareImages } from './core/new-page.js';
 import { createDeviceStore, indexedDbBackend } from './core/device-store.js';
 import { codeFromLink, PAIR_LINK_ACTION } from './core/pairing-code.js';
 import { createSigningStore, ENROL_LINK_ACTION, signingDatabase } from './core/signing.js';
@@ -106,6 +107,30 @@ class SendModal extends Modal {
         for (const element of actions.querySelectorAll('button')) element.disabled = false;
       }
     };
+    // A note the site does not have yet: list its images (cleaned of where
+    // they were taken, checked) before anything is sent.
+    const publishYml = await this.plugin.readPublishYml();
+    const local = publishYml === null ? null : notePublicStatus({ path: file.path, text: this.view.editor.getValue(), publishYml });
+    if (local?.published && !reply?.live) {
+      const text = this.view.editor.getValue();
+      const { local: paths, remote } = embeddedImages({ path: file.path, text,
+        resolve: (target, from) => this.plugin.app.metadataCache.getFirstLinkpathDest(target, from)?.path ?? null });
+      const images = prepareImages(await Promise.all(paths.map(async (path) => ({ path,
+        bytes: new Uint8Array(await this.plugin.app.vault.adapter.readBinary(path)) }))));
+      const list = contentEl.createEl('ul', { cls: 'cyberbaser-images' });
+      for (const image of images) {
+        const size = `${Math.max(1, Math.round(image.size / 1024))} KB`;
+        const note = image.refused ? messageFor(Object.assign(new Error(), { kind: 'refused', reason: image.refused }))
+          : image.cleaned ? 'location removed' : '';
+        list.createEl('li', { text: `${image.path} (${image.type ?? 'not allowed'}, ${size})${note ? `: ${note}` : ''}` });
+      }
+      for (const raw of remote) list.createEl('li', { cls: 'cyberbaser-warning', text: `${raw}: from another site, not allowed` });
+      contentEl.createEl('p', { cls: 'cyberbaser-muted', text: `New public page: ${local.address}${images.length ? `, plus ${images.length} image${images.length === 1 ? '' : 's'}` : ''}` });
+      const create = actions.createEl('button', { text: 'Publish new page', cls: 'mod-cta' });
+      create.addEventListener('click', () => run(create, (f, value) => this.plugin.controller.publishNewPage(f, value, { status: local, images, remote })));
+    } else if (local?.draft) {
+      contentEl.createEl('p', { cls: 'cyberbaser-muted', text: 'Draft: turn Draft off in its properties to publish it.' });
+    }
     if (this.plugin.controller.canPublish(reply)) {
       const publish = actions.createEl('button', { text: 'Publish to your site', cls: 'mod-cta' });
       publish.addEventListener('click', () => run(publish, (f, text) => this.plugin.controller.publish(f, text, reply)));
@@ -202,9 +227,11 @@ function renderPreview(container, file) {
   const block = container.createDiv({ cls: 'cyberbaser-change' });
   const head = block.createDiv({ cls: 'cyberbaser-change-head' });
   head.createEl('strong', { cls: 'cyberbaser-change-title', text: file.title });
-  head.createSpan({ cls: 'cyberbaser-change-kind', text: { edited: 'Edited', added: 'New note', deleted: 'Deleted' }[file.kind] });
+  head.createSpan({ cls: 'cyberbaser-change-kind', text: file.image ? 'New image' : { edited: 'Edited', added: 'New note', deleted: 'Deleted' }[file.kind] });
   block.createDiv({ cls: 'cyberbaser-path', text: file.path });
-  if (file.preview === null) {
+  if (file.image) {
+    block.createEl('p', { cls: 'cyberbaser-muted', text: `Image, ${Math.max(1, Math.round(file.byteLength / 1024))} KB, checked on this device.` });
+  } else if (file.preview === null) {
     block.createEl('p', { cls: 'cyberbaser-muted', text: 'This file is not text, so its words cannot be shown.' });
   } else if (file.kind === 'deleted') {
     block.createEl('p', { cls: 'cyberbaser-muted', text: 'The whole note is removed.' });
@@ -236,7 +263,7 @@ class ApprovalModal extends Modal {
     const message = contentEl.createEl('p', { cls: 'cyberbaser-message', text: 'Checking the change…', attr: { role: 'status' } });
     let prepared;
     try {
-      prepared = await this.plugin.controller.readApproval(this.requestId);
+      prepared = await this.plugin.controller.readApproval(this.requestId, { publishYml: await this.plugin.readPublishYml() });
     } catch (error) {
       message.setText(messageFor(error));
       return;
@@ -248,6 +275,10 @@ class ApprovalModal extends Modal {
     lead.createEl('p', { cls: 'cyberbaser-approval-what', text: `Publish ${count === 1 ? '1 change' : `${count} changes`} to ${summary.repository}` });
     lead.createEl('p', { cls: 'cyberbaser-muted', text: `Branch ${summary.branch}` });
     if (summary.changesBuild) contentEl.createEl('p', { cls: 'cyberbaser-warning', text: 'This changes how your site is built.' });
+    // A separate line for what becomes public: worked out on this device.
+    for (const page of summary.newPages ?? []) {
+      contentEl.createEl('p', { cls: 'cyberbaser-warning', text: `New public page: ${page.address}${summary.newImages ? `, plus ${summary.newImages} image${summary.newImages === 1 ? '' : 's'}` : ''}` });
+    }
     const list = contentEl.createDiv({ cls: 'cyberbaser-changes' });
     for (const file of summary.files) renderPreview(list, file);
     const minutes = Math.max(1, Math.round((summary.expiresAt - Date.now()) / 60_000));
@@ -438,6 +469,12 @@ export default class CyberbaserPlugin extends Plugin {
     clearInterval(this.watch);
   }
 
+  // This vault's own publish.yml, read on this device: the device decides
+  // for itself what a new page makes public. Null when there is none.
+  async readPublishYml() {
+    try { return await this.app.vault.adapter.read('publish.yml'); } catch { return null; }
+  }
+
   async saveSettings() {
     await this.saveData(publicSettings(this.settings));
   }
@@ -453,7 +490,7 @@ export default class CyberbaserPlugin extends Plugin {
       const reply = this.replies.get(view.file.path);
       outcome = { status: statusFor({ reply }, await textDigests(text)), reply };
     } else {
-      outcome = await this.controller.status(view.file, text);
+      outcome = await this.controller.status(view.file, text, { publishYml: await this.readPublishYml() });
       if (outcome.reply) this.replies.set(view.file.path, outcome.reply);
       else this.replies.delete(view.file.path);
     }

@@ -4,8 +4,11 @@ import {
   parseEnrolCode, prepareApproval,
 } from './signing.js';
 import { statusFor, textDigests } from './status.js';
+import { newPageProblem, notePublicStatus } from './new-page.js';
+import { fromBase64, hex, sha256, toBase64 } from './wire.js';
 import { createTapGate, TapRequired } from './tap.js';
-import { hex } from './wire.js';
+
+export const STAGE_CHUNK_BYTES = 256 * 1024;
 
 // Everything the plugin does, without Obsidian: pair, unpair, status, send.
 // The Obsidian glue (main.js) only shows what this returns.
@@ -44,6 +47,31 @@ const MESSAGES = Object.freeze({
   'approval-mismatch': "This request doesn't add up, so it was not signed.",
   'approval-too-large': 'This change is too large to approve from here. Approve it on a computer.',
   'tap-required': 'Tap the button yourself to approve. Nothing was signed.',
+  // New pages and images.
+  'note-is-draft': 'This note is a draft. Turn Draft off to publish it.',
+  'create-outside-publication': 'This note would not be on your site, so it was not sent. Check its folder and properties.',
+  'create-path-refused': 'This file name or folder cannot be published.',
+  'selection-config-change-refused': 'publish.yml is changed on its own, not with a page.',
+  'create-path-exists': 'Your vault already has a file at this path. Use Send instead.',
+  'create-path-case-collision': 'Your vault has a file whose name differs only in capital letters.',
+  'create-parent-is-file': 'A folder on this path is a file in your vault.',
+  'create-address-collision': 'Another page already uses this address.',
+  'capture-base-moved': 'Your vault changed while this was on its way. Send it again.',
+  'asset-type-refused': 'Only PNG, JPEG, WebP and GIF images can be published.',
+  'asset-type-mismatch': "An image's type does not match its file name.",
+  'asset-too-large': 'An image is larger than 5 MB.',
+  'bundle-too-large': 'The images together are larger than 12 MB.',
+  'bundle-file-count': 'A page can bring at most 4 new images.',
+  'asset-unreferenced': 'An image is not shown on the page.',
+  'remote-image-refused': 'The page shows an image from another site. Save it into your vault first.',
+  'image-has-location': 'A photo still records where it was taken and could not be cleaned.',
+  'public-set-removal-refused': 'This change would take pages off your site.',
+  'address-changed': 'This change would move a page to another address.',
+  'public-set-change-unlisted': 'This change would publish files it does not add.',
+  'approval-public-unknown': "This device can't read your publish.yml, so it can't check what goes public. Nothing was signed.",
+  'approval-private-note': 'This would publish a note your publish.yml keeps private. Nothing was signed.',
+  'approval-public-mismatch': "The new pages your node listed don't match what this device found. Nothing was signed.",
+  'approval-image-refused': 'An image in this change is not allowed. Nothing was signed.',
 });
 
 export function messageFor(error) {
@@ -71,6 +99,7 @@ export function createController({ client, store, signingStore = null, tapGate =
   random = (n) => globalThis.crypto.getRandomValues(new Uint8Array(n)) }) {
   let pairing;
   let signing;
+  const waiting = new Map(); // note path -> bundleId, while its new page waits for approval
   const loaded = async () => {
     if (pairing === undefined) pairing = await store.load();
     return pairing;
@@ -170,12 +199,35 @@ export function createController({ client, store, signingStore = null, tapGate =
         .map((entry) => ({ requestId: entry.requestId, expiresAt: entry.expiresAt })) : [];
     },
 
-    /** Fetch one request and check it; returns what the dialog shows. */
-    async readApproval(requestId) {
+    /**
+     * Fetch one request and check it; returns what the dialog shows.
+     * publishYml: this vault's own publish.yml text, so the device can work
+     * out new public pages itself. New images are fetched in chunks.
+     */
+    async readApproval(requestId, { publishYml = null } = {}) {
       const current = await requirePairing();
       const key = await requireSigning();
       const request = await client.request(current, 'readApproval', { requestId });
-      return prepareApproval({ request, signing: key, now: now() });
+      const readChunk = async (path) => {
+        const parts = [];
+        let offset = 0;
+        let total = null;
+        do {
+          const part = await client.request(current, 'readApprovalChunk', { requestId, path, offset });
+          if (typeof part?.data !== 'string' || !Number.isSafeInteger(part.total) || part.total > 5 * 1024 * 1024) return null;
+          const bytes = fromBase64(part.data);
+          if (bytes.length === 0 || (total !== null && total !== part.total)) return null;
+          total = part.total;
+          parts.push(bytes);
+          offset += bytes.length;
+        } while (offset < total);
+        if (offset !== total) return null;
+        const out = new Uint8Array(total);
+        let at = 0;
+        for (const part of parts) { out.set(part, at); at += part.length; }
+        return out;
+      };
+      return prepareApproval({ request, signing: key, now: now(), publishYml, readChunk });
     },
 
     /** Sign exactly the checked intent, only on a real tap, and send it back. */
@@ -196,10 +248,13 @@ export function createController({ client, store, signingStore = null, tapGate =
       return { declined: true };
     },
 
-    // The status line for this note. Never throws.
-    async status(file, text) {
+    // The status line for this note. Never throws. publishYml (optional):
+    // this vault's publish.yml, so a draft reads as Draft without asking.
+    async status(file, text, { publishYml = null } = {}) {
       const current = await loaded().catch(() => null);
       if (current === null) return { status: statusFor({ paired: false }), reply: null };
+      const local = typeof publishYml === 'string' ? notePublicStatus({ path: file.path, text, publishYml }) : null;
+      if (local?.draft) return { status: statusFor({ draft: true }), reply: null };
       const digests = await textDigests(text);
       // Full access sees drafts and publishing; a device that may only
       // propose still sees what the public site shows: public, and live.
@@ -208,7 +263,9 @@ export function createController({ client, store, signingStore = null, tapGate =
       }
       try {
         const reply = await client.request(current, 'readNoteStatus', { path: file.path });
-        return { status: statusFor({ reply }, digests), reply };
+        const status = statusFor({ reply, waiting: waiting.has(file.path) }, digests);
+        if (status.key === 'live') waiting.delete(file.path);
+        return { status, reply };
       } catch (error) {
         const state = error instanceof NodeError && error.kind === 'refused' ? { refused: true } : { unreachable: true };
         return { status: statusFor(state), reply: null };
@@ -228,6 +285,37 @@ export function createController({ client, store, signingStore = null, tapGate =
       if (receipt?.unchanged === true) return { kind: 'unchanged', text: 'Nothing changed compared with your vault.' };
       return { kind: 'proposed', queueId: receipt.queueId,
         text: 'Sent for review. It is waiting in your Proposals inbox.' };
+    },
+
+    /**
+     * Publish a note the vault does not have yet, with its images.
+     * images: prepareImages(...) output (already cleaned of location);
+     * status: notePublicStatus(...) for this note; remote: remote embeds.
+     * Images go in chunks first; then one bundle. Nothing publishes until
+     * the owner signs on a signing device.
+     */
+    async publishNewPage(file, text, { status, images = [], remote = [] }) {
+      const current = await loaded();
+      if (current === null) throw new NodeError('refused', 'not-paired');
+      const problem = newPageProblem({ status, images, remote });
+      if (problem !== null) throw new NodeError('refused', problem);
+      const sent = [];
+      for (const image of images) {
+        const sha = hex(await sha256(image.bytes));
+        for (let offset = 0; offset < image.bytes.length; offset += STAGE_CHUNK_BYTES) {
+          await client.request(current, 'stageAsset', { sha256: sha, size: image.bytes.length, offset,
+            data: toBase64(image.bytes.subarray(offset, offset + STAGE_CHUNK_BYTES)) });
+        }
+        sent.push({ path: image.path, sha256: sha });
+      }
+      const receipt = await client.request(current, 'submitPageBundle', { main: { path: file.path, text }, assets: sent });
+      if (receipt?.unchanged === true) return { kind: 'unchanged', text: 'Your site already has this text.' };
+      if (typeof receipt?.bundleId === 'string') waiting.set(file.path, receipt.bundleId);
+      const address = Array.isArray(receipt?.publicAdditions) ? receipt.publicAdditions.find((entry) => entry.path === file.path)?.address : null;
+      return receipt?.state === 'signing'
+        ? { kind: 'publishing', bundleId: receipt.bundleId, address,
+          text: 'Waiting for approval. Approve it on your signing device; it goes live after that.' }
+        : { kind: 'proposed', bundleId: receipt?.bundleId, address, text: 'Sent for review. It waits for the owner.' };
     },
 
     async publish(file, text, reply) {

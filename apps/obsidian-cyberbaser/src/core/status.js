@@ -10,6 +10,8 @@ export const STATUS = Object.freeze({
   unreachable: "Can't reach your node",
   noAccess: 'Status needs full access',
   checking: 'Checking',
+  draft: 'Draft',
+  waiting: 'Waiting for approval',
 });
 
 // Only this state earns a mark on the note: there is something to send or
@@ -49,15 +51,18 @@ export async function textDigests(text) {
 }
 
 // reply: the node's readNoteStatus result, or a refusal. Kinds:
-//   { paired: false } | { unreachable: true } | { refused: true } | { reply }
+//   { paired: false } | { unreachable: true } | { refused: true } | { draft: true }
+//   | { reply, waiting? }   waiting: a new page from this device awaits approval
 export function statusFor(state, digests) {
   if (state.paired === false) return { key: 'notPaired', label: STATUS.notPaired };
+  if (state.draft) return { key: 'draft', label: STATUS.draft };
   if (state.unreachable) return { key: 'unreachable', label: STATUS.unreachable };
   if (state.refused) return { key: 'noAccess', label: STATUS.noAccess };
   const reply = state.reply;
+  const current = reply?.live ? (reply.live.folded ? digests?.folded : digests?.exact) : null;
+  if (state.waiting && !(current && current === reply.live.digest)) return { key: 'waiting', label: STATUS.waiting };
   if (!reply || reply.selected !== true) return { key: 'notSelected', label: STATUS.notSelected };
   if (!reply.live) return { key: 'pending', label: STATUS.pending };
-  const current = reply.live.folded ? digests?.folded : digests?.exact;
   const extra = { version: reply.live.version, ...(typeof reply.live.at === 'string' ? { at: reply.live.at } : {}) };
   return current && current === reply.live.digest
     ? { key: 'live', label: STATUS.live, ...extra }

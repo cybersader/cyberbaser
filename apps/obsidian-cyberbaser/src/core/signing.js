@@ -13,6 +13,8 @@
 //   - Nothing is signed without a real tap in this plugin's own dialog (tap.js).
 import { canonicalJson, intentBytes, validateIntent } from '../../../../packages/signed-intent/src/intent.js';
 import { fromBase64, hex, toBase64, utf8 } from './wire.js';
+import { checkAsset } from '../../../../packages/media-check/src/index.js';
+import { notePublicStatus } from './new-page.js';
 
 export const ENROL_LINK_ACTION = 'cyberbaser-enrol';
 export const ED25519_APPROVAL_DOMAIN = 'cyberbaser.publish-approval.ed25519.v1\n';
@@ -264,7 +266,7 @@ function sideBytes(value) {
  * Throws ApprovalProblem for anything that does not add up. The summary uses
  * only the intent and bytes whose hashes the intent itself fixes.
  */
-export async function prepareApproval({ request, signing, now }) {
+export async function prepareApproval({ request, signing, now, publishYml = null, readChunk = null }) {
   if (!request || typeof request !== 'object' || typeof request.requestId !== 'string') throw new ApprovalProblem('approval-invalid');
   let template;
   try { template = validateIntent({ ...request.intent, keyId: signing.keyId }); } catch { throw new ApprovalProblem('approval-invalid'); }
@@ -275,12 +277,20 @@ export async function prepareApproval({ request, signing, now }) {
   const files = Array.isArray(request.files) ? request.files : [];
   if (files.length !== template.changes.length) throw new ApprovalProblem('approval-invalid');
   const shown = [];
+  const newPages = [];
+  let newImages = 0;
   for (const [index, change] of template.changes.entries()) {
     const file = files[index];
     if (!file || file.path !== change.path) throw new ApprovalProblem('approval-invalid');
     const sides = {};
     for (const side of ['before', 'after']) {
-      const bytes = sideBytes(file[side] ?? null);
+      let bytes;
+      // A new image read in chunks: this device fetches every byte and hashes it.
+      if (side === 'after' && file.after === 'chunked') {
+        if (change.before !== null || change.after === null || typeof readChunk !== 'function') throw new ApprovalProblem('approval-invalid');
+        bytes = await readChunk(change.path);
+        if (!(bytes instanceof Uint8Array)) throw new ApprovalProblem('approval-bytes-mismatch');
+      } else bytes = sideBytes(file[side] ?? null);
       if ((change[side] === null) !== (bytes === null)) throw new ApprovalProblem('approval-bytes-mismatch');
       if (bytes !== null && hex(await sha256(bytes)) !== change[side].sha256) throw new ApprovalProblem('approval-bytes-mismatch');
       sides[side] = bytes;
@@ -288,10 +298,29 @@ export async function prepareApproval({ request, signing, now }) {
     const before = decodeText(sides.before);
     const after = decodeText(sides.after);
     const kind = change.before === null ? 'added' : change.after === null ? 'deleted' : 'edited';
+    const markdown = /\.md$/iu.test(change.path);
+    // A new file goes public: work out on this device, from its own copy of
+    // publish.yml, which pages that makes and where. Never the node's word.
+    if (kind === 'added' && markdown) {
+      if (typeof publishYml !== 'string') throw new ApprovalProblem('approval-public-unknown');
+      if (after === null) throw new ApprovalProblem('approval-invalid');
+      const status = notePublicStatus({ path: change.path, text: after, publishYml });
+      if (!status.published) throw new ApprovalProblem('approval-private-note');
+      newPages.push({ path: change.path, address: status.address });
+    } else if (kind === 'added' && change.path !== 'publish.yml') {
+      if (!checkAsset(change.path, sides.after).ok) throw new ApprovalProblem('approval-image-refused');
+      newImages += 1;
+    }
+    const binary = kind === 'added' && !markdown && change.path !== 'publish.yml';
     shown.push({ path: change.path, title: noteTitle(change.path), kind,
-      preview: before === null || after === null ? null : wordPreview(before, after),
+      preview: binary || before === null || after === null ? null : wordPreview(before, after),
+      ...(binary ? { image: true, byteLength: sides.after.length } : {}),
       modeChanged: change.before !== null && change.after !== null && change.before.mode !== change.after.mode });
   }
+  // The node's list of new public pages must be exactly what this device found.
+  const claimed = Array.isArray(request.publicAdditions) ? request.publicAdditions : [];
+  const key = (list) => JSON.stringify(list.map((entry) => [entry?.path, entry?.address]).sort());
+  if (key(claimed) !== key(newPages)) throw new ApprovalProblem('approval-public-mismatch');
   const remote = template.target.remote;
   const repository = /^https:\/\/github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/u.exec(remote)?.[1] ?? remote.replace(/^https:\/\//u, '');
   return Object.freeze({
@@ -303,6 +332,8 @@ export async function prepareApproval({ request, signing, now }) {
       message: template.commit.message.trimEnd(),
       changesBuild: template.changes.some((change) => change.path.startsWith('.github/')),
       expiresAt: template.expiresAt,
+      // "New public page: /address, plus N images", shown as its own line.
+      newPages: Object.freeze(newPages), newImages,
     }),
   });
 }
