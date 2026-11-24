@@ -1,42 +1,511 @@
 {
-  "rule": "Each path segment: strip accents (NFKD, drop combining marks), lower-case, '&' -> 'and', '%' -> 'percent', drop apostrophes (' ’ ‘ `), every other run of characters that is not a letter or digit (spaces, punctuation, dots, emoji, symbols) -> one '-', trim '-' at both ends. Letters of any script are kept (accented Latin loses its accent; Greek, Cyrillic, CJK stay as typed, lower-cased). A file extension is kept, lower-cased, only for known file types (md, png, jpg, webp, pdf, ...); '.md' is dropped. Anything else after a dot is part of the name ('NIST CSF 2.0'). A folder note 'index.md' is the folder's address. 'address' is the web path without the leading '/'; folder pages end with '/'. 'slug' is Quartz's internal FullSlug.",
-  "implementation": "site/renderer/quartz/util/path.ts: sluggifySegment() (per segment), used by sluggify() -> slugifyFilePath() and slugTag(); patch site/quartz-patches/quartz-4.5.2-address-rule.patch",
+  "rule": "Each path segment: NFC-normalise, strip accents (NFKD, drop combining marks), lower-case, '&' -> 'and', '%' -> 'percent', drop apostrophes (' ’ ‘ `), every other run of characters that is not a letter or digit (spaces, punctuation, dots, emoji, symbols) -> one '-', trim '-' at both ends (sluggifySegment). Letters of any script are kept (accented Latin loses its accent; Greek, Cyrillic, CJK stay as typed, lower-cased). A file extension is kept, lower-cased, only for known file types (md, png, jpg, webp, pdf, ...); '.md' is dropped. Anything else after a dot is part of the name ('NIST CSF 2.0'). Folder notes: a note (.md) named 'index', or whose name equals its parent folder's name, is that folder's note and has the folder's address. 'Equals' means sluggifySegment(file name minus .md) === sluggifySegment(folder name), so case, accent encoding (NFC/NFD) and '&' vs 'and' do not matter. Other files (images) keep their own path. 'slug' is slugifyFilePath(path): content-independent; 'Name/Name.md' drops the repeated segment, 'index.md' keeps Quartz's '/index'. 'address' is addressOf(path): the web path without leading or trailing '/', '' for the home page; it never depends on other files. 'folderNote' is isFolderNotePath(path). Two files with the same address are an error (see 'collisions').",
+  "implementation": "site/renderer/quartz/util/path.ts (patch site/quartz-patches/quartz-4.5.2-address-rule.patch): sluggifySegment() per segment, used by sluggify() -> slugifyFilePath() and slugTag(); isFolderNoteName(), isFolderNotePath(), addressOf(), renderSlugs(), addressCollisions(). The renderer applies renderSlugs() and addressCollisions() in site/plugins/FolderNotes.ts.",
   "cases": [
-    { "path": "Leadership & strategy/Questions to ask a new CISO.md", "slug": "leadership-and-strategy/questions-to-ask-a-new-ciso", "address": "leadership-and-strategy/questions-to-ask-a-new-ciso" },
-    { "path": "Leadership & strategy/index.md", "slug": "leadership-and-strategy/index", "address": "leadership-and-strategy/" },
-    { "path": "index.md", "slug": "index", "address": "" },
-    { "path": "about.md", "slug": "about", "address": "about" },
-    { "path": "Knowledge base/index.md", "slug": "knowledge-base/index", "address": "knowledge-base/" },
-    { "path": "Knowledge base/Risk & governance/Board reporting/Reporting cyber risk to the board.md", "slug": "knowledge-base/risk-and-governance/board-reporting/reporting-cyber-risk-to-the-board", "address": "knowledge-base/risk-and-governance/board-reporting/reporting-cyber-risk-to-the-board" },
-    { "path": "Knowledge base/Risk & governance/Frameworks/NIST CSF 2.0 at a glance.md", "slug": "knowledge-base/risk-and-governance/frameworks/nist-csf-2-0-at-a-glance", "address": "knowledge-base/risk-and-governance/frameworks/nist-csf-2-0-at-a-glance" },
-    { "path": "Risk, governance & compliance/index.md", "slug": "risk-governance-and-compliance/index", "address": "risk-governance-and-compliance/" },
-    { "path": "From the field/Routine   beats    heroics.md", "slug": "from-the-field/routine-beats-heroics", "address": "from-the-field/routine-beats-heroics" },
-    { "path": "From the field/Zero trust: a direction, not a product.md", "slug": "from-the-field/zero-trust-a-direction-not-a-product", "address": "from-the-field/zero-trust-a-direction-not-a-product" },
-    { "path": "From the field/Don't pay — unless you decided first.md", "slug": "from-the-field/dont-pay-unless-you-decided-first", "address": "from-the-field/dont-pay-unless-you-decided-first" },
-    { "path": "From the field/The CISO’s first week – notes.md", "slug": "from-the-field/the-cisos-first-week-notes", "address": "from-the-field/the-cisos-first-week-notes" },
-    { "path": "From the field/Who owns \"risk\"? (A short answer!).md", "slug": "from-the-field/who-owns-risk-a-short-answer", "address": "from-the-field/who-owns-risk-a-short-answer" },
-    { "path": "From the field/Back\\slash and/slash.md", "slug": "from-the-field/back-slash-and/slash", "address": "from-the-field/back-slash-and/slash" },
-    { "path": "From the field/  Leading and trailing spaces  .md", "slug": "from-the-field/leading-and-trailing-spaces", "address": "from-the-field/leading-and-trailing-spaces" },
-    { "path": "From the field/...Dots around....md", "slug": "from-the-field/dots-around", "address": "from-the-field/dots-around" },
-    { "path": "From the field/The first 24 hours of a ransomware incident.md", "slug": "from-the-field/the-first-24-hours-of-a-ransomware-incident", "address": "from-the-field/the-first-24-hours-of-a-ransomware-incident" },
-    { "path": "From the field/100% patched in 30 days.md", "slug": "from-the-field/100-percent-patched-in-30-days", "address": "from-the-field/100-percent-patched-in-30-days" },
-    { "path": "From the field/Café résumé naïve Zürich.md", "slug": "from-the-field/cafe-resume-naive-zurich", "address": "from-the-field/cafe-resume-naive-zurich" },
-    { "path": "From the field/Ελληνικά Notes.md", "slug": "from-the-field/ελληνικα-notes", "address": "from-the-field/ελληνικα-notes" },
-    { "path": "From the field/🔥 Hot takes 🚀.md", "slug": "from-the-field/hot-takes", "address": "from-the-field/hot-takes" },
-    { "path": "From the field/R&D vs. Q&A.md", "slug": "from-the-field/r-and-d-vs-q-and-a", "address": "from-the-field/r-and-d-vs-q-and-a" },
-    { "path": "From the field/Version 1.5b release.md", "slug": "from-the-field/version-1-5b-release", "address": "from-the-field/version-1-5b-release" },
-    { "path": "Authors/The Chief.md", "slug": "authors/the-chief", "address": "authors/the-chief" },
-    { "path": "Authors/The Chief/Portrait.png", "slug": "authors/the-chief/portrait.png", "address": "authors/the-chief/portrait.png" },
-    { "path": "Authors/The Chief/avatar.webp", "slug": "authors/the-chief/avatar.webp", "address": "authors/the-chief/avatar.webp" },
-    { "path": "Leadership & strategy/Cover Photo.JPG", "slug": "leadership-and-strategy/cover-photo.jpg", "address": "leadership-and-strategy/cover-photo.jpg" },
-    { "path": "Leadership & strategy/Board Deck (v2).PDF", "slug": "leadership-and-strategy/board-deck-v2.pdf", "address": "leadership-and-strategy/board-deck-v2.pdf" },
-    { "path": "Leadership & strategy/Notes.MD", "slug": "leadership-and-strategy/notes", "address": "leadership-and-strategy/notes" },
-    { "path": "leadership-and-strategy/a-security-strategy-that-fits-on-one-page.md", "slug": "leadership-and-strategy/a-security-strategy-that-fits-on-one-page", "address": "leadership-and-strategy/a-security-strategy-that-fits-on-one-page" }
+    {
+      "path": "Leadership & strategy/Questions to ask a new CISO.md",
+      "slug": "leadership-and-strategy/questions-to-ask-a-new-ciso",
+      "address": "leadership-and-strategy/questions-to-ask-a-new-ciso"
+    },
+    {
+      "path": "Leadership & strategy/index.md",
+      "slug": "leadership-and-strategy/index",
+      "address": "leadership-and-strategy",
+      "folderNote": true
+    },
+    {
+      "path": "index.md",
+      "slug": "index",
+      "address": "",
+      "folderNote": true
+    },
+    {
+      "path": "about.md",
+      "slug": "about",
+      "address": "about"
+    },
+    {
+      "path": "Knowledge base/index.md",
+      "slug": "knowledge-base/index",
+      "address": "knowledge-base",
+      "folderNote": true
+    },
+    {
+      "path": "Knowledge base/Risk & governance/Board reporting/Reporting cyber risk to the board.md",
+      "slug": "knowledge-base/risk-and-governance/board-reporting/reporting-cyber-risk-to-the-board",
+      "address": "knowledge-base/risk-and-governance/board-reporting/reporting-cyber-risk-to-the-board"
+    },
+    {
+      "path": "Knowledge base/Risk & governance/Frameworks/NIST CSF 2.0 at a glance.md",
+      "slug": "knowledge-base/risk-and-governance/frameworks/nist-csf-2-0-at-a-glance",
+      "address": "knowledge-base/risk-and-governance/frameworks/nist-csf-2-0-at-a-glance"
+    },
+    {
+      "path": "Risk, governance & compliance/index.md",
+      "slug": "risk-governance-and-compliance/index",
+      "address": "risk-governance-and-compliance",
+      "folderNote": true
+    },
+    {
+      "path": "From the field/Routine   beats    heroics.md",
+      "slug": "from-the-field/routine-beats-heroics",
+      "address": "from-the-field/routine-beats-heroics"
+    },
+    {
+      "path": "From the field/Zero trust: a direction, not a product.md",
+      "slug": "from-the-field/zero-trust-a-direction-not-a-product",
+      "address": "from-the-field/zero-trust-a-direction-not-a-product"
+    },
+    {
+      "path": "From the field/Don't pay — unless you decided first.md",
+      "slug": "from-the-field/dont-pay-unless-you-decided-first",
+      "address": "from-the-field/dont-pay-unless-you-decided-first"
+    },
+    {
+      "path": "From the field/The CISO’s first week – notes.md",
+      "slug": "from-the-field/the-cisos-first-week-notes",
+      "address": "from-the-field/the-cisos-first-week-notes"
+    },
+    {
+      "path": "From the field/Who owns \"risk\"? (A short answer!).md",
+      "slug": "from-the-field/who-owns-risk-a-short-answer",
+      "address": "from-the-field/who-owns-risk-a-short-answer"
+    },
+    {
+      "path": "From the field/Back\\slash and/slash.md",
+      "slug": "from-the-field/back-slash-and/slash",
+      "address": "from-the-field/back-slash-and/slash"
+    },
+    {
+      "path": "From the field/  Leading and trailing spaces  .md",
+      "slug": "from-the-field/leading-and-trailing-spaces",
+      "address": "from-the-field/leading-and-trailing-spaces"
+    },
+    {
+      "path": "From the field/...Dots around....md",
+      "slug": "from-the-field/dots-around",
+      "address": "from-the-field/dots-around"
+    },
+    {
+      "path": "From the field/The first 24 hours of a ransomware incident.md",
+      "slug": "from-the-field/the-first-24-hours-of-a-ransomware-incident",
+      "address": "from-the-field/the-first-24-hours-of-a-ransomware-incident"
+    },
+    {
+      "path": "From the field/100% patched in 30 days.md",
+      "slug": "from-the-field/100-percent-patched-in-30-days",
+      "address": "from-the-field/100-percent-patched-in-30-days"
+    },
+    {
+      "path": "From the field/Café résumé naïve Zürich.md",
+      "slug": "from-the-field/cafe-resume-naive-zurich",
+      "address": "from-the-field/cafe-resume-naive-zurich"
+    },
+    {
+      "path": "From the field/Ελληνικά Notes.md",
+      "slug": "from-the-field/ελληνικα-notes",
+      "address": "from-the-field/ελληνικα-notes"
+    },
+    {
+      "path": "From the field/🔥 Hot takes 🚀.md",
+      "slug": "from-the-field/hot-takes",
+      "address": "from-the-field/hot-takes"
+    },
+    {
+      "path": "From the field/R&D vs. Q&A.md",
+      "slug": "from-the-field/r-and-d-vs-q-and-a",
+      "address": "from-the-field/r-and-d-vs-q-and-a"
+    },
+    {
+      "path": "From the field/Version 1.5b release.md",
+      "slug": "from-the-field/version-1-5b-release",
+      "address": "from-the-field/version-1-5b-release"
+    },
+    {
+      "path": "Authors/The Chief.md",
+      "slug": "authors/the-chief",
+      "address": "authors/the-chief"
+    },
+    {
+      "path": "Authors/The Chief/Portrait.png",
+      "slug": "authors/the-chief/portrait.png",
+      "address": "authors/the-chief/portrait.png"
+    },
+    {
+      "path": "Authors/The Chief/avatar.webp",
+      "slug": "authors/the-chief/avatar.webp",
+      "address": "authors/the-chief/avatar.webp"
+    },
+    {
+      "path": "Leadership & strategy/Cover Photo.JPG",
+      "slug": "leadership-and-strategy/cover-photo.jpg",
+      "address": "leadership-and-strategy/cover-photo.jpg"
+    },
+    {
+      "path": "Leadership & strategy/Board Deck (v2).PDF",
+      "slug": "leadership-and-strategy/board-deck-v2.pdf",
+      "address": "leadership-and-strategy/board-deck-v2.pdf"
+    },
+    {
+      "path": "Leadership & strategy/Notes.MD",
+      "slug": "leadership-and-strategy/notes",
+      "address": "leadership-and-strategy/notes"
+    },
+    {
+      "path": "leadership-and-strategy/a-security-strategy-that-fits-on-one-page.md",
+      "slug": "leadership-and-strategy/a-security-strategy-that-fits-on-one-page",
+      "address": "leadership-and-strategy/a-security-strategy-that-fits-on-one-page"
+    },
+    {
+      "path": "Threats & response/Threats & response.md",
+      "slug": "threats-and-response",
+      "address": "threats-and-response",
+      "folderNote": true
+    },
+    {
+      "path": "Threats & response/Running a tabletop exercise/Running a tabletop exercise.md",
+      "slug": "threats-and-response/running-a-tabletop-exercise",
+      "address": "threats-and-response/running-a-tabletop-exercise",
+      "folderNote": true
+    },
+    {
+      "path": "Threats & response/Running a tabletop exercise/Running a tabletop exercise cover.jpg",
+      "slug": "threats-and-response/running-a-tabletop-exercise/running-a-tabletop-exercise-cover.jpg",
+      "address": "threats-and-response/running-a-tabletop-exercise/running-a-tabletop-exercise-cover.jpg",
+      "folderNote": false
+    },
+    {
+      "path": "Threats & response/Running a tabletop exercise/Running a tabletop exercise.png",
+      "slug": "threats-and-response/running-a-tabletop-exercise/running-a-tabletop-exercise.png",
+      "address": "threats-and-response/running-a-tabletop-exercise/running-a-tabletop-exercise.png",
+      "folderNote": false
+    },
+    {
+      "path": "Threats & response/Running a tabletop exercise/Checklist.md",
+      "slug": "threats-and-response/running-a-tabletop-exercise/checklist",
+      "address": "threats-and-response/running-a-tabletop-exercise/checklist",
+      "folderNote": false
+    },
+    {
+      "path": "Threats & response/Running a tabletop exercise.md",
+      "slug": "threats-and-response/running-a-tabletop-exercise",
+      "address": "threats-and-response/running-a-tabletop-exercise",
+      "folderNote": false
+    },
+    {
+      "path": "Threats & response/Running a tabletop exercise/running a tabletop exercise.md",
+      "slug": "threats-and-response/running-a-tabletop-exercise",
+      "address": "threats-and-response/running-a-tabletop-exercise",
+      "folderNote": true
+    },
+    {
+      "path": "Threats & response/Running a tabletop exercise/index.md",
+      "slug": "threats-and-response/running-a-tabletop-exercise/index",
+      "address": "threats-and-response/running-a-tabletop-exercise",
+      "folderNote": true
+    },
+    {
+      "path": "Risk & governance/Risk and governance.md",
+      "slug": "risk-and-governance",
+      "address": "risk-and-governance",
+      "folderNote": true
+    },
+    {
+      "path": "Risk and governance/Risk & governance.md",
+      "slug": "risk-and-governance",
+      "address": "risk-and-governance",
+      "folderNote": true
+    },
+    {
+      "path": "From the field/Café/Café.md",
+      "slug": "from-the-field/cafe",
+      "address": "from-the-field/cafe",
+      "folderNote": true
+    },
+    {
+      "path": "From the field/Café/Café.md",
+      "slug": "from-the-field/cafe",
+      "address": "from-the-field/cafe",
+      "folderNote": true
+    },
+    {
+      "path": "Knowledge base/Knowledge base.md",
+      "slug": "knowledge-base",
+      "address": "knowledge-base",
+      "folderNote": true
+    },
+    {
+      "path": "Knowledge base/Glossary/Glossary.md",
+      "slug": "knowledge-base/glossary",
+      "address": "knowledge-base/glossary",
+      "folderNote": true
+    },
+    {
+      "path": "Knowledge base/Risk & governance/Risk & governance.md",
+      "slug": "knowledge-base/risk-and-governance",
+      "address": "knowledge-base/risk-and-governance",
+      "folderNote": true
+    },
+    {
+      "path": "Knowledge base/Risk & governance/Frameworks/Frameworks.md",
+      "slug": "knowledge-base/risk-and-governance/frameworks",
+      "address": "knowledge-base/risk-and-governance/frameworks",
+      "folderNote": true
+    },
+    {
+      "path": "Knowledge base/Risk & governance/Frameworks/NIST CSF 2.0 at a glance/NIST CSF 2.0 at a glance.md",
+      "slug": "knowledge-base/risk-and-governance/frameworks/nist-csf-2-0-at-a-glance",
+      "address": "knowledge-base/risk-and-governance/frameworks/nist-csf-2-0-at-a-glance",
+      "folderNote": true
+    },
+    {
+      "path": "Knowledge base/Risk & governance/Frameworks/NIST CSF 2.0 at a glance/NIST CSF diagram.webp",
+      "slug": "knowledge-base/risk-and-governance/frameworks/nist-csf-2-0-at-a-glance/nist-csf-diagram.webp",
+      "address": "knowledge-base/risk-and-governance/frameworks/nist-csf-2-0-at-a-glance/nist-csf-diagram.webp",
+      "folderNote": false
+    },
+    {
+      "path": "Authors/The Chief/The Chief.md",
+      "slug": "authors/the-chief",
+      "address": "authors/the-chief",
+      "folderNote": true
+    },
+    {
+      "path": "Authors/The Chief/avatar.png",
+      "slug": "authors/the-chief/avatar.png",
+      "address": "authors/the-chief/avatar.png",
+      "folderNote": false
+    },
+    {
+      "path": "A/A/A.md",
+      "slug": "a/a",
+      "address": "a/a",
+      "folderNote": true
+    },
+    {
+      "path": "Version 1.5/Version 1.5.md",
+      "slug": "version-1-5",
+      "address": "version-1-5",
+      "folderNote": true
+    },
+    {
+      "path": "Notes/Notes.MD",
+      "slug": "notes",
+      "address": "notes",
+      "folderNote": true
+    },
+    {
+      "path": "Leadership & strategy/Index.md",
+      "slug": "leadership-and-strategy/index",
+      "address": "leadership-and-strategy",
+      "folderNote": true
+    }
   ],
   "tags": [
-    { "tag": "knowledge-base/risk-and-governance", "slug": "knowledge-base/risk-and-governance" },
-    { "tag": "Knowledge base/Risk & governance", "slug": "knowledge-base/risk-and-governance" },
-    { "tag": "audience/security-leaders", "slug": "audience/security-leaders" },
-    { "tag": "Incident Response", "slug": "incident-response" }
-  ]
+    {
+      "tag": "knowledge-base/risk-and-governance",
+      "slug": "knowledge-base/risk-and-governance"
+    },
+    {
+      "tag": "Knowledge base/Risk & governance",
+      "slug": "knowledge-base/risk-and-governance"
+    },
+    {
+      "tag": "audience/security-leaders",
+      "slug": "audience/security-leaders"
+    },
+    {
+      "tag": "Incident Response",
+      "slug": "incident-response"
+    }
+  ],
+  "render": {
+    "rule": "renderSlugs(files): the slug the renderer draws each file under. Same as 'slug', except that a same-name folder note of a top-level folder, or whose folder holds at least one other note (.md) at any depth, becomes '<folder>/index' and is drawn as that folder's page (topic, KB folder, KB landing). A same-name folder note whose folder holds only itself and non-note files stays '<folder>' and is drawn as a page (post, KB page, author). 'url' is the served path: folder pages end with '/'. The address is the same either way.",
+    "files": [
+      "index.md",
+      "About.md",
+      "Threats & response/Threats & response.md",
+      "Threats & response/Running a tabletop exercise/Running a tabletop exercise.md",
+      "Threats & response/Running a tabletop exercise/Running a tabletop exercise cover.jpg",
+      "Leadership & strategy/index.md",
+      "Leadership & strategy/Writing a strategy/Writing a strategy.md",
+      "Empty topic/Empty topic.md",
+      "Knowledge base/Knowledge base.md",
+      "Knowledge base/Glossary/Glossary.md",
+      "Knowledge base/Risk & governance/Risk & governance.md",
+      "Knowledge base/Risk & governance/Frameworks/Frameworks.md",
+      "Knowledge base/Risk & governance/Frameworks/NIST CSF 2.0 at a glance/NIST CSF 2.0 at a glance.md",
+      "Knowledge base/Risk & governance/Frameworks/NIST CSF 2.0 at a glance/NIST CSF diagram.webp",
+      "Knowledge base/New folder/New folder.md",
+      "Authors/The Chief/The Chief.md",
+      "Authors/The Chief/avatar.png"
+    ],
+    "expect": {
+      "index.md": {
+        "slug": "index",
+        "url": ""
+      },
+      "About.md": {
+        "slug": "about",
+        "url": "about"
+      },
+      "Threats & response/Threats & response.md": {
+        "slug": "threats-and-response/index",
+        "url": "threats-and-response/"
+      },
+      "Threats & response/Running a tabletop exercise/Running a tabletop exercise.md": {
+        "slug": "threats-and-response/running-a-tabletop-exercise",
+        "url": "threats-and-response/running-a-tabletop-exercise"
+      },
+      "Threats & response/Running a tabletop exercise/Running a tabletop exercise cover.jpg": {
+        "slug": "threats-and-response/running-a-tabletop-exercise/running-a-tabletop-exercise-cover.jpg",
+        "url": "threats-and-response/running-a-tabletop-exercise/running-a-tabletop-exercise-cover.jpg"
+      },
+      "Leadership & strategy/index.md": {
+        "slug": "leadership-and-strategy/index",
+        "url": "leadership-and-strategy/"
+      },
+      "Leadership & strategy/Writing a strategy/Writing a strategy.md": {
+        "slug": "leadership-and-strategy/writing-a-strategy",
+        "url": "leadership-and-strategy/writing-a-strategy"
+      },
+      "Empty topic/Empty topic.md": {
+        "slug": "empty-topic/index",
+        "url": "empty-topic/"
+      },
+      "Knowledge base/Knowledge base.md": {
+        "slug": "knowledge-base/index",
+        "url": "knowledge-base/"
+      },
+      "Knowledge base/Glossary/Glossary.md": {
+        "slug": "knowledge-base/glossary",
+        "url": "knowledge-base/glossary"
+      },
+      "Knowledge base/Risk & governance/Risk & governance.md": {
+        "slug": "knowledge-base/risk-and-governance/index",
+        "url": "knowledge-base/risk-and-governance/"
+      },
+      "Knowledge base/Risk & governance/Frameworks/Frameworks.md": {
+        "slug": "knowledge-base/risk-and-governance/frameworks/index",
+        "url": "knowledge-base/risk-and-governance/frameworks/"
+      },
+      "Knowledge base/Risk & governance/Frameworks/NIST CSF 2.0 at a glance/NIST CSF 2.0 at a glance.md": {
+        "slug": "knowledge-base/risk-and-governance/frameworks/nist-csf-2-0-at-a-glance",
+        "url": "knowledge-base/risk-and-governance/frameworks/nist-csf-2-0-at-a-glance"
+      },
+      "Knowledge base/Risk & governance/Frameworks/NIST CSF 2.0 at a glance/NIST CSF diagram.webp": {
+        "slug": "knowledge-base/risk-and-governance/frameworks/nist-csf-2-0-at-a-glance/nist-csf-diagram.webp",
+        "url": "knowledge-base/risk-and-governance/frameworks/nist-csf-2-0-at-a-glance/nist-csf-diagram.webp"
+      },
+      "Knowledge base/New folder/New folder.md": {
+        "slug": "knowledge-base/new-folder",
+        "url": "knowledge-base/new-folder"
+      },
+      "Authors/The Chief/The Chief.md": {
+        "slug": "authors/the-chief",
+        "url": "authors/the-chief"
+      },
+      "Authors/The Chief/avatar.png": {
+        "slug": "authors/the-chief/avatar.png",
+        "url": "authors/the-chief/avatar.png"
+      }
+    }
+  },
+  "collisions": {
+    "rule": "addressCollisions(files): every address shared by two or more files, with the files (sorted). The renderer build fails on any (Cyberbaser: create-address-collision); no file wins.",
+    "cases": [
+      {
+        "name": "index.md beside a same-name folder note",
+        "files": [
+          "Topic/index.md",
+          "Topic/Topic.md",
+          "Topic/Post/Post.md"
+        ],
+        "collisions": [
+          {
+            "address": "topic",
+            "files": [
+              "Topic/Topic.md",
+              "Topic/index.md"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "names differing only in case",
+        "files": [
+          "A/b.md",
+          "A/B.md"
+        ],
+        "collisions": [
+          {
+            "address": "a/b",
+            "files": [
+              "A/B.md",
+              "A/b.md"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "old flat post beside its folder note",
+        "files": [
+          "Topic/Post.md",
+          "Topic/Post/Post.md"
+        ],
+        "collisions": [
+          {
+            "address": "topic/post",
+            "files": [
+              "Topic/Post.md",
+              "Topic/Post/Post.md"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "& vs and",
+        "files": [
+          "Risk & governance/Risk & governance.md",
+          "Risk and governance/Risk and governance.md"
+        ],
+        "collisions": [
+          {
+            "address": "risk-and-governance",
+            "files": [
+              "Risk & governance/Risk & governance.md",
+              "Risk and governance/Risk and governance.md"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "NFC vs NFD accents",
+        "files": [
+          "Café.md",
+          "Café.md"
+        ],
+        "collisions": [
+          {
+            "address": "cafe",
+            "files": [
+              "Café.md",
+              "Café.md"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "no collision: folder note, its image, a note with another name",
+        "files": [
+          "Topic/Topic.md",
+          "Topic/Post/Post.md",
+          "Topic/Post/Post.png",
+          "Topic/Post/Checklist.md",
+          "index.md"
+        ],
+        "collisions": []
+      }
+    ]
+  }
 }
