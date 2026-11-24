@@ -267,3 +267,28 @@ test('withdraw: asks the node to drop the bundle, and the note goes back to Draf
   const draft = '---\ntitle: T\ndate: 2026-11-24\ndraft: true # held\n---\n\nBody draft: false\n';
   expect(withDraftOn(withDraftOff(draft))).toBe(draft);
 });
+
+test('a refusal while following a post is shown, a lost connection is not, and Check again can recover it', async () => {
+  let answer = { kind: 'refuse' };
+  const readProgress = async () => {
+    if (answer.kind === 'refuse') throw Object.assign(new Error('refused'), { reason: 'bundle-progress-unavailable' });
+    if (answer.kind === 'offline') throw new NodeError('unreachable');
+    return { step: answer.step };
+  };
+  const tracker = createPublishTracker({ readProgress, withdraw: async () => {}, send: async () => ({ bundleId: 'b1', step: 'publishing' }),
+    isUnreachable: (error) => error instanceof NodeError && error.kind === 'unreachable' });
+  const { item, done } = tracker.publish({ path: 'P.md', title: 'P' });
+  await done;
+  expect(item.step).toBe('publishing');
+  answer = { kind: 'offline' };
+  await tracker.poll();
+  expect(item.step).toBe('publishing');
+  answer = { kind: 'refuse' };
+  await tracker.poll();
+  expect(item.step).toBe('failed');
+  expect(item.reason).toBe('bundle-progress-unavailable');
+  expect(statusBarState(tracker.items(), 0)).toMatchObject({ key: 'attention' });
+  answer = { kind: 'ok', step: 'live' };
+  await tracker.poll();
+  expect(item.step).toBe('live');
+});

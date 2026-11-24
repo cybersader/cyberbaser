@@ -46,6 +46,8 @@ const ERRORS = Object.freeze({
   'capture-base-moved': ['Your site changed while this was on its way. Your post is safe.', 'retry'],
   'owner-approval-mismatch': ['What reached your site was not what you approved, so nothing was published. Your post is safe.', 'retry'],
   'deployment-failed': ["Your site didn't finish updating. Your post is safe.", 'check'],
+  'bundle-progress-unavailable': ["Your site couldn't say how publishing is going. Your post is safe.", 'check'],
+  'bundle-job-mismatch': ["Your site's record for this post doesn't match it. Your post is safe.", 'check'],
   'live-verification-failed': ["Your site updated, but the page isn't showing yet. Your post is safe.", 'check'],
   declined: ['Not approved this time. Your post is safe.', 'retry'],
   unchanged: ['Your site already has this post.', 'check'],
@@ -172,9 +174,19 @@ export function createPublishTracker({ readProgress, withdraw, send, isUnreachab
     async poll() {
       for (const item of [...items.values()]) {
         if (item.step === 'queued') { await sendItem(item); continue; }
-        if (!['waiting', 'review', 'publishing'].includes(item.step) || item.bundleId === null) continue;
+        // A failed post that reached the node is read again too, so "Check again" can recover it.
+        const followed = ['waiting', 'review', 'publishing'].includes(item.step)
+          || (item.step === 'failed' && ['waiting', 'review', 'publishing'].includes(item.lastStep));
+        if (!followed || item.bundleId === null) continue;
         let progress;
-        try { progress = await readProgress(item.bundleId); } catch { continue; }
+        try { progress = await readProgress(item.bundleId); } catch (error) {
+          // A lost connection is retried on the next round; a refusal from the
+          // node is shown, never hidden behind "Publishing".
+          if (!isUnreachable(error)) {
+            set(item, { step: 'failed', reason: error?.reason ?? error?.kind ?? 'unknown', message: describeError(error), lastStep: item.step });
+          }
+          continue;
+        }
         if (!progress || typeof progress.step !== 'string') continue;
         set(item, { step: progress.step, reason: progress.reason ?? null, at: progress.at ?? null,
           pages: Array.isArray(progress.pages) ? progress.pages : item.pages });
