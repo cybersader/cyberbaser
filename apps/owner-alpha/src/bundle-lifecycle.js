@@ -21,6 +21,40 @@ const BUNDLE_ID = /^bundle-[0-9a-f-]{36}$/u;
 const SITE_CONFIG = '.cyberbaser/site.yml';
 
 /** The durable job that follows one bundle after its push. */
+const LIVE_JOB_STATES = Object.freeze(['live-confirmed', 'rebuilding-local', 'completed']);
+const FAILED_JOB_STATES = Object.freeze(['deployment-failed', 'live-verification-failed', 'manual-intervention', 'cancelled', 'failed']);
+
+/** The public web address of a new page: the site's base URL and its address. */
+export function pageLiveUrl(config, address) {
+  try { return liveUrlForSlug(config.live.baseUrl, addressToSlug(address)); } catch { return null; }
+}
+
+/**
+ * Where one bundle is, for the device that sent it: { bundleId, step, reason,
+ * at, pages: [{ path, address, url }] }. step is one of review (waits for the
+ * owner on the node), waiting (for the signature), publishing (pushed, the site
+ * is updating), live, withdrawn, declined, failed. job: the bundle's durable
+ * job (null before the push). No commits, branches or repository names.
+ */
+export function bundleProgress({ config, record, job = null }) {
+  const pages = (record.publicAdditions ?? []).map(({ path, address }) => ({ path, address, url: pageLiveUrl(config, address) }));
+  const base = { bundleId: record.bundleId, pages, reason: null, at: null };
+  switch (record.state) {
+    case 'review': return { ...base, step: 'review' };
+    case 'signing': return { ...base, step: 'waiting' };
+    case 'declined': return { ...base, step: record.reason === 'withdrawn' ? 'withdrawn' : 'declined' };
+    case 'stale': return { ...base, step: 'failed', reason: typeof record.reason === 'string' ? record.reason : 'stale' };
+    default: break;
+  }
+  const state = typeof job?.state === 'string' ? job.state : null;
+  if (state !== null && LIVE_JOB_STATES.includes(state)) {
+    const confirmed = Array.isArray(job.history) ? job.history.find((entry) => entry?.to === 'live-confirmed')?.at : null;
+    return { ...base, step: 'live', at: typeof confirmed === 'string' ? confirmed : null };
+  }
+  if (state !== null && FAILED_JOB_STATES.includes(state)) return { ...base, step: 'failed', reason: job.failure?.code ?? state };
+  return { ...base, step: 'publishing' };
+}
+
 export function bundleJobId(bundleId) {
   if (typeof bundleId !== 'string' || !BUNDLE_ID.test(bundleId)) fail('invalid-job-id', 'not a bundle id');
   return `OA-${bundleId}`;

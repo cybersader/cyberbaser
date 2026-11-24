@@ -36,7 +36,7 @@ export const IROH_COMMANDS = Object.freeze(['submitProposal', 'submitCapture', '
   // Signing device (core/approvals.js): enrol with the publisher, approve publishes.
   'readSigningChallenge', 'enrollSigningKey', 'listApprovals', 'readApproval', 'submitApproval', 'declineApproval',
   // New notes and images (core/bundle-desk.js).
-  'stageAsset', 'submitPageBundle', 'readApprovalChunk']);
+  'stageAsset', 'submitPageBundle', 'readApprovalChunk', 'readPageBundle', 'withdrawPageBundle']);
 // After a request verified, a command's own refusal may name one of these
 // fixed reasons so the device can say something useful. Signature, key, grant
 // and binding failures stay the single generic refusal.

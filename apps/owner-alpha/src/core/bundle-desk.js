@@ -257,6 +257,20 @@ export async function openBundleDesk({ config, git, branchHead, directory, stagi
       return { bundleId, state: 'declined' };
     },
 
+    /**
+     * The device that sent a bundle takes it back before it is signed. Only
+     * that device (its pairing key), only while it waits for review or for the
+     * signature. A withdrawn bundle is final: never offered, never pushed.
+     */
+    async withdraw(bundleId, keyId) {
+      const record = await load(bundleId);
+      if (typeof keyId !== 'string' || record.submitter?.keyId !== keyId) fail('bundle-not-found', 'no such bundle');
+      if (record.state === 'declined' && record.reason === 'withdrawn') return { bundleId, state: 'withdrawn' };
+      if (!['review', 'signing'].includes(record.state)) fail('bundle-not-reviewable', 'this bundle is already decided');
+      await save({ ...record, state: 'declined', reason: 'withdrawn', updatedAt: clock() });
+      return { bundleId, state: 'withdrawn' };
+    },
+
     // pushed: the publisher's answer ({ commit, branch, receipt }), kept so a
     // restart can still record the bundle's job (job-approvals.js).
     async markPublished(bundleId, commit, pushed = null) {

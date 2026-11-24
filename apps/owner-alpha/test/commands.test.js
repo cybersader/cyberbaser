@@ -175,7 +175,7 @@ test('unexpected effect errors use the existing route fallback codes', async () 
   }
 });
 
-test.each(['stageAsset', 'submitPageBundle', 'listBundles', 'approveBundle', 'declineBundle', 'readApprovalChunk'])(
+test.each(['stageAsset', 'submitPageBundle', 'listBundles', 'approveBundle', 'declineBundle', 'readApprovalChunk', 'readPageBundle', 'withdrawPageBundle'])(
   'page bundle command %s refuses an absent or invalid principal before reading input', async (command) => {
     const commands = fixtureCommands();
     const untouchable = new Proxy({}, { get() { throw new Error('input read before authorization'); } });
@@ -200,4 +200,27 @@ test('page bundles: an owner device that may publish goes to its signature, a pr
   expect(await commands.submitPageBundle(input, device('agent', 'agent', ['propose']))).toMatchObject({ state: 'review' });
   expect(submitted).toEqual([['phone', 'owner'], ['agent', 'propose']]);
   await expect(commands.submitPageBundle(input, device('reader', 'agent', []))).rejects.toHaveProperty('code', 'invalid-session');
+});
+
+test('page bundles: only the device that sent a bundle reads its progress or withdraws it; withdrawing takes the approval back', async () => {
+  const bundleId = 'bundle-00000000-0000-4000-8000-000000000009';
+  const record = { bundleId, state: 'signing', submitter: { keyId: 'phone' }, publicAdditions: [{ path: 'topic/a.md', address: '/topic/a' }] };
+  const withdrawn = [];
+  let listed = 0;
+  const bundleDesk = { staging: {}, load: async (id) => { if (id !== bundleId) throw new OwnerAlphaError('bundle-not-found', 'no'); return record; },
+    withdraw: async (id, keyId) => { if (keyId !== 'phone') throw new OwnerAlphaError('bundle-not-found', 'no'); withdrawn.push(id); return { bundleId: id, state: 'withdrawn' }; } };
+  const approvals = { list: async () => { listed += 1; return []; } };
+  const device = (keyId) => ({ method: 'device-key', keyId, id: example.owner.identity,
+    actor: { kind: 'owner-device', id: example.owner.identity, label: keyId }, grants: ['publish', 'propose'] });
+  const devicePrincipalAdapter = { ownerId: example.owner.identity, isVerified: () => true, consumeRequest: () => true,
+    hasGrant: (p, grant) => p.grants.includes(grant) };
+  const commands = fixtureCommands({ devicePrincipalAdapter, bundleDesk, approvals });
+  expect(await commands.readPageBundle({ bundleId }, device('phone'))).toMatchObject({ bundleId, step: 'waiting' });
+  await expect(commands.readPageBundle({ bundleId }, device('laptop'))).rejects.toHaveProperty('code', 'bundle-not-found');
+  await expect(commands.withdrawPageBundle({ bundleId }, device('laptop'))).rejects.toHaveProperty('code', 'bundle-not-found');
+  expect(withdrawn).toEqual([]);
+  expect(await commands.withdrawPageBundle({ bundleId }, device('phone'))).toEqual({ bundleId, state: 'withdrawn' });
+  expect(withdrawn).toEqual([bundleId]);
+  expect(listed).toBe(1);
+  await expect(commands.withdrawPageBundle({ bundleId: 'x' }, device('phone'))).rejects.toHaveProperty('code', 'bundle-not-found');
 });

@@ -25,6 +25,7 @@ import { createApprovalGate } from '../src/publisher/approval-gate.js';
 import { verifyBundleForPush } from '../src/publisher/bundle-publish.js';
 import { createOwnerKeys } from '../src/publisher/owner-keys.js';
 import { gitIn } from '../src/signed-publish.js';
+import { bundleProgress } from '../src/bundle-lifecycle.js';
 import { bundleVault, gitSync, REMOTE_URL, VAULT } from './bundle-fixture.js';
 
 const fingerTaps = new WeakSet();
@@ -102,8 +103,9 @@ beforeAll(async () => {
     pushed.push(target);
     return { commit: target, branch: 'main', receipt: authorization.receipt({ status: 'pushed', commit: target, remoteRef: target }) };
   };
-  const relay = createApprovalRelay({ publisher: { challenge: () => ownerKeys.challenge() } });
-  const offers = createJobApprovals({ config, context: null, pipeline: null, listJobs: async () => [], git: gitIn(checkout),
+  let offers;
+  const relay = createApprovalRelay({ publisher: { challenge: () => ownerKeys.challenge() }, refresh: () => offers.refresh(relay) });
+  offers = createJobApprovals({ config, context: null, pipeline: null, listJobs: async () => [], git: gitIn(checkout),
     bundles: desk, publishBundle, log: () => {},
     // After the push: the job that follows deployment and the live check (bundle-lifecycle.test.js runs it).
     trackBundle: async (evidence) => { tracked.push(evidence); return { state: 'completed' }; } });
@@ -117,12 +119,15 @@ beforeAll(async () => {
       case 'readApproval': return relay.read(input);
       case 'readApprovalChunk': return relay.readChunk(input);
       case 'submitApproval': return relay.submit(input);
+      // As commands.js: only the sending device; withdrawing also takes the waiting approval back.
+      case 'readPageBundle': return bundleProgress({ config, record: await desk.load(input.bundleId) });
+      case 'withdrawPageBundle': { const result = await desk.withdraw(input.bundleId, ownerPrincipal.keyId); await relay.list(); return result; }
       default: throw new Error(`unexpected ${command}`);
     }
   } };
   const controller = createController({ client, store: { load: async () => ({ keyId: 'pair-phone', grants: ['publish', 'propose'] }) },
     signingStore, tapGate: createTapGate((event) => fingerTaps.has(event)) });
-  world = { vault, remote, checkout, head, desk, relay, offers, controller, pushed, tracked, refusals, setTamper: (fn) => { tamper = fn; } };
+  world = { vault, remote, checkout, head, desk, relay, offers, controller, pushed, tracked, refusals, config, setTamper: (fn) => { tamper = fn; } };
 });
 
 afterAll(async () => { await rm(world.vault.root, { recursive: true, force: true }); });
@@ -294,4 +299,62 @@ test('a propose-only device can only propose: its bundle waits for review and is
   expect((await desk.load(result.bundleId)).state).toBe('signing');
   await offers.refresh(relay);
   expect((await relay.list()).length).toBe(1);
+});
+
+// Earlier tests may leave a bundle waiting (the propose-only one): decline it first.
+async function clearWaiting() {
+  for (const record of await world.desk.list(['signing', 'review'])) await world.desk.decline(record.bundleId);
+  await world.offers.refresh(world.relay);
+  for (const entry of await world.relay.list()) world.relay.decline({ requestId: entry.requestId });
+}
+
+test('withdraw before approval: the waiting approval is taken back, a signature can never publish it, and only its device can', async () => {
+  const { controller, desk, relay, remote } = world;
+  await clearWaiting();
+  const before = gitSync(remote, 'rev-parse', 'main');
+  const pushedBefore = world.pushed.length;
+  const notePath = 'topic/taken-back.md';
+  const text = '---\ntitle: Taken back\n---\n\nNot yet.\n';
+  const status = notePublicStatus({ path: notePath, text, publishYml: PUBLISH_YML });
+  const sent = await controller.publishNewPage({ path: notePath }, text, { status, images: [], remote: [] });
+  expect(await controller.bundleProgress(sent.bundleId)).toMatchObject({ step: 'waiting', pages: [{ path: notePath, address: '/topic/taken-back',
+    url: 'https://owner.example/site/topic/taken-back' }] });
+  const requestId = await waitingRequest();
+  const prepared = await controller.readApproval(requestId, { publishYml: PUBLISH_YML });
+
+  // Another device cannot withdraw it.
+  await expect(desk.withdraw(sent.bundleId, 'someone-else')).rejects.toMatchObject({ code: 'bundle-not-found' });
+  expect(await controller.withdraw(sent.bundleId)).toEqual({ bundleId: sent.bundleId, state: 'withdrawn' });
+  expect(await desk.load(sent.bundleId)).toMatchObject({ state: 'declined', reason: 'withdrawn' });
+  expect(await controller.bundleProgress(sent.bundleId)).toMatchObject({ step: 'withdrawn' });
+  // Gone from every signing device, and a sheet still open cannot approve it.
+  expect(await relay.list()).toEqual([]);
+  await expect(controller.approve(prepared, finger())).rejects.toMatchObject({ code: 'approval-not-found' });
+  await expect(controller.readApproval(requestId, { publishYml: PUBLISH_YML })).rejects.toMatchObject({ code: 'approval-not-found' });
+  // Never offered again; withdrawing twice is harmless; nothing was pushed.
+  await world.offers.refresh(relay);
+  expect(await relay.list()).toEqual([]);
+  expect(await controller.withdraw(sent.bundleId)).toMatchObject({ state: 'withdrawn' });
+  expect(gitSync(remote, 'rev-parse', 'main')).toBe(before);
+  expect(world.pushed.length).toBe(pushedBefore);
+});
+
+test('withdraw racing a signature: a signature that reaches the node after the withdrawal is not used', async () => {
+  const { controller, desk, relay, remote } = world;
+  await clearWaiting();
+  const before = gitSync(remote, 'rev-parse', 'main');
+  const pushedBefore = world.pushed.length;
+  const notePath = 'topic/race.md';
+  const text = '# Race\n';
+  const status = notePublicStatus({ path: notePath, text, publishYml: PUBLISH_YML });
+  const sent = await controller.publishNewPage({ path: notePath }, text, { status, images: [], remote: [] });
+  const requestId = await waitingRequest();
+  const prepared = await controller.readApproval(requestId, { publishYml: PUBLISH_YML });
+  // Withdrawn on the node, but the relay has not been refreshed yet: the phone's tap still arrives.
+  await desk.withdraw(sent.bundleId, 'pair-phone');
+  await controller.approve(prepared, finger());
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  expect(await desk.load(sent.bundleId)).toMatchObject({ state: 'declined', reason: 'withdrawn' });
+  expect(gitSync(remote, 'rev-parse', 'main')).toBe(before);
+  expect(world.pushed.length).toBe(pushedBefore);
 });

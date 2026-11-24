@@ -112,6 +112,11 @@ export function createJobApprovals({ config, context, pipeline, listJobs = listD
     offered.set(key, requestId);
     result.then(async (signed) => {
       offered.delete(key);
+      // Withdrawn (or otherwise decided) while it waited: the signature is not used.
+      const current = await bundles.load(record.bundleId);
+      if (current.state !== 'signing' || current.commit !== record.commit) {
+        throw Object.assign(new Error('the bundle was withdrawn'), { code: 'bundle-withdrawn' });
+      }
       let pushed;
       try {
         pushed = await publishBundle({ commit: record.commit, record: signed });
@@ -182,6 +187,14 @@ export function createJobApprovals({ config, context, pipeline, listJobs = listD
       }
     }
     if (bundles !== null && publishBundle !== null) {
+      // Requests whose bundle no longer waits for the signature (withdrawn by
+      // its device, declined on the node): taken back, so no device sees them.
+      const signingIds = new Set((await bundles.list(['signing'])).map((record) => `bundle:${record.bundleId}`));
+      for (const [key, requestId] of [...offered]) {
+        if (!key.startsWith('bundle:') || signingIds.has(key)) continue;
+        offered.delete(key);
+        try { relay.decline({ requestId }); } catch { /* already gone */ }
+      }
       for (const record of await bundles.list(['signing'])) {
         const key = `bundle:${record.bundleId}`;
         if (offered.has(key) || (quiet.get(key) ?? 0) > now) continue;

@@ -10,6 +10,7 @@ import { actorAllowsGrant } from './grants.js';
 import { createCaptureProposalBuilder, deliveryPathFor } from './capture-submission.js';
 import { createProposalSubmission } from './proposal-submission.js';
 import { refuseSignedRequest } from './signed-request.js';
+import { bundleJobId, bundleProgress } from '../bundle-lifecycle.js';
 
 const signedCommands = new WeakMap();
 
@@ -290,6 +291,29 @@ export function createOwnerCommands({
       // Charged before any Git read, like every other submission.
       await submitProposal.submitBuilt(async () => null, principal);
       return bundleDesk.submit(input, principal, tier);
+    }, { preserveCode: true }),
+
+    // Where a bundle this device sent is now (its progress view and status bar).
+    readPageBundle: command(bundleGrant, 'bundle-not-found', async (input, principal) => {
+      if (bundleDesk === null) fail('bundle-not-found', 'no such bundle');
+      const { bundleId } = closedInput(input, 'bundleId');
+      if (typeof bundleId !== 'string' || !/^bundle-[0-9a-f-]{36}$/u.test(bundleId)) fail('bundle-not-found', 'no such bundle');
+      const record = await bundleDesk.load(bundleId);
+      if (record.submitter?.keyId !== principal.keyId) fail('bundle-not-found', 'no such bundle');
+      let job = null;
+      if (record.state === 'published' && typeof lookupJob === 'function') job = await lookupJob(bundleJobId(bundleId)).catch(() => null);
+      return bundleProgress({ config, record, job });
+    }, { preserveCode: true }),
+
+    // The device takes back what it sent, before it is signed. The waiting
+    // approval is taken back too, so no signing device can approve it later.
+    withdrawPageBundle: command(bundleGrant, 'bundle-not-found', async (input, principal) => {
+      if (bundleDesk === null) fail('bundle-not-found', 'no such bundle');
+      const { bundleId } = closedInput(input, 'bundleId');
+      if (typeof bundleId !== 'string' || !/^bundle-[0-9a-f-]{36}$/u.test(bundleId)) fail('bundle-not-found', 'no such bundle');
+      const result = await bundleDesk.withdraw(bundleId, principal.keyId);
+      if (approvals !== null) await approvals.list().catch(() => {});
+      return result;
     }, { preserveCode: true }),
 
     listBundles: command('review', 'review-list-failed', async () => {
