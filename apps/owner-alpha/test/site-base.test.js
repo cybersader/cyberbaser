@@ -41,7 +41,10 @@ test('a vault that declares site.baseUrl is served at that path', async () => {
   expect(declaredSiteBase('site:\n  baseUrl: example.org/notes/team/\n')).toBe('/notes/team/');
   expect(declaredSiteBase('site:\n  title: Only a title\n')).toBeNull();
   expect(declaredSiteBase(null)).toBeNull();
-  for (const bad of ['site:\n  baseUrl: https://cyberchief.me\n', 'site:\n  baseUrl: host.org/../x\n', 'site:\n  baseUrl: 5\n', 'site: [', 'site:\n  baseUrl: host.org/a b\n']) {
+  // Cyberchief writes a full address (https://cyberchief.me/); its path is the base.
+  expect(declaredSiteBase('site:\n  baseUrl: https://cyberchief.me/\n')).toBe('/');
+  expect(declaredSiteBase('site:\n  baseUrl: https://example.org/notes/\n')).toBe('/notes/');
+  for (const bad of ['site:\n  baseUrl: ftp://cyberchief.me\n', 'site:\n  baseUrl: https://u:p@cyberchief.me/\n', 'site:\n  baseUrl: host.org/../x\n', 'site:\n  baseUrl: 5\n', 'site: [', 'site:\n  baseUrl: host.org/a b\n']) {
     expect(() => declaredSiteBase(bad)).toThrow(expect.objectContaining({ code: 'site-base-invalid' }));
   }
   const checkout = await tempDir('site-base-vault-');

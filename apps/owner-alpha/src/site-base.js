@@ -34,7 +34,7 @@ export function configuredSiteBase(config) {
 
 /**
  * The base path declared by the vault's site.yml text (site.baseUrl, host[/path]
- * without protocol), or null when the file declares none. An unreadable or
+ * or an http(s):// address), or null when the file declares none. An unreadable or
  * malformed declaration fails closed rather than guessing.
  */
 export function declaredSiteBase(text) {
@@ -45,8 +45,15 @@ export function declaredSiteBase(text) {
   }
   const declared = parsed?.site?.baseUrl;
   if (declared === undefined || declared === null) return null;
+  // An https:// (or http://) address is read for its path, as Cyberchief writes it ("https://cyberchief.me/").
+  if (typeof declared === 'string' && /^https?:\/\//iu.test(declared.trim())) {
+    let url;
+    try { url = new URL(declared.trim()); } catch { fail('site-base-invalid', 'site.baseUrl is not a valid address'); }
+    if (url.username || url.password || url.search || url.hash) fail('site-base-invalid', 'site.baseUrl must be host[/path]');
+    return normalizedBase(url.pathname, 'site.baseUrl');
+  }
   if (typeof declared !== 'string' || declared.trim() === '' || /^[a-z][a-z0-9+.-]*:/iu.test(declared.trim())) {
-    fail('site-base-invalid', 'site.baseUrl must be host[/path] without protocol');
+    fail('site-base-invalid', 'site.baseUrl must be host[/path], or an https:// address');
   }
   const value = declared.trim();
   const slash = value.indexOf('/');
