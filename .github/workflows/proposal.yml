@@ -8,6 +8,7 @@ on:
       - 'packages/correction/**'
       - 'packages/ofm/**'
       - 'packages/trust/**'
+      - 'packages/publish/**'
       - '.github/workflows/proposal.yml'
   pull_request:
     paths:
@@ -15,6 +16,7 @@ on:
       - 'packages/correction/**'
       - 'packages/ofm/**'
       - 'packages/trust/**'
+      - 'packages/publish/**'
       - '.github/workflows/proposal.yml'
   workflow_dispatch:
 
@@ -45,6 +47,8 @@ jobs:
           bun install --cwd packages/ofm --frozen-lockfile
           bun install --cwd packages/trust --frozen-lockfile
           bun install --cwd packages/proposal --frozen-lockfile
+          # The page-bundle test checks its folder-note rule against packages/publish.
+          bun install --cwd packages/publish --frozen-lockfile
 
       - name: Run proposal package tests
         run: bun test packages/proposal/test
