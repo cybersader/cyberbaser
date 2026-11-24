@@ -288,8 +288,11 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
           return { ...await pushExactCommit({ ...input, remoteUrl: fixture.remote }, gitDependencies), syntheticLocalRemote: true };
         },
         getHead: (cwd) => fixture.git(cwd, ['rev-parse', 'HEAD']),
-        discoverDeploymentRun: async ({ applicationSha }) => simulated('discovery', { binding: { provider: 'github-actions', runId: 'local-only', headSha: applicationSha, runAttempt: 1 } }),
-        monitorDeploymentRun: async ({ boundRun }) => simulated('deployment', { provider: 'github-actions', run: boundRun, environment: { state: 'success' } }),
+        // Shaped as a successful bound run so the node's own deployment checks
+        // (live verification, note status) accept it; still marked synthetic.
+        discoverDeploymentRun: async ({ applicationSha }) => simulated('discovery', { binding: { provider: 'github-actions', runId: '1', headSha: applicationSha, runAttempt: 1 } }),
+        monitorDeploymentRun: async ({ boundRun }) => simulated('deployment', { provider: 'github-actions',
+          run: { ...boundRun, status: 'completed', conclusion: 'success' }, environment: { state: 'success' } }),
         confirmLivePage: async () => simulated('live-confirmation', { oldWitnessAbsent: true, newWitnessUnique: true }),
         // New pages from a bundle: the same simulation, shaped as the new-page proof.
         confirmNewPages: async ({ pages, images }) => simulated('live-confirmation', { kind: 'new-page-live',
