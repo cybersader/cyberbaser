@@ -1,0 +1,34 @@
+---
+title: Renderer slot, new pages on the site design, review polish (built, scratch-verified)
+description: The owner config can name one renderer per vault instead of the bundled quartz-cyberbase. The site manifest records and re-checks it, builds run offline, and a new page from a bundle is now shown on the site's own design. Verified on scratch copies of the Cyberchief content and renderer; not used on a real vault.
+status: log
+---
+
+## What now works
+
+**Renderer slot.** An optional `renderer` section in the owner config names the vault's renderer: `name`, `directory`, `quartzCommit` (must be the pinned Quartz 4.5.2 commit `4923affa`) and `fingerprint` (the files and folders that are its identity, `build` required). Without it the bundled `renderers/quartz-cyberbase` runs exactly as before and its manifests are unchanged. With it:
+
+- the build is `<directory>/build <contentDir> <outDir>` with `CYBERBASER_SOURCE_PROVENANCE=enabled`, `CYBERBASER_EDIT_LINK_MODE=owner`, `CYBERBASER_OWNER_ORIGIN` and a private provenance report path; no CI marker, no proxies, `npm_config_offline=true`;
+- the build runs in a fresh network namespace (`/usr/bin/unshare --user --map-root-user --net`), so it has no network at all, and one build at a time per renderer directory;
+- the directory must be one real directory (no symlink on the way), owned by this user, not writable by group or others, with a regular executable `build`; it may not overlap the vault checkout, the owner workspace or the Cyberbaser project;
+- the site manifest records the name, pin and directory, and the fingerprinted files are folded into its resource digest. The site cache and the review page refuse a manifest from any other renderer, and a build that changes a fingerprinted file is refused (`renderer-changed-during-build`), so fingerprint only files the build does not write;
+- the suggestion form still needs the bundled renderer (`renderer-form-unsupported`); signed agent proposals and owner devices work with either.
+
+**New pages on the site design (route C).** With a configured renderer, a page bundle's new note, folder index and images are built privately into the cache by that renderer, the page is read back, made inert like every review frame (scripts, links and forms removed; stylesheets, fonts and images inlined; `SITE_FRAME_CSP`), and shown with a quiet "New page at /address" banner. Any failure falls back to the simplified page. The preview is kept in memory per bundle for the life of the process.
+
+**Review polish.** The decision panel, its buttons and dialogs take the site's `appearance.colorScheme` like the top bar (dark site, dark panel, same Cyberbaser green). A replacement whose new text starts with punctuation no longer shows a space before it: the old text's leading space is part of the deletion, on the site page and in the excerpt.
+
+## Evidence
+
+- `apps/owner-alpha/test/renderer-slot.test.js`: config validation and refusals, symlink and permission refusals, an offline build through a contract renderer (only `lo` visible inside), manifest identity, cache invalidation by fingerprint, identity-mismatch refusal, self-modifying build refusal.
+- `apps/owner-alpha/test/bundle-preview.test.js`: private build of just the bundle files, inert framed page with banner and inlined cover, fallback on failure or wrong renderer.
+- `apps/owner-alpha/test/review-scheme.test.js` and two new cases in `site-review-page.test.js` for the polish.
+- Scratch run (`.workspace/renderer-slot/drive.mjs`, not committed) on copies of the Cyberchief content and `site/renderer`, with a scratch `publish.yml` adding `exclude_when: []` because the posts are samples: the owner app built through the slot (manifest `name: cyberchief`, directory recorded); a signed agent edit of `from-the-field/routine-beats-heroics.md` was marked on the real dark page; a new post bundle with a 480x270 cover was built and shown on the Cyberchief design. Screenshots at 1280 and 390 wide.
+
+## Not done or not verified
+
+- Owner-local pre-apply checks (`checks.js`) still render baseline and candidate with the bundled renderer, not the configured one.
+- New pages with the bundled renderer keep the simplified page (its build needs a Quartz workspace per run, and a missing offline seed would fetch over the network).
+- The bundle review page is still a plain list above the frame, without the proposal page's top bar and floating panel.
+- `/usr/bin/unshare` must allow unprivileged user namespaces; where it does not (some containers), configured builds fail closed.
+- Not used on the real Cyberbase or Cyberchief vaults.
