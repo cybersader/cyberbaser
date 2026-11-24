@@ -14,7 +14,7 @@ const MAX_SOURCE_FILES = 100_000;
 const DIRECTORY_FLAGS = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
 const FILE_FLAGS = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK | constants.O_NOCTTY;
 const BARE_CONFIG = /^\[core\]\n\trepositoryformatversion = 0\n\tfilemode = (?:true|false)\n\tbare = true\n$/u;
-const SETTINGS = [
+export const SETTINGS = [
   'core.hooksPath=/dev/null', 'core.fsmonitor=false', 'core.attributesFile=/dev/null',
   'protocol.allow=never', 'protocol.https.allow=always', 'protocol.file.allow=never', 'protocol.ext.allow=never',
   'fetch.fsckObjects=true', 'transfer.fsckObjects=true', 'credential.helper=',
@@ -41,7 +41,7 @@ function nested(parent, child) {
   return child === parent || child.startsWith(`${parent}/`);
 }
 
-function makeRunner(repository, environment) {
+export function makeRunner(repository, environment) {
   // Do not inherit config injection, git-dir/object overrides, aliases, tracing,
   // transport settings, etc. The optional helper belongs to this process only.
   const env = Object.fromEntries(Object.entries(environment).filter(([key]) => !key.startsWith('GIT_')));
@@ -52,7 +52,7 @@ function makeRunner(repository, environment) {
     GIT_TERMINAL_PROMPT: '0', GIT_NO_REPLACE_OBJECTS: '1', GIT_NO_LAZY_FETCH: '1',
   });
   return async function run(args, { encoding = 'buffer', objects, input, credential = null } = {}) {
-    const transport = args[0] === 'ls-remote' || args[0] === 'push';
+    const transport = args[0] === 'ls-remote' || args[0] === 'push' || args[0] === 'fetch';
     // A ForgeAccess credential reaches only this one transport child, through
     // its environment, never its arguments; the inline helper answers "get" only.
     const forge = transport && credential !== null;
@@ -171,7 +171,7 @@ async function copyObject(source, target, budget) {
   } finally { await from.close(); }
 }
 
-async function snapshotObjects(checkout, output) {
+export async function snapshotObjects(checkout, output) {
   const budget = { buffer: Buffer.allocUnsafe(128 * 1024), files: 0, bytes: 0 };
   const packs = [];
   const source = await openSourceDirectory(checkout);
@@ -194,7 +194,10 @@ async function snapshotObjects(checkout, output) {
   return packs;
 }
 
-export async function createIsolatedPush({ repository, checkout, uid, environment = process.env, forgeAccess = null }) {
+// onPushed({ commit, branch, pack }) runs after a confirmed push, while the
+// validated pack still exists, so the publisher's mirror can adopt the commit
+// without another network round trip.
+export async function createIsolatedPush({ repository, checkout, uid, environment = process.env, forgeAccess = null, onPushed = null }) {
   if (!normalizedAbsolute(repository) || !normalizedAbsolute(checkout)
     || nested(checkout, repository) || nested(repository, checkout) || process.platform !== 'linux') unsafeRepository();
   const run = makeRunner(repository, environment);
@@ -226,7 +229,11 @@ export async function createIsolatedPush({ repository, checkout, uid, environmen
       // is proven and dropped when this function returns.
       const credential = forgeAccess === null ? null : await forgeAccess.pushCredential(request.remoteUrl);
       const git = (_repository, args, options) => run(args, { ...options, objects: checked, credential });
-      return await pushExactCommitFromBare({ ...request, checkout: repository }, { git, mutateGit: git });
+      const result = await pushExactCommitFromBare({ ...request, checkout: repository }, { git, mutateGit: git });
+      if (typeof onPushed === 'function') {
+        await onPushed({ commit: request.commit, branch: request.branch, pack: `${prefix}-${packId}.pack` }).catch(() => {});
+      }
+      return result;
     } finally {
       await rm(scratch, { recursive: true, force: true });
     }

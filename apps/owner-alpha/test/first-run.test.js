@@ -6,8 +6,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import {
-  createFirstRunHandler, createNotesPreparer, createSetupForgeRelay, createSetupLinks, detectWebsite, inspectPublishYml,
-  openSetupState, ownerConfigFromSetup, PENDING_PUBLISH_FILE, SETUP_STATE_FILE, starterPublishYml,
+  createFirstRunHandler, createNotesPreparer, createSetupForgeRelay, createSetupLinks, createStarterPublisher, detectWebsite, inspectPublishYml,
+  openSetupState, ownerConfigFromSetup, SETUP_STATE_FILE, starterPublishYml,
 } from '../src/first-run.js';
 import { createMemoryEditSessionStore, createOwnerAlphaHandler, ownerHttpTools } from '../src/server.js';
 import { validateOwnerAlphaConfig } from '../src/config.js';
@@ -103,17 +103,18 @@ function fakeReach() {
 }
 
 let nextPort = 47410;
-async function harness({ root, relay = 'fake', links = null, clock, reach, git = localGit, fetchUrlFor, buildSite, state: given } = {}) {
+async function harness({ root, relay = 'fake', links = null, clock, reach, git = localGit, fetchUrlFor, buildSite, state: given, starterPublish = null } = {}) {
   const directory = path.join(root, 'state');
   const state = given ?? await openSetupState(directory);
   const tools = ownerHttpTools();
   let now = clock ?? (() => Date.now());
   const setupLinks = links ?? createSetupLinks({ createToken: tools.token, sameSecret: tools.sameSecret, clock: () => now(), isComplete: () => state.read().completedAt !== null });
   const notes = createNotesPreparer({ state, directory, git, fetchUrlFor, buildSite });
+  const starter = starterPublish === null ? null : createStarterPublisher({ checkout: notes.checkout, publish: starterPublish, git });
   const completions = [];
   const port = nextPort++;
   const handler = createFirstRunHandler({ listen: { host: '127.0.0.1', port }, state, links: setupLinks,
-    relay: relay === 'fake' ? fakeRelay(state) : relay, notes, reach: reach ?? (async () => null), onComplete: (result) => completions.push(result) });
+    relay: relay === 'fake' ? fakeRelay(state) : relay, notes, starter, reach: reach ?? (async () => null), onComplete: (result) => completions.push(result) });
   const origin = `http://127.0.0.1:${port}`;
   let cookie = null;
   let csrf = null;
@@ -227,12 +228,25 @@ describe('setup steps', () => {
     expect(await h.waitNotes()).toBe('ready');
 
     // Restart: a new process opens the same state and a new link; the step is kept.
-    h = await harness({ root, fetchUrlFor: () => repo.bare, reach: fixture.reach, state: await openSetupState(path.join(root, 'state')) });
+    // The starter commit goes to the "publisher": here, a push of that exact commit to the bare repository.
+    const published = [];
+    let refuse = false;
+    const starterPublish = async (commit) => {
+      if (refuse) throw Object.assign(new Error('refused'), { code: 'starter-refused' });
+      published.push(commit);
+      git(path.join(root, 'state', 'notes'), '-c', 'protocol.file.allow=always', 'push', '-q', repo.bare, `${commit}:refs/heads/main`);
+      return { commit };
+    };
+    h = await harness({ root, fetchUrlFor: () => repo.bare, reach: fixture.reach, state: await openSetupState(path.join(root, 'state')), starterPublish });
     const resumed = await h.signIn();
     expect(resumed.text).toContain('data-step="notes"');
     expect(resumed.text).toContain('Copied 4 notes from <strong>cybersader/cyberbase</strong>');
     expect(resumed.text).toContain('cannot build the private preview');
     expect(resumed.text).toContain('Nothing is marked public yet');
+    // A multi-select list of checkboxes, none checked, and the file behind a disclosure.
+    expect(resumed.text).toContain('<input type="checkbox" name="folder" value="Garden">');
+    expect(resumed.text).not.toContain(' checked');
+    expect(resumed.text).toContain('<summary>Show the file</summary>');
     // Folder names come from the repository and are escaped.
     expect(resumed.text).toContain('&lt;img src=x onerror=alert(1)&gt;/');
     expect(resumed.text).not.toContain('<img src=x');
@@ -241,15 +255,44 @@ describe('setup steps', () => {
     // The starter file lists only folders that exist, and never on the owner's behalf.
     expect((await h.step('starter', ['../etc'])).value.code).toBe('invalid');
     expect((await h.step('starter', ['Garden', 'Garden'])).value.code).toBe('invalid');
-    expect((await h.step('starter', ['Garden'])).value.ok).toBe(true);
-    const pending = await readFile(path.join(h.directory, PENDING_PUBLISH_FILE), 'utf8');
-    expect(pending).toBe(starterPublishYml(['Garden']));
-    expect(pending).toContain('  - "Garden/**"');
-    expect(((await stat(path.join(h.directory, PENDING_PUBLISH_FILE))).mode & 0o777)).toBe(0o600);
-    // The private copy is untouched: no publish.yml written, nothing committed.
-    expect(git(path.join(h.directory, 'notes'), 'status', '--porcelain')).toBe('');
+    refuse = true;
+    expect((await h.step('starter', ['Garden'])).value.code).toBe('starter-refused');
+    const checkout = path.join(h.directory, 'notes');
+    expect(git(checkout, 'rev-parse', 'HEAD')).toBe(repo.head);
+    expect(git(checkout, 'status', '--porcelain')).toBe('');
+    refuse = false;
+    expect((await h.step('starter', ['Journal', 'Garden'])).value.ok).toBe(true);
+    // One commit, one added file, exactly the starter text for the sorted folders; the copy moved to it.
+    expect(published).toHaveLength(1);
+    expect(git(checkout, 'rev-parse', 'HEAD')).toBe(published[0]);
+    expect(git(repo.bare, 'rev-parse', 'main')).toBe(published[0]);
+    expect(git(checkout, 'rev-parse', 'HEAD^')).toBe(repo.head);
+    expect(git(checkout, 'diff-tree', '--no-commit-id', '--name-status', '-r', 'HEAD')).toBe('A\tpublish.yml');
+    expect(git(checkout, 'log', '-1', '--format=%s')).toBe('cyberbaser: add publish.yml');
+    expect(await readFile(path.join(checkout, 'publish.yml'), 'utf8')).toBe(starterPublishYml(['Garden', 'Journal']));
+    expect(git(checkout, 'status', '--porcelain')).toBe('');
+    const after = (await h.call('/setup')).text;
+    expect(after).toContain('It lists 2 entries');
+    expect(after).toContain('You added it just now.');
+    expect((await h.step('continue')).value.step).toBe('website');
+  });
+
+  test('publish nothing yet is a choice the owner can change', async () => {
+    const root = await scratch('oa-setup-nothing-');
+    const repo = await notesRepository(root, { workflow: false });
+    const fixture = fakeReach();
+    const h = await harness({ root, fetchUrlFor: () => repo.bare, reach: fixture.reach, buildSite: async () => ({ state: 'unavailable' }) });
+    await h.signIn();
+    await h.step('start');
+    await h.call('/owner/github/select', { csrf: h.csrf, repository: 'cybersader/cyberbase' });
+    await h.step('continue');
+    expect(await h.waitNotes()).toBe('ready');
+    expect((await h.step('reopen-publish')).value.code).toBe('invalid');
+    expect((await h.step('nothing-yet')).value.ok).toBe(true);
     expect((await h.step('reopen-publish')).value.ok).toBe(true);
-    expect(await Bun.file(path.join(h.directory, PENDING_PUBLISH_FILE)).exists()).toBe(false);
+    expect((await h.call('/setup')).text).toContain('Nothing is marked public yet');
+    // No publisher on this harness: the starter cannot be published, and says so.
+    expect((await h.step('starter', ['Garden'])).value.code).toBe('not-ready');
     expect((await h.step('nothing-yet')).value.ok).toBe(true);
     expect((await h.call('/setup')).text).toContain('Nothing will be published for now');
     expect((await h.step('continue')).value.step).toBe('website');

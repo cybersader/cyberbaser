@@ -27,6 +27,7 @@ import {
 import { assertCheckoutReady } from './source.js';
 import {
   retainPublication as retainPublicationDefault,
+  agentLaneEnabled,
   suggestionFormOrigin,
   verifyRetainedPublication as verifyRetainedPublicationDefault,
 } from './suggestions.js';
@@ -353,8 +354,10 @@ async function runtimeResourceIdentity(projectRoot) {
 async function inspectHtmlSite(siteRoot) {
   const html = (await inspectRegularTree(siteRoot, 'rendered candidate site'))
     .filter((relativePath) => /\.html?$/iu.test(relativePath));
-  if (html.length === 0 || !html.includes('index.html')) {
-    fail('site-html-baseline-missing', 'rendered candidate must contain index.html and at least one HTML page');
+  // A site that publishes only some folders has no home page (no root
+  // index.md is public), so index.html is not required; some page is.
+  if (html.length === 0) {
+    fail('site-html-baseline-missing', 'rendered candidate must contain at least one HTML page');
   }
   for (const relativePath of html) {
     const bytes = await readRegularNoFollow(
@@ -522,9 +525,13 @@ async function publishCandidate({ projectRoot, workspaceRoot, candidateSite, sit
 
 // The built pages either carry no form, or carry the form bound to exactly the
 // intake origin the current config would use plus one retained binding digest.
-function suggestionsMatch(value, formOrigin, editEntry) {
+// With the form off but paired agents on, the pages carry no form and the
+// manifest still names the one retained binding agents' proposals bind to.
+function suggestionsMatch(value, formOrigin, editEntry, agents = false) {
   if (!isPlainObject(value)) return false;
-  if (formOrigin === null) return value.form === false;
+  if (formOrigin === null) {
+    return value.form === false && (agents ? value.agents === true && typeof value.bindingDigest === 'string' : value.agents !== true);
+  }
   return value.form === true
     && (value.editEntry ?? 'auto') === editEntry
     && value.intakeOrigin === formOrigin
@@ -552,7 +559,7 @@ function reusableManifest(value, config, checkout, htmlPages, resources, outputT
     || value.renderer.resources?.digest !== resources.digest
     || value.renderer.resources?.files !== resources.files
     || value.renderer.resources?.bytes !== resources.bytes
-    || !suggestionsMatch(value.suggestions, suggestionFormOrigin(config), config.suggestions.editEntry ?? 'auto')
+    || !suggestionsMatch(value.suggestions, suggestionFormOrigin(config), config.suggestions.editEntry ?? 'auto', agentLaneEnabled(config))
     || value.site.manifest !== OWNER_SITE_MANIFEST_FILENAME
     || value.site.htmlPages !== htmlPages
     || value.site.outputTree?.digest !== outputTree.digest
@@ -619,7 +626,7 @@ export async function reuseOwnerSite({
     outputTree,
   );
   if (accepted === null) return null;
-  if (accepted.suggestions.form === true && !(await verifyRetained({
+  if ((accepted.suggestions.form === true || accepted.suggestions.agents === true) && !(await verifyRetained({
     config,
     projectRoot: project,
     head: before.head,
@@ -823,7 +830,8 @@ export async function rebuildOwnerSite({
     const formOrigin = suggestionFormOrigin(config);
     let suggestions = { form: false };
     let rendererSuggestions = null;
-    if (formOrigin !== null) {
+    const agents = formOrigin === null && agentLaneEnabled(config);
+    if (formOrigin !== null || agents) {
       let retained;
       try {
         retained = await retain({
@@ -842,27 +850,37 @@ export async function rebuildOwnerSite({
       if (!isPlainObject(retained) || typeof retained.bindingDigest !== 'string') {
         fail('site-suggestion-binding-failed', 'retainPublication did not return one binding digest');
       }
-      rendererSuggestions = {
-        editEntry: config.suggestions.editEntry ?? 'auto',
-        intakeOrigin: formOrigin,
-        bindingDigest: retained.bindingDigest,
-        sourceRepository: config.repository.remote.url,
-        sourceRevision: before.head,
-        ...(config.suggestions.form.challenge ? {
-          challenge: {
-            provider: config.suggestions.form.challenge.provider,
-            siteKey: config.suggestions.form.challenge.siteKey,
-          },
-        } : {}),
-      };
-      suggestions = {
-        form: true,
-        ...(config.suggestions.editEntry !== undefined ? { editEntry: config.suggestions.editEntry } : {}),
-        intakeOrigin: formOrigin,
-        bindingDigest: retained.bindingDigest,
-        pages: safeCount(retained.pages, 'retained pages'),
-        trustPolicy: jsonSafe(retained.trustPolicy ?? null, 'retained trust policy'),
-      };
+      if (agents) {
+        suggestions = {
+          form: false,
+          agents: true,
+          bindingDigest: retained.bindingDigest,
+          pages: safeCount(retained.pages, 'retained pages'),
+          trustPolicy: jsonSafe(retained.trustPolicy ?? null, 'retained trust policy'),
+        };
+      } else {
+        rendererSuggestions = {
+          editEntry: config.suggestions.editEntry ?? 'auto',
+          intakeOrigin: formOrigin,
+          bindingDigest: retained.bindingDigest,
+          sourceRepository: config.repository.remote.url,
+          sourceRevision: before.head,
+          ...(config.suggestions.form.challenge ? {
+            challenge: {
+              provider: config.suggestions.form.challenge.provider,
+              siteKey: config.suggestions.form.challenge.siteKey,
+            },
+          } : {}),
+        };
+        suggestions = {
+          form: true,
+          ...(config.suggestions.editEntry !== undefined ? { editEntry: config.suggestions.editEntry } : {}),
+          intakeOrigin: formOrigin,
+          bindingDigest: retained.bindingDigest,
+          pages: safeCount(retained.pages, 'retained pages'),
+          trustPolicy: jsonSafe(retained.trustPolicy ?? null, 'retained trust policy'),
+        };
+      }
     }
 
     let rendererResult;

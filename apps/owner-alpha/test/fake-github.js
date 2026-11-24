@@ -156,7 +156,7 @@ async function backend(request, url, pathInfo) {
 
 const server = Bun.serve({
   hostname: '127.0.0.1',
-  port: 0,
+  port: Number(process.env.FAKE_GITHUB_PORT ?? 0),
   async fetch(request) {
     const url = new URL(request.url);
     const route = url.pathname;

@@ -11,6 +11,8 @@
     'not-ready': 'That step is not finished yet.',
     'invalid-url': 'Enter the full address, starting with https://.',
     'step-changed': 'This page was out of date. It has been refreshed.',
+    'starter-refused': 'GitHub did not take the file: your notes there changed, or it already has a publish.yml. Reload and try again.',
+    'starter-failed': 'GitHub could not be reached, so the file was not published. Nothing changed. Try again.',
   };
 
   async function send(action, value = null, trigger = null) {
@@ -40,20 +42,26 @@
   const urlError = document.getElementById('website-error');
   form?.addEventListener('submit', (event) => { event.preventDefault(); root.querySelector('[data-action="save-url"]')?.click(); });
 
-  // ---- Your notes: the starter publish.yml, built from the folders picked
+  // ---- Your notes: the starter publish.yml, built from the folders checked
   const starter = document.getElementById('setup-starter');
   const file = document.getElementById('setup-file');
-  const picked = () => [...root.querySelectorAll('.setup-folder[aria-pressed="true"]')].map((node) => node.dataset.folder);
+  const change = document.getElementById('setup-change');
+  const repository = change?.querySelector('strong')?.textContent ?? '';
+  const picked = () => [...root.querySelectorAll('.setup-folder input:checked')].map((node) => node.value);
   function renderFile() {
     const folders = picked().sort((a, b) => a.localeCompare(b));
     const head = '# What Cyberbaser may publish. Only notes in these folders go on your website.\n# Everything else stays private. Add or remove folders any time.\n';
     file.textContent = folders.length === 0 ? `${head}allow: []\n`
       : `${head}allow:\n${folders.map((folder) => `  - ${JSON.stringify(`${folder}/**`)}`).join('\n')}\n`;
+    if (!change) return;
+    const named = folders.map((folder) => `${folder}/`);
+    const list = named.length <= 2 ? named.join(' and ') : `${named.slice(0, -1).join(', ')} and ${named.at(-1)}`;
+    change.replaceChildren('This adds one file, ', Object.assign(document.createElement('code'), { textContent: 'publish.yml' }),
+      ', to ', Object.assign(document.createElement('strong'), { textContent: repository }), '. ',
+      folders.length === 0 ? 'No folder is public yet.'
+        : `Notes in ${list} will be public; everything else stays private.`);
   }
-  root.querySelectorAll('.setup-folder').forEach((node) => node.addEventListener('click', () => {
-    node.setAttribute('aria-pressed', node.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
-    renderFile();
-  }));
+  root.querySelectorAll('.setup-folder input').forEach((node) => node.addEventListener('change', renderFile));
 
   root.addEventListener('click', async (event) => {
     const trigger = event.target.closest('[data-action]');
@@ -62,7 +70,7 @@
     if (action === 'open-starter') {
       starter.hidden = false;
       trigger.closest('.setup-actions').hidden = true;
-      (root.querySelector('.setup-folder') ?? root.querySelector('[data-action="starter"]'))?.focus();
+      (root.querySelector('.setup-folder input') ?? root.querySelector('[data-action="starter"]'))?.focus();
       return;
     }
     if (action === 'edit-url') {
@@ -78,7 +86,10 @@
       if (outcome && !outcome.ok) { urlError.textContent = MESSAGES[outcome.code] ?? 'That address was not accepted.'; urlInput.focus(); }
       return;
     }
+    const label = trigger.textContent;
+    if (action === 'starter') trigger.textContent = 'Publishing…';
     const outcome = await send(action, action === 'starter' ? picked() : null, trigger);
+    if (outcome && !outcome.ok) trigger.textContent = label;
     if (outcome && !outcome.ok) status.textContent = MESSAGES[outcome.code] ?? 'That did not work. Try again.';
   });
 

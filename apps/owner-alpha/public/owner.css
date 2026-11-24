@@ -1530,16 +1530,31 @@ body.save-page :focus-visible { outline: 2px solid var(--sp-acc); outline-offset
 .setup-starter { display: grid; gap: 0.9rem; }
 .setup-starter[hidden] { display: none; }
 .setup-starter > * { margin: 0; min-width: 0; }
-.setup-folders { display: grid; gap: 0.15rem; margin: 0; padding: 0.25rem; list-style: none; max-height: min(18rem, 45vh); overflow-y: auto;
+.setup-folders { display: grid; gap: 0.15rem; margin: 0; padding: 0.25rem; list-style: none; max-height: 26rem; overflow-y: auto;
   border: 1px solid var(--dev-line); border-radius: 0.5rem; background: var(--dev-sheet); scrollbar-width: thin; scrollbar-color: var(--dev-line) transparent; }
-.setup-page button.setup-folder {
-  display: flex; align-items: center; gap: 0.7rem; width: 100%; min-height: 2.75rem; padding: 0.55rem 0.7rem; border-radius: 0.4rem;
-  background: transparent; color: var(--dev-ink); font-weight: 600; text-align: left;
+.setup-pick { display: grid; gap: 0.5rem; margin: 0; padding: 0; border: 0; min-width: 0; }
+.setup-pick > * { margin: 0; min-width: 0; }
+.setup-pick legend { padding: 0; font-weight: 700; }
+.setup-folder {
+  position: relative; display: flex; align-items: center; gap: 0.75rem; min-height: 2.75rem; padding: 0.5rem 0.7rem; border-radius: 0.4rem;
+  color: var(--dev-ink); font-weight: 600; cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
-.setup-page button.setup-folder:hover { background: var(--dev-accent-soft); }
-.setup-folder-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.setup-folder-mark { flex: none; width: 1.1rem; height: 1.1rem; border: 1.5px solid #9ca8b6; border-radius: 50%; }
-.setup-folder[aria-pressed="true"] .setup-folder-mark { border: 0.32rem solid var(--dev-accent); }
+.setup-folder:hover { background: var(--dev-accent-soft); }
+/* The real checkbox stays in place for keyboard, touch and screen readers; the drawn box shows its state. */
+.setup-folder input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; pointer-events: none; }
+.setup-check {
+  flex: none; display: grid; place-items: center; width: 1.2rem; height: 1.2rem; border: 1.5px solid #8794a3; border-radius: 0.3rem;
+  background: var(--dev-sheet, #fff); color: transparent;
+}
+.setup-check svg { width: 0.85rem; height: 0.85rem; }
+.setup-folder input:checked + .setup-check { border-color: var(--dev-accent); background: var(--dev-accent); color: #fff; }
+.setup-folder input:focus-visible + .setup-check { outline: 3px solid #4c7dff; outline-offset: 2px; }
+.setup-folder:has(input:checked) { background: var(--dev-accent-soft); }
+@media (prefers-reduced-motion: no-preference) { .setup-check { transition: background 140ms ease-out, border-color 140ms ease-out; } }
+.setup-change { line-height: 1.5; }
+.setup-show-file summary { width: fit-content; cursor: pointer; color: var(--dev-muted); font-weight: 600; padding: 0.3rem 0; }
+.setup-show-file summary:hover { color: var(--dev-ink); }
+.setup-show-file[open] summary { margin-bottom: 0.5rem; }
 .setup-file {
   margin: 0; padding: 0.85rem 1rem; border-radius: 0.5rem; background: var(--dev-accent-soft); color: var(--dev-ink);
   font: 0.8rem/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere;
@@ -1603,6 +1618,6 @@ body.save-page :focus-visible { outline: 2px solid var(--sp-acc); outline-offset
   .setup-progress li.is-current { background: #8fb0ff; }
   .setup-field input, .setup-page .field input { background: #151b22; border-color: #4a5563; }
   .setup-field input::placeholder { color: #8994a2; }
-  .setup-folder-mark { border-color: #6b7684; }
-  .setup-folder[aria-pressed="true"] .setup-folder-mark { border-color: #8fb0ff; }
+  .setup-check { border-color: #6b7684; background: #151b22; }
+  .setup-folder input:checked + .setup-check { border-color: #8fb0ff; background: #8fb0ff; color: #10161d; }
 }

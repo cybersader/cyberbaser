@@ -31,3 +31,7 @@ The owner asked to start building toward the one-app setup ("let's start designi
 ## Still open
 
 The node needs network to start (it asks the forge for the branch head). Setup needs the publisher before a config exists. A compromised node can still ask for any commit to be pushed to the one repository; the split protects the key, not push authority. The renderer bundle is a separate download. Windows needs named pipes, ACLs and a lock without `flock`; macOS needs launchd daemons and a path without `/proc`. A Tauri shell would wrap the same program later; GPUI would mean a second UI. Nothing was installed on the owner's machine.
+
+## Later the same day: install and setup as one thing
+
+The two open items above are closed: the node starts with no network (it reads the remote branch from the publisher's mirror), and the publisher runs in a setup mode from install until the config exists. See [Deployment and reach, install and first run](/cyberbaser/design/deployment-and-reach/#install-and-first-run-as-one-thing-2026-11-23). Evidence: `packaging/test/container/run.sh setup-e2e.sh`, 48 of 48, with no network in the container; the original install test still passes 61 of 61. Still open: after an offline restart the sign-in link waits for job recovery, up to 15 minutes when a job is waiting on its deployment check.

@@ -832,12 +832,23 @@ export function retargetGithubRepository(raw, fullName) {
   return next;
 }
 
+// mirror: the publisher's read-only copy of the repository (a bare Git
+// repository it alone writes and fetches into). When present the node reads
+// the remote branch from it instead of asking the forge, so it starts and
+// works with no network, and holds no forge credential to fetch with.
 function validatePublisher(value) {
-  const { socketPath } = objectAt(value, '$.publisher', ['socketPath']);
+  const input = objectAt(value, '$.publisher', ['socketPath', ...(isPlainObject(value) && Object.hasOwn(value, 'mirror') ? ['mirror'] : [])]);
+  const { socketPath } = input;
   if (!validSocketPath(socketPath)) {
     fail('invalid-config-path', '$.publisher.socketPath must be one normalized absolute Unix socket path');
   }
-  return { socketPath };
+  if (!Object.hasOwn(input, 'mirror')) return { socketPath };
+  const mirror = input.mirror;
+  if (typeof mirror !== 'string' || !path.isAbsolute(mirror) || path.normalize(mirror) !== mirror || mirror.endsWith('/')
+    || path.dirname(mirror) === '/' || /[\\\p{Cc}]/u.test(mirror)) {
+    fail('invalid-config-path', '$.publisher.mirror must be one normalized absolute directory path beneath a non-root parent');
+  }
+  return { socketPath, mirror };
 }
 
 export function validateOwnerAlphaConfig(value) {

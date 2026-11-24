@@ -5,10 +5,12 @@
 // holds the credential), the node makes its private copy of the notes, and the
 // owner optionally pairs a phone and an agent. Every step is saved to an
 // owner-only state file, so a restart resumes at the same step. Nothing is
-// published during setup: the forge relay offers no push, the notes are only
-// cloned, and a starter publish.yml stays on this machine until the owner
-// publishes it.
-import { execFile } from 'node:child_process';
+// published during setup except one change the owner approves on screen: a
+// starter publish.yml listing exactly the folders they picked, which the
+// publisher checks byte for byte before it pushes. The node copies the notes
+// from the publisher's mirror, so it never holds a GitHub credential, even for
+// a private repository.
+import { execFile, spawn } from 'node:child_process';
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, readdir, readFile, rename, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -20,6 +22,7 @@ import { OwnerAlphaError, fail } from './errors.js';
 import { forgeRequest } from './publisher/forge-control.js';
 import { validFullName } from './publisher/forge-access.js';
 import { handleForgeSetup } from './forge-setup.js';
+import { STARTER_COMMIT_MESSAGE, STARTER_PATH, starterPublishYml, validStarterFolder } from './starter-publish.js';
 import { handleDeviceRoutes, ownerHttpTools, pairFormHtml } from './server.js';
 
 const exec = promisify(execFile);
@@ -27,7 +30,6 @@ const exec = promisify(execFile);
 export const SETUP_STEPS = Object.freeze(['welcome', 'github', 'notes', 'website', 'phone', 'agent', 'done']);
 export const SETUP_LINK_TTL_MS = 15 * 60_000;
 export const SETUP_STATE_FILE = 'setup.json';
-export const PENDING_PUBLISH_FILE = 'publish.yml.pending';
 const MAX_SETUP_SESSIONS = 8;
 const MAX_STATE_BYTES = 64 * 1024;
 const MAX_FOLDERS = 200;
@@ -186,8 +188,7 @@ async function countNotes(root) {
 
 async function topFolders(root) {
   const entries = await readdir(root, { withFileTypes: true });
-  return entries.filter((entry) => entry.isDirectory() && !entry.isSymbolicLink() && !entry.name.startsWith('.')
-    && entry.name !== 'node_modules' && !/[\p{Cc}]/u.test(entry.name) && entry.name.length <= 200)
+  return entries.filter((entry) => entry.isDirectory() && !entry.isSymbolicLink() && validStarterFolder(entry.name))
     .map((entry) => entry.name).sort((a, b) => a.localeCompare(b)).slice(0, MAX_FOLDERS);
 }
 
@@ -259,29 +260,48 @@ export async function detectWebsite(root, fullName) {
 /**
  * Makes the node's private copy of the notes and reports what it found. Runs
  * in the background; every phase is saved, so a restart picks it up again.
+ *
+ * With `mirror` and `refresh`, the publisher fetches (it alone holds the GitHub
+ * credential) into its mirror and the node clones that local copy; nothing on
+ * the node's side ever names a credential. Without them (development only) the
+ * node clones `fetchUrlFor(fullName)` itself.
  */
-export function createNotesPreparer({ state, directory, git = defaultSetupGit, fetchUrlFor = githubRemoteUrl, buildSite = null }) {
-  const checkout = path.join(directory, NOTES_DIRECTORY);
+export function createNotesPreparer({ state, directory, checkout = path.join(directory, NOTES_DIRECTORY), git = defaultSetupGit,
+  fetchUrlFor = githubRemoteUrl, buildSite = null, mirror = null, refresh = null }) {
   let running = null;
   const phase = (fields) => state.update((current) => ({ ...current, notes: { ...current.notes, ...fields } }));
+  const local = mirror === null ? [] : ['-c', 'protocol.file.allow=always', '-c', `safe.directory=${mirror}`];
 
-  async function existingCopyMatches(fullName) {
+  async function existingCopyMatches(fullName, wanted) {
     try {
       const entry = await lstat(checkout);
       if (!entry.isDirectory()) return false;
+      const head = await git(checkout, ['rev-parse', 'HEAD']);
       return (await git(checkout, ['remote', 'get-url', 'origin'])) === githubRemoteUrl(fullName)
-        && /^[0-9a-f]{40}$/u.test(await git(checkout, ['rev-parse', 'HEAD']));
+        && /^[0-9a-f]{40}$/u.test(head) && (wanted === null || head === wanted);
     } catch { return false; }
   }
 
   async function copy(fullName) {
-    if (await existingCopyMatches(fullName)) return;
-    const temporary = path.join(directory, `.notes-${Date.now().toString(36)}`);
+    let source = fetchUrlFor(fullName);
+    let wanted = null;
+    if (mirror !== null) {
+      const held = await refresh();
+      if (held?.repository !== fullName || !/^[0-9a-f]{40}$/u.test(held.head ?? '')) throw new Error('mirror holds another repository');
+      source = mirror;
+      wanted = held.head;
+    }
+    if (await existingCopyMatches(fullName, wanted)) return;
+    const temporary = path.join(path.dirname(checkout), `.notes-${Date.now().toString(36)}`);
     await rm(checkout, { recursive: true, force: true });
     try {
-      await git(directory, ['clone', '--quiet', '--no-tags', '--origin', 'origin', '--', fetchUrlFor(fullName), temporary]);
-      // The node's checkout always names the canonical remote, whatever it was fetched from.
+      await git(path.dirname(checkout), [...local, 'clone', '--quiet', '--no-local', '--no-tags', '--origin', 'origin', '--', source, temporary]);
+      // The node's checkout always names the canonical remote, whatever it was copied from.
       await git(temporary, ['remote', 'set-url', 'origin', githubRemoteUrl(fullName)]);
+      // Commits the node makes (approved changes) carry the owner's GitHub identity.
+      const owner = fullName.split('/')[0];
+      await git(temporary, ['config', 'user.name', owner]);
+      await git(temporary, ['config', 'user.email', `${owner}@users.noreply.github.com`]);
       await rename(temporary, checkout);
     } finally {
       await rm(temporary, { recursive: true, force: true });
@@ -320,15 +340,47 @@ export function createNotesPreparer({ state, directory, git = defaultSetupGit, f
   });
 }
 
-/** The starter publish.yml text for exactly the folders the owner picked. */
-export function starterPublishYml(folders) {
-  const lines = [
-    '# What Cyberbaser may publish. Only notes in these folders go on your website.',
-    '# Everything else stays private. Add or remove folders any time.',
-  ];
-  if (folders.length === 0) return `${lines.join('\n')}\nallow: []\n`;
-  return `${lines.join('\n')}\nallow:\n${folders.map((folder) => `  - ${JSON.stringify(`${folder}/**`)}`).join('\n')}\n`;
+function gitWithInput(cwd, args, input, env = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('git', ['-c', 'core.hooksPath=/dev/null', ...args], { cwd, env: { ...cleanGitEnv(), ...env }, stdio: ['pipe', 'pipe', 'ignore'] });
+    let out = '';
+    child.stdout.on('data', (chunk) => { out += chunk; });
+    child.once('error', reject);
+    child.once('close', (code) => (code === 0 ? resolve(out.trim()) : reject(new Error(`git ${args[0]} failed`))));
+    child.stdin.on('error', () => {});
+    child.stdin.end(input ?? '');
+  });
 }
+
+/**
+ * The one change setup publishes: a commit adding publish.yml on top of the
+ * checkout's head, built without touching the working tree. The publisher
+ * checks it and pushes it; only then does the checkout move to it.
+ */
+export function createStarterPublisher({ checkout, publish, git = defaultSetupGit, gitInput = gitWithInput }) {
+  return Object.freeze({
+    async publish({ repository, folders }) {
+      const text = starterPublishYml(folders);
+      const head = await git(checkout, ['rev-parse', 'HEAD']);
+      if (!/^[0-9a-f]{40}$/u.test(head)) fail('starter-refused', 'the notes copy has no commit');
+      if (await git(checkout, ['status', '--porcelain=v1', '--untracked-files=all']) !== '') fail('starter-refused', 'the notes copy has local changes');
+      const present = await git(checkout, ['ls-tree', '--name-only', head, '--', STARTER_PATH]);
+      if (present !== '') fail('starter-refused', 'the repository already has a publish.yml');
+      const blob = await gitInput(checkout, ['hash-object', '-w', '--stdin'], text);
+      const listing = await gitInput(checkout, ['ls-tree', '-z', head], '');
+      const tree = await gitInput(checkout, ['mktree', '-z'], `${listing}100644 blob ${blob}\t${STARTER_PATH}\0`);
+      const owner = repository.split('/')[0];
+      const who = { GIT_AUTHOR_NAME: owner, GIT_AUTHOR_EMAIL: `${owner}@users.noreply.github.com`,
+        GIT_COMMITTER_NAME: owner, GIT_COMMITTER_EMAIL: `${owner}@users.noreply.github.com` };
+      const commit = await gitInput(checkout, ['commit-tree', tree, '-p', head, '-F', '-'], `${STARTER_COMMIT_MESSAGE}\n`, who);
+      await publish(commit);
+      await git(checkout, ['merge', '--ff-only', '--quiet', commit]);
+      return { commit, text };
+    },
+  });
+}
+
+export { starterPublishYml } from './starter-publish.js';
 
 // ---------------------------------------------------------------- forge relay
 
@@ -339,6 +391,7 @@ export function createSetupForgeRelay({ socketPath, provider = 'github-app', sta
     get configuredRepository() { return state.read().repository ?? ''; },
     restartFor: null,
     ask(op, repository) { return request({ socketPath, op, repository }); },
+    publishStarter(commit) { return request({ socketPath, op: 'publish-starter', commit }); },
     async pick(fullName) {
       const bound = await this.ask('select', fullName);
       const chosen = bound.repository.fullName;
@@ -386,8 +439,8 @@ export function ownerConfigFromSetup(setup, layout) {
     checks: { allowedOfmVerdicts: ['clean'], requirePublishedSource: true, requireProjectionVerification: true,
       requireNoNewBrokenLinks: true, requireRenderedWitness: true },
     git: { autoCommit: true, autoPush: true, useHooks: true, commitMessagePrefix: 'cyberbaser:' },
-    publisher: { socketPath: layout.publisherSocket },
-    iroh: { enabled: true, stateDirectory: layout.irohStateDirectory },
+    publisher: { socketPath: layout.publisherSocket, ...(layout.mirror ? { mirror: layout.mirror } : {}) },
+    iroh: { enabled: true, stateDirectory: layout.irohStateDirectory, ...(layout.relay ? { relay: layout.relay } : {}) },
     forgeAccess: { provider: 'github-app', clientId: layout.clientId, stateDirectory: layout.forgeStateDirectory },
   };
   return { config: validateOwnerAlphaConfig(config), workflowDetected: detected !== null };
@@ -395,6 +448,7 @@ export function ownerConfigFromSetup(setup, layout) {
 
 // -------------------------------------------------------------------- pages
 
+const ICON_TICK = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const ICON_CHECK = '<svg class="setup-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 10.5l3.5 3.5 7.5-8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 function progressHtml(step) {
@@ -433,7 +487,8 @@ function publishYmlBlock(e, state) {
   const { notes } = state;
   if (notes.phase !== 'ready') return '';
   if (notes.publishYml === 'present') {
-    return `<p class="setup-note">Your <code>publish.yml</code> decides what goes on your website. It lists ${e(notes.allowCount)} ${notes.allowCount === 1 ? 'entry' : 'entries'}; everything else stays private.</p>`;
+    const added = notes.choice === 'starter' ? ' You added it just now.' : '';
+    return `<p class="setup-note">Your <code>publish.yml</code> decides what goes on your website. It lists ${e(notes.allowCount)} ${notes.allowCount === 1 ? 'entry' : 'entries'}; everything else stays private.${added}</p>`;
   }
   if (notes.publishYml === 'invalid') {
     return '<p class="setup-note">Your <code>publish.yml</code> cannot be read, so nothing will be published until it is fixed. You can continue and fix it later.</p>';
@@ -441,19 +496,17 @@ function publishYmlBlock(e, state) {
   if (notes.choice === 'nothing-yet') {
     return `<div class="setup-decided">${ICON_CHECK}<p>Nothing will be published for now. Add a <code>publish.yml</code> whenever you are ready.</p>${actionButton(e, 'reopen-publish', 'Change', 'quiet')}</div>`;
   }
-  if (notes.choice === 'starter') {
-    return `<div class="setup-decided">${ICON_CHECK}<p>Your starter <code>publish.yml</code> is saved on this machine. It goes to GitHub only when you publish it.</p>${actionButton(e, 'reopen-publish', 'Change', 'quiet')}</div>`;
-  }
-  const folders = notes.folders.map((folder) => `<li><button type="button" class="setup-folder" aria-pressed="false" data-folder="${e(folder)}"><span class="setup-folder-mark" aria-hidden="true"></span><span class="setup-folder-name">${e(folder)}/</span></button></li>`).join('');
+  const folders = notes.folders.map((folder) => `<li><label class="setup-folder"><input type="checkbox" name="folder" value="${e(folder)}"><span class="setup-check" aria-hidden="true">${ICON_TICK}</span><span class="setup-folder-name">${e(folder)}/</span></label></li>`).join('');
   return `<section class="setup-decision" aria-labelledby="publish-heading">
 <h2 id="publish-heading">Nothing is marked public yet</h2>
 <p>Your repository has no <code>publish.yml</code>, the file that lists which notes may go on your website. Without it Cyberbaser publishes nothing.</p>
-<div class="setup-actions">${actionButton(e, 'nothing-yet', 'Publish nothing yet')}${actionButton(e, 'open-starter', 'Write a starter file', 'quiet')}</div>
+<div class="setup-actions">${actionButton(e, 'nothing-yet', 'Publish nothing yet')}${actionButton(e, 'open-starter', 'Choose public folders', 'quiet')}</div>
 <div class="setup-starter" id="setup-starter" hidden>
-<p>Pick the folders that may be public. Nothing is picked for you.</p>
-${folders ? `<ul class="setup-folders" id="setup-folders">${folders}</ul>` : '<p class="setup-note">Your notes have no folders, so the starter file lists nothing. You can add entries later.</p>'}
-<pre class="setup-file" id="setup-file" aria-label="publish.yml as it will be saved">${e(starterPublishYml([]))}</pre>
-<div class="setup-actions">${actionButton(e, 'starter', 'Save this publish.yml')}</div>
+${folders ? `<fieldset class="setup-pick"><legend>Folders that may be public</legend><p class="setup-aside" id="setup-pick-hint">Choose any number. Nothing is chosen for you.</p>
+<ul class="setup-folders" id="setup-folders" aria-describedby="setup-pick-hint">${folders}</ul></fieldset>` : '<p class="setup-note">Your notes have no folders, so the file would list nothing. You can add entries later.</p>'}
+<p class="setup-change" id="setup-change" aria-live="polite">This adds one file, <code>publish.yml</code>, to <strong>${e(state.repository)}</strong>. No folder is public yet.</p>
+<details class="setup-show-file"><summary>Show the file</summary><pre class="setup-file" id="setup-file" aria-label="publish.yml as it will be published">${e(starterPublishYml([]))}</pre></details>
+<div class="setup-actions">${actionButton(e, 'starter', 'Publish this file')}</div>
 </div>
 </section>`;
 }
@@ -588,7 +641,7 @@ function isLoopback(address) {
  * and pairing for the picked repository's owner, or returns null.
  */
 export function createFirstRunHandler({
-  listen, state, links, relay = null, notes, reach = async () => null, pairCommand = 'cyberbaser pair',
+  listen, state, links, relay = null, notes, starter = null, reach = async () => null, pairCommand = 'cyberbaser pair',
   publicRoot = fileURLToPath(new URL('../public/', import.meta.url)), onComplete = () => {}, createToken,
 }) {
   const tools = ownerHttpTools();
@@ -641,24 +694,25 @@ export function createFirstRunHandler({
         notes.start(current.repository);
         return 'ok';
       case 'notes:nothing-yet':
-      case 'notes:starter': {
         if (current.notes.phase !== 'ready' || current.notes.publishYml !== 'missing') return 'invalid';
-        let text = null;
-        if (action === 'starter') {
-          const folders = Array.isArray(value) ? value : null;
-          if (folders === null || folders.length > MAX_FOLDERS || new Set(folders).size !== folders.length
-            || folders.some((folder) => typeof folder !== 'string' || !current.notes.folders.includes(folder))) return 'invalid';
-          text = starterPublishYml([...folders].sort((a, b) => a.localeCompare(b)));
-          await writePrivateFile(path.join(state.directory, PENDING_PUBLISH_FILE), text);
-        } else {
-          await rm(path.join(state.directory, PENDING_PUBLISH_FILE), { force: true });
-        }
-        await state.update((now) => ({ ...now, notes: { ...now.notes, choice: action } }));
+        await state.update((now) => ({ ...now, notes: { ...now.notes, choice: 'nothing-yet' } }));
+        return 'ok';
+      case 'notes:starter': {
+        // The owner approved exactly this file on screen; it goes to GitHub
+        // through the publisher, which checks it again, as the one change of setup.
+        if (current.notes.phase !== 'ready' || current.notes.publishYml !== 'missing') return 'invalid';
+        const folders = Array.isArray(value) ? value : null;
+        if (folders === null || folders.length > MAX_FOLDERS || new Set(folders).size !== folders.length
+          || folders.some((folder) => typeof folder !== 'string' || !current.notes.folders.includes(folder))) return 'invalid';
+        if (starter === null) return 'not-ready';
+        const sorted = [...folders].sort((a, b) => a.localeCompare(b));
+        try { await starter.publish({ repository: current.repository, folders: sorted }); }
+        catch (error) { return error?.code === 'starter-refused' ? 'starter-refused' : 'starter-failed'; }
+        await state.update((now) => ({ ...now, notes: { ...now.notes, choice: 'starter', publishYml: 'present', allowCount: sorted.length } }));
         return 'ok';
       }
       case 'notes:reopen-publish':
-        if (current.notes.choice === null) return 'invalid';
-        await rm(path.join(state.directory, PENDING_PUBLISH_FILE), { force: true });
+        if (current.notes.choice !== 'nothing-yet') return 'invalid';
         await state.update((now) => ({ ...now, notes: { ...now.notes, choice: null } }));
         return 'ok';
       case 'notes:continue':
@@ -776,7 +830,7 @@ export function createFirstRunHandler({
         queueMicrotask(() => onComplete({ state: finished, session: { sessionToken: owner.sessionToken, csrfToken } }));
         return json({ ok: true, step: 'done' });
       }
-      if (outcome !== 'ok') return json({ ok: false, code: outcome }, outcome === 'invalid-url' ? 400 : 409);
+      if (outcome !== 'ok') return json({ ok: false, code: outcome }, outcome === 'invalid-url' ? 400 : outcome === 'starter-failed' ? 502 : 409);
       return json({ ok: true, step: state.read().step });
     }
 
@@ -799,17 +853,22 @@ export function createFirstRunHandler({
  */
 export async function runFirstRun({
   stateDirectory, port, publisherSocket = null, provider = 'github-app', reach, git, fetchUrlFor, buildSite = null,
-  pairCommand, serve = Bun.serve, createToken, clock,
+  pairCommand, serve = Bun.serve, createToken, clock, checkout = undefined, mirror = null,
 }) {
   const state = await openSetupState(stateDirectory);
   const tools = ownerHttpTools();
   const links = createSetupLinks({ createToken: createToken ?? tools.token, sameSecret: tools.sameSecret, clock,
     isComplete: () => state.read().completedAt !== null });
-  const notes = createNotesPreparer({ state, directory: stateDirectory, git, fetchUrlFor, buildSite });
   const relay = publisherSocket === null ? null : createSetupForgeRelay({ socketPath: publisherSocket, provider, state });
+  const viaMirror = mirror !== null && relay !== null;
+  const notes = createNotesPreparer({ state, directory: stateDirectory, git, fetchUrlFor, buildSite,
+    ...(checkout === undefined ? {} : { checkout }),
+    ...(viaMirror ? { mirror, refresh: () => relay.ask('fetch') } : {}) });
+  const starter = viaMirror ? createStarterPublisher({ checkout: notes.checkout, publish: (commit) => relay.publishStarter(commit),
+    ...(git ? { git } : {}) }) : null;
   let finish;
   const completed = new Promise((resolve) => { finish = resolve; });
-  const handler = createFirstRunHandler({ listen: { host: '127.0.0.1', port }, state, links, relay, notes, reach, pairCommand,
+  const handler = createFirstRunHandler({ listen: { host: '127.0.0.1', port }, state, links, relay, notes, starter, reach, pairCommand,
     createToken, onComplete: (result) => finish(result) });
   // A restart while the notes were being copied picks the copy up again.
   const resumed = state.read();

@@ -3,11 +3,13 @@
 import { loadOwnerAlphaConfig } from '../src/config.js';
 import { createForgeAccess, createGithubAppAccess } from '../src/publisher/forge-access.js';
 import { startForgeControl } from '../src/publisher/forge-control.js';
+import { createMirror } from '../src/publisher/mirror.js';
 import { startPublisher } from '../src/publisher/server.js';
 import { DEFAULT_OWNER_ALPHA_PROJECT_ROOT } from '../src/site.js';
 import { storeContextFromConfig } from '../src/store.js';
 
-export async function runPublisherCli({ configFile, socketPath, repository, projectRoot = DEFAULT_OWNER_ALPHA_PROJECT_ROOT, socketGroup = null }) {
+export async function runPublisherCli({ configFile, socketPath, repository, projectRoot = DEFAULT_OWNER_ALPHA_PROJECT_ROOT, socketGroup = null,
+  forgeOptions = undefined }) {
   let publisher;
   let stopRequested = false;
   let stopped;
@@ -17,7 +19,8 @@ export async function runPublisherCli({ configFile, socketPath, repository, proj
   process.once('SIGINT', stop);
   try {
     const config = await loadOwnerAlphaConfig(configFile);
-    publisher = await startPublisher({ config, context: storeContextFromConfig(config, projectRoot), socketPath, repository, socketGroup });
+    publisher = await startPublisher({ config, context: storeContextFromConfig(config, projectRoot), socketPath, repository, socketGroup,
+      ...(forgeOptions === undefined ? {} : { forgeOptions }) });
     if (!stopRequested) process.stdout.write('owner-alpha publisher ready\n');
     await stopping;
   } finally {
@@ -41,11 +44,16 @@ export async function saveTokenCli({ configFile, repository, input = process.std
   return saved.repository.fullName;
 }
 
-// First-run setup: GitHub sign-in and repository choice only. There is no
-// repository yet, so this publisher can list and bind but never push.
-export async function runSetupForgeCli({ socketPath, stateDirectory, clientId }) {
-  const access = createGithubAppAccess({ clientId, stateDirectory, remoteUrl: null });
-  const control = await startForgeControl({ socketPath, forgeAccess: access });
+// First-run setup: GitHub sign-in, repository choice, and the mirror the node
+// copies its notes from. There is no publication policy yet, so this publisher
+// never pushes a job; the only change it may push is an exact starter
+// publish.yml the owner approved (see src/publisher/mirror.js). With a mirror
+// and a checkout it offers fetch and publish-starter; without, sign-in only.
+export async function runSetupForgeCli({ socketPath, stateDirectory, clientId, mirror = null, checkout = null, socketGroup = null,
+  http = undefined, uid = process.getuid() }) {
+  const access = createGithubAppAccess({ clientId, stateDirectory, remoteUrl: null, ...(http === undefined ? {} : { http }) });
+  const held = mirror === null ? null : await createMirror({ directory: mirror, uid, forgeAccess: access });
+  const control = await startForgeControl({ socketPath, forgeAccess: access, uid, socketGroup, mirror: held, starterCheckout: checkout });
   process.stdout.write('owner-alpha publisher ready for setup\n');
   await new Promise((resolve) => { process.once('SIGTERM', resolve); process.once('SIGINT', resolve); });
   access.close();

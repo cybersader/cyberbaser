@@ -422,7 +422,8 @@ async function currentSignedBinding({ config, projectRoot, source, git }) {
     if (manifest?.schemaVersion !== OWNER_SITE_SCHEMA_VERSION || manifest.artifactType !== OWNER_SITE_ARTIFACT_TYPE
       || manifest.source?.head !== head || manifest.source?.branch !== config.repository.branch
       || manifest.source?.remote?.name !== config.repository.remote.name || manifest.source?.remote?.url !== source.repository
-      || manifest.policyRevision !== computePolicyRevision(config) || manifest.suggestions?.form !== true) {
+      || manifest.policyRevision !== computePolicyRevision(config)
+      || (manifest.suggestions?.form !== true && manifest.suggestions?.agents !== true)) {
       fail('signed-binding-unavailable', 'no current publication binding');
     }
     return validateDigest(manifest.suggestions.bindingDigest, 'current publication binding');

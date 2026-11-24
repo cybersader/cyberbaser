@@ -41,13 +41,13 @@ Run "cyberbaser <mode> --help" for one mode.`,
   publisher: 'Usage: cyberbaser publisher <config-file> <socket-path> <bare-repository> [--socket-group <group>]\n       cyberbaser publisher save-token <config-file> <owner/name>   (token on standard input)\nThe only process that holds forge credentials. Installed: runs as the "cyberbaser-publisher" account.',
   intake: 'Usage: cyberbaser intake --config <absolute-config-file>\nThe suggestion intake. The node starts it beside itself; it runs as the node account.',
   pair: 'Usage: cyberbaser pair <code or obsidian:// link> [--state <absolute new file>]\nPairs an agent on this machine with an owner node; confirm the four words on the owner screen.',
-  install: 'Usage: cyberbaser install [--yes] [--dry-run] [--quartz-seed <archive>] [--port <n>]\nInstalls Cyberbaser as a background service. Asks for the admin password once (pkexec or sudo).\nCreates the accounts "cyberbaser" (node) and "cyberbaser-publisher" (publisher), owner-only state, and the services.',
+  install: 'Usage: cyberbaser install [--yes] [--dry-run] [--quartz-seed <archive>] [--port <n>] [--github-client-id <id>] [--github-origin <url>] [--iroh-relay none|n0|<url>]\nInstalls Cyberbaser as a background service. Asks for the admin password once (pkexec or sudo).\nCreates the accounts "cyberbaser" (node) and "cyberbaser-publisher" (publisher), owner-only state, and the services.',
   uninstall: 'Usage: cyberbaser uninstall [--purge] [--yes] [--dry-run]\nStops and removes the services and program files. Keeps your data and accounts unless --purge.',
   status: 'Usage: cyberbaser status\nShows what is installed, which services run, and the local address.',
 };
 
 // Run by the installed services only; not listed in help.
-const INTERNAL = Object.freeze(['service-node', 'sync-publisher-config']);
+const INTERNAL = Object.freeze(['service-node', 'service-publisher', 'sync-publisher-config']);
 
 function out(text) { process.stdout.write(`${text}\n`); }
 
@@ -126,6 +126,15 @@ export async function main(argv) {
     const { nodeServiceArgs } = await import('./platform/linux-systemd.js');
     const next = nodeServiceArgs();
     return guarded(next.mode, next.args);
+  }
+  if (mode === 'service-publisher') {
+    // The installed publisher service: setup mode until its config copy exists.
+    const problem = accountProblem('publisher');
+    if (problem !== null) { process.stderr.write(`cyberbaser publisher: ${problem}\n`); process.exitCode = 1; return; }
+    const { runPublisherService } = await import('./platform/linux-systemd.js');
+    try { process.exitCode = await runPublisherService({ appRoot: appRoot() }); }
+    catch (error) { process.stderr.write(`cyberbaser publisher failed${error?.code ? `: ${error.code}` : ''}\n`); process.exitCode = 1; }
+    return;
   }
   if (mode === 'sync-publisher-config') {
     const { syncPublisherConfig } = await import('./platform/linux-systemd.js');

@@ -26,7 +26,7 @@ mkdir -p /var/tmp/cb-test && install -m 0644 /test/scripts/save-job.mjs /test/sc
 
 echo "== install (fresh)"
 start=$(date +%s%N)
-$PROGRAM install --quartz-seed "$SEED" | tee /tmp/install.out
+$PROGRAM install --quartz-seed "$SEED" --github-client-id Iv23liFAKEcyberbaser | tee /tmp/install.out
 echo "install_ms=$(( ($(date +%s%N) - start) / 1000000 ))"
 check "install wrote its record" test -f /etc/cyberbaser/install.json
 check "node service active" wait_active cyberbaser-node.service

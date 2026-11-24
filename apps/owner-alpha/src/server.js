@@ -16,6 +16,7 @@ import { fail, OwnerAlphaError } from './errors.js';
 import { listDurableJobs, loadDurableJob, validateJobId } from './job-state.js';
 import { ensureOwnerSite } from './site.js';
 import { createEditSession as createSourceEditSession, liveUrlForSlug } from './source.js';
+import { createUpstream } from './upstream.js';
 import { prepareStore, storeContextFromConfig } from './store.js';
 import { startSuggestionIntake, suggestionFormOrigin, suggestionChallengeOrigin } from './suggestions.js';
 import { createOwnerPublicationRuntime, createPublicationSourceGuard } from './owner-publication-runtime.js';
@@ -591,7 +592,14 @@ function reviewSummaryCard(entry, href, decision = null, application = null, ear
 ${folded}</article>`;
 }
 
-function reviewListPage({ overlay, nextCursor }) {
+// One quiet line where publishing depends on GitHub; nothing when it is reachable.
+export function upstreamNotice(upstream) {
+  const state = typeof upstream?.current === 'function' ? upstream.current() : null;
+  if (state?.state !== 'unreachable') return '';
+  return '<p class="rv-note rv-upstream" role="status">Can\'t reach GitHub. You can still review; publishing waits until it is back.</p>';
+}
+
+function reviewListPage({ overlay, nextCursor, upstream = null }) {
   const actionable = overlay.actionable.length === 0
     ? '<p class="empty-state">Nothing is waiting for you.</p>'
     : groupActionable(overlay.actionable).map(({ entry, earlier }) => reviewSummaryCard(
@@ -623,6 +631,7 @@ function reviewListPage({ overlay, nextCursor }) {
     body: `<header class="rv-topbar"><b>Cyberbaser</b><span class="rv-priv">private to you</span></header>
 <main class="rv-inbox-main" id="owner-review-list">
 <h1>Proposals</h1>
+${upstreamNotice(upstream)}
 <section class="review-section" id="needs-review" aria-labelledby="actionable-heading">
 <div class="section-heading"><h2 id="actionable-heading">Needs review</h2><span class="section-count">${waiting}</span></div>
 <div class="proposal-list">${actionable}</div>
@@ -1809,6 +1818,9 @@ export function createOwnerAlphaHandler({
   // { sessionToken, csrfToken } the first-run setup in this same process
   // already gave the owner's browser, so setup ends signed in. Never on disk.
   adoptSession = null,
+  // { current() -> { state: 'reachable' | 'unreachable' | 'unknown' } }: whether
+  // the publisher last reached GitHub. Shown quietly where publishing needs it.
+  upstream = null,
 } = {}) {
   const config = validateOwnerAlphaConfig(configInput);
   const appearance = validReviewAppearance(reviewAppearance, config);
@@ -2141,7 +2153,7 @@ export function createOwnerAlphaHandler({
         });
       }
       if (request.method === 'HEAD') return html(null);
-      return html(reviewListPage({ overlay: review, nextCursor: review.nextCursor }));
+      return html(reviewListPage({ overlay: review, nextCursor: review.nextCursor, upstream }));
     }
 
     const reviewDecisionMatch = url.pathname.match(/^\/api\/review\/([^/]+)\/decision$/u);
@@ -2613,6 +2625,7 @@ export async function runOwnerAlphaServer({
   readAuthoringNote,
   createPublication = createOwnerPublicationRuntime,
   adoptSession = null,
+  createUpstreamStatus = createUpstream,
 } = {}) {
   if (typeof rebuildSite !== 'function'
     || typeof loadPipeline !== 'function'
@@ -2648,6 +2661,13 @@ export async function runOwnerAlphaServer({
   }
   const storeContext = storeContextFromConfig(config, projectRoot);
   await prepareStore(storeContext);
+  // With a publisher mirror: ask the publisher for GitHub's latest and bring a
+  // clean checkout up to it. Unreachable GitHub is a state, not a failure.
+  const upstream = config.publisher?.mirror ? createUpstreamStatus({ config }) : null;
+  await upstream?.refresh();
+  // Later checks only ask the publisher, so the quiet notice clears when GitHub is back.
+  const upstreamTimer = upstream === null ? null : setInterval(() => { upstream.refresh({ sync: false }).catch(() => {}); }, 5 * 60_000);
+  upstreamTimer?.unref?.();
   // The site build retains the publication binding the form needs, so the
   // intake starts after it and before anything reads the review socket.
   await rebuildSite({ config, projectRoot });
@@ -2709,6 +2729,7 @@ export async function runOwnerAlphaServer({
     devices,
     forgeSetup: createForgeSetup({ config, configFile: configFile instanceof URL ? fileURLToPath(configFile) : configFile }),
     ...(adoptSession === null ? {} : { adoptSession }),
+    upstream,
   });
   const readerFetch = createReader({ config, projectRoot });
   let runtime;
@@ -2758,7 +2779,9 @@ export async function runOwnerAlphaServer({
       : Object.freeze({ formOrigin: suggestions.formOrigin, forge: suggestions.forge }),
     recovery,
     iroh: iroh === undefined ? null : Object.freeze({ nodeId: iroh.nodeId, ticket: iroh.ticket }),
+    upstream,
     stop(closeActiveConnections) {
+      if (upstreamTimer !== null) clearInterval(upstreamTimer);
       runtime.stop?.(closeActiveConnections);
       const carriers = [signed, iroh].filter(Boolean);
       return carriers.length === 0
@@ -2848,6 +2871,7 @@ if (import.meta.main) {
 
   try {
     runtime = await runOwnerAlphaServer({ configFile });
+    if (runtime.upstream?.current().state === 'unreachable') console.log('GitHub: cannot reach it now; serving your notes as last copied.');
     await runtime.recovery;
     if (readyFile) await writeOwnerAlphaReadyMarker(readyFile);
     console.log(`Owner alpha reader: ${runtime.readerOrigin}/cyberbase/`);

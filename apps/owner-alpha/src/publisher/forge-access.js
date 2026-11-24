@@ -9,6 +9,8 @@
 //   saveToken(token, fullName) -> pasted-token providers only (publisher CLI, never the node)
 //   disconnect()               -> forget the credential
 //   pushCredential(remoteUrl)  -> { username, password, host } for one push; in-process only
+//   boundCredential()          -> { repository, remoteUrl, username, password, host } to read the bound
+//                                 repository into the publisher's own mirror; in-process only
 //
 // Credentials live only in this process and in its owner-only state directory.
 // Nothing returned by any method except pushCredential contains one, and no
@@ -33,6 +35,7 @@ export const FORGE_PROBLEMS = Object.freeze({
   'repository-mismatch': 'The picked repository is not the one this site publishes to yet. Restart Cyberbaser to switch.',
   'token-invalid': 'That token was refused. Paste a fine-grained token with "Contents: read and write" on the one repository.',
   'github-unreachable': 'GitHub could not be reached. Cyberbaser will try again.',
+  'starter-refused': 'That change was not published: it is not exactly the starter publish.yml, or your notes changed on GitHub meanwhile. Try again.',
 });
 
 const GITHUB_API_VERSION = '2022-11-28';
@@ -446,6 +449,20 @@ export function createGithubAppAccess({
       });
     },
 
+    // Reading the bound repository into the publisher's mirror. First-run setup
+    // (remoteUrl null) may read whichever repository was picked; once a config
+    // names the repository, only that one.
+    boundCredential() {
+      return exclusive(async () => {
+        const current = await usable();
+        if (current === null) throw problem(lastProblem ?? 'revoked');
+        if (!current.repository) throw problem('repository-not-installed');
+        if (remoteUrl !== null && current.repository.remoteUrl !== remoteUrl) throw problem('repository-mismatch');
+        return { repository: current.repository.fullName, remoteUrl: current.repository.remoteUrl, username: 'x-access-token',
+          password: current.accessToken, host: pushHost ?? pushHostFrom(current.repository.remoteUrl) };
+      });
+    },
+
     close() { clearPending(); },
   });
 }
@@ -519,6 +536,15 @@ export function createTokenAccess({ stateDirectory, remoteUrl, http = createGith
         try { await verify(current.token, current.repository.fullName); }
         catch (failure) { if (failure?.code === 'token-invalid') { await state.remove(); lastProblem = 'revoked'; } throw failure; }
         return { username: 'x-access-token', password: current.token, host: pushHost ?? pushHostFrom(targetUrl) };
+      });
+    },
+    boundCredential() {
+      return exclusive(async () => {
+        const current = await state.read();
+        if (current === null) throw problem('revoked');
+        if (current.repository.remoteUrl !== remoteUrl) throw problem('repository-mismatch');
+        return { repository: current.repository.fullName, remoteUrl: current.repository.remoteUrl, username: 'x-access-token',
+          password: current.token, host: pushHost ?? pushHostFrom(current.repository.remoteUrl) };
       });
     },
     close() {},

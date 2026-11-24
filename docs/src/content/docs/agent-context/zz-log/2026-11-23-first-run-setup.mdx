@@ -23,3 +23,12 @@ Built the first-run setup the [deployment and reach design](/cyberbaser/design/d
 ## Still open
 
 Cloning a private repository needs a publisher-side fetch. Publishing a confirmed starter `publish.yml` is not wired. Pairing during setup has not run on a real Iroh endpoint, and the installer that starts setup and then the node belongs to the packaging work.
+
+## Later the same day: what now works
+
+- **Private repositories.** The publisher fetches into its own mirror; the node copies from it with no credential anywhere on its side. Tested against the fake GitHub with a repository it refuses without the token (`apps/owner-alpha/test/mirror.test.js`) and in the installed container.
+- **The starter `publish.yml` is published.** The folder choice is now a checklist with nothing checked, a sentence saying what becomes public, the file behind **Show the file**, and **Publish this file**. The publisher accepts only that exact file added on top of the current head, and refuses anything else.
+- **Hand-off at Done.** The node starts in the same process with the owner's session; the setup link stops working.
+- Screenshots of the changed step: `.workspace/setup-wizard/v2/` (local record).
+
+Still open: setup writes no `.cyberbaser/trust.yml`, so approved proposals stop at the trust check until the repository has one; pairing during setup has not run on a real Iroh endpoint.

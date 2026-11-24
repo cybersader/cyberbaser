@@ -9,7 +9,12 @@ import { OwnerAlphaError, fail } from '../errors.js';
 import { FORGE_PROBLEMS, validFullName } from './forge-access.js';
 import { MAX_FRAME_BYTES, READ_TIMEOUT_MS, readFrame, restrictSocket, validSocketPath } from './protocol.js';
 
-export const FORGE_OPERATIONS = Object.freeze(['status', 'check', 'start', 'cancel', 'repositories', 'select', 'disconnect']);
+// fetch: the publisher refreshes its mirror of the bound repository and says
+// which branch and commit it holds. publish-starter: the one change a
+// first-run publisher may push (see mirror.js), named by its commit.
+export const FORGE_OPERATIONS = Object.freeze(['status', 'check', 'start', 'cancel', 'repositories', 'select', 'disconnect',
+  'fetch', 'publish-starter']);
+const COMMIT = /^[0-9a-f]{40}$/u;
 export const MAX_FORGE_RESPONSE_BYTES = 512 * 1024;
 const FORGE_CODES = Object.freeze([...Object.keys(FORGE_PROBLEMS), 'forge-invalid-request', 'forge-unsupported', 'forge-failed', 'forge-busy']);
 
@@ -19,8 +24,10 @@ export function forgeSocketPath(socketPath) {
   return candidate;
 }
 
-function requestFrame(op, repository) {
-  return op === 'select' ? JSON.stringify({ v: 1, op, repository }) : JSON.stringify({ v: 1, op });
+function requestFrame(op, value) {
+  if (op === 'select') return JSON.stringify({ v: 1, op, repository: value });
+  if (op === 'publish-starter') return JSON.stringify({ v: 1, op, commit: value });
+  return JSON.stringify({ v: 1, op });
 }
 
 // Exact canonical text only: no duplicate members, no extra whitespace or keys.
@@ -29,7 +36,8 @@ function parseForgeRequest(text) {
   try { value = JSON.parse(text); } catch { return null; }
   if (!value || typeof value !== 'object' || Array.isArray(value) || !FORGE_OPERATIONS.includes(value.op)) return null;
   if (value.op === 'select' && !validFullName(value.repository)) return null;
-  return requestFrame(value.op, value.repository) === text ? value : null;
+  if (value.op === 'publish-starter' && !COMMIT.test(value.commit ?? '')) return null;
+  return requestFrame(value.op, value.op === 'publish-starter' ? value.commit : value.repository) === text ? value : null;
 }
 
 function failureCode(error) {
@@ -37,7 +45,10 @@ function failureCode(error) {
   return 'forge-failed';
 }
 
-export async function startForgeControl({ socketPath, forgeAccess, uid = process.getuid(), socketGroup = null }) {
+// mirror: createMirror(...) for fetch; checkout: the node's notes copy, the
+// only place a starter commit is read from. Either may be null (no such ops).
+export async function startForgeControl({ socketPath, forgeAccess, uid = process.getuid(), socketGroup = null, mirror = null,
+  starterCheckout = null }) {
   const address = forgeSocketPath(socketPath);
   // The caller holds the publisher's socket lifetime lock in this owner-only
   // directory, so a leftover socket of ours here is stale.
@@ -67,6 +78,17 @@ export async function startForgeControl({ socketPath, forgeAccess, uid = process
           case 'start': result = await forgeAccess.startSignIn(); break;
           case 'cancel': await forgeAccess.cancelSignIn(); result = {}; break;
           case 'repositories': result = await forgeAccess.listRepositories(); break;
+          case 'fetch': {
+            if (mirror === null) throw new OwnerAlphaError('forge-unsupported', 'this publisher keeps no mirror');
+            const held = await mirror.refresh();
+            result = { repository: held.repository, branch: held.branch, head: held.head };
+            break;
+          }
+          case 'publish-starter': {
+            if (mirror === null || starterCheckout === null) throw new OwnerAlphaError('forge-unsupported', 'this publisher publishes no starter file');
+            result = await mirror.publishStarter({ checkout: starterCheckout, commit: request.commit });
+            break;
+          }
           case 'select': result = await forgeAccess.selectRepository(request.repository); break;
           default: await forgeAccess.disconnect(); result = {};
         }
@@ -93,8 +115,9 @@ export async function startForgeControl({ socketPath, forgeAccess, uid = process
 }
 
 /** Ask the publisher one forge question. Never sends or expects a credential. */
-export function forgeRequest({ socketPath, op, repository, timeoutMs = 20_000 }) {
-  if (!FORGE_OPERATIONS.includes(op) || (op === 'select' && !validFullName(repository))) {
+export function forgeRequest({ socketPath, op, repository, commit, timeoutMs = ['fetch', 'publish-starter'].includes(op) ? 120_000 : 20_000 }) {
+  if (!FORGE_OPERATIONS.includes(op) || (op === 'select' && !validFullName(repository))
+    || (op === 'publish-starter' && !COMMIT.test(commit ?? ''))) {
     return Promise.reject(new OwnerAlphaError('forge-invalid-request', 'invalid forge request'));
   }
   const address = forgeSocketPath(socketPath);
@@ -121,7 +144,7 @@ export function forgeRequest({ socketPath, op, repository, timeoutMs = 20_000 })
       }
       return invalid();
     }, invalid, { maxBytes: MAX_FORGE_RESPONSE_BYTES });
-    socket.once('connect', () => socket.write(`${requestFrame(op, repository)}\n`));
+    socket.once('connect', () => socket.write(`${requestFrame(op, op === 'publish-starter' ? commit : repository)}\n`));
     socket.once('error', unavailable);
     socket.once('end', unavailable);
     socket.once('close', unavailable);

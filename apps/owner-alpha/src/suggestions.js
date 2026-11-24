@@ -107,9 +107,15 @@ export function suggestionChallengeOrigin(configInput) {
  * The intake's complete settings, derived from the owner config. The owner
  * never edits these; the same values are written for the intake process.
  */
+// Paired agents propose through the intake's review socket, so the intake runs
+// for them too, with the public form and forge watcher off.
+export function agentLaneEnabled(config) {
+  return config.proposalReview.enabled && (config.iroh?.enabled === true || config.signedRequestSocket !== undefined);
+}
+
 export function deriveIntakeConfig(configInput, projectRoot) {
   const config = validateOwnerAlphaConfig(configInput);
-  if (!suggestionsEnabled(config)) return null;
+  if (!suggestionsEnabled(config) && !agentLaneEnabled(config)) return null;
   const paths = suggestionPaths(config, projectRoot);
   const formOrigin = suggestionFormOrigin(config);
   const forge = config.suggestions.forge;
@@ -350,7 +356,9 @@ export async function retainPublication({
   git = defaultSuggestionGit,
 } = {}) {
   const config = validateOwnerAlphaConfig(configInput);
-  if (!config.suggestions.form.enabled) fail('suggestion-form-disabled', 'the suggestion form is off in the owner config');
+  if (!config.suggestions.form.enabled && !agentLaneEnabled(config)) {
+    fail('suggestion-form-disabled', 'neither the suggestion form nor paired agents are on in the owner config');
+  }
   const head = exactCommit(checkout?.head, 'checkout.head');
   if (typeof checkout?.root !== 'string' || !path.isAbsolute(checkout.root)) {
     fail('invalid-checkout', 'checkout.root must be one absolute path');

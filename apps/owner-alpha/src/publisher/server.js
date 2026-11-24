@@ -11,6 +11,7 @@ import { createPublisherStoreContext } from '../store.js';
 import { READ_TIMEOUT_MS, REJECTION_CODES, readFrame, restrictSocket, validSocketGroup, validSocketPath } from './protocol.js';
 import { FORGE_PROBLEMS, createForgeAccess } from './forge-access.js';
 import { startForgeControl } from './forge-control.js';
+import { createMirror } from './mirror.js';
 import { createIsolatedPush } from './repository.js';
 
 async function socketStat(socketPath) {
@@ -109,7 +110,7 @@ function rejectionCode(error) {
   return REJECTION_CODES.includes(error.code) ? error.code : 'publisher-failed';
 }
 
-export async function startPublisher({ config, context, socketPath, repository, forgeAccess, forgeOptions, socketGroup = null } = {}) {
+export async function startPublisher({ config, context, socketPath, repository, forgeAccess, forgeOptions, socketGroup = null, mirrorOptions = null } = {}) {
   if (!validSocketPath(socketPath) || typeof process.getuid !== 'function' || !validSocketGroup(socketGroup)) {
     fail('publisher-unsafe-socket', 'publisher needs a private local Unix socket');
   }
@@ -183,7 +184,12 @@ export async function startPublisher({ config, context, socketPath, repository, 
     const publisherContext = await createPublisherStoreContext(context, checkout);
     // Undefined means "from config"; null means this publisher pushes with no forge credential.
     forgeAccess = forgeAccess === undefined ? createForgeAccess(config, forgeOptions) : forgeAccess;
-    const pushCommit = await createIsolatedPush({ repository, checkout, uid: Number(uid), forgeAccess });
+    // The mirror the node reads the remote branch from (config.publisher.mirror).
+    const mirrorPath = config.publisher?.mirror ?? null;
+    const mirror = mirrorPath === null || forgeAccess === null ? null
+      : await createMirror({ directory: mirrorPath, uid: Number(uid), forgeAccess, ...(mirrorOptions ?? {}) });
+    const pushCommit = await createIsolatedPush({ repository, checkout, uid: Number(uid), forgeAccess,
+      onPushed: mirror === null ? null : (pushed) => mirror.adoptPack(pushed) });
     // The caller holds the pipeline mutation lock; taking it here would deadlock.
     publish = createJobPublisher({ config, context: publisherContext, pushCommit, bindCommitMessage: true });
     await listen(server, socketPath);
@@ -191,7 +197,7 @@ export async function startPublisher({ config, context, socketPath, repository, 
     await ownerFile.truncate(0);
     await ownerFile.writeFile(fingerprint(ownedSocket));
     await ownerFile.sync();
-    if (forgeAccess !== null) forgeControl = await startForgeControl({ socketPath, forgeAccess, uid: Number(uid), socketGroup });
+    if (forgeAccess !== null) forgeControl = await startForgeControl({ socketPath, forgeAccess, uid: Number(uid), socketGroup, mirror });
     ready = true;
   } catch (error) {
     if (server.listening) await new Promise((resolve) => server.close(resolve));
@@ -199,6 +205,7 @@ export async function startPublisher({ config, context, socketPath, repository, 
     await ownerFile?.close();
     if (error instanceof OwnerAlphaError && [
       'publisher-unsafe-socket', 'publisher-socket-in-use', 'publisher-unsafe-repository', 'publisher-unsafe-store',
+      'publisher-unsafe-mirror',
     ].includes(error.code)) throw error;
     fail('publisher-start-failed', 'publisher Unix socket could not start');
   }

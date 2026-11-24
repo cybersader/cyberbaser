@@ -215,12 +215,12 @@ export async function assertCheckoutReady(configInput, { git = defaultGitRunner 
 
   const head = exactCommit(await runGit(git, checkoutReal, ['rev-parse', 'HEAD']), 'HEAD');
   const remoteRef = `refs/heads/${branch}`;
-  const remoteOutput = await runGit(git, checkoutReal, [
-    'ls-remote',
-    '--refs',
-    remote.name,
-    remoteRef,
-  ]);
+  // With a publisher mirror the node never asks the forge: the mirror holds the
+  // remote branch as the publisher last saw it (and moves it after each push).
+  const mirror = config.publisher?.mirror ?? null;
+  const remoteOutput = await runGit(git, checkoutReal, mirror === null
+    ? ['ls-remote', '--refs', remote.name, remoteRef]
+    : ['-c', `safe.directory=${mirror}`, '-c', 'protocol.file.allow=always', 'ls-remote', '--refs', '--', mirror, remoteRef]);
   const remoteMatch = String(remoteOutput).match(/^([0-9a-f]{40})\trefs\/heads\/([^\s]+)$/u);
   if (!remoteMatch || remoteMatch[2] !== branch) {
     fail(

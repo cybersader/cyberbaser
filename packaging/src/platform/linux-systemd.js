@@ -5,6 +5,8 @@
 //   /var/lib/cyberbaser-shared         what the publisher may read                root:cyberbaser-share 0750
 //     workspace/  job store, bound at /opt/cyberbaser/.workspace                  cyberbaser:cyberbaser-share 0770
 //     notes/      the node's copy of the notes (Git checkout)                     cyberbaser:cyberbaser-share 0770
+//     mirror/     the publisher's plain copy of the repository (bare Git):        cyberbaser-publisher:cyberbaser-share 0750
+//                 the publisher alone fetches and writes it; the node reads it
 //   /var/lib/cyberbaser-publisher      publisher only (forge key, push repo)      cyberbaser-publisher 0700
 //   /run/cyberbaser-publisher          publisher sockets, reachable by the group  0710
 //
@@ -32,6 +34,9 @@ export const LAYOUT = Object.freeze({
   // live in the shared directory so the publisher can read the commits.
   setup: '/var/lib/cyberbaser/setup',
   notes: '/var/lib/cyberbaser-shared/notes',
+  mirrorParent: '/var/lib/cyberbaser-shared/mirror',
+  mirror: '/var/lib/cyberbaser-shared/mirror/notes.git',
+  publisherForge: '/var/lib/cyberbaser-publisher/forge',
   publisherHome: '/var/lib/cyberbaser-publisher',
   publisherRun: '/run/cyberbaser-publisher',
   publisherSocket: '/run/cyberbaser-publisher/publisher.sock',
@@ -45,6 +50,9 @@ export const LAYOUT = Object.freeze({
 export const UNITS = Object.freeze(['cyberbaser-node.service', 'cyberbaser-publisher.service',
   'cyberbaser-config.path', 'cyberbaser-config-apply.service']);
 const DEFAULT_PORT = 4317;
+// The registered Cyberbaser GitHub App's public client ID. Not registered yet:
+// until it is, install takes --github-client-id.
+export const GITHUB_CLIENT_ID = null;
 const ACCOUNTS = DEFAULT_ACCOUNTS;
 
 function say(text) { process.stdout.write(`${text}\n`); }
@@ -66,7 +74,7 @@ function which(name) {
 }
 
 function parse(args, known) {
-  const options = { yes: false, dryRun: false, purge: false, seed: null, port: DEFAULT_PORT };
+  const options = { yes: false, dryRun: false, purge: false, seed: null, port: DEFAULT_PORT, clientId: null, githubOrigin: null, relay: null };
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
     if (arg === '--yes' && known.includes(arg)) options.yes = true;
@@ -74,6 +82,10 @@ function parse(args, known) {
     else if (arg === '--purge' && known.includes(arg)) options.purge = true;
     else if (arg === '--quartz-seed' && known.includes(arg) && args[i + 1]) options.seed = path.resolve(args[++i]);
     else if (arg === '--port' && known.includes(arg) && /^\d{2,5}$/u.test(args[i + 1] ?? '')) options.port = Number(args[++i]);
+    else if (arg === '--github-client-id' && known.includes(arg) && /^[A-Za-z0-9._-]{8,64}$/u.test(args[i + 1] ?? '')) options.clientId = args[++i];
+    // GitHub Enterprise, or a stand-in GitHub for tests: the web and API origin.
+    else if (arg === '--github-origin' && known.includes(arg) && /^https?:\/\/[A-Za-z0-9.:[\]-]+$/u.test(args[i + 1] ?? '')) options.githubOrigin = args[++i];
+    else if (arg === '--iroh-relay' && known.includes(arg) && /^(none|n0|https:\/\/\S+)$/u.test(args[i + 1] ?? '')) options.relay = args[++i];
     else throw new Error(`unknown option: ${arg}`);
   }
   return options;
@@ -206,7 +218,7 @@ async function installProgram(programPath, seed) {
   }
 }
 
-async function installState(ids, port) {
+async function installState(ids, { port, clientId, relay }) {
   // The node's checks expect its directories in its own (primary) group.
   await ensureDirectory(LAYOUT.nodeHome, { owner: ids.node, group: ids.share, mode: 0o700 });
   for (const name of ['home', 'cache', 'config', 'iroh', 'setup']) {
@@ -219,7 +231,7 @@ async function installState(ids, port) {
   const asNode = (args) => run('setpriv', ['--reuid', String(ids.node), '--regid', String(ids.share), '--clear-groups',
     '--', 'git', 'config', '--file', gitconfig, ...args], { allowFail: true });
   const safe = (asNode(['--get-all', 'safe.directory']).stdout ?? '').split('\n');
-  for (const directory of [LAYOUT.appRoot, path.join(LAYOUT.appRoot, 'vendor', 'quartz')]) {
+  for (const directory of [LAYOUT.appRoot, path.join(LAYOUT.appRoot, 'vendor', 'quartz'), LAYOUT.mirror]) {
     if (!safe.includes(directory) && asNode(['--add', 'safe.directory', directory]).status !== 0) {
       throw new Error('could not write the node account Git settings');
     }
@@ -233,6 +245,8 @@ async function installState(ids, port) {
     if (!exists(target)) await ensureDirectory(target, { owner: ids.node, group: ids.share, mode });
   }
   await ensureDirectory(LAYOUT.notes, { owner: ids.node, group: ids.share, mode: 0o770 });
+  // Written by the publisher only; the node reads it through the share group.
+  await ensureDirectory(LAYOUT.mirrorParent, { owner: ids.publisher, group: ids.share, mode: 0o750 });
   await ensureDirectory(LAYOUT.publisherHome, { owner: ids.publisher, group: ids.publisherGroup, mode: 0o700 });
   // What first-run setup needs to write the node config (see bin/cyberbaser-setup.js).
   const layout = {
@@ -243,10 +257,13 @@ async function installState(ids, port) {
     configFile: LAYOUT.config,
     // Where the notes copy must go so the publisher can read it (see the design page).
     checkout: path.join(LAYOUT.notes, 'notes'),
+    // The publisher's copy of the repository the node copies from and reads the remote branch in.
+    mirror: LAYOUT.mirror,
+    clientId,
+    ...(relay ? { relay } : {}),
   };
-  if (!exists(LAYOUT.layoutFile)) {
-    await writeOwned(LAYOUT.layoutFile, `${JSON.stringify(layout, null, 2)}\n`, { owner: ids.node, group: ids.share, mode: 0o600 });
-  }
+  // Rewritten on each install (it holds no secret), so an update brings new fields.
+  await writeOwned(LAYOUT.layoutFile, `${JSON.stringify(layout, null, 2)}\n`, { owner: ids.node, group: ids.share, mode: 0o600 });
 }
 
 async function writeRecord(record) {
@@ -270,14 +287,14 @@ function plan(options) {
   return [
     `create system accounts "${ACCOUNTS.node}" (node and intake) and "${ACCOUNTS.publisher}" (publisher), and the group "${ACCOUNTS.group}"`,
     `install the program and its files in ${LAYOUT.appRoot}${options.seed ? ' with the verified renderer bundle' : ''}`,
-    `create owner-only state in ${LAYOUT.nodeHome} and ${LAYOUT.publisherHome}, and the shared job store in ${LAYOUT.shared}`,
+    `create owner-only state in ${LAYOUT.nodeHome} and ${LAYOUT.publisherHome}, and the shared job store, notes copy and publisher mirror in ${LAYOUT.shared}`,
     `install the services ${UNITS.join(', ')} in ${LAYOUT.unitDir}, then enable and start them`,
   ];
 }
 
 export async function install(args, { programPath, compiled }) {
   let options;
-  try { options = parse(args, ['--yes', '--dry-run', '--quartz-seed', '--port']); }
+  try { options = parse(args, ['--yes', '--dry-run', '--quartz-seed', '--port', '--github-client-id', '--github-origin', '--iroh-relay']); }
   catch (error) { process.stderr.write(`${error.message}\n`); return 2; }
   if (options.dryRun) {
     say('cyberbaser install would:');
@@ -297,21 +314,30 @@ export async function install(args, { programPath, compiled }) {
     process.stderr.write(`Found an existing setup this installer did not make, so nothing was changed:\n${found.map((item) => `  - ${item}`).join('\n')}\n`);
     return 1;
   }
+  const clientId = options.clientId ?? record?.github?.clientId ?? GITHUB_CLIENT_ID;
+  if (clientId === null) {
+    process.stderr.write('The Cyberbaser GitHub App is not registered yet. Run install with --github-client-id <the app client ID>.\n');
+    return 1;
+  }
+  const githubOrigin = options.githubOrigin ?? record?.github?.origin ?? null;
+  const relay = options.relay ?? record?.irohRelay ?? null;
   const updating = record?.state === 'installed';
   const since = new Date().toISOString().replace('T', ' ').slice(0, 19);
   if (updating) systemctl('stop', ...UNITS);
   const ids = ensureAccounts();
   const seedNote = await installProgram(programPath, options.seed);
-  await installState(ids, options.port);
+  await installState(ids, { port: options.port, clientId, relay });
   const units = await unitTexts();
   for (const [name, text] of Object.entries(units)) await writeOwned(path.join(LAYOUT.unitDir, name), text);
   await writeRecord({ version: 1, state: 'installed', accounts: { node: ACCOUNTS.node, publisher: ACCOUNTS.publisher },
-    group: ACCOUNTS.group, appRoot: LAYOUT.appRoot, port: options.port, installedAt: record?.installedAt ?? new Date().toISOString(),
+    group: ACCOUNTS.group, appRoot: LAYOUT.appRoot, port: options.port,
+    github: { clientId, ...(githubOrigin ? { origin: githubOrigin } : {}) }, ...(relay ? { irohRelay: relay } : {}), installedAt: record?.installedAt ?? new Date().toISOString(),
     updatedAt: new Date().toISOString() });
   systemctl('daemon-reload');
   const enabled = systemctl('enable', '--now', 'cyberbaser-node.service', 'cyberbaser-config.path');
-  systemctl('enable', 'cyberbaser-publisher.service');
-  systemctl('start', 'cyberbaser-publisher.service');
+  // The publisher runs from the start: in setup mode (sign-in, repository
+  // choice, the mirror, the starter publish.yml) until the node config exists.
+  systemctl('enable', '--now', 'cyberbaser-publisher.service');
   if (enabled.status !== 0) { process.stderr.write('The services were installed but did not start; see: journalctl -u cyberbaser-node\n'); return 1; }
   say(`Installed (${seedNote}).`);
   if (exists(LAYOUT.config)) {
@@ -383,15 +409,51 @@ export function nodeServiceArgs() {
     : { mode: 'setup', args: [LAYOUT.setup, String(readInstallRecord()?.port ?? DEFAULT_PORT), LAYOUT.publisherSocket, LAYOUT.layoutFile] };
 }
 
+// Internal: the installed publisher service. Setup mode (no push, sign-in,
+// mirror and the one starter file) until its copy of the node config exists;
+// then the normal publisher. The config path unit restarts it when setup ends.
+export function publisherServiceMode(record = readInstallRecord()) {
+  const github = record?.github ?? {};
+  if (existsSync(LAYOUT.publisherConfig)) {
+    return { mode: 'publisher', configFile: LAYOUT.publisherConfig, socketPath: LAYOUT.publisherSocket,
+      repository: path.join(LAYOUT.publisherHome, 'push.git'), github };
+  }
+  return { mode: 'setup', socketPath: LAYOUT.publisherSocket, stateDirectory: LAYOUT.publisherForge, clientId: github.clientId ?? null,
+    mirror: LAYOUT.mirror, checkout: path.join(LAYOUT.notes, 'notes'), github };
+}
+
+export async function runPublisherService({ appRoot }) {
+  const plan = publisherServiceMode();
+  const { groupId } = await import('../accounts.js');
+  const socketGroup = groupId(ACCOUNTS.group);
+  const { createGithubHttp } = await import('../../../apps/owner-alpha/src/publisher/forge-access.js');
+  const http = plan.github.origin ? createGithubHttp({ apiBaseUrl: plan.github.origin, webBaseUrl: plan.github.origin }) : undefined;
+  const publisherCli = await import('../../../apps/owner-alpha/bin/owner-alpha-publisher.js');
+  if (plan.mode === 'publisher') {
+    await publisherCli.runPublisherCli({ configFile: plan.configFile, socketPath: plan.socketPath, repository: plan.repository,
+      projectRoot: appRoot, socketGroup, ...(http ? { forgeOptions: { http } } : {}) });
+    return 0;
+  }
+  if (!plan.clientId) { process.stderr.write('No GitHub App client ID in the install record\n'); return 1; }
+  await publisherCli.runSetupForgeCli({ socketPath: plan.socketPath, stateDirectory: plan.stateDirectory, clientId: plan.clientId,
+    mirror: plan.mirror, checkout: plan.checkout, socketGroup, http });
+  return 0;
+}
+
 // Internal, root, before the publisher starts: copy the node config into the
 // publisher's own owner-only file. The source must be one regular file owned
-// by the node account; it is never followed through a link.
+// by the node account; it is never followed through a link. No node config
+// yet means setup: there is nothing to copy and the publisher runs in setup mode.
 export async function syncPublisherConfig() {
   if (process.getuid() !== 0) { process.stderr.write('sync-publisher-config runs as root from the publisher service\n'); return 1; }
   const node = userEntry(ACCOUNTS.node);
   const publisher = userEntry(ACCOUNTS.publisher);
   const share = groupEntry(ACCOUNTS.group);
   if (!node || !publisher || !share) { process.stderr.write('Cyberbaser accounts are missing\n'); return 1; }
+  if (!exists(LAYOUT.config)) {
+    await rm(LAYOUT.publisherConfig, { force: true });
+    return 0;
+  }
   let handle;
   try {
     handle = await open(LAYOUT.config, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
