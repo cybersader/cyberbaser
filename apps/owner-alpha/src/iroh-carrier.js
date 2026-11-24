@@ -51,7 +51,8 @@ export const IROH_REFUSAL_REASONS = Object.freeze(['proposal-budget-exhausted', 
   'create-path-refused', 'selection-config-change-refused', 'create-path-exists', 'create-path-case-collision',
   'create-parent-is-file', 'create-address-collision', 'create-outside-publication', 'capture-base-moved',
   'asset-type-refused', 'asset-type-mismatch', 'asset-too-large', 'bundle-too-large', 'bundle-file-count', 'asset-unreferenced',
-  'remote-image-refused', 'image-has-location', 'public-set-removal-refused', 'address-changed', 'public-set-change-unlisted']);
+  'remote-image-refused', 'image-has-location', 'public-set-removal-refused', 'address-changed', 'public-set-change-unlisted',
+  'address-style-unknown', 'address-mismatch']);
 const PAIR_WAIT_MS = 6 * 60_000;
 
 const alpnBytes = (name) => [...Buffer.from(name, 'utf8')];

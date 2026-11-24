@@ -243,6 +243,7 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
   const { commitAppliedCandidate, pushExactCommit, verifyExactCommit } = await import('../src/git-publish.js');
   const { startSuggestionIntake } = await import('../src/suggestions.js');
   const { createOwnerPublicationRuntime } = await import('../src/owner-publication-runtime.js');
+  const { createBundlePreview } = await import('../src/bundle-preview.js');
   // The policy's HTTPS identity is not a destination. Verify both real remote
   // directions before mapping identity for the normal fail-closed policy checks.
   const policyGit = async (cwd, args, options) => {
@@ -298,7 +299,10 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
     },
     createHandler(input) {
       // Edit this page is the owner's direct route; it binds the same disposable checkout.
+      // New pages on the site design (route C) read the same disposable checkout through the policy seam too.
       const handler = createOwnerAlphaHandler({ ...input,
+        ...(input.config?.renderer ? { bundlePreview: createBundlePreview({ config: input.config, projectRoot: input.projectRoot,
+          dependencies: { assertCheckoutReady: ready } }) } : {}),
         createEditSession: (session) => createEditSession({ ...session, git: policyGit }) });
       const labelled = async (request) => {
         const result = await handler(request);

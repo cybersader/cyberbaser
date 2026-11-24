@@ -97,11 +97,14 @@ test('status: live, older, not yet confirmed, excluded and unknown, from the vau
 
   // Published and live: the verified deployment's text, folded.
   expect(await status.status('notes/garden.md')).toEqual({ selected: true,
-    live: { digest: digest('# Garden\n\nWater daily.\n'), folded: true, at: '2026-11-23T10:00:00.000Z', commit: deployed } });
+    live: { digest: digest('# Garden\n\nWater daily.\n'), folded: true, at: '2026-11-23T10:00:00.000Z', commit: deployed },
+    committed: digest('# Garden\n\nWater daily.\n') });
   // Published, but the vault moved on: live is the older text.
   expect((await status.status('notes/kitchen.md')).live.digest).toBe(digest('# Kitchen\n\nSalt.\n'));
+  // ...and what the branch head has now, published but not confirmed.
+  expect((await status.status('notes/kitchen.md')).committed).toBe(digest('# Kitchen\n\nSalt and pepper.\n'));
   // Selected now, not in the verified deployment: public, not confirmed yet.
-  expect(await status.status('notes/new.md')).toEqual({ selected: true, live: null });
+  expect(await status.status('notes/new.md')).toEqual({ selected: true, live: null, committed: digest('# New\n') });
   // The selector excludes these; an unknown path looks the same.
   for (const vaultPath of ['notes/draft.md', 'private/diary.md', 'nowhere.md', '../x.md', null]) {
     expect(await status.status(vaultPath)).toEqual({ selected: false, live: null });
@@ -115,9 +118,9 @@ test('status: no verified deployment, or evidence that does not agree, means not
   const { checkout, deployed } = await vault();
   const config = configFor(checkout);
   const none = createNoteStatus({ config, context: null, listJobs: async () => [] });
-  expect(await none.status('notes/garden.md')).toEqual({ selected: true, live: null });
+  expect(await none.status('notes/garden.md')).toEqual({ selected: true, live: null, committed: digest('# Garden\n\nWater daily.\n') });
   const broken = createNoteStatus({ config, context: null, ...evidenceFor(deployed, undefined, { broken: true }) });
-  expect(await broken.status('notes/garden.md')).toEqual({ selected: true, live: null });
+  expect(await broken.status('notes/garden.md')).toEqual({ selected: true, live: null, committed: digest('# Garden\n\nWater daily.\n') });
 });
 
 test('status: the selection follows the branch head; a missing publish.yml publishes nothing', async () => {
@@ -161,6 +164,10 @@ test('readNoteStatus: owner and propose-only tiers; only the asked path; never a
   const live = { digest: digest('# Garden\n\nWater daily.\n'), folded: true, at: '2026-11-23T10:00:00.000Z' };
   // Publication is off on this node, so the owner device also gets the public tier.
   expect(await owner('readNoteStatus', { path: 'notes/garden.md' })).toEqual({ path: 'notes/garden.md', selected: true, live });
+  // An owner device that publishes (new pages) also learns the published text at the branch head.
+  const publisher = device(config, { grants: ['publication', 'publish', 'propose'], noteStatus });
+  expect(await publisher('readNoteStatus', { path: 'notes/garden.md' })).toEqual({ path: 'notes/garden.md', selected: true, live,
+    committed: { digest: live.digest, folded: true } });
   for (const run of [phone, agent]) {
     const reply = await run('readNoteStatus', { path: 'notes/garden.md' });
     expect(reply).toEqual({ path: 'notes/garden.md', selected: true, live });
@@ -175,7 +182,8 @@ test('readNoteStatus: owner and propose-only tiers; only the asked path; never a
   const publication = { publishAvailable: true, readStatus: async () => ({ live: null, latest: null }) };
   const fullOwner = device(on, { grants: ['publication', 'propose'], noteStatus, publication });
   expect(await fullOwner('readNoteStatus', { path: 'notes/kitchen.md' })).toEqual({ path: 'notes/kitchen.md', selected: true,
-    live: { digest: digest('# Kitchen\n\nSalt.\n'), folded: true, at: '2026-11-23T10:00:00.000Z' }, publishAvailable: false });
+    live: { digest: digest('# Kitchen\n\nSalt.\n'), folded: true, at: '2026-11-23T10:00:00.000Z' }, publishAvailable: false,
+    committed: { digest: digest('# Kitchen\n\nSalt.\n'), folded: true } });
   expect(await fullOwner('readNoteStatus', { path: 'Notes/Garden.md' })).toMatchObject({ mappingId: 'garden', publishAvailable: true });
   const onPhone = device(on, { grants: ['propose'], noteStatus, publication });
   expect(await onPhone('readNoteStatus', { path: 'Notes/Garden.md' })).toEqual({ path: 'Notes/Garden.md', selected: true, live });

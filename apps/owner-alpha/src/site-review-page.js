@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { open, realpath } from 'node:fs/promises';
 import path from 'node:path';
-import { parseFrontmatter } from '@cyberbaser/publish';
+import { DEFAULT_ADDRESS_STYLE, pageSlug, parseFrontmatter, slugTargetPath } from '@cyberbaser/publish';
 import { escapeHtml, replacementHtml, REWRITE_THRESHOLD, wholeWordChange } from './proposal-review-page.js';
 import { hasHiddenProposalSource, refineForDisplay } from './publication-display.js';
 import { BUNDLED_RENDERER_NAME } from './renderer-slot.js';
@@ -65,14 +65,14 @@ async function readContained(root, relative, maxBytes) {
   }
 }
 
-/** Quartz 4.5.2 slugifyFilePath for a Markdown source path; null when unsafe. */
-export function quartzSlug(sourcePath) {
-  if (typeof sourcePath !== 'string' || !/\.md$/iu.test(sourcePath) || /[\\\0]/u.test(sourcePath)) return null;
-  const segments = sourcePath.replace(/\.md$/iu, '').split('/');
-  if (segments.some((part) => part === '' || part === '.' || part === '..')) return null;
-  const slug = segments.map((part) => part.replace(/\s/gu, '-').replace(/&/gu, '-and-').replace(/%/gu, '-percent')
-    .replace(/\?/gu, '').replace(/#/gu, '')).join('/').replace(/_index$/u, 'index');
-  return slug.split('/').some((part) => part === '' || part === '.' || part === '..') ? null : slug;
+/**
+ * The built page's slug for a Markdown source path, by the vault's address
+ * style (@cyberbaser/publish addresses.js; stock Quartz 4.5.2 by default);
+ * null when unsafe.
+ */
+export function quartzSlug(sourcePath, style = DEFAULT_ADDRESS_STYLE) {
+  if (typeof sourcePath !== 'string' || !/\.md$/iu.test(sourcePath) || /^\//u.test(sourcePath)) return null;
+  return pageSlug(sourcePath, style);
 }
 
 /**
@@ -82,15 +82,11 @@ export function quartzSlug(sourcePath) {
  * FrontmatterSlug and the projection's slugTarget. Reads only the pinned base
  * text; the page's provenance must still name this path and these bytes.
  */
-export function sitePageSlug(sourcePath, baseText) {
-  const own = quartzSlug(sourcePath);
+export function sitePageSlug(sourcePath, baseText, style = DEFAULT_ADDRESS_STYLE) {
+  const own = quartzSlug(sourcePath, style);
   if (own === null || typeof baseText !== 'string') return own;
-  const slug = parseFrontmatter(baseText).data?.slug;
-  if (typeof slug !== 'string') return own;
-  const target = slug.trim().replace(/^\/+|\/+$/gu, '').replace(/\.(md|html)$/iu, '');
-  if (target === '' || target.includes('\\') || /[\u0000-\u001F\u007F]/u.test(target)) return own;
-  if (target.split('/').some((part) => part === '' || part === '.' || part === '..' || part.trim() !== part)) return own;
-  return quartzSlug(`${target}.md`);
+  const target = slugTargetPath(parseFrontmatter(baseText).data?.slug);
+  return target === null ? own : quartzSlug(target, style);
 }
 
 async function readManifest(siteRoot, rendererName) {
@@ -117,12 +113,13 @@ function validProvenance(value, sourcePath, baseBytes) {
  * The note's built page and provenance, only when the private build was made
  * from the pinned base and rendered exactly these base bytes.
  */
-export async function loadSitePage({ siteRoot, sourcePath, revision, baseText, rendererName = BUNDLED_RENDERER_NAME }) {
+export async function loadSitePage({ siteRoot, sourcePath, revision, baseText, rendererName = BUNDLED_RENDERER_NAME, addressStyle = DEFAULT_ADDRESS_STYLE }) {
   if (typeof siteRoot !== 'string' || typeof baseText !== 'string') return { reason: 'unavailable' };
   const before = await readManifest(siteRoot, rendererName);
   if (before === null) return { reason: 'unavailable' };
   if (before.head !== revision) return { reason: 'changed' };
-  const slug = sitePageSlug(sourcePath, baseText);
+  if (addressStyle === null) return { reason: 'unavailable' };
+  const slug = sitePageSlug(sourcePath, baseText, addressStyle);
   if (slug === null) return { reason: 'unavailable' };
   const [page, sidecar] = await Promise.all([
     readContained(siteRoot, `${slug}.html`, LIMITS.page),
@@ -591,10 +588,10 @@ export async function readBuiltSitePage({ siteRoot, slug, colorScheme, banner = 
  * The whole decision: the site page with its changes, or the reason the
  * simplified rendering is shown instead. Never throws.
  */
-export async function siteReviewFrame({ siteRoot, sourcePath, revision, document, operations, model, colorScheme, rendererName = BUNDLED_RENDERER_NAME }) {
+export async function siteReviewFrame({ siteRoot, sourcePath, revision, document, operations, model, colorScheme, rendererName = BUNDLED_RENDERER_NAME, addressStyle = DEFAULT_ADDRESS_STYLE }) {
   try {
     if (!document || document.reason !== null || typeof document.baseText !== 'string') return { html: null, reason: 'unavailable' };
-    const loaded = await loadSitePage({ siteRoot, sourcePath, revision, baseText: document.baseText, rendererName });
+    const loaded = await loadSitePage({ siteRoot, sourcePath, revision, baseText: document.baseText, rendererName, addressStyle });
     if (loaded.reason) return { html: null, reason: loaded.reason };
     const page = markSitePage({ html: loaded.html, provenance: loaded.provenance, baseText: document.baseText, operations, model });
     if (page === null) return { html: null, reason: 'unplaceable' };

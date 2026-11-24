@@ -54,8 +54,12 @@ export function createJobApprovals({ config, context, pipeline, listJobs = listD
   readCommit = committedCommit, attach = attachOwnerApproval, clock = Date.now, log = () => {},
   starter = null, publishStarter = null, afterStarter = async () => {},
   // Page bundles (bundle-desk.js) whose commit waits for the signature, and the
-  // publisher's publish-bundle check that pushes one.
-  bundles = null, publishBundle = null }) {
+  // publisher's publish-bundle check that pushes one. checkBundle(record) ->
+  // 'address-mismatch' | anything else: run once per bundle before it is
+  // offered (the configured renderer's build must have the page at the address
+  // shown); a mismatch is refused, never offered.
+  bundles = null, publishBundle = null, checkBundle = null }) {
+  const checks = new Map(); // bundleId -> Promise<verdict>
   const offered = new Map(); // jobId -> requestId
   const quiet = new Map(); // jobId -> time before which it is not offered again ("Not now", or it could not be offered)
   let running = null;
@@ -149,6 +153,22 @@ export function createJobApprovals({ config, context, pipeline, listJobs = listD
       for (const record of await bundles.list(['signing'])) {
         const key = `bundle:${record.bundleId}`;
         if (offered.has(key) || (quiet.get(key) ?? 0) > now) continue;
+        if (checkBundle !== null) {
+          // Started in the background; offered on a later refresh once it is known.
+          if (!checks.has(record.bundleId)) {
+            const verdict = { settled: false, value: null };
+            checks.set(record.bundleId, verdict);
+            Promise.resolve().then(() => checkBundle(record)).then((value) => { verdict.value = value; }, () => {})
+              .finally(() => { verdict.settled = true; });
+          }
+          const verdict = checks.get(record.bundleId);
+          if (!verdict.settled) continue;
+          if (verdict.value === 'address-mismatch') {
+            await bundles.markStale(record.bundleId, 'address-mismatch');
+            log(`bundle ${record.bundleId} refused: address-mismatch`);
+            continue;
+          }
+        }
         try { await offerBundle(relay, record); } catch (error) {
           quiet.set(key, now + 60_000);
           log(`bundle ${record.bundleId} not offered: ${error?.code ?? error?.message ?? 'failed'}`);

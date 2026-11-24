@@ -13,7 +13,7 @@
 //   4.  otherwise -> not published.
 import yaml from 'js-yaml';
 import { findFrontmatterInText } from '../../correction/src/frontmatter.js';
-import { sluggify } from './paths.js';
+import { addressFor, DEFAULT_ADDRESS_STYLE } from './addresses.js';
 
 export const CONFIG_FILENAME = 'publish.yml';
 export const DEFAULT_EXCLUDE_WHEN = Object.freeze(['draft', 'sample']);
@@ -216,12 +216,10 @@ export function slugPage(slug) {
 
 /**
  * The public address a reader types for a published page: `/topic/sub/note`,
- * `/topic/sub/` for a folder note, `/` for the home page. Same slug rules as
- * the renderer (Quartz sluggify, case kept).
+ * `/topic/sub/` for a folder note, `/` for the home page. style: the vault's
+ * address style (addresses.js; `.cyberbaser/site.yml` `addresses:`), stock
+ * Quartz when not given.
  */
-export function publicAddress(path, slug = null) {
-  const page = (slug === null ? null : slugPage(slug)) ?? normalize(path);
-  const slugged = sluggify(page, false);
-  if (slugged === 'index') return '/';
-  return `/${slugged.endsWith('/index') ? slugged.slice(0, -'index'.length) : slugged}`;
+export function publicAddress(path, slug = null, style = DEFAULT_ADDRESS_STYLE) {
+  return addressFor(normalize(path), slug, style);
 }

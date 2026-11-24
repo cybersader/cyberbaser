@@ -345,8 +345,15 @@ export function createOwnerCommands({
       const vaultPath = noteLinks?.resolve(notePath) ?? deliveryPathFor(config, notePath);
       const found = await noteStatus.status(vaultPath);
       const live = found.live === null ? null : { digest: found.live.digest, folded: true, at: found.live.at };
-      return tier === 'owner' ? { path: notePath, selected: found.selected, live, publishAvailable: false }
-        : { path: notePath, selected: found.selected, live };
+      // Only for the owner's devices that publish: the published text at the
+      // branch head, so the device can tell its new page went out before it is
+      // confirmed live. Other devices get what the public site shows.
+      // (The same test as bundleGrant: an owner device that may publish new pages.)
+      const publishes = tier === 'owner' || (isOwnerDevice(principal) && devicePrincipalAdapter?.isVerified(principal) === true
+        && devicePrincipalAdapter.hasGrant(principal, 'publish'));
+      const committed = publishes && typeof found.committed === 'string' ? { committed: { digest: found.committed, folded: true } } : {};
+      return tier === 'owner' ? { path: notePath, selected: found.selected, live, publishAvailable: false, ...committed }
+        : { path: notePath, selected: found.selected, live, ...committed };
     }),
 
     listProposals: command('review', 'review-list-failed', async (input) => {

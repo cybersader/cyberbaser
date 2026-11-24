@@ -1,0 +1,42 @@
+{
+  "rule": "Each path segment: strip accents (NFKD, drop combining marks), lower-case, '&' -> 'and', '%' -> 'percent', drop apostrophes (' ’ ‘ `), every other run of characters that is not a letter or digit (spaces, punctuation, dots, emoji, symbols) -> one '-', trim '-' at both ends. Letters of any script are kept (accented Latin loses its accent; Greek, Cyrillic, CJK stay as typed, lower-cased). A file extension is kept, lower-cased, only for known file types (md, png, jpg, webp, pdf, ...); '.md' is dropped. Anything else after a dot is part of the name ('NIST CSF 2.0'). A folder note 'index.md' is the folder's address. 'address' is the web path without the leading '/'; folder pages end with '/'. 'slug' is Quartz's internal FullSlug.",
+  "implementation": "site/renderer/quartz/util/path.ts: sluggifySegment() (per segment), used by sluggify() -> slugifyFilePath() and slugTag(); patch site/quartz-patches/quartz-4.5.2-address-rule.patch",
+  "cases": [
+    { "path": "Leadership & strategy/Questions to ask a new CISO.md", "slug": "leadership-and-strategy/questions-to-ask-a-new-ciso", "address": "leadership-and-strategy/questions-to-ask-a-new-ciso" },
+    { "path": "Leadership & strategy/index.md", "slug": "leadership-and-strategy/index", "address": "leadership-and-strategy/" },
+    { "path": "index.md", "slug": "index", "address": "" },
+    { "path": "about.md", "slug": "about", "address": "about" },
+    { "path": "Knowledge base/index.md", "slug": "knowledge-base/index", "address": "knowledge-base/" },
+    { "path": "Knowledge base/Risk & governance/Board reporting/Reporting cyber risk to the board.md", "slug": "knowledge-base/risk-and-governance/board-reporting/reporting-cyber-risk-to-the-board", "address": "knowledge-base/risk-and-governance/board-reporting/reporting-cyber-risk-to-the-board" },
+    { "path": "Knowledge base/Risk & governance/Frameworks/NIST CSF 2.0 at a glance.md", "slug": "knowledge-base/risk-and-governance/frameworks/nist-csf-2-0-at-a-glance", "address": "knowledge-base/risk-and-governance/frameworks/nist-csf-2-0-at-a-glance" },
+    { "path": "Risk, governance & compliance/index.md", "slug": "risk-governance-and-compliance/index", "address": "risk-governance-and-compliance/" },
+    { "path": "From the field/Routine   beats    heroics.md", "slug": "from-the-field/routine-beats-heroics", "address": "from-the-field/routine-beats-heroics" },
+    { "path": "From the field/Zero trust: a direction, not a product.md", "slug": "from-the-field/zero-trust-a-direction-not-a-product", "address": "from-the-field/zero-trust-a-direction-not-a-product" },
+    { "path": "From the field/Don't pay — unless you decided first.md", "slug": "from-the-field/dont-pay-unless-you-decided-first", "address": "from-the-field/dont-pay-unless-you-decided-first" },
+    { "path": "From the field/The CISO’s first week – notes.md", "slug": "from-the-field/the-cisos-first-week-notes", "address": "from-the-field/the-cisos-first-week-notes" },
+    { "path": "From the field/Who owns \"risk\"? (A short answer!).md", "slug": "from-the-field/who-owns-risk-a-short-answer", "address": "from-the-field/who-owns-risk-a-short-answer" },
+    { "path": "From the field/Back\\slash and/slash.md", "slug": "from-the-field/back-slash-and/slash", "address": "from-the-field/back-slash-and/slash" },
+    { "path": "From the field/  Leading and trailing spaces  .md", "slug": "from-the-field/leading-and-trailing-spaces", "address": "from-the-field/leading-and-trailing-spaces" },
+    { "path": "From the field/...Dots around....md", "slug": "from-the-field/dots-around", "address": "from-the-field/dots-around" },
+    { "path": "From the field/The first 24 hours of a ransomware incident.md", "slug": "from-the-field/the-first-24-hours-of-a-ransomware-incident", "address": "from-the-field/the-first-24-hours-of-a-ransomware-incident" },
+    { "path": "From the field/100% patched in 30 days.md", "slug": "from-the-field/100-percent-patched-in-30-days", "address": "from-the-field/100-percent-patched-in-30-days" },
+    { "path": "From the field/Café résumé naïve Zürich.md", "slug": "from-the-field/cafe-resume-naive-zurich", "address": "from-the-field/cafe-resume-naive-zurich" },
+    { "path": "From the field/Ελληνικά Notes.md", "slug": "from-the-field/ελληνικα-notes", "address": "from-the-field/ελληνικα-notes" },
+    { "path": "From the field/🔥 Hot takes 🚀.md", "slug": "from-the-field/hot-takes", "address": "from-the-field/hot-takes" },
+    { "path": "From the field/R&D vs. Q&A.md", "slug": "from-the-field/r-and-d-vs-q-and-a", "address": "from-the-field/r-and-d-vs-q-and-a" },
+    { "path": "From the field/Version 1.5b release.md", "slug": "from-the-field/version-1-5b-release", "address": "from-the-field/version-1-5b-release" },
+    { "path": "Authors/The Chief.md", "slug": "authors/the-chief", "address": "authors/the-chief" },
+    { "path": "Authors/The Chief/Portrait.png", "slug": "authors/the-chief/portrait.png", "address": "authors/the-chief/portrait.png" },
+    { "path": "Authors/The Chief/avatar.webp", "slug": "authors/the-chief/avatar.webp", "address": "authors/the-chief/avatar.webp" },
+    { "path": "Leadership & strategy/Cover Photo.JPG", "slug": "leadership-and-strategy/cover-photo.jpg", "address": "leadership-and-strategy/cover-photo.jpg" },
+    { "path": "Leadership & strategy/Board Deck (v2).PDF", "slug": "leadership-and-strategy/board-deck-v2.pdf", "address": "leadership-and-strategy/board-deck-v2.pdf" },
+    { "path": "Leadership & strategy/Notes.MD", "slug": "leadership-and-strategy/notes", "address": "leadership-and-strategy/notes" },
+    { "path": "leadership-and-strategy/a-security-strategy-that-fits-on-one-page.md", "slug": "leadership-and-strategy/a-security-strategy-that-fits-on-one-page", "address": "leadership-and-strategy/a-security-strategy-that-fits-on-one-page" }
+  ],
+  "tags": [
+    { "tag": "knowledge-base/risk-and-governance", "slug": "knowledge-base/risk-and-governance" },
+    { "tag": "Knowledge base/Risk & governance", "slug": "knowledge-base/risk-and-governance" },
+    { "tag": "audience/security-leaders", "slug": "audience/security-leaders" },
+    { "tag": "Incident Response", "slug": "incident-response" }
+  ]
+}

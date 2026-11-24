@@ -13,10 +13,19 @@
 // Only for a configured renderer (renderer-slot.js): its builds run offline
 // and one at a time with the site build. The bundled renderer keeps the
 // simplified rendering for bundles.
-import { lstat, mkdir, rm, writeFile } from 'node:fs/promises';
+//
+// Address check: the page is looked up at the address the device, the node
+// and the approval sheet all computed (the vault's address style,
+// .cyberbaser/site.yml). When the build succeeds but has no page there, the
+// renderer addresses pages differently: the preview answers
+// { refused: 'address-mismatch' } so the bundle is refused rather than signed
+// for an address the site will not have.
+import { lstat, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { project as projectContent, verifyProjection } from '@cyberbaser/projection';
-import { select } from '@cyberbaser/publish';
+import { addressFor, parseFrontmatter, readAddressStyle, select } from '@cyberbaser/publish';
+
+const parseSlug = (text) => parseFrontmatter(text).data?.slug;
 import { createConfiguredRenderer, rendererIdentity } from './renderer-slot.js';
 import { verifyBytePreservingProjection } from './site.js';
 import { assertCheckoutReady } from './source.js';
@@ -95,8 +104,16 @@ export function createBundlePreview({ config, projectRoot, render = null, depend
       }
       const result = await build({ contentDir: content, outputDir: site, workspaceDir: path.join(root, 'work'), ownerOrigin });
       if (result?.renderer !== identity.name || result.revision !== identity.revision) return null;
-      const slug = sitePageSlug(note.path, note.text);
+      const siteYml = await readFile(path.join(checkout.root, '.cyberbaser', 'site.yml'), 'utf8').catch(() => null);
+      const style = readAddressStyle(siteYml);
+      if (!style.ok) return null;
+      const slug = sitePageSlug(note.path, note.text, style.style);
       if (slug === null) return null;
+      // The address everyone was shown must be the one this computes, and the built page must be there.
+      const expected = addressFor(note.path, typeof parseSlug(note.text) === 'string' ? parseSlug(note.text) : null, style.style);
+      if (expected !== addition.address || !(await exists(path.join(site, ...`${slug}.html`.split('/'))))) {
+        return { refused: 'address-mismatch' };
+      }
       return await readBuiltSitePage({ siteRoot: site, slug, colorScheme, imageLimits: IMAGE_LIMITS,
         banner: { label: 'New page at', address: addition.address } });
     } finally {
@@ -104,6 +121,7 @@ export function createBundlePreview({ config, projectRoot, render = null, depend
     }
   }
 
+  // Returns the framed page (a string), { refused: 'address-mismatch' }, or null (simplified rendering).
   return async function previewBundle(input) {
     if (!BUNDLE_ID_RE.test(input?.bundleId ?? '') || !Number.isSafeInteger(input.index) || input.index < 0) return null;
     // A bundle never changes; its preview is kept for the life of this process.

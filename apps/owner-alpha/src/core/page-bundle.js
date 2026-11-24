@@ -12,7 +12,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { bundleCandidates, validatePageBundle } from '../../../../packages/proposal/src/page-bundle.js';
-import { caseKey, lintPath, publicAddress, selectTree, slugKey } from '../../../../packages/publish/src/index.js';
+import { caseKey, lintPath, publicAddress, readAddressStyle, selectTree, slugKey } from '../../../../packages/publish/src/index.js';
 import { checkAsset, remoteImageEmbeds } from '../../../../packages/media-check/src/index.js';
 import { fail } from '../errors.js';
 
@@ -21,8 +21,10 @@ export const BUNDLE_CODES = Object.freeze([
   'create-parent-is-file', 'create-address-collision', 'create-outside-publication', 'capture-base-moved',
   'asset-type-refused', 'asset-type-mismatch', 'asset-too-large', 'bundle-too-large', 'asset-unreferenced',
   'remote-image-refused', 'image-has-location', 'public-set-removal-refused', 'address-changed',
-  'public-set-change-unlisted', 'capture-base-unavailable', 'capture-too-large',
+  'public-set-change-unlisted', 'capture-base-unavailable', 'capture-too-large', 'address-style-unknown', 'address-mismatch',
 ]);
+
+export const SITE_CONFIG_PATH = '.cyberbaser/site.yml';
 
 const SELECTION_CONFIG = new Set(['publish.yml']);
 const OID = /^[0-9a-f]{40}$/u;
@@ -271,9 +273,25 @@ export async function checkPageBundle({ bundle: input, git, head, readAsset, max
     taken.set(key, source);
   }
 
+  // Web addresses by the vault's own address style (.cyberbaser/site.yml), the
+  // same function the device and the review page use. Two pages may not share one.
+  const siteEntry = tree.get(SITE_CONFIG_PATH);
+  const siteYml = siteEntry?.type === 'blob' ? decoder.decode((await readBlobs(git, [siteEntry.oid])).get(siteEntry.oid)) : null;
+  const addressStyle = readAddressStyle(siteYml);
+  if (!addressStyle.ok) fail('address-style-unknown', 'this vault names an address style Cyberbaser does not know');
+  const addressOf = (source) => publicAddress(source, after.report.slugs[source] ?? null, addressStyle.style);
+  const existing = new Map();
+  for (const source of after.report.published.pages) if (!created.has(source)) existing.set(addressOf(source), source);
+  for (const source of created) {
+    if (!isMarkdown(source) || !afterSet.has(source)) continue;
+    const address = addressOf(source);
+    if (address === null) fail('create-path-refused', 'this name has no web address; use some letters or digits', { path: source });
+    if (existing.has(address)) fail('create-address-collision', 'another page already uses this address', { path: source, existing: existing.get(address) });
+    existing.set(address, source);
+  }
   const publicAdditions = bundle.files.filter((file) => file.kind === 'create')
-    .map((file) => ({ path: file.path, address: publicAddress(file.path, after.report.slugs[file.path] ?? null) }));
-  return Object.freeze({ bundle, base, tree, candidates, publicAdditions, images });
+    .map((file) => ({ path: file.path, address: addressOf(file.path) }));
+  return Object.freeze({ bundle, base, tree, candidates, publicAdditions, images, addressStyle: addressStyle.style });
 }
 
 /**

@@ -1,3 +1,4 @@
+import { ADDRESS_STYLES, DEFAULT_ADDRESS_STYLE, readAddressStyle } from '@cyberbaser/publish';
 import { createOwnerHandoffStore } from './owner-direct.js';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { constants } from 'node:fs';
@@ -1677,7 +1678,9 @@ function validReviewAppearance(value, config) {
   const siteTitle = typeof value?.siteTitle === 'string' && value.siteTitle.trim().length > 0 && value.siteTitle.length <= 80
     && !/\p{Cc}/u.test(value.siteTitle) ? value.siteTitle.trim() : fallbackTitle[0].toUpperCase() + fallbackTitle.slice(1);
   const colorScheme = REVIEW_SCHEMES.includes(value?.colorScheme) ? value.colorScheme : 'light';
-  return Object.freeze({ siteTitle, colorScheme });
+  const addressStyle = value?.addressStyle === undefined ? DEFAULT_ADDRESS_STYLE
+    : ADDRESS_STYLES.includes(value.addressStyle) ? value.addressStyle : null;
+  return Object.freeze({ siteTitle, colorScheme, addressStyle });
 }
 
 /** The vault's own `.cyberbaser/site.yml` title and colour scheme, when it is a regular file. */
@@ -1690,7 +1693,9 @@ export async function readReviewAppearance(config) {
     let text;
     try { text = await handle.readFile('utf8'); } finally { await handle.close(); }
     const parsed = Bun.YAML.parse(text);
-    return { siteTitle: parsed?.site?.title, colorScheme: parsed?.appearance?.colorScheme };
+    // The address style the renderer uses (null: one this code does not know; review pages then fall back).
+    const addresses = readAddressStyle(text);
+    return { siteTitle: parsed?.site?.title, colorScheme: parsed?.appearance?.colorScheme, addressStyle: addresses.ok ? addresses.style : null };
   } catch {
     return null;
   }
@@ -1882,7 +1887,8 @@ export function createOwnerAlphaHandler({
     if (reviewSiteRoot === null) return { html: null, reason: null };
     const { document, operations, model } = reviewDisplay(entry);
     return siteReviewFrame({ siteRoot: reviewSiteRoot, sourcePath: entry.summary.source.path, revision: entry.summary.source.revision,
-      document, operations, model, colorScheme: appearance.colorScheme, rendererName: rendererIdentity(config).name });
+      document, operations, model, colorScheme: appearance.colorScheme, rendererName: rendererIdentity(config).name,
+      addressStyle: appearance.addressStyle });
   }
   if (typeof createEditSession !== 'function'
     || typeof saveEdit !== 'function'
@@ -2218,6 +2224,11 @@ export function createOwnerAlphaHandler({
           const site = await previewBundle({ bundleId, index: Number(index), bundle, record, colorScheme: appearance.colorScheme,
             readImage: (imagePath) => desk.readImage(bundleId, imagePath) });
           if (typeof site === 'string') return frameResponse(site, 200, SITE_FRAME_CSP);
+          // The renderer would not put the page at the address shown: refuse the bundle.
+          if (site?.refused === 'address-mismatch') {
+            await desk.markStale(bundleId, 'address-mismatch');
+            return errorResponse(409, 'address-mismatch');
+          }
         }
         const images = new Map();
         for (const image of record.images) images.set(image.path, await desk.readImage(bundleId, image.path));
@@ -2858,8 +2869,20 @@ export async function runOwnerAlphaServer({
     directory: path.join(config.iroh.stateDirectory, 'bundles'),
     branchHead: async () => (await bundleGitRunner(['rev-parse', '--verify', `refs/heads/${config.repository.branch}^{commit}`])).toString('utf8').trim() });
   if (devices !== null) devices.bundleDesk = bundleDesk;
+  // With a configured renderer, a bundle is built once before it is offered, to
+  // confirm its page lands at the address shown (bundle-preview.js).
+  const bundleCheck = devices === null || !config.renderer ? null : createBundlePreview({ config, projectRoot });
   const jobApprovals = devices === null ? null : createJobApprovals({ config, context: storeContext, pipeline: recoveringPipeline,
     bundles: bundleDesk,
+    checkBundle: bundleCheck === null ? null : async (record) => {
+      const bundle = parsePageBundle(record.bundleText);
+      for (const [index] of record.publicAdditions.entries()) {
+        const site = await bundleCheck({ bundleId: record.bundleId, index, bundle, record, colorScheme: 'light',
+          readImage: (imagePath) => bundleDesk.readImage(record.bundleId, imagePath) });
+        if (site?.refused === 'address-mismatch') return 'address-mismatch';
+      }
+      return 'ok';
+    },
     publishBundle: config.publisher ? ({ commit, record }) => ownerRequest({ socketPath: config.publisher.socketPath,
       op: 'publish-bundle', commit, record }) : null,
     log: (line) => console.error(`Owner alpha: ${line}`), starter: starterFile,

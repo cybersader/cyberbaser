@@ -170,20 +170,24 @@ export function createNoteStatus({ config, context, listJobs = listDurableJobs, 
       return [...(await selectionAt(await head())).published].sort();
     },
 
-    // { selected, live: { digest, folded: true, at, commit } | null } for one
-    // vault path. Throws when the node cannot establish it.
+    // { selected, live: { digest, folded: true, at, commit } | null,
+    // committed } for one vault path; committed is the folded digest of the
+    // note at the branch head (what was published, whether or not it is
+    // confirmed live yet). Throws when the node cannot establish it.
     async status(vaultPath) {
       try {
         const current = await selectionAt(await head());
         if (typeof vaultPath !== 'string' || !current.published.has(vaultPath)) return { selected: false, live: null };
+        const [headBytes] = await readBlobs(checkout, [current.blobs.get(vaultPath)]);
+        const committed = foldedDigest(headBytes);
         const deployed = await verifiedDeployment();
-        if (deployed === null) return { selected: true, live: null };
+        if (deployed === null) return { selected: true, live: null, committed };
         const then = await selectionAt(deployed.commit);
         const objectId = then.published.has(vaultPath) ? then.blobs.get(vaultPath) : undefined;
-        if (!objectId) return { selected: true, live: null };
+        if (!objectId) return { selected: true, live: null, committed };
         const [bytes] = await readBlobs(checkout, [objectId]);
         const digest = foldedDigest(bytes);
-        return { selected: true, live: digest === null ? null : { digest, folded: true, at: deployed.at, commit: deployed.commit } };
+        return { selected: true, live: digest === null ? null : { digest, folded: true, at: deployed.at, commit: deployed.commit }, committed };
       } catch {
         fail('publication-status-unavailable', 'note status could not be established from the checkout');
       }
