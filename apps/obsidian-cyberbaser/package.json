@@ -10,5 +10,8 @@
     "build:wasm": "bash scripts/build-wasm.sh",
     "build": "bun scripts/build.js",
     "test": "bun test test"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
   }
 }

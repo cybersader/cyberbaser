@@ -1,0 +1,140 @@
+# Cyberchief site model: DRAFT (2026-11-24)
+#
+# Describes what this vault contains, for Cyberbaser (forms, checks, allowed
+# properties) and for the cyberchief renderer. It describes content only.
+# How a page looks is decided by the renderer; `layout:` just names which of
+# the renderer's page layouts a type uses.
+#
+# Written by the cyberchief project lead from the site as built
+# (site/components/cc.ts, site/KB-CONVENTIONS.md, the frontmatter in content/).
+# Cyberbaser may reshape it once its format research picks a format; it will
+# say so before editing this file.
+
+version: 0
+site:
+  title: Cyberchief
+  home: index.md
+  default_author: authors/the-chief.md
+
+# Field types used below:
+#   text, long-text      plain text (long-text = a sentence or two)
+#   date                 YYYY-MM-DD
+#   checkbox             true / false
+#   url                  a web address
+#   image                a vault path to an image file (no remote images)
+#   choice               one of a fixed list (`options:`)
+#   choice-from-folder   one sub-folder of `root:`; stored as the note's location, not a property
+#   tags                 list of `group/value` strings
+#   author-reference     a link to a note in authors/, e.g. "[[authors/the-chief]]"
+#   number               a whole number
+
+# What is public is decided only by publish.yml at the vault root.
+
+types:
+
+  post:
+    label: Post
+    layout: post
+    # A post lives directly inside one topic folder.
+    location:
+      field: topic
+      pattern: "<topic>/<slug>.md"
+    fields:
+      title:       { type: text, label: Title, required: true }
+      topic:       { type: choice-from-folder, label: Topic, required: true, root: ".", of_type: topic }
+      description: { type: long-text, label: Summary, required: true }
+      date:        { type: date, label: Date, required: true, default: "on first publish" }
+      tags:        { type: tags, label: Tags, required: false }
+      cover:       { type: image, label: Cover photo, required: false }
+      youtube:     { type: url, label: YouTube link, required: false, hint: "A YouTube video link or ID. The video only loads when a reader presses play." }
+      featured:    { type: checkbox, label: Feature on home, required: false, default: false }
+      author:      { type: author-reference, label: Author, required: false, default: "from the paired device, else site.default_author" }
+      draft:       { type: checkbox, label: Draft, required: false, default: true }
+      sample:      { type: checkbox, label: Sample, required: false, default: false, hidden: true }
+
+  topic:
+    label: Topic
+    layout: topic
+    # A top-level folder whose folder note is index.md. Posts live inside it.
+    location:
+      pattern: "<slug>/index.md"
+      excludes: [kb, authors, tags]
+    fields:
+      title:       { type: text, label: Title, required: true }
+      description: { type: long-text, label: Summary, required: true }
+      start:       { type: text, label: Reader prompt, required: false, hint: "e.g. I'm building or resetting a security program" }
+      short:       { type: text, label: Short label, required: false, hint: "Shown on the filter buttons" }
+      order:       { type: number, label: Order, required: false }
+      icon:        { type: choice, label: Icon, required: false, options: [flag, scale, alert, layers, users, star, building, shield] }
+      cover:       { type: image, label: Cover photo, required: false }
+
+  kb-page:
+    label: Knowledge base page
+    layout: kb-page
+    # One home folder anywhere under kb/ (at most two levels deep), or kb/ itself.
+    location:
+      field: folder
+      pattern: "kb/<folder...>/<slug>.md"
+    fields:
+      title:       { type: text, label: Title, required: true }
+      folder:      { type: choice-from-folder, label: Folder, required: true, root: kb, of_type: kb-folder, allow_new: true, max_depth: 2 }
+      description: { type: long-text, label: Summary, required: true }
+      tags:        { type: tags, label: Tags, required: false }
+      draft:       { type: checkbox, label: Draft, required: false, default: true }
+      sample:      { type: checkbox, label: Sample, required: false, default: false, hidden: true }
+
+  kb-folder:
+    label: Knowledge base folder
+    layout: kb-folder
+    location:
+      pattern: "kb/<folder...>/index.md"
+    fields:
+      title:       { type: text, label: Title, required: true }
+      description: { type: long-text, label: Summary, required: true }
+      order:       { type: number, label: Order, required: false }
+
+  author:
+    label: Author
+    layout: author
+    location:
+      pattern: "authors/<slug>.md"
+    fields:
+      title:       { type: text, label: Name, required: true }
+      credential:  { type: text, label: Credential, required: false }
+      location:    { type: text, label: Location, required: false }
+      avatar:      { type: image, label: Small photo, required: false }
+      portrait:    { type: image, label: Large photo, required: false }
+      linkedin:    { type: url, label: LinkedIn, required: false }
+      description: { type: long-text, label: Short bio, required: false }
+
+  page:
+    label: Page
+    layout: page
+    # Fixed single pages. Not created from the form.
+    location:
+      paths: [index.md, about.md, contact.md, content.md, kb/index.md, kb/glossary.md]
+    fields:
+      title:       { type: text, label: Title, required: true }
+      description: { type: long-text, label: Summary, required: false }
+
+taxonomy:
+  # Folder Tag Sync model (site/KB-CONVENTIONS.md).
+  model: folders-plus-tags
+  folders:
+    rule: "Every page has exactly one home folder."
+    folder_note: index.md
+    folder_tag: derived          # the folder path, e.g. kb/threats-and-response/ransomware; never typed by authors
+  tags:
+    shape: "group/value"
+    open: true                   # any new group/value tag is accepted and shown automatically
+    suggested:
+      audience: [executives, security-leaders, practitioners, board]
+      level: [primer, deep-dive]
+      sector: [public-sector, finance, healthcare, critical-infrastructure]
+    labels:                      # display labels for suggested groups; others are labelled from their words
+      audience: Audience
+      level: Level
+      sector: Sector
+  also_filed:
+    rule: "A kb/<folder> tag lists the page under that folder too. Its home does not change."
+    tag_prefix: "kb/"
