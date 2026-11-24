@@ -4,6 +4,9 @@
 
 ## Log
 
+### Images named in properties are references (2026-11-24, implementation rule)
+- A top-level property naming an existing image by its exact vault path (`cover: posts/x.png`, or `"[[posts/x.png]]"`) references it, for the selector, the plugin, the node and the publisher alike (`packages/publish/src/property-refs.js`). Not model-driven, because the model never decides what is public and the selector runs without one; exact paths only, because that is how renderers read these properties. Log: `zz-log/2026-11-24-property-images.mdx`.
+
 ### Cyberbaser is the gate, not a CMS (2026-11-24, owner decision)
 - **Context:** the owner asked whether Cyberbaser has primitives for author pictures, profiles and fill-in fields (cover, tags) for a non-technical author (Cyberchief), and then: "Is this a meta CMS platform?" They were shown six architectures by who owns each job (WordPress, Obsidian Publish, Git-based CMS, and Cyberbaser as A gate / B gate plus content model / C meta-CMS).
 - **Asked** (question dialog): "Which shape should Cyberbaser take? A = the gate only (Cyberbaser accepts, checks and publishes with your approval; editors, forms, site look and storage are other tools; page types and author profiles are plain vault files). B = gate plus its own field format, forms and profiles. C = a full CMS with its own editor and accounts." **Answer:** "Definitely A, and I'm not saying owning forms, I'm really just saying owning a meta schema or I don't know".

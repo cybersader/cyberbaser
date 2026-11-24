@@ -1,0 +1,40 @@
+---
+title: Images named in properties count as shown (built, synthetic)
+description: A cover, avatar or portrait set only as a property, by its path from the vault root, now counts as an image the page shows. The selector publishes it, the plugin sends it, the node and the publisher accept it. One rule in packages/publish, no site model needed.
+status: log
+---
+
+## The problem
+
+A post from the New post form names its cover only in a property (`cover: from-the-field/x-cover.png`). Only images embedded in the text counted as shown, so the node refused the bundle (`asset-unreferenced`), the plugin did not send the cover, and the selector left property images out of the published set. Author photos (`avatar`, `portrait`) were affected the same way in the full-vault preview and on the real site.
+
+## The rule
+
+A top-level property whose value is one text naming an image file by its path from the vault root (`posts/x.png`, `/posts/x.png` or `"[[posts/x.png]]"`) references that image when a file exists at exactly that path. Remote addresses, `..`, note-relative paths and file-name lookups are not references. Code: `packages/publish/src/property-refs.js`.
+
+Why this rule and not "fields the site model types as `image`":
+
+- **The model never decides what is public; `publish.yml` does.** The selector runs in the site build and on vaults without a model (Cyberbase), so it cannot depend on `.cyberbaser/model.yml`. Every layer has to give the same answer, so the rule lives where the selector lives.
+- **Exact vault paths are how renderers read these properties.** Quartz's `cover`/`image` and the Cyberchief renderer's `cover`, `avatar` and `portrait` take a path from the vault root. A note-relative or basename guess could publish a file the page never shows.
+- **No key names in the core** (R25). Any property qualifies; a value that is not an existing image path names nothing.
+
+## Where it applies
+
+- **Selector** (`select.js`, rule 5): a published page's property images are reachable assets, reported with `kind: 'property'` and the line. A private page's property images stay private. The full-vault preview and the site build use the selector, so they follow.
+- **Node** (`page-bundle.js`): unchanged code; `asset-unreferenced` reads the selector's report, so a cover-only post passes.
+- **Publisher** (`bundle-publish.js`): new re-check `asset-unreferenced`. Every added image must be shown by a note in the same commit, in its text or its properties, resolved with the selector's own rule (`noteAssetTargets`). Before this the publisher had no reference check at all.
+- **Plugin** (`new-page.js` `embeddedImages`): also lists property images that exist in the vault, once, so they are cleaned of location and sent.
+- **Device approval**: unchanged. New public pages are still only created notes, recomputed from the device's own `publish.yml`, so device and node agree.
+
+## Evidence
+
+- `packages/publish/test/property-refs.test.js`: value parsing, refs, cover and author photos published with their pages, private ones not, no relative or basename lookup, `noteAssetTargets`.
+- `apps/owner-alpha/test/page-bundle.test.js`: a cover-only bundle passes the node and the publisher; a note-relative value is `asset-unreferenced`; the publisher refuses an image no note shows.
+- `apps/owner-alpha/test/page-bundle-e2e.test.js`: a cover-only post goes from the plugin core through the desk, device signature and publisher checks to the throwaway remote. With the selector change removed this test fails.
+- `apps/obsidian-cyberbaser/test/new-page.test.js`: the plugin sends a property-only cover once.
+- Suites: 1,359 pass, 10 skip, 1 known fail (`proposal-fixtures` missing module); plugin 45 pass.
+
+## Not verified
+
+- The plugin's `exists` check in real Obsidian.
+- A Quartz or Cyberchief site build of a vault whose only reference to an image is a property (the selector now emits it; whether each renderer copies and links it was not built here).
