@@ -91,6 +91,15 @@ export function slugKey(vaultPath, lowercase = true) {
     .join('/')
 }
 
+/**
+ * The key two paths collide under on a case-insensitive file system (macOS,
+ * Windows, a phone): the NFC path, case-folded. `Note.md` and `note.md` share
+ * one key, so a new file must not take a key an existing path already holds.
+ */
+export function caseKey(vaultPath) {
+  return stripSlashes(String(vaultPath).normalize('NFC')).toLowerCase()
+}
+
 function violation(rule, path, extra = {}) {
   return { rule, code: RULES[rule], path, ...extra }
 }
