@@ -769,3 +769,28 @@ export async function guardChangeSetApplication({ context, config, jobId, sessio
     fail('application-authority-mismatch', 'durable v2 job differs from the exact authorized input or current eligibility');
   }
 }
+
+/**
+ * The owner review an approved-proposal job may claim at the trust check:
+ * only when the immutable owner decision is an approval and a recorded owner
+ * application event names exactly this job and this input. Anything else is
+ * not an owner review, and the job is checked like any other change.
+ */
+export async function verifiedOwnerReview({ context, jobId, session }) {
+  const origin = session?.origin;
+  if (origin?.type !== 'approved-proposal') return null;
+  const queueId = validateQueueId(origin.queueId);
+  const input = await readApprovedProposalInput(context, queueId);
+  const recovered = await recoverProposalDecisions(context);
+  const decision = recovered.decisions.find((item) => item.queueId === queueId);
+  const events = await listProposalApplicationEvents(context, { queueId });
+  const event = events.find((item) => item.job.jobId === jobId);
+  if (!input || !decision || !event || decision.action !== 'approve'
+    || input.decision.digest !== decisionDigest(decision)
+    || event.decision.digest !== input.decision.digest
+    || origin.inputDigest !== digestBytes(Buffer.from(artifactJson(input)))
+    || event.input.digest !== origin.inputDigest) {
+    fail('application-authority-mismatch', 'approved-proposal job does not match its immutable owner application act');
+  }
+  return { type: 'approved-proposal', queueId, inputDigest: origin.inputDigest };
+}

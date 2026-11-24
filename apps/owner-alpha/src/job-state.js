@@ -26,7 +26,9 @@ const transitions = {
   'source-applied': ['committing', 'manual-intervention'],
   committing: ['committed', 'manual-intervention'],
   committed: ['pushing', 'failed'],
-  pushing: ['pushed', 'manual-intervention'],
+  // Signed publish: the publisher waits for the owner's device; nothing is retried meanwhile.
+  pushing: ['pushed', 'awaiting-approval', 'manual-intervention', 'failed'],
+  'awaiting-approval': ['pushing', 'cancelled', 'failed'],
   pushed: ['discovering-run', 'failed'],
   'discovering-run': ['run-bound', 'deployment-failed', 'failed'],
   'run-bound': ['monitoring-deployment', 'deployment-failed', 'failed'],
@@ -99,6 +101,11 @@ const recovery = {
     classification: 'reconcile-push',
     automatic: true,
     instruction: 'Check the configured remote for the exact commit and push only if it is absent.',
+  },
+  'awaiting-approval': {
+    classification: 'wait-for-owner',
+    automatic: true,
+    instruction: 'Do nothing until an owner approval is attached to the job; then resume pushing through the publisher.',
   },
   pushed: {
     classification: 'resume-run-discovery',

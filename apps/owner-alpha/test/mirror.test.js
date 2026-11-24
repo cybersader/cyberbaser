@@ -147,7 +147,15 @@ await runSetupForgeCli({ socketPath, stateDirectory, clientId, mirror, checkout,
   expect(canaryCount(forgeState)).toBeGreaterThan(0); // positive control: the publisher holds it
 
   // The one change setup may publish: exactly the starter file, approved on screen.
-  const starter = createStarterPublisher({ checkout, publish: (commit) => relay.publishStarter(commit), git: localGit });
+  // Setup only prepares it; here the publisher has no owner services, so the
+  // unsigned forge request stands in for the signed one (job-approvals.test.js).
+  const prepareStarter = createStarterPublisher({ checkout, git: localGit });
+  const starter = { async publish(input) {
+    const prepared = await prepareStarter.prepare(input);
+    await relay.publishStarter(prepared.commit);
+    git(checkout, 'merge', '--ff-only', '--quiet', prepared.commit);
+    return prepared;
+  } };
   // Anything else is refused by the publisher, whatever the node asks.
   const tamper = async (name, mutate) => {
     const head = git(checkout, 'rev-parse', 'HEAD');

@@ -290,7 +290,7 @@ test('the client state table classifies every durable job state exactly once', (
   const groups = Object.groupBy(JOB_STATES, (state) => PUBLICATION_JOB_STATES[state]);
   expect(groups).toEqual({
     publishing: ['accepted', 'preflighting', 'checking', 'rendering', 'ready-to-apply', 'applying', 'source-applied',
-      'committing', 'committed', 'pushing', 'pushed', 'discovering-run', 'run-bound', 'monitoring-deployment',
+      'committing', 'committed', 'pushing', 'awaiting-approval', 'pushed', 'discovering-run', 'run-bound', 'monitoring-deployment',
       'deployment-succeeded', 'verifying-live'],
     live: ['live-confirmed', 'rebuilding-local', 'completed'],
     'not-verified': ['live-verification-failed'],

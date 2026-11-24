@@ -1,6 +1,7 @@
 import net from 'node:net';
 import { OwnerAlphaError, fail } from '../errors.js';
 import { validateJobId } from '../job-state.js';
+import { APPROVAL_PROBLEMS } from './owner-keys.js';
 import { PUSH_STATUSES, REJECTION_CODES, readFrame, validSocketPath } from './protocol.js';
 
 export async function requestPublication({ socketPath, jobId, timeoutMs = 30_000 } = {}) {
@@ -33,7 +34,7 @@ export async function requestPublication({ socketPath, jobId, timeoutMs = 30_000
         return settle(resolve, response);
       }
       if (response.ok === false && REJECTION_CODES.includes(response.code)) {
-        return settle(reject, new OwnerAlphaError(response.code, 'publisher refused or could not confirm the push'));
+        return settle(reject, new OwnerAlphaError(response.code, APPROVAL_PROBLEMS[response.code] ?? 'publisher refused or could not confirm the push'));
       }
       return invalid();
     }, invalid);

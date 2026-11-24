@@ -29,7 +29,16 @@ MIRROR=/var/lib/cyberbaser-shared/mirror/notes.git
 HOSTED=/srv/gh/cybersader/cyberbase.git
 
 until systemctl is-system-running --quiet 2>/dev/null || [ "$(systemctl is-system-running 2>/dev/null)" = degraded ]; do sleep 0.5; done
-mkdir -p /var/tmp/cb-test && install -m 0644 /test/scripts/owner-browser.mjs /test/scripts/agent-lane.mjs /var/tmp/cb-test/
+mkdir -p /var/tmp/cb-test && install -m 0644 /test/scripts/owner-browser.mjs /test/scripts/agent-lane.mjs /test/scripts/signing-device.mjs /var/tmp/cb-test/
+device() { as_node env BUN_BE_BUN=1 /opt/cyberbaser/bin/cyberbaser /var/tmp/cb-test/signing-device.mjs "$@"; }
+PHONE=/var/lib/cyberbaser/phone.json
+# As the node, with the job store where the node service sees it (as save-job in install-test.sh).
+device_store() {
+  systemd-run --quiet --wait --pipe --collect --uid=cyberbaser --gid=cyberbaser-share \
+    -p UMask=0007 -p BindPaths=/var/lib/cyberbaser-shared/workspace:/opt/cyberbaser/.workspace -p RuntimeMaxSec=120 \
+    -E CYBERBASER_SHARED_STORE=group -E PATH=/opt/cyberbaser/libexec:/usr/local/bin:/usr/bin:/bin -E HOME=/var/lib/cyberbaser/home \
+    -E BUN_BE_BUN=1 /opt/cyberbaser/bin/cyberbaser /var/tmp/cb-test/signing-device.mjs "$@"
+}
 git config --global user.name Synthetic; git config --global user.email synthetic@example.invalid
 git config --global init.defaultBranch main
 
@@ -81,11 +90,28 @@ check "the publisher started in setup mode" wait_journal cyberbaser-publisher.se
 check "no node config yet" test ! -e /var/lib/cyberbaser/config/owner-alpha.json
 [ "$(stat -c '%U:%G %a' /var/lib/cyberbaser-shared/mirror)" = "cyberbaser-publisher:cyberbaser-share 750" ] && pass "mirror folder: publisher-owned, group read-only" || fail "mirror folder $(stat -c '%U:%G %a' /var/lib/cyberbaser-shared/mirror)"
 
+echo "== signed publish: the first device, by the code the installer printed"
+ENROLL=$(sed -n 's/^  Code: \([0-9A-Z-]*\).*/\1/p' /tmp/install.out | head -1)
+RECOVERY=$(sed -n '/If you ever lose every device/{n;s/^  //p}' /tmp/install.out | head -1)
+[ -n "$ENROLL" ] && [ -n "$RECOVERY" ] && pass "install printed a first-device code and a recovery code" || fail "install printed codes"
+journalctl --no-pager -o cat | grep -qF "$RECOVERY" && fail "the journal holds the recovery code" || pass "the recovery code is nowhere in the journal"
+refused "the node cannot read the publisher's owner keys" as_node ls /var/lib/cyberbaser-publisher/owners
+curl -fs http://127.0.0.1:4319/enroll | grep -qF "$ENROLL" && pass "the publisher's own page shows the code on this computer" || fail "enroll page"
+refused "that page refuses the node account" as_node curl -fs -o /dev/null http://127.0.0.1:4319/enroll
+curl -fs -H 'Origin: http://127.0.0.1:4317' http://127.0.0.1:4319/enroll >/dev/null && fail "a script from the web app read the code" || pass "a script from the web app cannot read the code"
+device forged-enroll AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-GGGG-HHHH | grep -q '"code":"owner-enrollment-refused"' && pass "a node-made code enrolls nothing" || fail "forged enrollment"
+device enroll "$ENROLL" "$PHONE" phone | tee /tmp/enroll.out | grep -q '"ok":true' && pass "the stand-in device enrolled with the printed code" || { fail "enroll"; cat /tmp/enroll.out; }
+device forged-enroll "$ENROLL" | grep -q '"code":"owner-enrollment-closed"' && pass "the code works once" || fail "code reuse"
+
 echo "== setup in the owner's browser"
-browser setup "$LINK" /tmp/owner.cookie | tee /tmp/setup.out
-grep -q '"ok":true' /tmp/setup.out && pass "setup ran start to Done" || fail "setup ran start to Done"
+browser setup-signed "$LINK" /tmp/owner.cookie | tee /tmp/setup.out
+grep -q '"ok":true' /tmp/setup.out && pass "setup ran to the notes step" || fail "setup to notes"
 grep -q '"multiSelect":true' /tmp/setup.out && pass "Your notes shows an unchecked multi-select and a Show the file disclosure" || fail "multi-select markup"
-grep -q '"afterStarter":true' /tmp/setup.out && pass "the starter publish.yml shows as added" || fail "starter shown"
+grep -q '"unsignedStarterRefused":true' /tmp/setup.out && pass "the node cannot publish the starter publish.yml without the owner's signature" || fail "unsigned starter"
+[ "$(git -C "$HOSTED" rev-parse main)" = "$BASE" ] && pass "nothing reached GitHub" || fail "unsigned starter pushed"
+device starter-forged Garden | grep -q '"code":"owner-approval-invalid"' && pass "a starter signed with the node's own key is refused" || fail "forged starter"
+device starter "$PHONE" Garden | tee /tmp/starter.out | grep -q '"receiptVerified":true' && pass "the device signed the starter and verified the publisher's receipt" || { fail "signed starter"; cat /tmp/starter.out; }
+browser setup-finish /tmp/owner.cookie | grep -q '"ok":true' && pass "setup ran start to Done" || fail "setup ran start to Done"
 check "the notes copy exists" test -d "$CHECKOUT/.git"
 [ "$(stat -c %U "$CHECKOUT")" = cyberbaser ] && pass "the notes copy belongs to the node" || fail "notes copy owner"
 [ "$(git -c safe.directory='*' -C "$CHECKOUT" remote get-url origin)" = "https://github.com/cybersader/cyberbase.git" ] && pass "the copy's remote is the plain HTTPS URL" || fail "copy remote"
@@ -132,12 +158,27 @@ QUEUE=$(json_field queueId < /tmp/propose.out)
 rm -f /tmp/owner.cookie
 browser sign-in "$BOOT" /tmp/owner.cookie | grep -q '"ok":true' && pass "owner signed in again with the one-time link" || fail "sign-in"
 browser approve "$QUEUE" /tmp/owner.cookie | tee /tmp/approve.out
+JOB=$(json_field jobId < /tmp/approve.out)
+grep -q '"state":"awaiting-approval"' /tmp/approve.out && pass "the applied change waits for the owner's device" || fail "job waits for approval"
+[ "$(git -C "$HOSTED" rev-parse main)" = "$STARTER" ] && pass "unsigned, nothing was pushed" || fail "unsigned job pushed"
+device_store sign-job "$PHONE" /var/lib/cyberbaser/config/owner-alpha.json "$JOB" | grep -q '"ok":true' && pass "the device signed exactly that commit" || fail "sign job"
+systemctl restart cyberbaser-node.service
+for _ in $(seq 1 240); do [ "$(git -C "$HOSTED" rev-parse main)" != "$STARTER" ] && break; sleep 0.5; done
 AFTER=$(git -C "$HOSTED" rev-parse main)
 [ "$AFTER" != "$STARTER" ] && [ "$(git -C "$HOSTED" rev-parse main^)" = "$STARTER" ] && pass "approved and applied: the publisher pushed one commit" || { fail "push after approve"; journalctl -u cyberbaser-node.service --no-pager -o cat | tail -5; }
 git -C "$HOSTED" show main:Garden/Roses.md | grep -q 'in late winter' && pass "GitHub has the agent's change" || fail "change on GitHub"
 [ "$AFTER" = "$(git -c safe.directory='*' -C "$CHECKOUT" rev-parse HEAD)" ] && pass "the pushed commit is the node's commit" || fail "pushed commit differs"
 [ "$AFTER" = "$(git -c safe.directory='*' -C "$MIRROR" rev-parse main)" ] && pass "the mirror moved to it" || fail "mirror after push"
 git -C "$HOSTED" diff --stat "$STARTER" main | grep -q '1 file changed' && pass "only that note changed" || fail "untouched files"
+
+echo "== devices: add, revoke, recovery code once"
+LAPTOP=/var/lib/cyberbaser/laptop.json; FRESH=/var/lib/cyberbaser/fresh.json
+device add "$PHONE" "$LAPTOP" laptop | grep -q '"ok":true' && pass "the phone allowed a second device" || fail "add device"
+device revoke "$LAPTOP" phone | grep -q '"ok":true' && pass "the second device removed the phone" || fail "revoke"
+device revoke "$PHONE" laptop | grep -q '"code":"owner-key-refused"' && pass "the removed phone can change nothing" || fail "revoked key still works"
+device recover "$RECOVERY" "$FRESH" fresh | grep -q '"ok":true' && pass "the recovery code set up a replacement device" || fail "recovery"
+device devices | grep -q '"active":\["fresh"\]' && pass "only the replacement device can publish now" || fail "devices after recovery"
+device recover "$RECOVERY" /var/lib/cyberbaser/again.json again | grep -q '"code":"owner-key-refused"' && pass "the recovery code works once" || fail "recovery reuse"
 
 echo "== the node account cannot read the GitHub token anywhere"
 check "positive control: the token exists in the publisher's state" bash -c "grep -rqaE '$TOKEN_RE' /var/lib/cyberbaser-publisher/forge"

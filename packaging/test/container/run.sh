@@ -28,7 +28,7 @@ bun "$REPO/packaging/build.js" --outfile "$WORK/cyberbaser"
 mkdir -p "$WORK/src/apps/owner-alpha/test"
 rsync -aL --chmod=a+rX,go-w "$REPO/apps/owner-alpha/src" "$REPO/apps/owner-alpha/bin" "$REPO/apps/owner-alpha/node_modules" \
   "$REPO/apps/owner-alpha/package.json" "$WORK/src/apps/owner-alpha/"
-cp "$REPO/apps/owner-alpha/test/fake-github.js" "$WORK/src/apps/owner-alpha/test/"
+cp "$REPO/apps/owner-alpha/test/fake-github.js" "$REPO/apps/owner-alpha/test/signed-device.js" "$WORK/src/apps/owner-alpha/test/"
 rsync -aL --chmod=a+rX,go-w "$REPO/packages" "$WORK/src/"
 mkdir -p "$WORK/src/renderers"
 rsync -a --chmod=a+rX,go-w --exclude node_modules "$REPO/renderers/quartz-cyberbase" "$WORK/src/renderers/"

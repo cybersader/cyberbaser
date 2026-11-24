@@ -5,11 +5,33 @@ import { createForgeAccess, createGithubAppAccess } from '../src/publisher/forge
 import { startForgeControl } from '../src/publisher/forge-control.js';
 import { createMirror } from '../src/publisher/mirror.js';
 import { startPublisher } from '../src/publisher/server.js';
+import { issueEnrollmentCode, resetOwners } from '../src/publisher/owner-keys.js';
+import { startOwnerServices } from '../src/publisher/owner-services.js';
+import { qrMatrix } from '../src/qr.js';
+
+// A QR code drawn with half blocks, two modules per character row.
+export function qrTerminal(text) {
+  const { size, modules } = qrMatrix(text);
+  const dark = (y, x) => y >= 0 && y < size && x >= 0 && x < size && Boolean(modules[y][x]);
+  const lines = [];
+  for (let y = -2; y < size + 2; y += 2) {
+    let line = '  ';
+    for (let x = -2; x < size + 2; x += 1) {
+      const top = dark(y, x);
+      const bottom = dark(y + 1, x);
+      line += top && bottom ? ' ' : top ? '\u2584' : bottom ? '\u2580' : '\u2588';
+    }
+    lines.push(line);
+  }
+  return lines.join('\n');
+}
 import { DEFAULT_OWNER_ALPHA_PROJECT_ROOT } from '../src/site.js';
 import { storeContextFromConfig } from '../src/store.js';
 
+// owners: signed publish (src/publisher/owner-services.js). The owner-key
+// directory is the publisher's own state, given here, never read from the config.
 export async function runPublisherCli({ configFile, socketPath, repository, projectRoot = DEFAULT_OWNER_ALPHA_PROJECT_ROOT, socketGroup = null,
-  forgeOptions = undefined }) {
+  forgeOptions = undefined, owners = null }) {
   let publisher;
   let stopRequested = false;
   let stopped;
@@ -20,7 +42,7 @@ export async function runPublisherCli({ configFile, socketPath, repository, proj
   try {
     const config = await loadOwnerAlphaConfig(configFile);
     publisher = await startPublisher({ config, context: storeContextFromConfig(config, projectRoot), socketPath, repository, socketGroup,
-      ...(forgeOptions === undefined ? {} : { forgeOptions }) });
+      owners, ...(forgeOptions === undefined ? {} : { forgeOptions }) });
     if (!stopRequested) process.stdout.write('owner-alpha publisher ready\n');
     await stopping;
   } finally {
@@ -49,15 +71,44 @@ export async function saveTokenCli({ configFile, repository, input = process.std
 // never pushes a job; the only change it may push is an exact starter
 // publish.yml the owner approved (see src/publisher/mirror.js). With a mirror
 // and a checkout it offers fetch and publish-starter; without, sign-in only.
+// With owners (signed publish), the starter file needs the owner's signed
+// approval through the owner control socket, and the first device is enrolled
+// here, before the node has any config.
 export async function runSetupForgeCli({ socketPath, stateDirectory, clientId, mirror = null, checkout = null, socketGroup = null,
-  http = undefined, uid = process.getuid() }) {
+  http = undefined, uid = process.getuid(), owners = null }) {
   const access = createGithubAppAccess({ clientId, stateDirectory, remoteUrl: null, ...(http === undefined ? {} : { http }) });
   const held = mirror === null ? null : await createMirror({ directory: mirror, uid, forgeAccess: access });
-  const control = await startForgeControl({ socketPath, forgeAccess: access, uid, socketGroup, mirror: held, starterCheckout: checkout });
+  const control = await startForgeControl({ socketPath, forgeAccess: access, uid, socketGroup, mirror: held, starterCheckout: checkout,
+    starterSigned: owners !== null && (owners.mode ?? 'enforce') === 'enforce' });
+  const ownerServices = owners === null ? null
+    : await startOwnerServices({ owners, socketPath, uid, socketGroup, mirror: held, starterCheckout: checkout });
   process.stdout.write('owner-alpha publisher ready for setup\n');
   await new Promise((resolve) => { process.once('SIGTERM', resolve); process.once('SIGINT', resolve); });
   access.close();
+  await ownerServices?.close();
   await control.close();
+}
+
+// Administrator commands, run as the publisher account. They print the code
+// on this terminal only; the node never sees it.
+export async function enrollCodeCli({ directory, reset = false, out = (line) => process.stdout.write(`${line}\n`) }) {
+  const issued = reset ? await resetOwners({ directory }) : await issueEnrollmentCode({ directory });
+  if (issued.enrolled) {
+    out('A device can already publish. To start over (every device removed), run: cyberbaser publisher reset-owners');
+    return issued;
+  }
+  out('');
+  out('Set up the device that will approve publishing. Scan this with it, or type the code:');
+  out(qrTerminal(issued.uri));
+  out(`  Code: ${issued.code}   (valid for one hour, for one device)`);
+  if (issued.recoveryCode) {
+    out('');
+    out('Your recovery code. Write it down and keep it somewhere safe; it is shown only now.');
+    out('If you ever lose every device, it lets you set up a new one:');
+    out(`  ${issued.recoveryCode}`);
+  }
+  out('');
+  return issued;
 }
 
 if (import.meta.main && process.argv[2] === 'setup') {
@@ -67,6 +118,14 @@ if (import.meta.main && process.argv[2] === 'setup') {
   } else {
     try { await runSetupForgeCli({ socketPath: process.argv[3], stateDirectory: process.argv[4], clientId: process.argv[5] }); }
     catch { process.stderr.write('owner-alpha publisher failed\n'); process.exitCode = 1; }
+  }
+} else if (import.meta.main && ['enroll-code', 'reset-owners'].includes(process.argv[2])) {
+  if (process.argv.length !== 4) {
+    process.stderr.write(`usage: owner-alpha-publisher ${process.argv[2]} <owner-state-dir>\n`);
+    process.exitCode = 1;
+  } else {
+    try { await enrollCodeCli({ directory: process.argv[3], reset: process.argv[2] === 'reset-owners' }); }
+    catch (error) { process.stderr.write(`no code issued: ${error?.code ?? 'error'}\n`); process.exitCode = 1; }
   }
 } else if (import.meta.main && process.argv[2] === 'save-token') {
   if (process.argv.length !== 5) {

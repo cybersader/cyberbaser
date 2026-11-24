@@ -27,6 +27,10 @@ Usage: cyberbaser <mode> [arguments]
                                      the forge key. Options: --socket-group <name>
   publisher save-token <config> <owner/name>
                                      Save a pasted token (read from standard input).
+  publisher enroll-code              Show a new code to set up the first device
+                                     that approves publishing (administrator).
+  publisher reset-owners             Remove every device that can publish and show
+                                     a new code and recovery code (administrator).
   intake --config <file>             Run the suggestion intake (the node starts it).
   pair <code or link> [--state <file>]
                                      Pair this machine's agent with an owner node.
@@ -38,7 +42,7 @@ Usage: cyberbaser <mode> [arguments]
 
 Run "cyberbaser <mode> --help" for one mode.`,
   node: 'Usage: cyberbaser node <config-file>\nRuns the owner node from one owner-only JSON config. Installed: runs as the "cyberbaser" account.',
-  publisher: 'Usage: cyberbaser publisher <config-file> <socket-path> <bare-repository> [--socket-group <group>]\n       cyberbaser publisher save-token <config-file> <owner/name>   (token on standard input)\nThe only process that holds forge credentials. Installed: runs as the "cyberbaser-publisher" account.',
+  publisher: 'Usage: cyberbaser publisher <config-file> <socket-path> <bare-repository> [--socket-group <group>]\n       cyberbaser publisher save-token <config-file> <owner/name>   (token on standard input)\n       cyberbaser publisher enroll-code | reset-owners   (as administrator: the first-device code, or start over)\nThe only process that holds forge credentials. Installed: runs as the "cyberbaser-publisher" account.',
   intake: 'Usage: cyberbaser intake --config <absolute-config-file>\nThe suggestion intake. The node starts it beside itself; it runs as the node account.',
   pair: 'Usage: cyberbaser pair <code or obsidian:// link> [--state <absolute new file>]\nPairs an agent on this machine with an owner node; confirm the four words on the owner screen.',
   install: 'Usage: cyberbaser install [--yes] [--dry-run] [--quartz-seed <archive>] [--port <n>] [--github-client-id <id>] [--github-origin <url>] [--iroh-relay none|n0|<url>]\nInstalls Cyberbaser as a background service. Asks for the admin password once (pkexec or sudo).\nCreates the accounts "cyberbaser" (node) and "cyberbaser-publisher" (publisher), owner-only state, and the services.',
@@ -109,6 +113,17 @@ async function runPublisherWithGroup(args) {
   }
 }
 
+// Signed publish administration, as the publisher account. Root re-runs itself
+// as that account, so the files stay the publisher's own.
+async function runOwnerAdmin(args) {
+  const { LAYOUT } = await import('./platform/linux-systemd.js');
+  const directory = args[1] ?? LAYOUT.publisherOwners;
+  if (args.length > 2) { process.stderr.write(`${HELP.publisher}\n`); process.exitCode = 1; return; }
+  const { enrollCodeCli } = await import('../../apps/owner-alpha/bin/owner-alpha-publisher.js');
+  try { await enrollCodeCli({ directory, reset: args[0] === 'reset-owners' }); }
+  catch (error) { process.stderr.write(`no code issued${error?.code ? `: ${error.code}` : ''}\n`); process.exitCode = 1; }
+}
+
 export async function main(argv) {
   const spawned = spawnedEntry(argv[0]);
   if (spawned !== null) return guarded(spawned, argv.slice(1));
@@ -141,6 +156,18 @@ export async function main(argv) {
     process.exitCode = await syncPublisherConfig();
     return;
   }
+  if (mode === 'publisher' && ['enroll-code', 'reset-owners'].includes(args[0]) && process.getuid?.() === 0) {
+    // The administrator: run the same command as the publisher account.
+    const { userEntry, groupEntry, DEFAULT_ACCOUNTS } = await import('./accounts.js');
+    const account = userEntry(DEFAULT_ACCOUNTS.publisher);
+    const group = groupEntry(DEFAULT_ACCOUNTS.group);
+    if (!account || !group) { process.stderr.write('cyberbaser publisher: not installed on this machine\n'); process.exitCode = 1; return; }
+    const { spawnSync } = await import('node:child_process');
+    const result = spawnSync('setpriv', ['--reuid', String(account.id), '--regid', String(group.id), '--clear-groups', '--',
+      process.execPath, 'publisher', ...args], { stdio: 'inherit', env: { PATH: '/usr/bin:/bin', HOME: '/var/lib/cyberbaser-publisher' } });
+    process.exitCode = result.status ?? 1;
+    return;
+  }
   if (['install', 'uninstall', 'status'].includes(mode)) {
     const platform = platformFor(process.platform);
     process.exitCode = await platform[mode](args, { programPath: process.execPath, compiled: isCompiled() });
@@ -157,6 +184,7 @@ async function guarded(mode, args) {
     return;
   }
   if (mode === 'publisher' && args.includes('--socket-group')) return runPublisherWithGroup(args);
+  if (mode === 'publisher' && ['enroll-code', 'reset-owners'].includes(args[0])) return runOwnerAdmin(args);
   return runEntry(mode, args);
 }
 

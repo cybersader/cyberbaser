@@ -32,3 +32,11 @@ Cloning a private repository needs a publisher-side fetch. Publishing a confirme
 - Screenshots of the changed step: `.workspace/setup-wizard/v2/` (local record).
 
 Still open: setup writes no `.cyberbaser/trust.yml`, so approved proposals stop at the trust check until the repository has one; pairing during setup has not run on a real Iroh endpoint.
+
+## Later the same day: approved suggestions work without a trust file
+
+Closed: a fresh vault has no `.cyberbaser/trust.yml`, so every change classified as `full-review` and approved suggestions stopped at the trust check. An owner-approved suggestion is by definition fully reviewed, so `full-review` is now satisfied by the owner's own approval, and only by that: before the check, the pipeline re-checks the immutable approval and the recorded Apply act for that exact job and input, and the check result records `trustRequirement: { route: 'full-review', satisfiedBy: { type: 'approved-proposal', … } }`. Lighter routes still need the owner policy to allow them, `reject` is never satisfied, and setup still writes no trust file. Evidence: three new cases in `apps/owner-alpha/test/checks.test.js`, and an end-to-end Approve and Apply in a vault with no trust file in `v2-application-cases.js`.
+
+## Later the same day: the starter publish.yml is signed on the phone
+
+Every push now needs the owner's signature, so setup no longer pushes the starter `publish.yml` itself. **Publish this file** prepares the one commit locally (the copy and GitHub stay where they were) and says it goes to GitHub when the owner approves it on the phone. Once a phone is paired, the phone step shows the publisher's own enrolment page (`http://127.0.0.1:<port+2>/enroll`) in a sandboxed frame; only that origin is added to the page's frame policy, and the code never passes through the setup app. After Done the node keeps the prepared commit beside its device records, offers it to the phone as the first signed publish, sends the signature with the publisher's `publish-starter`, and moves the checkout to the commit. Evidence: `first-run.test.js` (prepared, not pushed; the frame and its policy) and `job-approvals.test.js` (approved, published through `publish-starter`, the copy moves; "Not now" keeps it waiting and a restart offers it again).

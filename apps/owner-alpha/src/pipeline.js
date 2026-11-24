@@ -3,7 +3,8 @@ import { findFrontmatterInText } from '../../../packages/correction/src/frontmat
 import { validateChangeSetCorrection } from './change-set-operation.js';
 import { randomUUID } from 'node:crypto';
 import { applyAcceptedOperation } from './apply.js';
-import { createJsonArtifactOnce, readJsonArtifact } from './artifacts.js';
+import { createJsonArtifactOnce, readJsonArtifact, replaceJsonArtifactAtomic } from './artifacts.js';
+import { rm } from 'node:fs/promises';
 import { runPreApplyChecks } from './checks.js';
 import { computePolicyRevision, validateOwnerAlphaConfig } from './config.js';
 import {
@@ -33,7 +34,7 @@ import {
   rebuildOwnerSite,
 } from './site.js';
 import { assertCheckoutReady, createEditSession, defaultGitRunner } from './source.js';
-import { storeContextFromConfig } from './store.js';
+import { assertSafeStoreTarget, resolveStorePath, storeContextFromConfig } from './store.js';
 
 export const PIPELINE_SCHEMA_VERSION = 1;
 export const PIPELINE_MUTATION_LOCK = 'locks/owner-alpha-mutation.lock';
@@ -108,6 +109,55 @@ async function optionalArtifact(context, relativePath, options) {
   } catch (error) {
     if (error instanceof OwnerAlphaError && error.code === 'artifact-not-found') return null;
     throw error;
+  }
+}
+
+// The owner approval travels as standard base64 of its JSON, so random
+// signature text can never look like a credential to the artifact writer.
+export const OWNER_APPROVAL_ARTIFACT = 'owner-alpha-owner-approval';
+const MAX_APPROVAL_BYTES = 12 * 1024;
+
+function encodeOwnerApproval(jobId, record) {
+  if (!isPlainObject(record) || Object.keys(record).sort().join(',') !== 'approval,intent') {
+    fail('owner-approval-invalid', 'an owner approval is exactly { intent, approval }');
+  }
+  const text = JSON.stringify(record);
+  if (Buffer.byteLength(text) > MAX_APPROVAL_BYTES) fail('owner-approval-invalid', 'owner approval is too large');
+  return { schemaVersion: 1, artifactType: OWNER_APPROVAL_ARTIFACT, jobId, recordBase64: Buffer.from(text, 'utf8').toString('base64') };
+}
+
+function decodeOwnerApproval(stored, jobId) {
+  if (!isPlainObject(stored) || stored.artifactType !== OWNER_APPROVAL_ARTIFACT || stored.jobId !== jobId
+    || typeof stored.recordBase64 !== 'string' || stored.recordBase64.length > MAX_APPROVAL_BYTES * 2) return null;
+  try { return JSON.parse(Buffer.from(stored.recordBase64, 'base64').toString('utf8')); } catch { return null; }
+}
+
+/** The approval record attached to a job, or null. Read by the publisher only as a carrier. */
+export async function readOwnerApproval(context, jobId, options = {}) {
+  const stored = await optionalArtifact(context, pipelineArtifactPaths(jobId).ownerApproval, options);
+  return stored === null ? null : decodeOwnerApproval(stored, jobId);
+}
+
+async function discardOwnerApproval(context, paths, options) {
+  const file = resolveStorePath(context, paths.ownerApproval);
+  if (await optionalArtifact(context, paths.ownerApproval, options).catch(() => null) === null) return;
+  await assertSafeStoreTarget(context, file);
+  await rm(file, { force: true });
+}
+
+/**
+ * Attach (or replace) the owner's signed approval for a job's push. The node
+ * stores what a device sent; only the publisher decides whether it counts.
+ */
+export async function attachOwnerApproval({ context, config, jobId, record }) {
+  const id = validateJobId(jobId);
+  const paths = pipelineArtifactPaths(id);
+  const options = artifactOptions(config);
+  const value = encodeOwnerApproval(id, record);
+  try { await createJsonArtifactOnce(context, paths.ownerApproval, value, options); }
+  catch (error) {
+    if (!(error instanceof OwnerAlphaError) || error.code !== 'artifact-already-exists') throw error;
+    await replaceJsonArtifactAtomic(context, paths.ownerApproval, value, options);
   }
 }
 
@@ -240,6 +290,9 @@ export function pipelineArtifactPaths(jobIdInput) {
     sourceApplied: `jobs/${jobId}/effects/source-applied.json`,
     committed: `jobs/${jobId}/effects/committed.json`,
     pushed: `jobs/${jobId}/effects/pushed.json`,
+    // The owner's signed approval for this job's push, as a device sent it.
+    // Its authority comes from the signature the publisher checks, not from being stored here.
+    ownerApproval: `jobs/${jobId}/approvals/owner-approval.json`,
     runBound: `jobs/${jobId}/effects/run-bound.json`,
     deployment: `jobs/${jobId}/results/deployment.json`,
     live: `jobs/${jobId}/results/live.json`,
@@ -418,7 +471,9 @@ function assertPushedReceipt(pushed, committed, config) {
 
 // The executor accepts a job ID, never a destination, checkout, commit or candidate.
 // The pipeline holds the mutation lock; the IPC publisher must not acquire it again.
-export function createJobPublisher({ config, context, pushCommit = pushExactCommit, bindCommitMessage = false }) {
+// approvalGate (publisher only, approval-gate.js): every push first needs the
+// owner's signed approval for exactly this commit. Absent, nothing changes.
+export function createJobPublisher({ config, context, pushCommit = pushExactCommit, bindCommitMessage = false, approvalGate = null }) {
   const options = artifactOptions(config);
   const policyRevision = computePolicyRevision(config);
   return async function publishJob(id) {
@@ -435,15 +490,32 @@ export function createJobPublisher({ config, context, pushCommit = pushExactComm
     }
     const application = deserializeApplication(durable);
     const prior = await loadRecord(context, paths.pushed, 'owner-alpha-pushed-effect', jobId, options);
-    const pushed = prior ?? await pushCommit({
+    if (prior !== null) {
+      assertPushedReceipt(prior, committed, config);
+      return 'already-pushed';
+    }
+    let authorization = null;
+    if (approvalGate !== null) {
+      // The record is only a carrier; admitPublish checks the signature against
+      // the publisher's own key list and spends its one-use nonce.
+      const record = await readOwnerApproval(context, jobId, options).catch(() => null);
+      authorization = await approvalGate.authorize(record, { remote: config.repository.remote.url, branch: config.repository.branch });
+    }
+    let pushed = await pushCommit({
       checkout: config.repository.checkout, application, commit: committed.commit,
       remote: config.repository.remote.name, remoteUrl: config.repository.remote.url,
       branch: config.repository.branch, useHooks: config.git.useHooks,
       ...(bindCommitMessage ? { expectedMessage: committed.message } : {}),
+      ...(authorization === null ? {} : { verifyCommit: authorization.verifyCommit }),
     });
     assertPushedReceipt(pushed, committed, config);
-    if (prior === null) await saveRecord(context, paths.pushed, 'owner-alpha-pushed-effect', jobId, pushed, options);
-    return prior === null ? pushed.status : 'already-pushed';
+    const signed = authorization?.receipt(pushed) ?? null;
+    if (signed !== null) {
+      pushed = { ...pushed, ownerApproval: { intent: signed.body.intent, keyId: signed.body.keyId },
+        publisherReceiptBase64: Buffer.from(JSON.stringify(signed), 'utf8').toString('base64') };
+    }
+    await saveRecord(context, paths.pushed, 'owner-alpha-pushed-effect', jobId, pushed, options);
+    return pushed.status;
   };
 }
 
@@ -521,6 +593,11 @@ async function executeLocked(input, config, context, dependencies) {
           bindings ??= await boundInputs(input, config, context, paths, dependencies, options);
           checks = await loadRecord(context, paths.preApplyChecks, 'owner-alpha-pre-apply-check-result', jobId, options);
           if (checks === null) {
+            // An owner-approved proposal carries the owner's full review into the
+            // trust check, but only after its immutable application act is verified.
+            const ownerReview = bindings.session.origin?.type === 'approved-proposal'
+              ? await (await import('./proposal-application.js')).verifiedOwnerReview({ context, jobId, session: bindings.session })
+              : null;
             checks = await dependencies.runPreApplyChecks({
               config,
               checkoutDir: config.repository.checkout,
@@ -531,6 +608,7 @@ async function executeLocked(input, config, context, dependencies) {
               operation: bindings.operation,
               trustPolicy: input.trustPolicy,
               trustSubject: input.trustSubject,
+              ownerReview,
               renderer: input.rendererAdapter,
             });
             checks = await saveRecord(
@@ -659,13 +737,41 @@ async function executeLocked(input, config, context, dependencies) {
           state = await transition(context, state, 'pushing', 'begin-exact-push', dependencies);
           break;
         }
+        case 'awaiting-approval': {
+          // Waiting for the owner's device. A job resumes from here only when an
+          // approval was attached to it (attachOwnerApproval); otherwise it stays
+          // put: no retry loop, no failure, nothing lost.
+          if (await optionalArtifact(context, paths.ownerApproval, options) === null) return pipelineSummary(state, paths);
+          state = await transition(context, state, 'pushing', 'owner-approval-attached', dependencies);
+          break;
+        }
         case 'pushing': {
           if (config.publisher) {
-            await requestPublication({
-              socketPath: config.publisher.socketPath,
-              jobId,
-              timeoutMs: config.limits.networkTimeoutMs,
-            });
+            try {
+              await requestPublication({
+                socketPath: config.publisher.socketPath,
+                jobId,
+                timeoutMs: config.limits.networkTimeoutMs,
+              });
+            } catch (error) {
+              // Waiting or a spent approval: park the job durably and drop the stale
+              // approval so a fresh one can be attached. Nothing was pushed.
+              if (error instanceof OwnerAlphaError && ['owner-approval-missing', 'owner-approval-expired'].includes(error.code)) {
+                await discardOwnerApproval(context, paths, options);
+                state = await transition(context, state, 'awaiting-approval', error.code, dependencies);
+                return pipelineSummary(state, paths);
+              }
+              // A bad or mismatched approval never pushes: the job fails closed.
+              if (error instanceof OwnerAlphaError && ['owner-approval-invalid', 'owner-approval-mismatch'].includes(error.code)) {
+                state = await transition(context, state, 'failed', error.code, dependencies, {
+                  code: error.code,
+                  message: error.message,
+                  retryable: false,
+                });
+                return pipelineSummary(state, paths);
+              }
+              throw error;
+            }
             const receipt = await loadRecord(context, paths.pushed, 'owner-alpha-pushed-effect', jobId, options);
             if (receipt === null) fail('pushed-evidence-missing', 'publisher did not persist an exact push receipt');
             const boundCommit = await loadRecord(context, paths.committed, 'owner-alpha-committed-effect', jobId, options);

@@ -10,7 +10,8 @@ import { pathToFileURL } from 'node:url';
 import { computePolicyRevision, validateOwnerAlphaConfig } from '../src/config.js';
 import { OwnerAlphaError } from '../src/errors.js';
 import { initializeDurableJob, loadDurableJob, transitionDurableJob } from '../src/job-state.js';
-import { pipelineArtifactPaths } from '../src/pipeline.js';
+import { attachOwnerApproval, pipelineArtifactPaths } from '../src/pipeline.js';
+import { createDevice, enroll, signPublish, verifyReceipt } from './signed-device.js';
 import { requestPublication } from '../src/publisher/client.js';
 import { startPublisher } from '../src/publisher/server.js';
 import { prepareStore, storeContextFromConfig } from '../src/store.js';
@@ -147,7 +148,8 @@ exec "$OA_REAL_GIT" "\${globals[@]}" "$@"
   delete env[SECRET_KEY];
   const publisherRunner = path.join(root, 'start-publisher.mjs');
   await writeFile(publisherRunner, `import { runPublisherCli } from ${JSON.stringify(pathToFileURL(CLI).href)};
-await runPublisherCli({ configFile: process.argv[2], socketPath: process.argv[3], repository: process.argv[4], projectRoot: import.meta.dir });
+await runPublisherCli({ configFile: process.argv[2], socketPath: process.argv[3], repository: process.argv[4], projectRoot: import.meta.dir,
+  owners: process.argv[5] ? { directory: process.argv[5], mode: 'enforce' } : null });
 `);
   const appRunner = path.join(root, 'start-app.mjs');
   const moduleUrl = (name) => JSON.stringify(pathToFileURL(path.join(APP, 'src', `${name}.js`)).href);
@@ -171,12 +173,13 @@ process.stdout.write(JSON.stringify({ result, credentialPresent: Object.hasOwn(p
     secret: `fixture-credential-${randomUUID()}` };
 }
 
-async function runPublisher(fx, { pushGate } = {}) {
+async function runPublisher(fx, { pushGate, owners = null } = {}) {
   const env = { ...fx.env, [SECRET_KEY]: fx.secret, ...(pushGate ? { OA_TEST_PUSH_GATE: pushGate } : {}) };
-  const child = launch([process.execPath, fx.publisherRunner, fx.configFile, fx.socketPath, fx.repository], { cwd: fx.root, env });
+  const child = launch([process.execPath, fx.publisherRunner, fx.configFile, fx.socketPath, fx.repository, ...(owners ? [owners] : [])],
+    { cwd: fx.root, env });
   await waitUntil(() => {
     if (child.exit) throw new Error(`publisher exited before reporting readiness: ${child.stderr}`);
-    return child.stdout === 'owner-alpha publisher ready\n';
+    return child.stdout.endsWith('owner-alpha publisher ready\n');
   });
   return child;
 }
@@ -452,3 +455,64 @@ test('no publisher setting retains the exact policy revision; routing is policy-
   expect(computePolicyRevision(raw)).toBe(LEGACY_REVISION);
   expect(computePolicyRevision({ ...raw, publisher: { socketPath: '/run/owner-alpha/publisher.sock' } })).toBe(LEGACY_REVISION);
 });
+
+// Signed publish, end to end across the two processes: the node commits, the
+// publisher refuses until the owner's device approves exactly that commit.
+async function signedFixture() {
+  const fx = await fixture();
+  const owners = path.join(fx.root, 'owners');
+  const publisher = await runPublisher(fx, { owners });
+  const code = /code \(valid for one hour\): (\S+)/u.exec(publisher.stdout)?.[1];
+  expect(code).toBeTruthy();
+  return { ...fx, publisher, code };
+}
+
+async function committedCommit(fx, jobId) {
+  return JSON.parse(await readFile(path.join(fx.context.storeRoot, pipelineArtifactPaths(jobId).committed), 'utf8')).result.commit;
+}
+
+test('signed publish: waits for approval without pushing, then pushes exactly what the device signed', async () => {
+  const fx = await signedFixture();
+  const jobId = 'OA-SIGNED';
+  let { result } = await appResult(runApp(fx, jobId));
+  expect(result.state).toBe('awaiting-approval');
+  expect(result.failure).toBeNull();
+  expect(await pushes(fx)).toEqual([]);
+  // Resuming without an approval stays put: no retry, no failure.
+  ({ result } = await appResult(runApp(fx, jobId, { action: 'resume' })));
+  expect(result.state).toBe('awaiting-approval');
+  expect(await pushes(fx)).toEqual([]);
+  const phone = createDevice();
+  await enroll(phone, { socketPath: fx.socketPath, code: fx.code });
+  const commit = await committedCommit(fx, jobId);
+  const record = await signPublish(phone, { socketPath: fx.socketPath, repository: fx.checkout, commit,
+    remote: fx.config.repository.remote.url, branch: fx.config.repository.branch });
+  await attachOwnerApproval({ context: fx.context, config: fx.config, jobId, record });
+  ({ result } = await appResult(runApp(fx, jobId, { action: 'resume' })));
+  expect(result.state).toBe('completed');
+  expect(await git(fx.remote, 'rev-parse', 'refs/heads/main')).toBe(commit);
+  const pushed = (await receipt(fx, jobId)).result;
+  const signed = JSON.parse(Buffer.from(pushed.publisherReceiptBase64, 'base64').toString('utf8'));
+  expect(verifyReceipt(phone, signed)).toBe(true);
+  expect(signed.body).toMatchObject({ commit, keyId: 'phone', remoteHeadBefore: fx.baseCommit, remoteHeadAfter: commit });
+  expect(pushed.ownerApproval.keyId).toBe('phone');
+  expect(await pushes(fx)).toHaveLength(1);
+}, 20_000);
+
+test('signed publish: a node-forged approval never pushes and fails closed with a plain reason', async () => {
+  const fx = await signedFixture();
+  const jobId = 'OA-FORGED';
+  expect((await appResult(runApp(fx, jobId))).result.state).toBe('awaiting-approval');
+  await enroll(createDevice(), { socketPath: fx.socketPath, code: fx.code });
+  // The node holds no owner key; the best it can do is sign with its own.
+  const nodeKey = createDevice({ keyId: 'phone' });
+  const record = await signPublish(nodeKey, { socketPath: fx.socketPath, repository: fx.checkout, commit: await committedCommit(fx, jobId),
+    remote: fx.config.repository.remote.url, branch: fx.config.repository.branch });
+  await attachOwnerApproval({ context: fx.context, config: fx.config, jobId, record });
+  const { result } = await appResult(runApp(fx, jobId, { action: 'resume' }));
+  expect(result.state).toBe('failed');
+  expect(result.failure.code).toBe('owner-approval-invalid');
+  expect(result.failure.message).toContain('nothing was published');
+  expect(await pushes(fx)).toEqual([]);
+  expect(await git(fx.remote, 'rev-parse', 'refs/heads/main')).toBe(fx.baseCommit);
+}, 20_000);

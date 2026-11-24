@@ -9,3 +9,27 @@
 .cyberbaser-status .cyberbaser-status-icon { display: inline-flex; color: var(--text-accent); }
 .cyberbaser-status .cyberbaser-status-icon svg { width: var(--icon-xs); height: var(--icon-xs); }
 .view-action.cyberbaser-mark { color: var(--text-accent); }
+/* Approving publishes: a plain sheet built from what is signed. */
+.cyberbaser-modal .cyberbaser-muted { color: var(--text-muted); font-size: var(--font-ui-small); }
+.cyberbaser-modal .cyberbaser-field { display: flex; flex-direction: column; gap: var(--size-4-1); margin: var(--size-4-3) 0; }
+.cyberbaser-modal .cyberbaser-field label { font-size: var(--font-ui-small); color: var(--text-muted); }
+.cyberbaser-modal .cyberbaser-fingerprint { font-family: var(--font-monospace); font-size: 1.4em; font-weight: 600; letter-spacing: 0.04em; text-align: center; margin: var(--size-4-2) 0; font-variant-numeric: tabular-nums; }
+.cyberbaser-approval .cyberbaser-approval-lead { margin-bottom: var(--size-4-3); }
+.cyberbaser-approval .cyberbaser-approval-lead > * { margin: 0; }
+.cyberbaser-approval .cyberbaser-approval-what { font-size: var(--font-ui-large); font-weight: var(--font-semibold); line-height: var(--line-height-tight); margin-bottom: var(--size-4-1); overflow-wrap: anywhere; }
+.cyberbaser-approval .cyberbaser-warning { color: var(--text-warning); font-weight: var(--font-semibold); }
+.cyberbaser-approval .cyberbaser-changes { display: flex; flex-direction: column; gap: var(--size-4-3); max-height: 50vh; overflow-y: auto; }
+.cyberbaser-approval .cyberbaser-changes > * { margin-top: 0; }
+.cyberbaser-approval .cyberbaser-change { padding: var(--size-4-3); border-radius: var(--radius-m); background: var(--background-secondary); min-width: 0; }
+.cyberbaser-approval .cyberbaser-change-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--size-4-2); }
+.cyberbaser-approval .cyberbaser-change-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cyberbaser-approval .cyberbaser-change-kind { flex: none; font-size: var(--font-ui-smaller); color: var(--text-muted); }
+.cyberbaser-approval .cyberbaser-path { font-size: var(--font-ui-smaller); margin-bottom: var(--size-4-2); }
+.cyberbaser-approval .cyberbaser-words-preview { white-space: pre-wrap; overflow-wrap: anywhere; line-height: var(--line-height-normal); font-size: var(--font-ui-medium); }
+.cyberbaser-approval .cyberbaser-words-preview del { color: var(--text-error); text-decoration-thickness: 2px; background: rgba(var(--color-red-rgb), 0.12); border-radius: var(--radius-s); }
+.cyberbaser-approval .cyberbaser-words-preview ins { color: var(--text-success); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; background: rgba(var(--color-green-rgb), 0.12); border-radius: var(--radius-s); }
+.cyberbaser-approval .cyberbaser-gap { color: var(--text-faint); }
+.cyberbaser-approval .cyberbaser-approval-actions { margin-top: var(--size-4-4); }
+.cyberbaser-approval .cyberbaser-approval-actions button { flex: 1 1 10em; }
+.cyberbaser-approval .cyberbaser-footnote { color: var(--text-faint); font-size: var(--font-ui-smaller); margin-bottom: 0; }
+.cyberbaser-approval .cyberbaser-words-preview del + ins { margin-inline-start: 0.3em; }

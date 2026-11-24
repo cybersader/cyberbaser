@@ -48,7 +48,7 @@ export async function runAgentChild({ capture, checkout, key, socket }) {
 // delivery note from a synthetic workspace copy (workspace/<delivery path>)
 // that starts equal to the vault, is bound to it, then holds workspaceText.
 export const PUBLICATION_MAPPING_ID = 'workspace-note';
-export async function createAgentProposalRehearsal({ port = 46527, before = defaultBefore, after = defaultAfter, realQuartz = false, siteTitle = null, iroh = null, publication = null } = {}) {
+export async function createAgentProposalRehearsal({ port = 46527, before = defaultBefore, after = defaultAfter, realQuartz = false, siteTitle = null, iroh = null, publication = null, publisherSigning = null } = {}) {
   if (before.source !== after.source || before.path !== after.path) throw new Error('Capture files must describe the same note.');
   const fixture = await createSuggestionsFixture({ port, agentBase: before.text, siteTitle });
   try {
@@ -85,7 +85,7 @@ export async function createAgentProposalRehearsal({ port = 46527, before = defa
       ...(publication === null ? {} : { ownerPublication: { enabled: true, mappings: [mapping] } }),
       ...(iroh === null ? {} : { iroh: { enabled: true, stateDirectory: irohState, relay: iroh, ...(iroh !== 'n0' ? { bindAddress: '127.0.0.1:0' } : {}) } }) }), { mode: 0o600 });
     const runtime = await startSuggestionsRehearsal(fixture, { ...(realQuartz ? {} : { renderer: renderFixture, simulatedRender: true }),
-      ...(publication === null ? {} : { readAuthoringNote }) });
+      ...(publication === null ? {} : { readAuthoringNote }), publisherSigning });
     // publication.bind === false leaves the link to the owner's linking step on
     // the Devices page; syncWorkspace() then delivers the newer text.
     const syncWorkspace = async () => {

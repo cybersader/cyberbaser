@@ -28,9 +28,9 @@ const writeConfig = async (file, config) => {
   await rename(temporary, file);
 };
 
-async function runNodeAfterSetup({ configFile, session }) {
+async function runNodeAfterSetup({ configFile, session, pendingStarter = null }) {
   const { runOwnerAlphaServer } = await import('../src/server.js');
-  const runtime = await runOwnerAlphaServer({ configFile, adoptSession: session });
+  const runtime = await runOwnerAlphaServer({ configFile, adoptSession: session, pendingStarter });
   if (process.env.CYBERBASER_TEST_SESSION_MARK === '1') {
     const { createHash } = await import('node:crypto');
     process.stdout.write(`Owner session from setup: ${createHash('sha256').update(session.sessionToken).digest('hex').slice(0, 8)}\n`);
@@ -66,8 +66,9 @@ if (import.meta.main) {
     pairing.attachNode({ nodeId: carrier.nodeId, ticket: carrier.ticket });
     return { store, pairing };
   };
+  // The publisher serves its own first-device code on port + 2 (packaging layout).
   const setup = await runFirstRun({ stateDirectory: path.resolve(stateDirectory), port: Number(portText), publisherSocket, reach,
-    checkout, mirror: layout.mirror ?? null });
+    checkout, mirror: layout.mirror ?? null, enrolPort: layout.enrollPort ?? Number(portText) + 2 });
   process.stdout.write(`Cyberbaser setup: ${setup.setupLink()}\n`);
   const console = createInterface({ input: process.stdin, terminal: false });
   console.on('line', (line) => {
@@ -85,7 +86,7 @@ if (import.meta.main) {
   setup.stop(true);
   if (flag === '--exit-at-done') process.exit(0);
   try {
-    await runNodeAfterSetup({ configFile: layout.configFile, session });
+    await runNodeAfterSetup({ configFile: layout.configFile, session, pendingStarter: state.notes.starterCommit ?? null });
   } catch (error) {
     // The service restarts and runs the node from the config; the owner signs in with the printed link.
     process.stderr.write(`Cyberbaser could not start after setup${error?.code ? `: ${error.code}` : ''}\n`);

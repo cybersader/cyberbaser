@@ -211,6 +211,36 @@ describe('immediate automatic checks', () => {
       trustPolicy: null,
     }), 'trust-route-not-allowed');
   });
+
+  const ownerReview = { type: 'approved-proposal', queueId: 'Q-0f0e0d0c-0b0a-4908-8706-050403020100',
+    inputDigest: `sha-256=:${Buffer.alloc(32, 7).toString('base64')}:` };
+
+  test('an explicit owner review satisfies full-review without a trust file, and says so', () => {
+    const fixture = correctionFixture();
+    const result = runImmediateChecks({ baseBytes: fixture.before, candidateBytes: fixture.candidate,
+      operation: fixture.operation, sourcePath: 'pub/Page.md', config: policy(), trustPolicy: null, ownerReview });
+    expect(result.trust.route).toBe('full-review');
+    expect(result.trust.reasons).toEqual(['no-trust-config']);
+    expect(result.trustRequirement).toEqual({ route: 'full-review', satisfiedBy: ownerReview });
+  });
+
+  test('an owner review never unlocks a lighter route the owner policy does not allow', async () => {
+    // trusted human, non-typo change -> quick-review; policy allows only auto-merge.
+    const fixture = correctionFixture('The old phrase is unique and fairly long.', 'A rather different sentence was written here instead, with many more words added so it is clearly no typo fix at all.');
+    await expectCode(() => runImmediateChecks({ baseBytes: fixture.before, candidateBytes: fixture.candidate,
+      operation: fixture.operation, sourcePath: 'pub/Page.md', trustPolicy: trustPolicy(), ownerReview,
+      config: policy({ owner: { identity: 'owner', allowedTrustRoutes: ['auto-merge'] } }) }), 'trust-route-not-allowed');
+  });
+
+  test('owner review evidence must be exact', async () => {
+    const fixture = correctionFixture();
+    for (const bad of [{ ...ownerReview, type: 'owner-direct' }, { ...ownerReview, queueId: 'Q-1' },
+      { ...ownerReview, inputDigest: 'sha256:abc' }, { ...ownerReview, extra: true }, 'approved']) {
+      await expectCode(() => runImmediateChecks({ baseBytes: fixture.before, candidateBytes: fixture.candidate,
+        operation: fixture.operation, sourcePath: 'pub/Page.md', config: policy(), trustPolicy: null, ownerReview: bad }),
+      'invalid-owner-review');
+    }
+  });
 });
 
 describe('publication boundary checks', () => {

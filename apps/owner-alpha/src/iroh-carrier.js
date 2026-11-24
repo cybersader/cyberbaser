@@ -32,7 +32,9 @@ const IDLE_TIMEOUT_MS = 30_000;
 // Signed commands this carrier accepts. Everything else gets the generic
 // refusal before any verification work.
 export const IROH_COMMANDS = Object.freeze(['submitProposal', 'submitCapture', 'readNoteStatus',
-  'preparePublication', 'publish', 'readPublicationReceipt']);
+  'preparePublication', 'publish', 'readPublicationReceipt',
+  // Signing device (core/approvals.js): enrol with the publisher, approve publishes.
+  'readSigningChallenge', 'enrollSigningKey', 'listApprovals', 'readApproval', 'submitApproval', 'declineApproval']);
 // After a request verified, a command's own refusal may name one of these
 // fixed reasons so the device can say something useful. Signature, key, grant
 // and binding failures stay the single generic refusal.
@@ -41,7 +43,9 @@ export const IROH_REFUSAL_REASONS = Object.freeze(['proposal-budget-exhausted', 
   'publication-candidate-mismatch', 'publication-expected-source-mismatch', 'workspace-unbound',
   'delivery-moved-since-baseline', 'workspace-diverged', 'publication-read-only', 'publication-disabled',
   'workspace-text-repeated', 'workspace-properties-invalid', 'retired-material', 'publication-draft-not-found',
-  'note-needs-linking']);
+  'note-needs-linking', 'recovery-in-progress', 'recovery-failed',
+  'signing-unavailable', 'enroll-refused', 'approval-not-found', 'approval-expired', 'approval-invalid',
+  'approval-mismatch', 'approval-too-large']);
 const PAIR_WAIT_MS = 6 * 60_000;
 
 const alpnBytes = (name) => [...Buffer.from(name, 'utf8')];

@@ -10,6 +10,8 @@ export const REJECTION_CODES = Object.freeze([
   'publisher-job-not-found', 'publisher-job-not-admitted', 'publication-evidence-missing',
   'publisher-receipt-mismatch', 'remote-destination-mismatch', 'remote-advanced',
   'git-push-failed', 'forge-access-unavailable', 'publisher-failed',
+  // Signed publish (owner-keys.js): no approval yet, a stale one, a bad one, or a commit that differs from it.
+  'owner-approval-missing', 'owner-approval-expired', 'owner-approval-invalid', 'owner-approval-mismatch',
 ]);
 
 const UTF8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });

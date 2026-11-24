@@ -11,7 +11,11 @@ test.skipIf(existsSync(LAYOUT.publisherConfig) || existsSync(LAYOUT.config))('be
   expect(plan).toEqual({
     mode: 'setup', socketPath: LAYOUT.publisherSocket, stateDirectory: LAYOUT.publisherForge, clientId: 'Iv23liFAKEcyberbaser',
     mirror: LAYOUT.mirror, checkout: `${LAYOUT.notes}/notes`, github: { clientId: 'Iv23liFAKEcyberbaser', origin: 'http://127.0.0.1:9' },
+    // Signed publish: the owner keys are the publisher's own state, never the node config copy.
+    owners: LAYOUT.publisherOwners, enrollPort: 4319,
   });
+  expect(LAYOUT.publisherOwners.startsWith(`${LAYOUT.publisherHome}/`)).toBe(true);
+  expect(LAYOUT.publisherOwners).not.toBe(LAYOUT.publisherConfig);
   expect(publisherServiceMode(null).clientId).toBeNull();
   expect(nodeServiceArgs().mode).toBe('setup');
   // The mirror lives where the node can read it and only the publisher can write.

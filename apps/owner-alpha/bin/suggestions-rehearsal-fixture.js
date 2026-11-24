@@ -221,7 +221,7 @@ async function assertLocalAgentConfiguration(fixture) {
   }
 }
 
-export async function startSuggestionsRehearsal(fixture, { renderer = createRehearsalRenderer(), simulatedRender = false, readAuthoringNote } = {}) {
+export async function startSuggestionsRehearsal(fixture, { renderer = createRehearsalRenderer(), simulatedRender = false, readAuthoringNote, publisherSigning = null } = {}) {
   if (simulatedRender) await assertLocalAgentConfiguration(fixture);
   // The site manifest hashes actual runtime resources. Copy, never symlink,
   // this small code/resource closure into the owned runtime project.
@@ -254,7 +254,7 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
   const ready = (config) => assertCheckoutReady(config, { git: policyGit });
   const rebuild = ({ config }) => rebuildOwnerSite({ config, projectRoot: fixture.projectRoot, renderer }, { assertCheckoutReady: ready });
   const simulated = (stage, value) => ({ ...value, synthetic: true, evidence: `local-rehearsal-simulated-${stage}; no deployment or live verification` });
-  const runtime = await runOwnerAlphaServer({ configFile: fixture.configFile, projectRoot: fixture.projectRoot,
+  const runtime = await runOwnerAlphaServer({ configFile: fixture.configFile, projectRoot: fixture.projectRoot, publisherSigning,
     ...(readAuthoringNote === undefined ? {} : { readAuthoringNote,
       // Publication reads the same disposable checkout through the policy seam.
       createPublication: (input) => createOwnerPublicationRuntime({ ...input, git: reviewGit, checkoutReady: ready,

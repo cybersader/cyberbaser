@@ -14,6 +14,7 @@ import {
   createReaderHandler,
   recoverOwnerAlphaJobs,
   runOwnerAlphaServer,
+  createRecoveryGate,
   startOwnerAlphaServer,
   startReaderServer,
 } from '../src/server.js';
@@ -1272,6 +1273,103 @@ describe('owner-alpha runtime startup', () => {
     }));
     expect(status.status).toBe(200);
     expect((await status.json()).state).toBe('checking');
+  });
+
+  test('the recovery gate keeps synchronous entry points synchronous', async () => {
+    const gate = createRecoveryGate();
+    const start = gate.wrapSync(({ jobId }) => ({ accepted: { jobId } }));
+    const save = gate.wrapAsync(async ({ jobId }) => ({ jobId }));
+    expect(gate.recovering()).toBe('running');
+    expect(() => start({ jobId: 'a' })).toThrow(expect.objectContaining({ code: 'recovery-in-progress' }));
+    await expect(save({ jobId: 'a' })).rejects.toHaveProperty('code', 'recovery-in-progress');
+    gate.settle(true);
+    expect(gate.recovering()).toBe(false);
+    // Publication needs its durable acceptance handle back at once, not a promise.
+    expect(start({ jobId: 'b' })).toEqual({ accepted: { jobId: 'b' } });
+    expect(await save({ jobId: 'b' })).toEqual({ jobId: 'b' });
+    const failed = createRecoveryGate();
+    failed.settle(false);
+    expect(failed.recovering()).toBe('failed');
+    expect(() => failed.wrapSync(() => 1)()).toThrow(expect.objectContaining({ code: 'recovery-failed' }));
+  });
+
+  // The owner must be able to sign in right after a restart, even when an
+  // earlier job is still being resumed (offline, a deployment check can retry
+  // for 15 minutes). This replaces the old guarantee "no sign-in link until
+  // recovery is done" with the invariant it stood for: no owner act runs beside
+  // a recovering job. Reading and signing in are allowed; every owner POST and
+  // every gated pipeline entry is refused with one plain message until
+  // recovery settles, and stays refused if recovery fails.
+  for (const outcome of ['settles', 'fails']) test(`signs in during recovery and refuses owner acts until recovery ${outcome}`, async () => {
+    const projectRoot = await mkdtemp(path.join(os.tmpdir(), 'owner-alpha-recovering-'));
+    cleanup.push(projectRoot);
+    await execFileAsync('git', ['init', '-q', projectRoot]);
+    await writeFile(path.join(projectRoot, '.gitignore'), '.workspace/\n');
+    const configFile = await privateConfigFile(projectRoot);
+    let finish;
+    const recoveryGate = new Promise((resolve, reject) => { finish = { resolve, reject }; });
+    let ownerFetch;
+    let gatedSave;
+    const saves = [];
+    const started = await runOwnerAlphaServer({
+      configFile,
+      projectRoot,
+      rebuildSite: async ({ config }) => {
+        const siteRoot = path.join(projectRoot, config.workspace.site);
+        await mkdir(siteRoot, { recursive: true });
+        await writeFile(path.join(siteRoot, 'index.html'), '<!doctype html><h1>Runtime Cyberbase</h1>');
+      },
+      loadPipeline: async () => ({
+        saveEdit: async ({ jobId }) => { saves.push(jobId); return { jobId, state: 'accepted' }; },
+        getJob: async (jobId) => fixtureJob(jobId),
+        resumeJob: async ({ jobId }) => ({ jobId, state: 'completed' }),
+      }),
+      createHandler: (options) => {
+        gatedSave = options.saveEdit;
+        return createOwnerAlphaHandler({
+          ...options,
+          createToken: tokenFactory(TOKENS.process, TOKENS.csrf, TOKENS.bootstrap),
+          createJobId: () => 'job-runtime',
+          createEditSession: async () => ({ source: { text: '# Runtime source\n' } }),
+        });
+      },
+      recoverDecisions: async () => ({ decisions: [], index: { decisions: [] } }),
+      recoverJobs: async () => recoveryGate,
+      serve(options) {
+        if (options.port === 4317) ownerFetch = options.fetch;
+        return { stop() {}, url: new URL(`http://127.0.0.1:${options.port}`) };
+      },
+    });
+
+    // Recovery has not settled, yet the owner signs in and opens a page.
+    const opened = await openEdit(ownerFetch);
+    expect(opened.bootstrap.status).toBe(303);
+    expect(opened.response.status).toBe(200);
+    const refused = await saveRequest(ownerFetch, opened, { editedText: '# Updated\n' });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({ error: { code: 'recovery-in-progress',
+      message: 'Finishing an earlier publish. Try again in a moment.' } });
+    // Paired devices and the signed socket reach the same pipeline entry.
+    await expect(gatedSave({ jobId: 'job-device' })).rejects.toHaveProperty('code', 'recovery-in-progress');
+    expect(saves).toEqual([]);
+
+    if (outcome === 'settles') {
+      finish.resolve([{ jobId: 'job-earlier', state: 'completed' }]);
+      expect(await started.recovery).toEqual([{ jobId: 'job-earlier', state: 'completed' }]);
+      const saved = await saveRequest(ownerFetch, opened, { editedText: '# Updated\n' });
+      expect(saved.status).toBe(202);
+      expect(saves).toEqual(['job-runtime']);
+    } else {
+      finish.reject(new Error('resume failed'));
+      await expect(started.recovery).rejects.toThrow('resume failed');
+      const stillRefused = await saveRequest(ownerFetch, opened, { editedText: '# Updated\n' });
+      expect(stillRefused.status).toBe(503);
+      expect((await stillRefused.json()).error.code).toBe('recovery-failed');
+      await expect(gatedSave({ jobId: 'job-device' })).rejects.toHaveProperty('code', 'recovery-failed');
+      expect(saves).toEqual([]);
+      const reading = await ownerFetch(request('/api/jobs/job-runtime', { headers: { Cookie: opened.cookie } }));
+      expect(reading.status).toBe(200);
+    }
   });
 
   test('starts the suggestion intake after the site build and stops it with the runtime', async () => {

@@ -25,6 +25,9 @@ import { excerptDocument, escapeHtml as escapeReviewHtml, FRAME_CSP, frameDocume
 import { SITE_FRAME_CSP, SITE_REVIEW_REASONS, siteReviewFrame } from './site-review-page.js';
 
 import { createOwnerCommands, OwnerCommandPrecondition } from './core/commands.js';
+import { createApprovalRelay, publisherSigningFromSocket } from './core/approvals.js';
+import { createJobApprovals, pendingStarterFile } from './core/job-approvals.js';
+import { ownerRequest } from './publisher/owner-control.js';
 import { createBootstrapPrincipalAdapter, createDevicePrincipalAdapter } from './core/principal.js';
 import { assertOutsideVault, loadDeviceKeyRegistry } from './core/device-key-files.js';
 import { openDeviceStore } from './core/device-store.js';
@@ -43,7 +46,7 @@ export { createOwnerProposalReviewService, createMemoryEditSessionStore };
 // body limits and secret comparison.
 export function ownerHttpTools() {
   return Object.freeze({ html, json, errorResponse, response, pageShell, readBoundedJson, sameSecret, exactToken, escapeHtml,
-    cookieHeader, requestCookie, token, staticResponse });
+    cookieHeader, requestCookie, token, staticResponse, ownerCsp: OWNER_CSP });
 }
 
 const COOKIE_NAME = 'owner_alpha_session';
@@ -177,6 +180,35 @@ function json(value, status = 200, headers = {}) {
 
 function errorResponse(status, code) {
   return json({ error: { code } }, status);
+}
+
+export const RECOVERY_IN_PROGRESS_MESSAGE = 'Finishing an earlier publish. Try again in a moment.';
+export const RECOVERY_FAILED_MESSAGE = 'An earlier publish could not be finished. Restart Cyberbaser to try again.';
+
+/**
+ * Startup recovery state for the runtime: recovering() is false once recovery
+ * settled cleanly, else 'running' or 'failed'. wrapAsync / wrapSync refuse an
+ * owner-act entry point until then; wrapSync keeps a synchronous return value
+ * (publication's startEdit hands back its durable acceptance at once).
+ */
+export function createRecoveryGate() {
+  let state = 'running';
+  const refuse = () => {
+    if (state === 'running') fail('recovery-in-progress', RECOVERY_IN_PROGRESS_MESSAGE);
+    if (state === 'failed') fail('recovery-failed', RECOVERY_FAILED_MESSAGE);
+  };
+  return Object.freeze({
+    recovering: () => (state === 'settled' ? false : state),
+    settle(ok) { state = ok ? 'settled' : 'failed'; },
+    wrapAsync: (action) => (typeof action !== 'function' ? action : async (...args) => { refuse(); return action(...args); }),
+    wrapSync: (action) => (...args) => { refuse(); return action(...args); },
+  });
+}
+
+function recoveryRefusal(state) {
+  return state === 'failed'
+    ? json({ error: { code: 'recovery-failed', message: RECOVERY_FAILED_MESSAGE } }, 503)
+    : json({ error: { code: 'recovery-in-progress', message: RECOVERY_IN_PROGRESS_MESSAGE } }, 409, { 'Retry-After': '30' });
 }
 
 function cookieHeader(processSession) {
@@ -1821,8 +1853,14 @@ export function createOwnerAlphaHandler({
   // { current() -> { state: 'reachable' | 'unreachable' | 'unknown' } }: whether
   // the publisher last reached GitHub. Shown quietly where publishing needs it.
   upstream = null,
+  // () -> false, or 'running' / 'failed' while startup job recovery has not
+  // settled cleanly. Owner actions that
+  // could conflict with a recovering job are refused until it settles; signing
+  // in and reading stay available.
+  recovering = () => false,
 } = {}) {
   const config = validateOwnerAlphaConfig(configInput);
+  if (typeof recovering !== 'function') throw new TypeError('recovering must be a function');
   const appearance = validReviewAppearance(reviewAppearance, config);
   if (reviewSiteRoot !== null && (typeof reviewSiteRoot !== 'string' || !path.isAbsolute(reviewSiteRoot))) {
     throw new TypeError('reviewSiteRoot must be null or one absolute path');
@@ -2022,6 +2060,12 @@ export function createOwnerAlphaHandler({
     const { csrfToken, principal } = deviceSession;
     if (request.method === 'POST' && request.headers.get('origin') !== expectedOrigin) {
       return errorResponse(403, 'invalid-origin');
+    }
+    // Every signed-in owner POST starts or records an owner act. While an
+    // earlier job is still being resumed, none may run beside it.
+    if (request.method === 'POST') {
+      const recovery = recovering();
+      if (recovery) return recoveryRefusal(recovery);
     }
 
     if (url.pathname === '/') {
@@ -2626,6 +2670,13 @@ export async function runOwnerAlphaServer({
   createPublication = createOwnerPublicationRuntime,
   adoptSession = null,
   createUpstreamStatus = createUpstream,
+  // The publisher's signing verbs ({ challenge, enroll }) relayed to paired
+  // signing devices. Null until the publisher offers them: devices then get
+  // a plain "signing-unavailable".
+  publisherSigning = null,
+  // The starter publish.yml commit first-run setup prepared, handed over in
+  // the same process; kept on disk until the owner's device approves it.
+  pendingStarter = null,
 } = {}) {
   if (typeof rebuildSite !== 'function'
     || typeof loadPipeline !== 'function'
@@ -2683,6 +2734,18 @@ export async function runOwnerAlphaServer({
     await suggestions?.close().catch(() => {});
     throw error;
   }
+  // Startup recovery runs in the background so the owner can sign in at once.
+  // Until it settles, every entry that starts an owner act (Save, Apply,
+  // Publish, decisions; from the browser, a paired device or the signed
+  // socket) is refused with one plain message. Recovery itself uses
+  // pipeline.resumeJob and recoverDecisions, which are not gated. A failed
+  // recovery keeps the gate closed: earlier the whole app stopped instead.
+  const recoveryGate = createRecoveryGate();
+  const { recovering } = recoveryGate;
+  const gate = recoveryGate.wrapAsync;
+  const recoveringPipeline = pipeline;
+  pipeline = Object.freeze({ ...recoveringPipeline, saveEdit: gate(recoveringPipeline.saveEdit?.bind(recoveringPipeline)),
+    ...(typeof recoveringPipeline.startEdit === 'function' ? { startEdit: recoveryGate.wrapSync(recoveringPipeline.startEdit.bind(recoveringPipeline)) } : {}) });
   const lookupJob = pipeline.getJob ?? ((jobId) => loadDurableJob(storeContext, jobId, {
     maxBytes: config.limits.maxArtifactBytes,
   }));
@@ -2698,7 +2761,7 @@ export async function runOwnerAlphaServer({
       context: storeContext,
       source,
       recoverDecisions,
-      recordDecision,
+      recordDecision: gate(recordDecision),
       application: {
         saveEdit: pipeline.saveEdit,
         createJobId: () => `OA-${randomUUID()}`,
@@ -2711,6 +2774,19 @@ export async function runOwnerAlphaServer({
   // drafts, views and publish lock.
   const ownerPublication = config.ownerPublication.enabled
     ? createPublication({ config, context: storeContext, readNote: readAuthoringNote, pipeline }) : null;
+  // In memory only: a restart drops waiting approvals, as the publisher's nonces.
+  // The publisher's owner-control socket when one is configured; a test or
+  // rehearsal may pass its own. Jobs waiting for approval are offered on demand.
+  const signingPublisher = publisherSigning ?? (config.publisher
+    ? publisherSigningFromSocket({ socketPath: config.publisher.socketPath, ownerRequest }) : null);
+  const starterFile = devices === null ? null : pendingStarterFile(config.iroh.stateDirectory);
+  if (starterFile !== null && pendingStarter !== null) await starterFile.save(pendingStarter);
+  const jobApprovals = devices === null ? null : createJobApprovals({ config, context: storeContext, pipeline: recoveringPipeline,
+    log: (line) => console.error(`Owner alpha: ${line}`), starter: starterFile,
+    publishStarter: config.publisher ? ({ commit, record }) => ownerRequest({ socketPath: config.publisher.socketPath,
+      op: 'publish-starter', commit, record }) : null });
+  const approvals = devices === null ? null : createApprovalRelay({ publisher: signingPublisher,
+    refresh: () => jobApprovals.refresh(approvals) });
   if (devices !== null) {
     // Status for every note the site publishes, and the owner's note links.
     devices.noteStatus = createNoteStatus({ config, context: storeContext });
@@ -2730,6 +2806,7 @@ export async function runOwnerAlphaServer({
     forgeSetup: createForgeSetup({ config, configFile: configFile instanceof URL ? fileURLToPath(configFile) : configFile }),
     ...(adoptSession === null ? {} : { adoptSession }),
     upstream,
+    recovering,
   });
   const readerFetch = createReader({ config, projectRoot });
   let runtime;
@@ -2751,7 +2828,7 @@ export async function runOwnerAlphaServer({
       const nodeId = endpoint.id().toString();
       const verifier = createDevicePrincipalAdapter({ registry, audience: irohAudience(nodeId), requireChannelBinding: true });
       const commands = createOwnerCommands({ config, projectRoot, devicePrincipalAdapter: verifier, proposalReview,
-        publication: ownerPublication, noteStatus: devices.noteStatus, noteLinks: devices.links });
+        publication: ownerPublication, noteStatus: devices.noteStatus, noteLinks: devices.links, approvals });
       iroh = startIrohCarrier({ endpoint, commands, verifier, pairing: devices.pairing, relay: config.iroh.relay });
       devices.store.setRevokeListener((key) => { if (key.irohNodeId) iroh.closePeer(key.irohNodeId); });
       devices.pairing.attachNode({ nodeId, ticket: iroh.ticket });
@@ -2768,10 +2845,11 @@ export async function runOwnerAlphaServer({
     return recoverJobs({
       config,
       context: storeContext,
-      pipeline,
+      pipeline: recoveringPipeline,
       listJobs,
     });
-  });
+  }).then((results) => { recoveryGate.settle(true); return results; },
+    (error) => { recoveryGate.settle(false); throw error; });
   return Object.freeze({
     ...runtime,
     suggestions: suggestions === null
@@ -2779,6 +2857,8 @@ export async function runOwnerAlphaServer({
       : Object.freeze({ formOrigin: suggestions.formOrigin, forge: suggestions.forge }),
     recovery,
     iroh: iroh === undefined ? null : Object.freeze({ nodeId: iroh.nodeId, ticket: iroh.ticket }),
+    // request({ intent, files, askedBy }) for the publish path; null without Iroh.
+    approvals,
     upstream,
     stop(closeActiveConnections) {
       if (upstreamTimer !== null) clearInterval(upstreamTimer);
@@ -2872,8 +2952,10 @@ if (import.meta.main) {
   try {
     runtime = await runOwnerAlphaServer({ configFile });
     if (runtime.upstream?.current().state === 'unreachable') console.log('GitHub: cannot reach it now; serving your notes as last copied.');
-    await runtime.recovery;
-    if (readyFile) await writeOwnerAlphaReadyMarker(readyFile);
+    // The sign-in link is printed before job recovery finishes: a job waiting
+    // on a deployment check can take 15 minutes offline. Owner acts that would
+    // conflict are refused by the runtime until recovery settles. The ready
+    // marker (the container health check) still waits for recovery.
     console.log(`Owner alpha reader: ${runtime.readerOrigin}/cyberbase/`);
     if (runtime.suggestions === null) {
       console.log('Suggestions: off (turn them on under "suggestions" in the owner config)');
@@ -2895,6 +2977,14 @@ if (import.meta.main) {
         issueBootstrap: runtime.issueBootstrap,
       });
     }
+    runtime.recovery.then(async () => {
+      if (readyFile) await writeOwnerAlphaReadyMarker(readyFile);
+    }, () => {
+      console.error('Owner alpha: an earlier publish could not be finished. Owner actions stay paused; restart to try again.');
+    }).catch((error) => {
+      console.error(`Owner alpha ready marker failed: ${error instanceof OwnerAlphaError ? error.code : 'unexpected-error'}`);
+      void stop(1);
+    });
   } catch (error) {
     await stop(1);
     const reason = error instanceof OwnerAlphaError ? error.code : 'unexpected-error';

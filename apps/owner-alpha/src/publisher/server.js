@@ -13,6 +13,8 @@ import { FORGE_PROBLEMS, createForgeAccess } from './forge-access.js';
 import { startForgeControl } from './forge-control.js';
 import { createMirror } from './mirror.js';
 import { createIsolatedPush } from './repository.js';
+import { startOwnerServices } from './owner-services.js';
+export { OWNER_FILES } from './owner-keys.js';
 
 async function socketStat(socketPath) {
   try { return await lstat(socketPath, { bigint: true }); }
@@ -105,12 +107,16 @@ function parseRequest(text) {
 
 function rejectionCode(error) {
   if (!(error instanceof OwnerAlphaError)) return 'publisher-failed';
+  if (error.code === 'owner-busy') return 'owner-approval-expired';
   if (error.code === 'artifact-not-found') return 'publisher-job-not-found';
   if (Object.hasOwn(FORGE_PROBLEMS, error.code)) return 'forge-access-unavailable';
   return REJECTION_CODES.includes(error.code) ? error.code : 'publisher-failed';
 }
 
-export async function startPublisher({ config, context, socketPath, repository, forgeAccess, forgeOptions, socketGroup = null, mirrorOptions = null } = {}) {
+// owners (signed publish, owner-services.js): { directory, mode, enrollPort, nodeUid }.
+// Its directory is the publisher's own state, given here and never read from config.
+export async function startPublisher({ config, context, socketPath, repository, forgeAccess, forgeOptions, socketGroup = null, mirrorOptions = null,
+  owners = null, log = undefined } = {}) {
   if (!validSocketPath(socketPath) || typeof process.getuid !== 'function' || !validSocketGroup(socketGroup)) {
     fail('publisher-unsafe-socket', 'publisher needs a private local Unix socket');
   }
@@ -123,6 +129,7 @@ export async function startPublisher({ config, context, socketPath, repository, 
   let closing;
   let ownedSocket;
   let forgeControl = null;
+  let ownerServices = null;
   const server = net.createServer((socket) => {
     socket.on('error', () => socket.destroy());
     const reply = (response) => socket.end(`${JSON.stringify(response)}\n`, () => socket.destroy());
@@ -190,8 +197,13 @@ export async function startPublisher({ config, context, socketPath, repository, 
       : await createMirror({ directory: mirrorPath, uid: Number(uid), forgeAccess, ...(mirrorOptions ?? {}) });
     const pushCommit = await createIsolatedPush({ repository, checkout, uid: Number(uid), forgeAccess,
       onPushed: mirror === null ? null : (pushed) => mirror.adoptPack(pushed) });
+    if (owners !== null) {
+      ownerServices = await startOwnerServices({ owners, socketPath, uid: Number(uid), socketGroup,
+        ...(log === undefined ? {} : { log }) });
+    }
     // The caller holds the pipeline mutation lock; taking it here would deadlock.
-    publish = createJobPublisher({ config, context: publisherContext, pushCommit, bindCommitMessage: true });
+    publish = createJobPublisher({ config, context: publisherContext, pushCommit, bindCommitMessage: true,
+      approvalGate: ownerServices?.gate ?? null });
     await listen(server, socketPath);
     ownedSocket = await restrictSocket(socketPath, Number(uid), socketGroup);
     await ownerFile.truncate(0);
@@ -201,11 +213,12 @@ export async function startPublisher({ config, context, socketPath, repository, 
     ready = true;
   } catch (error) {
     if (server.listening) await new Promise((resolve) => server.close(resolve));
+    await ownerServices?.close();
     forgeAccess?.close?.();
     await ownerFile?.close();
     if (error instanceof OwnerAlphaError && [
       'publisher-unsafe-socket', 'publisher-socket-in-use', 'publisher-unsafe-repository', 'publisher-unsafe-store',
-      'publisher-unsafe-mirror',
+      'publisher-unsafe-mirror', 'publisher-unsafe-owner-state',
     ].includes(error.code)) throw error;
     fail('publisher-start-failed', 'publisher Unix socket could not start');
   }
@@ -215,6 +228,7 @@ export async function startPublisher({ config, context, socketPath, repository, 
       ready = false;
       forgeAccess?.close?.();
       const forgeClosed = forgeControl?.close();
+      const ownersClosed = ownerServices?.close();
       const idle = new Promise((resolve) => server.close(resolve));
       const pending = active;
       if (pending?.task === null) pending.socket.destroy();
@@ -222,6 +236,7 @@ export async function startPublisher({ config, context, socketPath, repository, 
         await pending?.task;
         await idle;
         await forgeClosed;
+        await ownersClosed;
         // net.Server normally removes the socket itself. Don't unlink a successor.
         if (unchanged(ownedSocket, await socketStat(socketPath))) await unlink(socketPath);
       } finally {

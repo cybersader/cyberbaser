@@ -21,6 +21,12 @@ if (form && status) {
       const response = await fetch(`/api/publication/${action}`, { method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const result = await response.json();
+      if (result?.error?.code === 'recovery-in-progress') {
+        status.textContent = 'Finishing an earlier publish. Try again in a moment.';
+        pending = false; trigger.disabled = false; if (confirm) confirm.disabled = false;
+        form.removeAttribute('aria-busy');
+        return;
+      }
       if (!response.ok) throw new Error('publication-refused');
       const unchanged = action === 'prepare' && result.outcome === 'unchanged';
       if (unchanged && (Object.keys(result).sort().join(',') !== 'outcome,reviewUrl'

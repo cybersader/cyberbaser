@@ -8,6 +8,9 @@
 //     mirror/     the publisher's plain copy of the repository (bare Git):        cyberbaser-publisher:cyberbaser-share 0750
 //                 the publisher alone fetches and writes it; the node reads it
 //   /var/lib/cyberbaser-publisher      publisher only (forge key, push repo)      cyberbaser-publisher 0700
+//     owners/   the owner keys that may approve a publish, the publisher's own
+//               key and the one-time first-device code (signed publish).
+//               Never copied from or to the node config.
 //   /run/cyberbaser-publisher          publisher sockets, reachable by the group  0710
 //
 // Both services run with the share group as their primary group, so what the
@@ -37,6 +40,7 @@ export const LAYOUT = Object.freeze({
   mirrorParent: '/var/lib/cyberbaser-shared/mirror',
   mirror: '/var/lib/cyberbaser-shared/mirror/notes.git',
   publisherForge: '/var/lib/cyberbaser-publisher/forge',
+  publisherOwners: '/var/lib/cyberbaser-publisher/owners',
   publisherHome: '/var/lib/cyberbaser-publisher',
   publisherRun: '/run/cyberbaser-publisher',
   publisherSocket: '/run/cyberbaser-publisher/publisher.sock',
@@ -273,6 +277,23 @@ async function writeRecord(record) {
 
 function systemctl(...args) { return run('systemctl', args, { allowFail: true }); }
 
+// The publisher's loopback page for the first-device code: the node's port + 2.
+export function enrollPagePort(port) { return port + 2; }
+
+// Signed publish: as the publisher account, open the first-device window and
+// make the recovery code, then print both here, on the administrator's
+// terminal. The node never sees them.
+function printEnrollment(ids, port) {
+  const result = spawnSync('setpriv', ['--reuid', String(ids.publisher), '--regid', String(ids.share), '--clear-groups', '--',
+    LAYOUT.program, 'publisher', 'enroll-code'], { stdio: ['ignore', 'inherit', 'inherit'],
+    env: { PATH: '/usr/bin:/bin', HOME: LAYOUT.publisherHome } });
+  if (result.status !== 0) {
+    say('The publishing setup code could not be made; run "cyberbaser publisher enroll-code" as administrator.');
+    return;
+  }
+  say(`The same code is shown on this computer at http://127.0.0.1:${enrollPagePort(port)}/enroll (not to the web app).`);
+}
+
 function setupLink(since) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     const log = run('journalctl', ['--unit', 'cyberbaser-node.service', '--since', since, '--output', 'cat', '--no-pager'], { allowFail: true }).stdout ?? '';
@@ -334,6 +355,7 @@ export async function install(args, { programPath, compiled }) {
     github: { clientId, ...(githubOrigin ? { origin: githubOrigin } : {}) }, ...(relay ? { irohRelay: relay } : {}), installedAt: record?.installedAt ?? new Date().toISOString(),
     updatedAt: new Date().toISOString() });
   systemctl('daemon-reload');
+  printEnrollment(ids, options.port);
   const enabled = systemctl('enable', '--now', 'cyberbaser-node.service', 'cyberbaser-config.path');
   // The publisher runs from the start: in setup mode (sign-in, repository
   // choice, the mirror, the starter publish.yml) until the node config exists.
@@ -414,12 +436,14 @@ export function nodeServiceArgs() {
 // then the normal publisher. The config path unit restarts it when setup ends.
 export function publisherServiceMode(record = readInstallRecord()) {
   const github = record?.github ?? {};
+  // Signed publish: where the owner keys live (never from the config copy) and the first-device page port.
+  const signed = { owners: LAYOUT.publisherOwners, enrollPort: enrollPagePort(record?.port ?? DEFAULT_PORT) };
   if (existsSync(LAYOUT.publisherConfig)) {
     return { mode: 'publisher', configFile: LAYOUT.publisherConfig, socketPath: LAYOUT.publisherSocket,
-      repository: path.join(LAYOUT.publisherHome, 'push.git'), github };
+      repository: path.join(LAYOUT.publisherHome, 'push.git'), github, ...signed };
   }
   return { mode: 'setup', socketPath: LAYOUT.publisherSocket, stateDirectory: LAYOUT.publisherForge, clientId: github.clientId ?? null,
-    mirror: LAYOUT.mirror, checkout: path.join(LAYOUT.notes, 'notes'), github };
+    mirror: LAYOUT.mirror, checkout: path.join(LAYOUT.notes, 'notes'), github, ...signed };
 }
 
 export async function runPublisherService({ appRoot }) {
@@ -429,14 +453,16 @@ export async function runPublisherService({ appRoot }) {
   const { createGithubHttp } = await import('../../../apps/owner-alpha/src/publisher/forge-access.js');
   const http = plan.github.origin ? createGithubHttp({ apiBaseUrl: plan.github.origin, webBaseUrl: plan.github.origin }) : undefined;
   const publisherCli = await import('../../../apps/owner-alpha/bin/owner-alpha-publisher.js');
+  // Signed publish, enforced: the owner-key list is the publisher's own state.
+  const owners = { directory: plan.owners, mode: 'enforce', enrollPort: plan.enrollPort, nodeUid: userEntry(ACCOUNTS.node)?.id ?? null };
   if (plan.mode === 'publisher') {
     await publisherCli.runPublisherCli({ configFile: plan.configFile, socketPath: plan.socketPath, repository: plan.repository,
-      projectRoot: appRoot, socketGroup, ...(http ? { forgeOptions: { http } } : {}) });
+      projectRoot: appRoot, socketGroup, owners, ...(http ? { forgeOptions: { http } } : {}) });
     return 0;
   }
   if (!plan.clientId) { process.stderr.write('No GitHub App client ID in the install record\n'); return 1; }
   await publisherCli.runSetupForgeCli({ socketPath: plan.socketPath, stateDirectory: plan.stateDirectory, clientId: plan.clientId,
-    mirror: plan.mirror, checkout: plan.checkout, socketGroup, http });
+    mirror: plan.mirror, checkout: plan.checkout, socketGroup, http, owners });
   return 0;
 }
 

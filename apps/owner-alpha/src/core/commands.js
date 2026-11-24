@@ -62,6 +62,9 @@ export function createOwnerCommands({
   proposalReview = null, publication = null, proposalClock = Date.now, readCaptureBase,
   // Optional: status for every published note, and the owner's note links.
   noteStatus = null, noteLinks = null,
+  // Optional: the relay between the publisher and the owner's signing device
+  // (core/approvals.js). Only owner devices that may publish reach it.
+  approvals = null,
 }) {
   const config = validateOwnerAlphaConfig(configInput);
   if (devicePrincipalAdapter !== null && devicePrincipalAdapter.ownerId !== config.owner.identity) {
@@ -89,6 +92,14 @@ export function createOwnerCommands({
     && principal.method === 'device-key'
     && ['publication', 'propose'].some((grant) => actorAllowsGrant(principal.actor.kind, grant)
       && devicePrincipalAdapter.hasGrant(principal, grant));
+
+  // An owner device the owner allowed to publish. Independent of the owner
+  // publication page: a signing device approves every kind of publish.
+  function signingGrant(principal) {
+    if (!isOwnerDevice(principal) || devicePrincipalAdapter?.isVerified(principal) !== true
+      || !devicePrincipalAdapter.hasGrant(principal, 'publish')) refuseSignedRequest();
+    if (approvals === null) fail('signing-unavailable', 'this node does not relay signed approvals');
+  }
 
   function requireGrant(grant, principal) {
     const bootstrap = principalAdapter?.isVerified(principal) && principal.method === 'bootstrap-session';
@@ -371,6 +382,31 @@ export function createOwnerCommands({
 
     publish: command('publish', 'publication-publish-refused', async (input) => {
       return publication.publish(draftInput(input));
+    }),
+
+    // Signing device: enrol with the publisher, then approve publishes. The
+    // node relays; the device and the publisher check everything themselves.
+    readSigningChallenge: command(signingGrant, 'signing-unavailable', async (input) => {
+      const { publisher } = closedInput(input, 'publisher');
+      if (typeof publisher !== 'string' || !/^[0-9a-f]{64}$/u.test(publisher)) fail('invalid-command-input', 'publisher must be 64 hex');
+      return approvals.challenge();
+    }, { preserveCode: true }),
+    enrollSigningKey: command(signingGrant, 'enroll-refused', async (input) => {
+      const { intent, approval } = closedInput(input, 'intent', ['approval']);
+      return approvals.enroll({ intent, approval });
+    }, { preserveCode: true }),
+    listApprovals: command(signingGrant, 'approval-not-found', async (input) => {
+      if (closedInput(input, 'waiting').waiting !== true) fail('invalid-command-input', 'waiting must be true');
+      return { waiting: await approvals.list() };
+    }),
+    readApproval: command(signingGrant, 'approval-not-found', async (input) => {
+      return approvals.read(closedInput(input, 'requestId'));
+    }),
+    submitApproval: command(signingGrant, 'approval-invalid', async (input) => {
+      return approvals.submit(closedInput(input, 'requestId', ['intent', 'approval']));
+    }),
+    declineApproval: command(signingGrant, 'approval-not-found', async (input) => {
+      return approvals.decline(closedInput(input, 'requestId'));
     }),
 
     readJob: command('read', 'job-lookup-failed', async (input) => {

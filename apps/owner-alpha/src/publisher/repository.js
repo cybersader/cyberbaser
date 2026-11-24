@@ -225,6 +225,11 @@ export async function createIsolatedPush({ repository, checkout, uid, environmen
       // Validate the exact pack with no other object stores available. This
       // hashes objects and checks links and structure before verification/push.
       await run(['index-pack', '--strict', `${prefix}-${packId}.pack`], { objects: checked });
+      // Signed publish: the commit must be exactly what the owner's device
+      // approved, read from this validated pack and nothing else.
+      if (typeof request.verifyCommit === 'function') {
+        await request.verifyCommit((args) => run(args, { objects: checked }), request.commit);
+      }
       // A short-lived credential for exactly this push, fetched after the commit
       // is proven and dropped when this function returns.
       const credential = forgeAccess === null ? null : await forgeAccess.pushCredential(request.remoteUrl);

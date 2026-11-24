@@ -354,12 +354,14 @@ function gitWithInput(cwd, args, input, env = {}) {
 
 /**
  * The one change setup publishes: a commit adding publish.yml on top of the
- * checkout's head, built without touching the working tree. The publisher
- * checks it and pushes it; only then does the checkout move to it.
+ * checkout's head, built without touching the working tree. Setup only
+ * prepares it. Every push needs the owner's signature, so the node offers it
+ * to the owner's signing device once one is set up (core/job-approvals.js);
+ * the publisher checks that signature and the commit, then pushes it.
  */
-export function createStarterPublisher({ checkout, publish, git = defaultSetupGit, gitInput = gitWithInput }) {
+export function createStarterPublisher({ checkout, git = defaultSetupGit, gitInput = gitWithInput }) {
   return Object.freeze({
-    async publish({ repository, folders }) {
+    async prepare({ repository, folders }) {
       const text = starterPublishYml(folders);
       const head = await git(checkout, ['rev-parse', 'HEAD']);
       if (!/^[0-9a-f]{40}$/u.test(head)) fail('starter-refused', 'the notes copy has no commit');
@@ -373,8 +375,6 @@ export function createStarterPublisher({ checkout, publish, git = defaultSetupGi
       const who = { GIT_AUTHOR_NAME: owner, GIT_AUTHOR_EMAIL: `${owner}@users.noreply.github.com`,
         GIT_COMMITTER_NAME: owner, GIT_COMMITTER_EMAIL: `${owner}@users.noreply.github.com` };
       const commit = await gitInput(checkout, ['commit-tree', tree, '-p', head, '-F', '-'], `${STARTER_COMMIT_MESSAGE}\n`, who);
-      await publish(commit);
-      await git(checkout, ['merge', '--ff-only', '--quiet', commit]);
       return { commit, text };
     },
   });
@@ -391,6 +391,8 @@ export function createSetupForgeRelay({ socketPath, provider = 'github-app', sta
     get configuredRepository() { return state.read().repository ?? ''; },
     restartFor: null,
     ask(op, repository) { return request({ socketPath, op, repository }); },
+    // Unsigned: accepted only by a publisher without owner services (tests and
+    // older installs). The installed publisher needs the signed owner request.
     publishStarter(commit) { return request({ socketPath, op: 'publish-starter', commit }); },
     async pick(fullName) {
       const bound = await this.ask('select', fullName);
@@ -490,6 +492,9 @@ function publishYmlBlock(e, state) {
     const added = notes.choice === 'starter' ? ' You added it just now.' : '';
     return `<p class="setup-note">Your <code>publish.yml</code> decides what goes on your website. It lists ${e(notes.allowCount)} ${notes.allowCount === 1 ? 'entry' : 'entries'}; everything else stays private.${added}</p>`;
   }
+  if (notes.publishYml === 'awaiting-approval') {
+    return `<div class="setup-decided">${ICON_CHECK}<p>Your <code>publish.yml</code> is ready. It lists ${e(notes.allowCount)} ${notes.allowCount === 1 ? 'entry' : 'entries'}; everything else stays private. It goes to GitHub when you approve it on your phone, which setup sets up next.</p></div>`;
+  }
   if (notes.publishYml === 'invalid') {
     return '<p class="setup-note">Your <code>publish.yml</code> cannot be read, so nothing will be published until it is fixed. You can continue and fix it later.</p>';
   }
@@ -518,7 +523,22 @@ function deviceList(e, dev, kind) {
   return `<ul class="setup-paired">${rows.map((device) => `<li>${ICON_CHECK}<span><strong>${e(device.label)}</strong> is paired</span></li>`).join('')}</ul>`;
 }
 
-function stepBody({ e, state, csrfToken, relay, dev, pairCommand }) {
+// The first signing device enrols with a code only the publisher shows. The
+// page embeds the publisher's own loopback page in a frame: this app can place
+// it but cannot read it (the publisher refuses fetches and sends no CORS), so
+// even a compromised app cannot enrol its own key.
+function enrolBlock(e, enrolPort, state) {
+  const starter = state.notes.publishYml === 'awaiting-approval'
+    ? ' Your <code>publish.yml</code> then waits on the phone under <strong>Cyberbaser: Approvals waiting</strong>.' : '';
+  return `<section class="setup-decision setup-enrol" aria-labelledby="enrol-heading">
+<h2 id="enrol-heading">Let this phone approve publishing</h2>
+<p>Nothing reaches your website unless you approve it on your phone. In Obsidian, scan this code with the phone you just paired, then check that both screens show the same four groups.${starter}</p>
+<iframe class="setup-enrol-frame" src="http://127.0.0.1:${e(enrolPort)}/enroll" title="Publishing setup code from the publisher" sandbox="" referrerpolicy="no-referrer" loading="eager"></iframe>
+<p class="setup-aside">This code comes from the publisher, not from this page. You can also do this later; nothing is published until you do.</p>
+</section>`;
+}
+
+function stepBody({ e, state, csrfToken, relay, dev, pairCommand, enrolPort = null }) {
   const step = state.step;
   if (step === 'welcome') {
     return `<h1>Set up Cyberbaser</h1>
@@ -537,7 +557,7 @@ ${forge}
   }
   if (step === 'notes') {
     const ready = state.notes.phase === 'ready'
-      && (['present', 'invalid'].includes(state.notes.publishYml) || state.notes.choice !== null);
+      && (['present', 'invalid', 'awaiting-approval'].includes(state.notes.publishYml) || state.notes.choice !== null);
     return `<h1>Your notes</h1>
 <p class="setup-lede">Cyberbaser is making a private copy of your notes on this machine. It reads from GitHub and changes nothing there.</p>
 ${notesLines(e, state)}
@@ -574,8 +594,10 @@ ${field}`;
       ? `<div id="devices" class="setup-devices" data-csrf="${e(csrfToken)}" data-pair-command="${e(pairCommand)}">${pairFormHtml({ kind, label: step === 'phone' ? 'My phone' : 'My agent' })}</div>`
       : '<p class="setup-note">Pairing needs Cyberbaser\'s connection, which is not running yet. You can pair later from Devices.</p>';
     const skip = step === 'phone' ? 'Pair later' : 'Skip';
+    const approve = step === 'phone' && paired && enrolPort !== null ? enrolBlock(e, enrolPort, state) : '';
     return `${intro}
 ${paired}
+${approve}
 ${paired && reachable ? '<details class="setup-more"><summary>Pair another</summary>' : ''}${form}${paired && reachable ? '</details>' : ''}
 <div class="setup-actions setup-continue">${paired ? actionButton(e, 'continue', 'Continue') : actionButton(e, 'skip', skip, 'quiet')}</div>`;
   }
@@ -584,6 +606,7 @@ ${paired && reachable ? '<details class="setup-more"><summary>Pair another</summ
     ['Website', state.website.url ?? 'Not set yet'],
     ['Phone', state.phone === 'paired' ? 'Paired' : 'Not paired yet'],
     ['Agent', state.agent === 'paired' ? 'Paired' : 'None yet'],
+    ...(state.notes.publishYml === 'awaiting-approval' ? [['publish.yml', 'Waiting for your approval on your phone']] : []),
   ];
   return `<h1>Cyberbaser is ready</h1>
 <p class="setup-lede">Changes your agents and visitors suggest will appear in Proposals. Nothing is published until you approve it.</p>
@@ -592,7 +615,7 @@ ${paired && reachable ? '<details class="setup-more"><summary>Pair another</summ
 <div class="setup-actions"><a class="setup-link-button" href="/owner/review">Open Proposals</a><a class="setup-link-button quiet" href="/owner/devices">Devices</a></div>`;
 }
 
-export function setupPage({ state, csrfToken, relay = null, dev = null, pairCommand = 'cyberbaser pair', tools }) {
+export function setupPage({ state, csrfToken, relay = null, dev = null, pairCommand = 'cyberbaser pair', tools, enrolPort = null }) {
   const e = tools.escapeHtml;
   const index = SETUP_STEPS.indexOf(state.step);
   const back = index > 0 && state.step !== 'done';
@@ -606,7 +629,7 @@ export function setupPage({ state, csrfToken, relay = null, dev = null, pairComm
     body: `<main class="setup-shell" id="setup" data-csrf="${e(csrfToken)}" data-step="${e(state.step)}" data-notes-phase="${e(state.notes.phase)}">
 <header class="setup-top">${back ? actionButton(e, 'back', 'Back', 'setup-back') : '<span class="setup-mark">Cyberbaser</span>'}${progressHtml(state.step)}</header>
 <section class="setup-step" aria-live="polite">
-${stepBody({ e, state, csrfToken, relay, dev, pairCommand })}
+${stepBody({ e, state, csrfToken, relay, dev, pairCommand, enrolPort })}
 <p class="setup-status" id="setup-status" role="status"></p>
 </section>
 </main>`,
@@ -643,6 +666,8 @@ function isLoopback(address) {
 export function createFirstRunHandler({
   listen, state, links, relay = null, notes, starter = null, reach = async () => null, pairCommand = 'cyberbaser pair',
   publicRoot = fileURLToPath(new URL('../public/', import.meta.url)), onComplete = () => {}, createToken,
+  // The publisher's own enrolment page (publisher/owner-control.js), or null.
+  enrolPort = null,
 }) {
   const tools = ownerHttpTools();
   const { html, json, errorResponse, response, readBoundedJson, sameSecret, exactToken, requestCookie, cookieHeader, staticResponse } = tools;
@@ -698,17 +723,20 @@ export function createFirstRunHandler({
         await state.update((now) => ({ ...now, notes: { ...now.notes, choice: 'nothing-yet' } }));
         return 'ok';
       case 'notes:starter': {
-        // The owner approved exactly this file on screen; it goes to GitHub
-        // through the publisher, which checks it again, as the one change of setup.
+        // The owner chose exactly this file on screen. It is prepared as one
+        // commit here and goes to GitHub only after the owner signs it on their
+        // phone (after setup); the publisher checks that signature itself.
         if (current.notes.phase !== 'ready' || current.notes.publishYml !== 'missing') return 'invalid';
         const folders = Array.isArray(value) ? value : null;
         if (folders === null || folders.length > MAX_FOLDERS || new Set(folders).size !== folders.length
           || folders.some((folder) => typeof folder !== 'string' || !current.notes.folders.includes(folder))) return 'invalid';
         if (starter === null) return 'not-ready';
         const sorted = [...folders].sort((a, b) => a.localeCompare(b));
-        try { await starter.publish({ repository: current.repository, folders: sorted }); }
+        let prepared;
+        try { prepared = await starter.prepare({ repository: current.repository, folders: sorted }); }
         catch (error) { return error?.code === 'starter-refused' ? 'starter-refused' : 'starter-failed'; }
-        await state.update((now) => ({ ...now, notes: { ...now.notes, choice: 'starter', publishYml: 'present', allowCount: sorted.length } }));
+        await state.update((now) => ({ ...now, notes: { ...now.notes, choice: 'starter', publishYml: 'awaiting-approval',
+          allowCount: sorted.length, starterCommit: prepared.commit } }));
         return 'ok';
       }
       case 'notes:reopen-publish':
@@ -800,7 +828,9 @@ export function createFirstRunHandler({
       if (url.search !== '') return errorResponse(400, 'unexpected-query');
       const current = state.read();
       const dev = ['phone', 'agent'].includes(current.step) ? await devices() : null;
-      return html(request.method === 'HEAD' ? null : setupPage({ state: current, csrfToken, relay, dev, pairCommand, tools }));
+      const frame = enrolPort !== null && current.step === 'phone'
+        ? { 'Content-Security-Policy': `${tools.ownerCsp}; frame-src http://127.0.0.1:${enrolPort}` } : {};
+      return html(request.method === 'HEAD' ? null : setupPage({ state: current, csrfToken, relay, dev, pairCommand, tools, enrolPort }), 200, frame);
     }
     if (url.pathname === '/setup/state') {
       if (request.method !== 'GET') return response(null, 405, { Allow: 'GET' });
@@ -854,6 +884,8 @@ export function createFirstRunHandler({
 export async function runFirstRun({
   stateDirectory, port, publisherSocket = null, provider = 'github-app', reach, git, fetchUrlFor, buildSite = null,
   pairCommand, serve = Bun.serve, createToken, clock, checkout = undefined, mirror = null,
+  // The publisher's enrolment page port (port + 2 in the installed layout), or null.
+  enrolPort = null,
 }) {
   const state = await openSetupState(stateDirectory);
   const tools = ownerHttpTools();
@@ -864,12 +896,11 @@ export async function runFirstRun({
   const notes = createNotesPreparer({ state, directory: stateDirectory, git, fetchUrlFor, buildSite,
     ...(checkout === undefined ? {} : { checkout }),
     ...(viaMirror ? { mirror, refresh: () => relay.ask('fetch') } : {}) });
-  const starter = viaMirror ? createStarterPublisher({ checkout: notes.checkout, publish: (commit) => relay.publishStarter(commit),
-    ...(git ? { git } : {}) }) : null;
+  const starter = viaMirror ? createStarterPublisher({ checkout: notes.checkout, ...(git ? { git } : {}) }) : null;
   let finish;
   const completed = new Promise((resolve) => { finish = resolve; });
   const handler = createFirstRunHandler({ listen: { host: '127.0.0.1', port }, state, links, relay, notes, starter, reach, pairCommand,
-    createToken, onComplete: (result) => finish(result) });
+    createToken, onComplete: (result) => finish(result), enrolPort });
   // A restart while the notes were being copied picks the copy up again.
   const resumed = state.read();
   if (resumed.repository && ['cloning', 'building'].includes(resumed.notes.phase)) notes.start(resumed.repository);

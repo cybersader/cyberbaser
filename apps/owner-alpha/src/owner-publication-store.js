@@ -459,6 +459,7 @@ export const PUBLICATION_JOB_STATES = Object.freeze({
   committing: 'publishing',
   committed: 'publishing',
   pushing: 'publishing',
+  'awaiting-approval': 'publishing',
   pushed: 'publishing',
   'discovering-run': 'publishing',
   'run-bound': 'publishing',

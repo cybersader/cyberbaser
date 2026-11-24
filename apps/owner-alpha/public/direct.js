@@ -13,6 +13,7 @@ if (root && form && status) {
         body: JSON.stringify({ editId: root.dataset.editId, csrf: root.dataset.csrf }),
       });
       const result = await response.json();
+      if (result?.error?.code === 'recovery-in-progress') { status.textContent = 'Finishing an earlier publish. Try again in a moment.'; button.disabled = false; return; }
       if (!response.ok || !/^\/owner\/jobs\/OA-[A-Za-z0-9-]+$/.test(result.statusUrl)) throw Error(result?.error?.code ?? 'save-failed');
       location.assign(result.statusUrl);
     } catch (error) {

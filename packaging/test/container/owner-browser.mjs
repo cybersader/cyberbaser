@@ -34,15 +34,22 @@ async function call(route, body, { redirect = 'manual' } = {}) {
 function done(value) { process.stdout.write(`${JSON.stringify(value)}\n`); process.exit(0); }
 function failed(stage, detail) { process.stdout.write(`${JSON.stringify({ ok: false, stage, detail: String(detail).slice(0, 400) })}\n`); process.exit(1); }
 
-async function setup(link) {
-  const opened = await call(link.slice(ORIGIN.length));
-  if (opened.status !== 303) failed('open-link', opened.status);
-  let page = await call('/setup');
+async function stepper() {
+  const page = await call('/setup');
   const csrf = /data-csrf="([^"]+)"/u.exec(page.text)?.[1];
-  const step = async (action, value = null) => {
+  return async (action, value = null) => {
     const current = /data-step="([^"]+)"/u.exec((await call('/setup')).text)?.[1];
     return call('/setup/step', { csrf, step: current, action, value });
   };
+}
+
+// signed: stop after the notes copy; the unsigned starter must be refused
+// (the owner's device publishes it, see signing-device.mjs). setup-finish goes on.
+async function setup(link, { signed = false } = {}) {
+  const opened = await call(link.slice(ORIGIN.length));
+  if (opened.status !== 303) failed('open-link', opened.status);
+  let page;
+  const step = await stepper();
   if ((await step('start')).value?.step !== 'github') failed('start', 'not on github');
   const started = await call('/owner/github/start', { csrf });
   if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}$/u.test(started.value?.userCode ?? '')) failed('sign-in', started.text);
@@ -69,6 +76,10 @@ async function setup(link) {
   page = await call('/setup');
   const multiSelect = page.text.includes('<input type="checkbox" name="folder" value="Garden">') && !page.text.includes(' checked')
     && page.text.includes('<summary>Show the file</summary>');
+  if (signed) {
+    const unsigned = await step('starter', ['Garden']);
+    done({ ok: true, count: notes.count, multiSelect, unsignedStarterRefused: unsigned.value?.ok !== true });
+  }
   const starter = await step('starter', ['Garden']);
   if (starter.value?.ok !== true) failed('starter', starter.text);
   const afterStarter = (await call('/setup')).text.includes('You added it just now.');
@@ -78,6 +89,18 @@ async function setup(link) {
   const finished = await step('skip');
   if (finished.value?.step !== 'done') failed('done', finished.text);
   done({ ok: true, count: notes.count, multiSelect, afterStarter });
+}
+
+async function setupFinish() {
+  const step = await stepper();
+  const chose = await step('nothing-yet');
+  if (chose.value?.ok !== true) failed('nothing-yet', chose.text);
+  if ((await step('continue')).value?.step !== 'website') failed('continue-website', 'refused');
+  if ((await step('skip')).value?.step !== 'phone') failed('website', 'refused');
+  if ((await step('skip')).value?.step !== 'agent') failed('phone', 'refused');
+  const finished = await step('skip');
+  if (finished.value?.step !== 'done') failed('done', finished.text);
+  done({ ok: true });
 }
 
 async function landed() {
@@ -110,6 +133,7 @@ async function approve(queueId) {
     // Until the job is past its push (later states wait on the forge's deployment, which this test has none of).
     if (job && !['accepted', 'preflighting', 'checking', 'rendering', 'ready-to-apply', 'applying', 'source-applied', 'committing',
       'committed', 'pushing'].includes(job.state)) break;
+    if (job?.state === 'awaiting-approval') break;
     await sleep(1000);
   }
   done({ ok: true, jobId, state: job?.state ?? null, failure: job?.failure?.code ?? null });
@@ -117,6 +141,8 @@ async function approve(queueId) {
 
 try {
   if (command === 'setup') await setup(argument);
+  else if (command === 'setup-signed') await setup(argument, { signed: true });
+  else if (command === 'setup-finish') await setupFinish();
   else if (command === 'landed') await landed();
   else if (command === 'sign-in') {
     const signed = await call(argument.slice(ORIGIN.length));

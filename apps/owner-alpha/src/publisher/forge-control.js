@@ -47,8 +47,10 @@ function failureCode(error) {
 
 // mirror: createMirror(...) for fetch; checkout: the node's notes copy, the
 // only place a starter commit is read from. Either may be null (no such ops).
+// starterSigned: the starter file needs the owner's signature (owner-control.js
+// publish-starter), so this unsigned operation is refused.
 export async function startForgeControl({ socketPath, forgeAccess, uid = process.getuid(), socketGroup = null, mirror = null,
-  starterCheckout = null }) {
+  starterCheckout = null, starterSigned = false }) {
   const address = forgeSocketPath(socketPath);
   // The caller holds the publisher's socket lifetime lock in this owner-only
   // directory, so a leftover socket of ours here is stale.
@@ -85,7 +87,9 @@ export async function startForgeControl({ socketPath, forgeAccess, uid = process
             break;
           }
           case 'publish-starter': {
-            if (mirror === null || starterCheckout === null) throw new OwnerAlphaError('forge-unsupported', 'this publisher publishes no starter file');
+            if (mirror === null || starterCheckout === null || starterSigned) {
+              throw new OwnerAlphaError('forge-unsupported', 'the starter file needs the owner\'s signed approval');
+            }
             result = await mirror.publishStarter({ checkout: starterCheckout, commit: request.commit });
             break;
           }

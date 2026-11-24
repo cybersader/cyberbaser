@@ -45,19 +45,21 @@ export function memoryBackend() {
     delete: async (key) => { map.delete(key); } };
 }
 
-export function indexedDbBackend(indexedDB = globalThis.indexedDB) {
+// The signing key (signing.js) uses its own database through the same backend,
+// so pairing and signing never share a record or a schema version.
+export function indexedDbBackend(indexedDB = globalThis.indexedDB, { database = DATABASE, store: storeName = STORE } = {}) {
   let opening = null;
   const open = () => (opening ??= new Promise((resolve, reject) => {
-    const request = indexedDB.open(DATABASE, 1);
-    request.onupgradeneeded = () => request.result.createObjectStore(STORE);
+    const request = indexedDB.open(database, 1);
+    request.onupgradeneeded = () => request.result.createObjectStore(storeName);
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => { opening = null; reject(request.error); };
   }));
   const run = async (mode, action) => {
     const db = await open();
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction(STORE, mode);
-      const request = action(transaction.objectStore(STORE));
+      const transaction = db.transaction(storeName, mode);
+      const request = action(transaction.objectStore(storeName));
       transaction.oncomplete = () => resolve(request.result ?? null);
       transaction.onerror = () => reject(transaction.error);
       transaction.onabort = () => reject(transaction.error);

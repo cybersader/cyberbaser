@@ -151,10 +151,14 @@ export async function createMirror({ directory, uid = process.getuid(), forgeAcc
     if (await currentBranch() === null) await run(['symbolic-ref', 'HEAD', `refs/heads/${branch}`]);
   }
 
-  async function publishStarter({ checkout, commit }) {
+  // authorize({ remote, branch }) (signed publish): admits the owner's signed
+  // approval for this target and returns { verifyCommit(git, commit) }. When
+  // given, the starter commit must also be exactly what the device approved.
+  async function publishStarter({ checkout, commit, authorize = null }) {
     if (typeof checkout !== 'string' || !path.isAbsolute(checkout) || !OID.test(commit ?? '')) throw starterRefused();
     const fetched = await fetchBound();
     if (fetched.branch === null || fetched.head === null) throw starterRefused();
+    const authorization = authorize === null ? null : await authorize({ remote: fetched.remoteUrl, branch: fetched.branch });
     const scratch = await mkdtemp(path.join(scratchRoot, 'cyberbaser-starter-'));
     try {
       const source = path.join(scratch, 'source');
@@ -183,6 +187,7 @@ export async function createMirror({ directory, uid = process.getuid(), forgeAcc
       if (fields.length !== 2 || entry === null || fields[1] !== STARTER_PATH) throw starterRefused();
       const bytes = await run(['cat-file', 'blob', entry[1]], { objects: checked, encoding: 'buffer' });
       if (parseStarterPublishYml(bytes) === null) throw starterRefused();
+      if (authorization !== null) await authorization.verifyCommit((args) => run(args, { objects: checked }), commit);
       const bound = await credential();
       try {
         // Not forced: if the remote moved since the fetch, GitHub refuses it.
@@ -194,7 +199,8 @@ export async function createMirror({ directory, uid = process.getuid(), forgeAcc
         bound.password = null;
       }
       await adopt({ commit, branch: fetched.branch, pack: `${prefix}-${packId}.pack` });
-      return { repository: fetched.repository, branch: fetched.branch, commit };
+      const receipt = authorization?.receipt({ status: 'pushed', commit, remoteRef: commit }) ?? null;
+      return { repository: fetched.repository, branch: fetched.branch, commit, ...(receipt === null ? {} : { receipt }) };
     } catch (error) {
       if (error instanceof OwnerAlphaError) throw error;
       throw starterRefused();

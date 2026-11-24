@@ -103,18 +103,18 @@ function fakeReach() {
 }
 
 let nextPort = 47410;
-async function harness({ root, relay = 'fake', links = null, clock, reach, git = localGit, fetchUrlFor, buildSite, state: given, starterPublish = null } = {}) {
+async function harness({ root, relay = 'fake', links = null, clock, reach, git = localGit, fetchUrlFor, buildSite, state: given, starter: withStarter = false, enrolPort = null } = {}) {
   const directory = path.join(root, 'state');
   const state = given ?? await openSetupState(directory);
   const tools = ownerHttpTools();
   let now = clock ?? (() => Date.now());
   const setupLinks = links ?? createSetupLinks({ createToken: tools.token, sameSecret: tools.sameSecret, clock: () => now(), isComplete: () => state.read().completedAt !== null });
   const notes = createNotesPreparer({ state, directory, git, fetchUrlFor, buildSite });
-  const starter = starterPublish === null ? null : createStarterPublisher({ checkout: notes.checkout, publish: starterPublish, git });
+  const starter = withStarter ? createStarterPublisher({ checkout: notes.checkout, git }) : null;
   const completions = [];
   const port = nextPort++;
   const handler = createFirstRunHandler({ listen: { host: '127.0.0.1', port }, state, links: setupLinks,
-    relay: relay === 'fake' ? fakeRelay(state) : relay, notes, starter, reach: reach ?? (async () => null), onComplete: (result) => completions.push(result) });
+    relay: relay === 'fake' ? fakeRelay(state) : relay, notes, starter, reach: reach ?? (async () => null), onComplete: (result) => completions.push(result), enrolPort });
   const origin = `http://127.0.0.1:${port}`;
   let cookie = null;
   let csrf = null;
@@ -228,16 +228,8 @@ describe('setup steps', () => {
     expect(await h.waitNotes()).toBe('ready');
 
     // Restart: a new process opens the same state and a new link; the step is kept.
-    // The starter commit goes to the "publisher": here, a push of that exact commit to the bare repository.
-    const published = [];
-    let refuse = false;
-    const starterPublish = async (commit) => {
-      if (refuse) throw Object.assign(new Error('refused'), { code: 'starter-refused' });
-      published.push(commit);
-      git(path.join(root, 'state', 'notes'), '-c', 'protocol.file.allow=always', 'push', '-q', repo.bare, `${commit}:refs/heads/main`);
-      return { commit };
-    };
-    h = await harness({ root, fetchUrlFor: () => repo.bare, reach: fixture.reach, state: await openSetupState(path.join(root, 'state')), starterPublish });
+    // Setup prepares the starter commit; nothing is pushed until the owner's phone signs it (job-approvals.js).
+    h = await harness({ root, fetchUrlFor: () => repo.bare, reach: fixture.reach, state: await openSetupState(path.join(root, 'state')), starter: true });
     const resumed = await h.signIn();
     expect(resumed.text).toContain('data-step="notes"');
     expect(resumed.text).toContain('Copied 4 notes from <strong>cybersader/cyberbase</strong>');
@@ -255,26 +247,57 @@ describe('setup steps', () => {
     // The starter file lists only folders that exist, and never on the owner's behalf.
     expect((await h.step('starter', ['../etc'])).value.code).toBe('invalid');
     expect((await h.step('starter', ['Garden', 'Garden'])).value.code).toBe('invalid');
-    refuse = true;
-    expect((await h.step('starter', ['Garden'])).value.code).toBe('starter-refused');
     const checkout = path.join(h.directory, 'notes');
-    expect(git(checkout, 'rev-parse', 'HEAD')).toBe(repo.head);
-    expect(git(checkout, 'status', '--porcelain')).toBe('');
-    refuse = false;
+    // Local changes in the copy: refused, nothing prepared.
+    await writeFile(path.join(checkout, 'stray.md'), 'x\n');
+    expect((await h.step('starter', ['Garden'])).value.code).toBe('starter-refused');
+    await rm(path.join(checkout, 'stray.md'));
     expect((await h.step('starter', ['Journal', 'Garden'])).value.ok).toBe(true);
-    // One commit, one added file, exactly the starter text for the sorted folders; the copy moved to it.
-    expect(published).toHaveLength(1);
-    expect(git(checkout, 'rev-parse', 'HEAD')).toBe(published[0]);
-    expect(git(repo.bare, 'rev-parse', 'main')).toBe(published[0]);
-    expect(git(checkout, 'rev-parse', 'HEAD^')).toBe(repo.head);
-    expect(git(checkout, 'diff-tree', '--no-commit-id', '--name-status', '-r', 'HEAD')).toBe('A\tpublish.yml');
-    expect(git(checkout, 'log', '-1', '--format=%s')).toBe('cyberbaser: add publish.yml');
-    expect(await readFile(path.join(checkout, 'publish.yml'), 'utf8')).toBe(starterPublishYml(['Garden', 'Journal']));
+    // One commit, one added file, exactly the starter text for the sorted folders.
+    // It is only prepared: the copy and GitHub stay where they were until the owner signs it.
+    const prepared = h.state.read().notes.starterCommit;
+    expect(prepared).toMatch(/^[0-9a-f]{40}$/u);
+    expect(h.state.read().notes.publishYml).toBe('awaiting-approval');
+    expect(git(checkout, 'rev-parse', 'HEAD')).toBe(repo.head);
+    expect(git(repo.bare, 'rev-parse', 'main')).toBe(repo.head);
+    expect(git(checkout, 'rev-parse', `${prepared}^`)).toBe(repo.head);
+    expect(git(checkout, 'diff-tree', '--no-commit-id', '--name-status', '-r', prepared)).toBe('A\tpublish.yml');
+    expect(git(checkout, 'log', '-1', '--format=%s', prepared)).toBe('cyberbaser: add publish.yml');
+    expect(git(checkout, 'show', `${prepared}:publish.yml`) + '\n').toBe(starterPublishYml(['Garden', 'Journal']));
     expect(git(checkout, 'status', '--porcelain')).toBe('');
     const after = (await h.call('/setup')).text;
     expect(after).toContain('It lists 2 entries');
-    expect(after).toContain('You added it just now.');
+    expect(after).toContain('when you approve it on your phone');
     expect((await h.step('continue')).value.step).toBe('website');
+  });
+
+  test('once a phone is paired, setup shows the publisher\'s own enrolment page in a frame it cannot read', async () => {
+    const root = await scratch('oa-setup-enrol-');
+    const fixture = fakeReach();
+    const state = await openSetupState(path.join(root, 'state'));
+    await state.update((now) => ({ ...now, step: 'phone', repository: 'cybersader/cyberbase',
+      notes: { ...now.notes, phase: 'ready', publishYml: 'awaiting-approval', allowCount: 1, choice: 'starter', starterCommit: 'a'.repeat(40) } }));
+    const h = await harness({ root, state, reach: fixture.reach, enrolPort: 4319 });
+    await h.signIn();
+    // No phone yet: nothing to enrol with.
+    let page = await h.call('/setup');
+    expect(page.text).not.toContain('setup-enrol-frame');
+    fixture.devices.push({ keyId: 'k1', kind: 'owner-device', label: 'Pixel', grants: ['publish'], revoked: false });
+    page = await h.call('/setup');
+    expect(page.text).toContain('<iframe class="setup-enrol-frame" src="http://127.0.0.1:4319/enroll"');
+    expect(page.text).toContain('sandbox=""');
+    expect(page.text).toContain('Approvals waiting');
+    // Only that one loopback origin may be framed; nothing else changes in the policy.
+    const csp = page.headers.get('content-security-policy');
+    expect(csp).toContain('frame-src http://127.0.0.1:4319');
+    expect(csp).toContain("connect-src 'self'");
+    expect(csp).toContain("frame-ancestors 'none'");
+    // The code itself never passes through this app.
+    expect(page.text).not.toMatch(/cyberbaser-enroll:v1/u);
+    // Done says the starter file still waits for the phone.
+    await state.update((now) => ({ ...now, step: 'done' }));
+    expect((await h.call('/setup')).text).toContain('Waiting for your approval on your phone');
+    expect((await h.call('/setup')).headers.get('content-security-policy')).not.toContain('frame-src');
   });
 
   test('publish nothing yet is a choice the owner can change', async () => {

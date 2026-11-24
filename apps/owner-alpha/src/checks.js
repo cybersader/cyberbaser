@@ -121,6 +121,28 @@ function correctionFromOperation(operation) {
   };
 }
 
+// The only explicit owner review the trust check accepts: an owner-approved
+// proposal applied through the owner application act. The pipeline re-checks
+// that act against the immutable decision before any source effect.
+function ownerReviewEvidence(value) {
+  if (value === null || value === undefined) return null;
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+    || Object.keys(value).sort().join(',') !== 'inputDigest,queueId,type'
+    || value.type !== 'approved-proposal'
+    || typeof value.queueId !== 'string' || !/^Q-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(value.queueId)
+    || typeof value.inputDigest !== 'string' || !/^sha-256=:[A-Za-z0-9+/]{43}=:$/u.test(value.inputDigest)) {
+    fail('invalid-owner-review', 'owner review evidence must name one approved proposal and its exact input');
+  }
+  return { type: value.type, queueId: value.queueId, inputDigest: value.inputDigest };
+}
+
+/** The owner review a durable edit session carries, from its origin only. */
+export function ownerReviewFromSession(session) {
+  const origin = session?.origin;
+  if (origin?.type !== 'approved-proposal') return null;
+  return ownerReviewEvidence({ type: origin.type, queueId: origin.queueId, inputDigest: origin.inputDigest });
+}
+
 /** Run the checks that need only the bound base, operation, candidate and owner policy. */
 export function runImmediateChecks({
   baseBytes,
@@ -130,6 +152,7 @@ export function runImmediateChecks({
   config,
   trustPolicy,
   trustSubject,
+  ownerReview = null,
 }) {
   const base = exactBytes(baseBytes, 'baseBytes');
   const candidate = exactBytes(candidateBytes, 'candidateBytes');
@@ -186,7 +209,14 @@ export function runImmediateChecks({
     meta: { ownerAlpha: true },
   }, normalizeTrustPolicy(trustPolicy));
   const allowedTrustRoutes = allowedList(config?.owner?.allowedTrustRoutes, 'config.owner.allowedTrustRoutes');
-  if (!allowedTrustRoutes.includes(trust.route)) {
+  const review = ownerReviewEvidence(ownerReview);
+  // `full-review` means "the owner must look at the whole change". An approved
+  // proposal is exactly that: the owner read the full proposal and approved it.
+  // So that route, and only that route, is satisfied by an explicit owner
+  // review, with or without a trust file. Lighter routes still need the owner
+  // policy to allow them, and `reject` is never satisfied.
+  const reviewedByOwner = trust.route === 'full-review' && review !== null;
+  if (!reviewedByOwner && !allowedTrustRoutes.includes(trust.route)) {
     fail('trust-route-not-allowed', `trust route ${trust.route} is not allowed by owner policy`, {
       route: trust.route,
       allowed: [...allowedTrustRoutes],
@@ -196,6 +226,7 @@ export function runImmediateChecks({
   }
 
   return deepFreeze({
+    ...(reviewedByOwner ? { trustRequirement: { route: 'full-review', satisfiedBy: review } } : {}),
     ok: true,
     operation: multi ? { reproducesCandidate: true, ...multiProof } : {
       reproducesCandidate: true,
@@ -739,6 +770,7 @@ export async function runPreApplyChecks({
   operation,
   trustPolicy,
   trustSubject,
+  ownerReview = null,
   targetPage,
   targetSlug,
   renderer = renderPinnedQuartz,
@@ -799,6 +831,7 @@ export async function runPreApplyChecks({
       config,
       trustPolicy: effectiveTrustPolicy,
       trustSubject,
+      ownerReview,
     });
 
     temporaryRoot = await createTemporaryRoot();

@@ -144,6 +144,7 @@ if (form && reason && status && byteCount && dialog && dialogTitle && confirmBut
 
   function recoveryMessage(code) {
     if (code === 'lock-busy') return 'Another owner action is finishing. Wait a moment, then try again.';
+    if (code === 'recovery-in-progress') return 'Finishing an earlier publish. Try again in a moment.';
     if (code === 'unseen-changes-not-acknowledged') return 'Look at the changes the page can’t show, then choose I’ve seen this. Nothing was recorded.';
     if (code === 'decision-evidence-mismatch' || code === 'decision-evidence-conflict') {
       return 'This proposal changed while you were reading it. Nothing was recorded. Reload it before deciding.';

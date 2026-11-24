@@ -47,6 +47,31 @@ function firstLine(child, ms = 180_000) {
     child.once('exit', (code) => reject(new Error(`exited ${code} before printing`)));
   });
 }
+// Every JSON line a child prints, kept until a step asks for it.
+function lineQueue(child) {
+  const seen = [];
+  const waiters = [];
+  createInterface({ input: child.stdout }).on('line', (line) => {
+    let value;
+    try { value = JSON.parse(line); } catch { return; }
+    seen.push(value);
+    for (const waiter of [...waiters]) {
+      const index = seen.findIndex(waiter.match);
+      if (index >= 0) { waiters.splice(waiters.indexOf(waiter), 1); waiter.resolve(seen.splice(index, 1)[0]); }
+    }
+  });
+  return {
+    next(match, ms = 120_000) {
+      const index = seen.findIndex(match);
+      if (index >= 0) return Promise.resolve(seen.splice(index, 1)[0]);
+      return new Promise((resolve, reject) => {
+        const waiter = { match, resolve };
+        waiters.push(waiter);
+        setTimeout(() => { if (waiters.includes(waiter)) reject(new Error('timed out waiting for the node')); }, ms);
+      });
+    },
+  };
+}
 const now = () => performance.now();
 // Read a QR from a PNG screenshot with an independent decoder (jsQR, a dev
 // dependency of the node app) after ImageMagick turns it into RGBA pixels.
@@ -84,7 +109,8 @@ async function main() {
   }
   step('relay ready', { relay: useN0 ? 'n0 public relay' : relay });
   const nodeChild = start('bun', [path.join(here, 'node-fixture.js'), relay, String(port), path.join(vault, 'workspace-note.md')], { cwd: pluginRoot });
-  const node = JSON.parse(await firstLine(nodeChild));
+  const nodeLines = lineQueue(nodeChild);
+  const node = await nodeLines.next((value) => typeof value.ownerOrigin === 'string', 180_000);
   step('owner node ready', { ownerOrigin: node.ownerOrigin });
 
   // Owner session (the owner's browser on the node's own loopback page).
@@ -182,6 +208,86 @@ async function main() {
     assert('pairing kept in device IndexedDB with a non-extractable key', stored.length === 1 && stored[0].extractable === false && stored[0].secretBytes === 32, { stored });
     await page.click('.cyberbaser-pair-button'); // Done
     await page.waitForSelector('.cyberbaser-modal', { state: 'detached', timeout: 10_000 });
+
+    // 3b. Become the signing device: open the installer's enrolment link the
+    //     way the OS hands a scanned QR to Obsidian, tap Set up approvals,
+    //     compare the fingerprint with the publisher's record of the key.
+    //     The publisher here runs its real owner services (key list, approval gate).
+    const enrolOpened = await page.evaluate((url) => {
+      const parsed = new URL(url);
+      const params = { action: parsed.host, ...Object.fromEntries(parsed.searchParams) };
+      if (typeof window.OBS_ACT === 'function') { window.OBS_ACT(params); return 'OBS_ACT'; }
+      const handler = app.workspace.protocolHandlers?.get(parsed.host);
+      if (!handler) return null;
+      handler(params);
+      return 'protocolHandlers';
+    }, node.signing.enrolLink);
+    assert('Obsidian accepted the obsidian:// enrolment link', enrolOpened !== null, { enrolOpened });
+    await page.waitForSelector('.cyberbaser-enrol .cyberbaser-code', { timeout: 10_000 });
+    assert('the link filled in the publisher and code', (await page.inputValue('.cyberbaser-enrol .cyberbaser-code')).includes(node.signing.publisher));
+    await page.fill('#cyberbaser-device-name', 'Test phone');
+    await shot('10-enrol');
+    // A script cannot approve for the owner: a synthetic click signs nothing.
+    await page.evaluate(() => document.querySelector('.cyberbaser-enrol-button').click());
+    await page.waitForFunction(() => document.querySelector('.cyberbaser-enrol .cyberbaser-message')?.textContent.startsWith('Tap the button yourself'), null, { timeout: 10_000 });
+    assert('a synthetic click is refused before any key is made', await page.evaluate(() => document.querySelector('.cyberbaser-fingerprint') === null));
+    t = now();
+    await page.click('.cyberbaser-enrol-button');
+    await page.waitForSelector('.cyberbaser-fingerprint', { timeout: 60_000 });
+    record.timings.enrolMs = Math.round(now() - t);
+    await shot('11-enrolled');
+    const fingerprint = (await page.textContent('.cyberbaser-fingerprint')).trim();
+    nodeChild.stdin.write('keys\n');
+    const { keys } = await nodeLines.next((value) => Array.isArray(value.keys));
+    assert('the publisher enrolled exactly this device key', keys.length === 1 && keys[0].label === 'Test phone', { keys });
+    record.signing = { fingerprint, keyId: keys[0].keyId };
+    const signingStored = await page.evaluate(async () => {
+      const db = await new Promise((resolve, reject) => { const r = indexedDB.open('cyberbaser-signing', 1); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+      const all = await new Promise((resolve) => { const r = db.transaction('keys').objectStore('keys').getAll(); r.onsuccess = () => resolve(r.result); });
+      return all.map((entry) => ({ keyId: entry.keyId, extractable: entry.privateKey.extractable, type: entry.privateKey.algorithm.name }));
+    });
+    assert('signing key kept in its own IndexedDB, non-extractable Ed25519', signingStored.length === 1
+      && signingStored[0].extractable === false && signingStored[0].type === 'Ed25519' && signingStored[0].keyId === keys[0].keyId, { signingStored });
+    const syncedAfterEnrol = await page.evaluate(async () => JSON.stringify(await app.plugins.plugins.cyberbaser.loadData()));
+    assert('synced plugin data holds no signing key', !syncedAfterEnrol.includes(keys[0].keyId) && !syncedAfterEnrol.includes('privateKey'), { syncedAfterEnrol });
+    await page.click('.cyberbaser-enrol-done');
+    await page.waitForSelector('.cyberbaser-modal', { state: 'detached', timeout: 10_000 });
+
+    // 3c. A publish waiting for this phone: open "Approvals waiting", review
+    //     the change drawn from the signed intent, approve with a real tap.
+    nodeChild.stdin.write('approval\n');
+    const { approvalRequested } = await nodeLines.next((value) => typeof value.approvalRequested === 'string');
+    await page.evaluate(() => app.commands.executeCommandById('cyberbaser:approvals'));
+    await page.waitForSelector('text=Review it', { timeout: 30_000 });
+    await shot('12-approvals-waiting');
+    await page.click('text=Review it');
+    await page.waitForSelector('.cyberbaser-approve', { timeout: 30_000 });
+    const sheet = await page.evaluate(() => ({
+      what: document.querySelector('.cyberbaser-approval-what')?.textContent,
+      title: document.querySelector('.cyberbaser-change-title')?.textContent,
+      removed: [...document.querySelectorAll('.cyberbaser-words-preview del')].map((node) => node.textContent),
+      added: [...document.querySelectorAll('.cyberbaser-words-preview ins')].map((node) => node.textContent),
+      overflow: document.documentElement.scrollWidth > window.innerWidth,
+    }));
+    assert('the sheet names the note, the repository and the exact words', sheet.what === 'Publish 1 change to example/vault'
+      && sheet.title === 'workspace-note' && sheet.removed.join(' ').includes('red') && sheet.added.join(' ').includes('green'), { sheet });
+    assert('the sheet fits a phone screen', sheet.overflow === false, { sheet });
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate((dark) => { document.body.classList.toggle('theme-dark', dark); document.body.classList.toggle('theme-light', !dark); }, theme === 'dark');
+      await shot(`13-approve-publish-${theme}`);
+    }
+    await page.evaluate(() => document.querySelector('.cyberbaser-approve').click());
+    await page.waitForFunction(() => document.querySelector('.cyberbaser-approval .cyberbaser-result')?.textContent.startsWith('Tap the button yourself'), null, { timeout: 10_000 });
+    t = now();
+    await page.click('.cyberbaser-approve');
+    await page.waitForFunction(() => document.querySelector('.cyberbaser-approval .cyberbaser-result')?.textContent.startsWith('Approved.'), null, { timeout: 30_000 });
+    record.timings.approveMs = Math.round(now() - t);
+    await shot('14-approved');
+    const verdict = await nodeLines.next((value) => 'approvalVerified' in value);
+    assert('the real publisher gate admitted the phone signature over the intent', verdict.approvalVerified === true && verdict.keyId === keys[0].keyId, { verdict, approvalRequested });
+    await page.click('.cyberbaser-approval button.mod-cta');
+    await page.waitForSelector('.cyberbaser-modal', { state: 'detached', timeout: 10_000 });
+    await page.evaluate(() => { document.body.classList.remove('theme-dark'); document.body.classList.add('theme-light'); });
 
     // 4. Quiet status: nothing on the note; the full status on demand.
     const mark = () => page.evaluate(() => document.querySelector('.view-action.cyberbaser-mark')?.dataset.status ?? null);

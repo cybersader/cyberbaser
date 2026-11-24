@@ -7,6 +7,7 @@ import { createNodeClient } from './core/client.js';
 import { createController, DEFAULT_SETTINGS, messageFor, publicSettings } from './core/controller.js';
 import { createDeviceStore, indexedDbBackend } from './core/device-store.js';
 import { codeFromLink, PAIR_LINK_ACTION } from './core/pairing-code.js';
+import { createSigningStore, ENROL_LINK_ACTION, signingDatabase } from './core/signing.js';
 import { describeStatus, needsMark, STATUS, statusFor, textDigests } from './core/status.js';
 
 const GRANT_WORDS = Object.freeze({ propose: 'send changes for review', publish: 'publish', publication: 'see what is live' });
@@ -92,7 +93,10 @@ class SendModal extends Modal {
       try {
         const outcome = await action(file, this.view.editor.getValue());
         result.setText(outcome.text);
-        if (outcome.kind === 'publishing') this.plugin.watchPublication();
+        if (outcome.kind === 'publishing') {
+          this.plugin.watchPublication();
+          this.plugin.offerWaitingApproval(this);
+        }
       } catch (error) {
         result.setText(messageFor(error));
         for (const element of actions.querySelectorAll('button')) element.disabled = false;
@@ -138,6 +142,181 @@ class StatusModal extends Modal {
   onClose() { this.contentEl.empty(); }
 }
 
+// ---- Approving publishes with this device's own key ----
+
+// Set this device up as one that approves publishing, from the code the
+// installer shows (scanned as an obsidian:// link, or pasted).
+class EnrolModal extends Modal {
+  constructor(plugin, code = '') {
+    super(plugin.app);
+    this.plugin = plugin;
+    this.code = code;
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    this.modalEl.addClass('cyberbaser-modal', 'cyberbaser-enrol');
+    this.setTitle?.('Approve publishing here');
+    contentEl.createEl('p', { text: 'Scan or paste the one-time code your Cyberbaser installer shows. After this, nothing is published until you approve it here.' });
+    const input = contentEl.createEl('textarea', { cls: 'cyberbaser-code', attr: { rows: '3', placeholder: 'cyberbaser-enroll:v1?…', 'aria-label': 'Code from the installer' } });
+    input.value = this.code;
+    const nameRow = contentEl.createDiv({ cls: 'cyberbaser-field' });
+    nameRow.createEl('label', { text: 'Name for this device', attr: { for: 'cyberbaser-device-name' } });
+    const name = nameRow.createEl('input', { type: 'text', attr: { id: 'cyberbaser-device-name', maxlength: '64', autocomplete: 'off' } });
+    name.value = Platform.isMobile ? 'Phone' : 'This computer';
+    const message = contentEl.createEl('p', { cls: 'cyberbaser-message', attr: { role: 'status' } });
+    const button = contentEl.createEl('button', { text: 'Set up approvals', cls: 'mod-cta cyberbaser-enrol-button' });
+    const run = async (event) => {
+      button.disabled = true;
+      input.disabled = true;
+      name.disabled = true;
+      message.setText('Asking your publisher…');
+      try {
+        const result = await this.plugin.controller.enrol(input.value, { label: name.value, tap: event });
+        this.plugin.signingEnrolled = true;
+        contentEl.empty();
+        contentEl.createEl('p', { text: `Done. ${result.label} now approves your publishes.` });
+        contentEl.createEl('p', { cls: 'cyberbaser-muted', text: 'Your installer shows the same four groups:' });
+        contentEl.createDiv({ cls: 'cyberbaser-fingerprint', text: result.fingerprint });
+        contentEl.createEl('p', { cls: 'cyberbaser-muted', text: 'If they differ, remove this device on your node and ask for a new code.' });
+        const done = contentEl.createEl('button', { text: 'Done', cls: 'mod-cta cyberbaser-enrol-done' });
+        done.addEventListener('click', () => this.close());
+      } catch (error) {
+        message.setText(messageFor(error));
+        button.disabled = false;
+        input.disabled = false;
+        name.disabled = false;
+      }
+    };
+    button.addEventListener('click', run);
+  }
+
+  onClose() { this.contentEl.empty(); }
+}
+
+function renderPreview(container, file) {
+  const block = container.createDiv({ cls: 'cyberbaser-change' });
+  const head = block.createDiv({ cls: 'cyberbaser-change-head' });
+  head.createEl('strong', { cls: 'cyberbaser-change-title', text: file.title });
+  head.createSpan({ cls: 'cyberbaser-change-kind', text: { edited: 'Edited', added: 'New note', deleted: 'Deleted' }[file.kind] });
+  block.createDiv({ cls: 'cyberbaser-path', text: file.path });
+  if (file.preview === null) {
+    block.createEl('p', { cls: 'cyberbaser-muted', text: 'This file is not text, so its words cannot be shown.' });
+  } else if (file.kind === 'deleted') {
+    block.createEl('p', { cls: 'cyberbaser-muted', text: 'The whole note is removed.' });
+  } else {
+    const words = block.createDiv({ cls: 'cyberbaser-words-preview', attr: { 'aria-label': 'What changes' } });
+    for (const part of file.preview) {
+      if (part.kind === 'removed') words.createEl('del', { text: part.text });
+      else if (part.kind === 'added') words.createEl('ins', { text: part.text });
+      else if (part.kind === 'gap') words.createSpan({ cls: 'cyberbaser-gap', text: ' … ' });
+      else words.appendText(part.text);
+    }
+  }
+  if (file.modeChanged) block.createEl('p', { cls: 'cyberbaser-muted', text: 'Also changes whether the file can run.' });
+}
+
+// One publish to approve. Everything shown is built by this plugin from the
+// signed intent and bytes it hashed itself; the buttons sign or decline.
+class ApprovalModal extends Modal {
+  constructor(plugin, requestId) {
+    super(plugin.app);
+    this.plugin = plugin;
+    this.requestId = requestId;
+  }
+
+  async onOpen() {
+    const { contentEl } = this;
+    this.modalEl.addClass('cyberbaser-modal', 'cyberbaser-approval');
+    this.setTitle?.('Approve publishing?');
+    const message = contentEl.createEl('p', { cls: 'cyberbaser-message', text: 'Checking the change…', attr: { role: 'status' } });
+    let prepared;
+    try {
+      prepared = await this.plugin.controller.readApproval(this.requestId);
+    } catch (error) {
+      message.setText(messageFor(error));
+      return;
+    }
+    message.remove();
+    const { summary } = prepared;
+    const count = summary.files.length;
+    const lead = contentEl.createDiv({ cls: 'cyberbaser-approval-lead' });
+    lead.createEl('p', { cls: 'cyberbaser-approval-what', text: `Publish ${count === 1 ? '1 change' : `${count} changes`} to ${summary.repository}` });
+    lead.createEl('p', { cls: 'cyberbaser-muted', text: `Branch ${summary.branch}` });
+    if (summary.changesBuild) contentEl.createEl('p', { cls: 'cyberbaser-warning', text: 'This changes how your site is built.' });
+    const list = contentEl.createDiv({ cls: 'cyberbaser-changes' });
+    for (const file of summary.files) renderPreview(list, file);
+    const minutes = Math.max(1, Math.round((summary.expiresAt - Date.now()) / 60_000));
+    const actions = contentEl.createDiv({ cls: 'cyberbaser-actions cyberbaser-approval-actions' });
+    const approve = actions.createEl('button', { text: 'Approve and publish', cls: 'mod-cta cyberbaser-approve' });
+    const decline = actions.createEl('button', { text: 'Not now', cls: 'cyberbaser-decline' });
+    const result = contentEl.createEl('p', { cls: 'cyberbaser-result', attr: { role: 'status' } });
+    contentEl.createEl('p', { cls: 'cyberbaser-footnote', text: `Approved with this device's own key. Open for about ${minutes} min.` });
+    const busy = (value) => { approve.disabled = value; decline.disabled = value; };
+    // The click event itself is the proof of a tap; scripts cannot make one.
+    approve.addEventListener('click', async (event) => {
+      busy(true);
+      result.setText('Approving…');
+      try {
+        await this.plugin.controller.approve(prepared, event);
+        result.setText('Approved. Your node is publishing it now.');
+        actions.empty();
+        actions.createEl('button', { text: 'Done', cls: 'mod-cta' }).addEventListener('click', () => this.close());
+      } catch (error) {
+        result.setText(messageFor(error));
+        busy(false);
+      }
+    });
+    decline.addEventListener('click', async () => {
+      busy(true);
+      try {
+        await this.plugin.controller.decline(this.requestId);
+        result.setText('Not published. Nothing was signed.');
+        actions.empty();
+        actions.createEl('button', { text: 'Done' }).addEventListener('click', () => this.close());
+      } catch (error) {
+        result.setText(messageFor(error));
+        busy(false);
+      }
+    });
+  }
+
+  onClose() { this.contentEl.empty(); }
+}
+
+// What is waiting for this device's approval. Opened from the command palette
+// or the note menu; nothing about it stands in the header.
+class ApprovalsModal extends Modal {
+  constructor(plugin) {
+    super(plugin.app);
+    this.plugin = plugin;
+  }
+
+  async onOpen() {
+    const { contentEl } = this;
+    this.modalEl.addClass('cyberbaser-modal');
+    this.setTitle?.('Approvals waiting');
+    const line = contentEl.createEl('p', { cls: 'cyberbaser-message', text: 'Asking your node…', attr: { role: 'status' } });
+    if (!(await this.plugin.controller.signingDevice())) {
+      line.setText('This device does not approve publishing yet.');
+      contentEl.createEl('button', { text: 'Set up approvals…', cls: 'mod-cta' })
+        .addEventListener('click', () => { this.close(); new EnrolModal(this.plugin).open(); });
+      return;
+    }
+    let waiting;
+    try { waiting = await this.plugin.controller.waitingApprovals(); } catch (error) { line.setText(messageFor(error)); return; }
+    if (waiting.length === 0) { line.setText('Nothing is waiting.'); return; }
+    line.setText(waiting.length === 1 ? 'One publish is waiting for you.' : `${waiting.length} publishes are waiting for you.`);
+    const list = contentEl.createDiv({ cls: 'cyberbaser-actions cyberbaser-waiting' });
+    waiting.forEach((entry, index) => {
+      list.createEl('button', { text: waiting.length === 1 ? 'Review it' : `Review publish ${index + 1}` })
+        .addEventListener('click', () => { this.close(); new ApprovalModal(this.plugin, entry.requestId).open(); });
+    });
+  }
+
+  onClose() { this.contentEl.empty(); }
+}
+
 class CyberbaserSettingTab extends PluginSettingTab {
   constructor(plugin) {
     super(plugin.app, plugin);
@@ -159,6 +338,19 @@ class CyberbaserSettingTab extends PluginSettingTab {
           this.display();
         })
         : button.setButtonText('Pair with your Cyberbaser node').setCta().onClick(() => new PairModal(this.plugin).open())));
+    const signer = await this.plugin.controller.signingDevice();
+    new Setting(containerEl)
+      .setName(signer ? 'Approves publishing' : 'Does not approve publishing')
+      .setDesc(signer ? `${signer.label}, key ${signer.fingerprint}. Every publish waits for your approval here or on another device.`
+        : 'Set up with the one-time code your Cyberbaser installer shows.')
+      .addButton((button) => (signer
+        ? button.setButtonText('Stop approving here').onClick(async () => {
+          await this.plugin.controller.forgetSigning();
+          this.plugin.signingEnrolled = false;
+          new Notice('This device no longer approves. Also remove it under Devices that can publish.');
+          this.display();
+        })
+        : button.setButtonText('Set up approvals').onClick(() => new EnrolModal(this.plugin).open())));
     new Setting(containerEl)
       .setName('Show a mark when a note has unpublished changes')
       .setDesc('Nothing shows while a note matches your site. For the full status, use "Cyberbaser: status" in the note menu.')
@@ -168,7 +360,7 @@ class CyberbaserSettingTab extends PluginSettingTab {
         this.plugin.refreshStatus(true);
       }));
     containerEl.createEl('p', { cls: 'setting-item-description',
-      text: 'The pairing key stays in this app on this device. It is never written to vault files, so it does not sync.' });
+      text: 'The pairing key and the approval key stay in this app on this device. They are never written to vault files, so they do not sync.' });
   }
 }
 
@@ -177,7 +369,11 @@ export default class CyberbaserPlugin extends Plugin {
     this.settings = { ...DEFAULT_SETTINGS, ...publicSettings(await this.loadData()) };
     const scope = `vault:${this.app.appId ?? this.app.vault.getName()}`;
     this.controller = createController({ client: createNodeClient({ carrier: lazyCarrier }),
-      store: createDeviceStore(indexedDbBackend(), scope) });
+      store: createDeviceStore(indexedDbBackend(), scope),
+      // Its own database: the approval key never shares a record with pairing.
+      signingStore: createSigningStore(indexedDbBackend(globalThis.indexedDB, signingDatabase()), scope) });
+    this.signingEnrolled = false;
+    this.controller.signingDevice().then((device) => { this.signingEnrolled = device !== null; }, () => {});
     this.replies = new Map(); // path -> last node reply, for local re-checks while typing
     this.headerActions = new WeakMap();
 
@@ -199,14 +395,23 @@ export default class CyberbaserPlugin extends Plugin {
       if (!checking) new StatusModal(this, view).open();
       return true;
     } });
+    this.addCommand({ id: 'approvals', name: 'Approvals waiting', callback: () => new ApprovalsModal(this).open() });
+    this.addCommand({ id: 'enrol', name: 'Set up this device to approve publishing', callback: () => new EnrolModal(this).open() });
     // The note's "…" menu: status and send, on demand.
     this.registerEvent(this.app.workspace.on('file-menu', (menu, file) => {
       const view = this.app.workspace.getActiveViewOfType(MarkdownView);
       if (!view?.file || view.file !== file) return;
       menu.addItem((item) => item.setTitle('Cyberbaser: status').setIcon('info').onClick(() => new StatusModal(this, view).open()));
       menu.addItem((item) => item.setTitle('Cyberbaser: send or publish').setIcon('upload').onClick(() => new SendModal(this, view).open()));
+      if (this.signingEnrolled) menu.addItem((item) => item.setTitle('Cyberbaser: approvals waiting').setIcon('check-circle').onClick(() => new ApprovalsModal(this).open()));
     }));
     this.registerObsidianProtocolHandler(PAIR_LINK_ACTION, (params) => new PairModal(this, codeFromLink(params) ?? '').open());
+    // obsidian://cyberbaser-enrol?publisher=…&code=… (the installer's QR code).
+    this.registerObsidianProtocolHandler(ENROL_LINK_ACTION, (params) => {
+      const code = typeof params?.publisher === 'string' && typeof params?.code === 'string'
+        ? `cyberbaser-enroll:v1?publisher=${params.publisher}&code=${params.code}` : '';
+      new EnrolModal(this, code).open();
+    });
     this.addSettingTab(new CyberbaserSettingTab(this));
 
     if (!Platform.isMobile) {
@@ -282,6 +487,21 @@ export default class CyberbaserPlugin extends Plugin {
       this.headerActions.set(view, action);
     }
     action.dataset.status = status.key;
+  }
+
+  // After Publish from this device: if the node asks for its approval, show
+  // it right away, so the one Publish tap leads straight to the confirmation.
+  async offerWaitingApproval(modal) {
+    if (!this.signingEnrolled) return;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const waiting = await this.controller.waitingApprovals().catch(() => []);
+      if (waiting.length > 0) {
+        modal.close();
+        new ApprovalModal(this, waiting.at(-1).requestId).open();
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
   }
 
   // After Publish: re-check every few seconds for two minutes.
