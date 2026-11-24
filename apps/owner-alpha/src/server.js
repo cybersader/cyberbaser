@@ -2729,6 +2729,9 @@ export async function runOwnerAlphaServer({
   rebuildSite = ensureOwnerSite,
   loadPipeline = loadPipelineAdapter,
   createHandler = createOwnerAlphaHandler,
+  // createBundlePreview({ config, projectRoot }) by default; one preview serves
+  // the review page and the check before a bundle is offered.
+  createPreview = createBundlePreview,
   createReader = createReaderHandler,
   startServers = startOwnerAlphaServers,
   listJobs = listDurableJobs,
@@ -2871,7 +2874,8 @@ export async function runOwnerAlphaServer({
   if (devices !== null) devices.bundleDesk = bundleDesk;
   // With a configured renderer, a bundle is built once before it is offered, to
   // confirm its page lands at the address shown (bundle-preview.js).
-  const bundleCheck = devices === null || !config.renderer ? null : createBundlePreview({ config, projectRoot });
+  const bundlePreview = config.renderer ? createPreview({ config, projectRoot }) : null;
+  const bundleCheck = devices === null ? null : bundlePreview;
   const jobApprovals = devices === null ? null : createJobApprovals({ config, context: storeContext, pipeline: recoveringPipeline,
     bundles: bundleDesk,
     checkBundle: bundleCheck === null ? null : async (record) => {
@@ -2907,6 +2911,7 @@ export async function runOwnerAlphaServer({
     reviewSiteRoot: path.resolve(projectRoot, config.workspace.site),
     ownerPublication,
     devices,
+    bundlePreview,
     forgeSetup: createForgeSetup({ config, configFile: configFile instanceof URL ? fileURLToPath(configFile) : configFile }),
     ...(adoptSession === null ? {} : { adoptSession }),
     upstream,

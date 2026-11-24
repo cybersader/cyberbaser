@@ -263,6 +263,9 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
       createPublication: (input) => createOwnerPublicationRuntime({ ...input, git: reviewGit, checkoutReady: ready,
         sourceSession: (session) => createEditSession({ ...session, git: policyGit }) }) }),
     rebuildSite: rebuild,
+    // New pages on the site design (route C, and the address check before a
+    // bundle is offered) read the same disposable checkout through the policy seam.
+    createPreview: (input) => createBundlePreview({ ...input, dependencies: { assertCheckoutReady: ready } }),
     startSuggestions: (input) => startSuggestionIntake({ ...input, intakeEntry: path.join(PROJECT_ROOT, 'apps/account-free-intake/bin/server.js') }),
     createReviewSource: (input) => createOwnerProposalReviewSource({ ...input, git: reviewGit }),
     createReviewService: (input) => createOwnerProposalReviewService({ ...input,
@@ -299,10 +302,7 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
     },
     createHandler(input) {
       // Edit this page is the owner's direct route; it binds the same disposable checkout.
-      // New pages on the site design (route C) read the same disposable checkout through the policy seam too.
       const handler = createOwnerAlphaHandler({ ...input,
-        ...(input.config?.renderer ? { bundlePreview: createBundlePreview({ config: input.config, projectRoot: input.projectRoot,
-          dependencies: { assertCheckoutReady: ready } }) } : {}),
         createEditSession: (session) => createEditSession({ ...session, git: policyGit }) });
       const labelled = async (request) => {
         const result = await handler(request);
