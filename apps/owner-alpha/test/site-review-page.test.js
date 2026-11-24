@@ -62,6 +62,28 @@ describe('marking changes on the built site page', () => {
     expect(paragraph(html, 'cb3')).toBe('<p data-cb-node="cb3">Restore a small folder to the <span class="cbr-c cbr-n1" id="c1"><del>original</del> <ins>spare</ins></span> drive. Leave the working copy alone.</p>');
   });
 
+  test('a replacement that starts with punctuation adds no space before it', async () => {
+    const html = await mark('backup', FIXTURE_TEXTS.backup, [[' to the original drive', ' to the original drive', ', on the original drive']]);
+    const block = paragraph(html, 'cb3');
+    expect(block).toContain('folder<span class="cbr-c cbr-n1" id="c1">');
+    expect(block).not.toMatch(/\s<ins>/u);
+    expect(block).not.toMatch(/<\/del>\s+<ins>/u);
+    // Read as the new text: no space before the comma.
+    expect(block.replace(/<del>[^<]*<\/del>/gu, '').replace(/<[^>]+>/gu, '')).toContain('small folder, on the original drive.');
+    // Read as the old text: unchanged.
+    expect(block.replace(/<ins>[^<]*<\/ins>/gu, '').replace(/<[^>]+>/gu, '')).toContain('small folder to the original drive.');
+  });
+
+  test('the page excerpt adds no space before punctuation either', () => {
+    const base = 'Each exception recorded and assigned to an owner.\n';
+    const start = base.indexOf(' and assigned');
+    const html = excerptDocument({ operations: [{ start, end: start + ' and assigned to an owner'.length,
+      expected: ' and assigned to an owner', replacement: ', assigned to an owner and given an expiry date' }],
+      title: 'Note', sourcePath: 'note.md', baseText: base });
+    expect(html).not.toMatch(/\s<ins>,/u);
+    expect(html).toContain('<del> and assigned to an owner</del><ins>, assigned to an owner and given an expiry date</ins>');
+  });
+
   test('a change inside a word grows to the whole word', async () => {
     const html = await mark('backup', FIXTURE_TEXTS.backup, [['riginal drive', 'rig', 'bor']]);
     expect(paragraph(html, 'cb3')).toContain('<del>original</del> <ins>oborinal</ins>');

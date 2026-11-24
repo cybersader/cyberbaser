@@ -9,7 +9,7 @@ import { constants } from 'node:fs';
 import { open, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { parseFrontmatter } from '@cyberbaser/publish';
-import { escapeHtml, REWRITE_THRESHOLD, wholeWordChange } from './proposal-review-page.js';
+import { escapeHtml, replacementHtml, REWRITE_THRESHOLD, wholeWordChange } from './proposal-review-page.js';
 import { hasHiddenProposalSource, refineForDisplay } from './publication-display.js';
 
 export const SITE_REVIEW_REASONS = Object.freeze({
@@ -327,10 +327,7 @@ function changeHtml(placement) {
   const { number, first, span, rewritten } = placement;
   const open = `<span class="cbr-c cbr-n${number}"${first ? ` id="c${number}"` : ''}>`;
   if (rewritten) return `${open}<span class="cbr-new">${escapeHtml(span.newText)}</span></span>`;
-  const removed = span.oldText === '' ? '' : marked('del', span.oldText);
-  const added = span.newText === '' ? '' : marked('ins', span.newText);
-  const gap = removed && added && !/\s$/u.test(span.oldText) && !/^\s/u.test(span.newText) ? ' ' : '';
-  return `${open}${removed}${gap}${added}</span>`;
+  return `${open}${replacementHtml(span.oldText, span.newText, marked)}</span>`;
 }
 
 function textOf(node, html) {

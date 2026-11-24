@@ -473,6 +473,27 @@ function excerptMark(tag, text) {
   return words === '' ? escapeHtml(text) : `${escapeHtml(lead)}<${tag}>${escapeHtml(words)}</${tag}>${escapeHtml(trail)}`;
 }
 
+// Punctuation that sits against the word before it.
+const HUGS_PREVIOUS = /^[,.;:!?)\]}\u2019\u201D\u2026%]/u;
+
+/**
+ * A deleted run followed by an inserted run, shown so neither introduces a
+ * space before punctuation: when the new text starts with punctuation, the
+ * space the old text began with is part of what was deleted, and no
+ * separating space is added. `mark(tag, text)` marks one run.
+ */
+export function replacementHtml(oldText, newText, mark) {
+  if (oldText === '') return newText === '' ? '' : mark('ins', newText);
+  if (newText === '') return mark('del', oldText);
+  if (HUGS_PREVIOUS.test(newText)) {
+    const [, words, trail] = /^([\s\S]*?)(\s*)$/u.exec(oldText);
+    const removed = words.trim() === '' ? escapeHtml(oldText) : `<del>${escapeHtml(words)}</del>${escapeHtml(trail)}`;
+    return `${removed}${mark('ins', newText)}`;
+  }
+  const gap = !/\s$/u.test(oldText) && !/^\s/u.test(newText) ? ' ' : '';
+  return `${mark('del', oldText)}${gap}${mark('ins', newText)}`;
+}
+
 // The exact change at whole words, in its own line of the page source. Needs
 // the pinned page text; without it only the exact characters can be shown.
 function excerptItem(operation, number, baseBytes) {
@@ -496,10 +517,8 @@ function excerptItem(operation, number, baseBytes) {
   if (/\n/u.test(change.oldText + change.newText)) {
     return { html: `<div class="chg rw">${anchor}<span class="tag">Changed</span><pre class="src">${excerptMark('del', change.oldText)}</pre><pre class="src">${excerptMark('ins', change.newText)}</pre></div>` };
   }
-  const removed = change.oldText === '' ? '' : excerptMark('del', change.oldText);
-  const added = change.newText === '' ? '' : excerptMark('ins', change.newText);
-  const gap = removed && added && !/\s$/u.test(change.oldText) && !/^\s/u.test(change.newText) ? ' ' : '';
-  return { html: `<div class="row mk">${anchor}<p>${excerptSide(before, 'before')}${removed}${gap}${added}${excerptSide(after, 'after')}</p></div>` };
+  const marked = replacementHtml(change.oldText, change.newText, excerptMark);
+  return { html: `<div class="row mk">${anchor}<p>${excerptSide(before, 'before')}${marked}${excerptSide(after, 'after')}</p></div>` };
 }
 
 // After a decision, when the site's page can't be shown: each change in its
