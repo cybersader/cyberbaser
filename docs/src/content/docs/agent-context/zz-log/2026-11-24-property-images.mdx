@@ -38,3 +38,17 @@ Why this rule and not "fields the site model types as `image`":
 
 - The plugin's `exists` check in real Obsidian.
 - A Quartz or Cyberchief site build of a vault whose only reference to an image is a property (the selector now emits it; whether each renderer copies and links it was not built here).
+
+## Folder notes: the note's own folder counts too (same day)
+
+The Cyberchief owner chose a folder-note layout ("look at my other plugins how i do attachments", then "Your folder-note style (Recommended)"): each post is a folder named after it, the note inside under the same name, its photos beside it, and topic folders get a same-name note instead of `index.md`. Images now live in the note's own folder, so the property rule was widened.
+
+**The rule now.** A top-level property naming an image references the first file that exists of: (1) that path from the vault root, (2) that path from the note's own folder. `cover: Post cover.jpg` in `Topic/Post/Post.md` is `Topic/Post/Post cover.jpg`. This is Obsidian's resolution order minus its third step, "the only file of that name anywhere", which is refused: its answer can change when an unrelated file is added, so a reviewed and signed change could later show a different image. The Cyberchief renderer removed the same step (`site/components/cc.ts` `vaultFile`), so the site and every Cyberbaser layer agree.
+
+**One function, every layer.** `packages/publish/src/property-refs.js` (`propertyImageCandidates`, `resolvePropertyImage`, `propertyImages(text, exists, notePath)`) is used by the selector (rule 5 and `noteAssetTargets`, so the node's `asset-unreferenced` and the publisher's re-check), the plugin's `embeddedImages` (what is sent) and the approval sheet's cover (`pageDetails`).
+
+**What the form writes.** With site model `names.images: note-folder` (Cyberchief v3), the form writes the bare file name, and only when the photo landed in the note's own folder (Obsidian's `attachmentFolderPath: "./"`, which the Cyberchief vault sets). If a file of that name also exists at the vault root (which is looked at first), the full path is written instead. Any other placement, and any other model, keeps the path from the vault root.
+
+**Known limit.** Because the vault root is looked at first, adding a root file with the same name as a bare cover later changes what that cover means, exactly as in Obsidian. The form never writes such a name, and the change that adds the root file goes through the same review.
+
+**Evidence.** `packages/publish/test/property-refs.test.js` (root first, then the note's folder, never by name elsewhere), `apps/owner-alpha/test/page-bundle.test.js` (a note-folder cover passes the node and the publisher, a cover in another folder is `asset-unreferenced`), `apps/obsidian-cyberbaser/test/new-page.test.js` and `model-v3.test.js` (bare name written, found by the same rule, full path kept when the root holds the name).

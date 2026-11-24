@@ -17,7 +17,8 @@ test('a property value names an image only by its exact vault path', () => {
 
 test('refs come from top-level properties and carry the key and line', () => {
   const text = '---\ntitle: X\ncover: posts/x-cover.png\nnested:\n  image: posts/y.png\n---\nbody\n';
-  expect(propertyImageRefs(text)).toEqual([{ key: 'cover', target: 'posts/x-cover.png', line: 3, kind: 'property', raw: 'cover: posts/x-cover.png' }]);
+  expect(propertyImageRefs(text)).toEqual([{ key: 'cover', target: 'posts/x-cover.png', candidates: ['posts/x-cover.png'], line: 3, kind: 'property', raw: 'cover: posts/x-cover.png' }]);
+  expect(propertyImageRefs(text, 'posts/x/x.md')[0].candidates).toEqual(['posts/x-cover.png', 'posts/x/posts/x-cover.png']);
   expect(propertyImageRefs('---\n: [\n---\n')).toEqual([]);
   expect(propertyImages(text, (p) => p === 'posts/x-cover.png')).toEqual(['posts/x-cover.png']);
   expect(propertyImages(text, () => false)).toEqual([]);
@@ -42,13 +43,26 @@ test('rule 5: a cover named only in properties publishes with its page', () => {
   expect(report.denied.find((d) => d.path === 'private/secret.png').rule).toBe(RULES.ASSET_UNREACHABLE);
 });
 
-test('rule 5: a property path is not resolved relative to the note or by file name', () => {
+test('rule 5: a property image is found from the vault root, then the note\'s own folder, never by file name', () => {
   const files = {
-    'posts/a.md': '---\ncover: a-cover.png\n---\n',
-    'posts/a-cover.png': null,
-    'a-cover.png.bak': null,
+    'Topic/Post/Post.md': '---\ncover: Post cover.jpg\n---\n',
+    'Topic/Post/Post cover.jpg': null,
+    'Topic/Other/Other.md': '---\ncover: lonely.png\n---\n',
+    'Elsewhere/lonely.png': null,
+    'Topic/Both/Both.md': '---\ncover: both.png\n---\n',
+    'Topic/Both/both.png': null,
+    'both.png': null,
   };
-  expect(selectFiles(files, CONFIG).published).toEqual(['posts/a.md']);
+  const { published, report } = selectFiles(files, { allow: ['**'] });
+  expect(published).toContain('Topic/Post/Post cover.jpg');
+  // Obsidian's third step (the only file of that name anywhere) is not taken.
+  expect(published).not.toContain('Elsewhere/lonely.png');
+  // The vault root comes first, as in Obsidian and the Cyberchief renderer.
+  expect(published).toContain('both.png');
+  expect(published).not.toContain('Topic/Both/both.png');
+  expect(report.assets.find((a) => a.path === 'Topic/Post/Post cover.jpg').referencedBy[0]).toMatchObject({ source: 'Topic/Post/Post.md', kind: 'property' });
+  expect(propertyImages('---\ncover: Post cover.jpg\n---\n', (p) => p === 'Topic/Post/Post cover.jpg', 'Topic/Post/Post.md')).toEqual(['Topic/Post/Post cover.jpg']);
+  expect(propertyImages('---\ncover: Post cover.jpg\n---\n', (p) => p === 'Topic/Post/Post cover.jpg')).toEqual([]);
 });
 
 test('noteAssetTargets: body embeds, links and property images, resolved like the selector', () => {
@@ -56,4 +70,5 @@ test('noteAssetTargets: body embeds, links and property images, resolved like th
   const text = '---\ncover: posts/a-cover.png\n---\n![[inline.jpg]] ![d](../shared/d.webp) [[other]]\n';
   expect(noteAssetTargets('posts/a.md', text, paths)).toEqual(['posts/a-cover.png', 'posts/inline.jpg', 'shared/d.webp']);
   expect(noteAssetTargets('posts/a.md', '---\ncover: posts/missing.png\n---\n', paths)).toEqual([]);
+  expect(noteAssetTargets('posts/a.md', '---\ncover: a-cover.png\n---\n', paths)).toEqual(['posts/a-cover.png']);
 });

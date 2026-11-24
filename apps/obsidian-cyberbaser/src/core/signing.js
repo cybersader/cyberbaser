@@ -16,7 +16,7 @@ import { fromBase64, hex, toBase64, utf8 } from './wire.js';
 import { checkAsset } from '../../../../packages/media-check/src/index.js';
 import { notePublicStatus } from './new-page.js';
 import { parseFrontmatter } from '../../../../packages/publish/src/page-rules.js';
-import { propertyImageRefs } from '../../../../packages/publish/src/property-refs.js';
+import { propertyImageRefs, resolvePropertyImage } from '../../../../packages/publish/src/property-refs.js';
 import yaml from 'js-yaml';
 
 export const ENROL_LINK_ACTION = 'cyberbaser-enrol';
@@ -208,7 +208,7 @@ export function pageDetails(path, text, images = new Map()) {
   const fm = parseFrontmatter(text);
   const data = fm.error ? {} : fm.data;
   const pick = (value) => (typeof value === 'string' && oneLine(value) !== '' ? oneLine(value) : null);
-  const coverPath = propertyImageRefs(text).map((ref) => ref.target).find((target) => images.has(target)) ?? null;
+  const coverPath = propertyImageRefs(text, path).map((ref) => resolvePropertyImage(ref, (candidate) => images.has(candidate))).find((found) => found !== null) ?? null;
   return { title: pick(data.title) ?? noteTitle(path), description: pick(data.description), cover: coverPath };
 }
 

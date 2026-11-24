@@ -44,8 +44,9 @@ export function notePublicStatus({ path, text, publishYml, siteYml = null }) {
 
 /**
  * The vault images a note shows: those it embeds, and those a property names
- * by their path from the vault root (`cover: posts/x-cover.png`, the same rule
- * the selector and the node use; packages/publish/src/property-refs.js).
+ * from the vault root (`cover: posts/x-cover.png`) or from the note's own
+ * folder (`cover: x-cover.png`), the same rule the selector, the node and the
+ * publisher use (packages/publish/src/property-refs.js); never by file name alone.
  * resolve(target, fromPath) -> vault path or null (Obsidian's link
  * resolution); exists(path) -> whether the vault has that file. Remote images
  * in the text are reported so the owner can fix them before anything is sent.
@@ -59,7 +60,7 @@ export function embeddedImages({ path, text, resolve, exists = () => false }) {
     const resolved = resolve(target, path);
     if (typeof resolved === 'string' && !/\.md$/iu.test(resolved) && !local.includes(resolved)) local.push(resolved);
   }
-  for (const image of propertyImages(text, exists)) if (!local.includes(image)) local.push(image);
+  for (const image of propertyImages(text, exists, path)) if (!local.includes(image)) local.push(image);
   return { local, remote };
 }
 

@@ -99,16 +99,22 @@ describe('every node refusal', () => {
     expect(await codeOf(create('topic/p.md', '# no image\n', [{ path: 'topic/lonely.png', bytes: COVER }]))).toBe('asset-unreferenced');
   });
 
-  test('a cover named only in properties is shown by the page, by its vault path', async () => {
+  test('a cover named only in properties is shown by the page, from the vault root or the note\'s own folder', async () => {
     const assets = [{ path: 'topic/sub/post-cover.png', bytes: COVER }];
     const checked = await create('topic/sub/post.md', note('No embeds.\n', 'title: Post\ncover: topic/sub/post-cover.png\n'), assets);
     expect(checked.images.map((image) => image.path)).toEqual(['topic/sub/post-cover.png']);
     const commit = await buildBundleCommit({ git: vault.git, checked, message: 'Add post\n',
       author: { name: 'Owner', email: 'owner@example.invalid' }, time: 1_800_000_000 });
     expect(await checkBundleCommit(vault.git, vault.head, commit)).toEqual({ ok: true });
-    // A note-relative property value is not a reference.
-    expect(await codeOf(create('topic/sub/post2.md', note('x\n', 'title: Post\ncover: post2-cover.png\n'),
-      [{ path: 'topic/sub/post2-cover.png', bytes: COVER }]))).toBe('asset-unreferenced');
+    // A value relative to the note's own folder is a reference; the publisher agrees.
+    const relative = await create('topic/sub/post2.md', note('x\n', 'title: Post\ncover: post2-cover.png\n'),
+      [{ path: 'topic/sub/post2-cover.png', bytes: COVER }]);
+    const relativeCommit = await buildBundleCommit({ git: vault.git, checked: relative, message: 'Add post2\n',
+      author: { name: 'Owner', email: 'owner@example.invalid' }, time: 1_800_000_000 });
+    expect(await checkBundleCommit(vault.git, vault.head, relativeCommit)).toEqual({ ok: true });
+    // Relative to another folder (Obsidian's "unique name anywhere") is not.
+    expect(await codeOf(create('topic/sub/post3.md', note('x\n', 'title: Post\ncover: post3-cover.png\n'),
+      [{ path: 'topic/other/post3-cover.png', bytes: COVER }]))).toBe('asset-unreferenced');
   });
 
   test('remote-image-refused: http(s), protocol-relative and data: images', async () => {

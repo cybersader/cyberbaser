@@ -34,8 +34,10 @@ test('a cover named only in properties is sent, by its exact vault path, once', 
   const both = `${text}![[x-cover.png]]\n`;
   expect(embeddedImages({ path: 'from-the-field/x.md', text: both, resolve: () => 'from-the-field/x-cover.png', exists }).local)
     .toEqual(['from-the-field/x-cover.png']);
-  // Not a vault path, or no such file: not sent.
-  expect(embeddedImages({ path: 'from-the-field/x.md', text: '---\ncover: x-cover.png\n---\n', resolve, exists }).local).toEqual([]);
+  // A name relative to the note's own folder is found there (the site model's note-folder images).
+  expect(embeddedImages({ path: 'from-the-field/x.md', text: '---\ncover: x-cover.png\n---\n', resolve, exists }).local).toEqual(['from-the-field/x-cover.png']);
+  // Only there: a file of that name in another folder is not looked up, and no such file is not sent.
+  expect(embeddedImages({ path: 'elsewhere/x.md', text: '---\ncover: x-cover.png\n---\n', resolve, exists }).local).toEqual([]);
   expect(embeddedImages({ path: 'from-the-field/x.md', text, resolve }).local).toEqual([]);
 });
 

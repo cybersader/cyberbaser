@@ -17,14 +17,15 @@
 //   4. otherwise                   -> not published.
 //   5. non-markdown assets         -> published only if a published page
 //                                     references them (body links and embeds,
-//                                     or a property naming the image by its
-//                                     vault path: property-refs.js). Never by path.
+//                                     or a property naming the image from the
+//                                     vault root or the note's own folder:
+//                                     property-refs.js). Never by path.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import yaml from 'js-yaml';
 import { extractRefs } from './links.js';
-import { propertyImageRefs } from './property-refs.js';
+import { propertyImageRefs, resolvePropertyImage } from './property-refs.js';
 import { CONFIG_FILENAME, RULES, classifyPage, globToRegExp, parseFrontmatter, resolveConfig } from './page-rules.js';
 
 export { CONFIG_FILENAME, RULES, globToRegExp, parseFrontmatter, resolveConfig };
@@ -114,7 +115,10 @@ export function noteAssetTargets(notePath, content, paths) {
   const out = new Set();
   for (const ref of refs.embeds) { const t = resolveWiki(ref.target, from, index); if (t && !isMarkdown(t)) out.add(t); }
   for (const ref of [...refs.mdImages, ...refs.mdLinks, ...refs.htmlSrcs]) { const t = resolveHref(ref.target, from, index); if (t && !isMarkdown(t)) out.add(t); }
-  for (const ref of propertyImageRefs(text)) if (index.byPath.has(ref.target) && !isMarkdown(ref.target)) out.add(ref.target);
+  for (const ref of propertyImageRefs(text, from)) {
+    const t = resolvePropertyImage(ref, (p) => index.byPath.has(p) && !isMarkdown(p));
+    if (t) out.add(t);
+  }
   return [...out].sort();
 }
 
@@ -215,9 +219,11 @@ export function selectFiles(fileMap, config, opts = {}) {
       noteRef(target, ref, p);
     }
 
-    // Images named by a property (`cover: posts/x.png`), exact vault path only.
-    for (const ref of propertyImageRefs(content)) {
-      if (index.byPath.has(ref.target) && !isMarkdown(ref.target)) noteRef(ref.target, ref, p);
+    // Images named by a property (`cover: posts/x.png`): from the vault root,
+    // then from the note's own folder (property-refs.js). Never by file name.
+    for (const ref of propertyImageRefs(content, p)) {
+      const target = resolvePropertyImage(ref, (c) => index.byPath.has(c) && !isMarkdown(c));
+      if (target) noteRef(target, ref, p);
     }
 
     for (const ref of refs.wikilinks) {

@@ -4,18 +4,22 @@
 // bundle check (`asset-unreferenced`), the publisher's own re-check and the
 // writing device (which images to send):
 //
-//   A top-level property whose value is one text naming an image by its path
-//   from the vault root (`cover: from-the-field/x-cover.png`, optionally as
-//   `"[[from-the-field/x-cover.png]]"`) references that image, when a file
-//   exists at exactly that path.
+//   A top-level property whose value is one text naming an image
+//   (`cover: from-the-field/x-cover.png`, optionally as
+//   `"[[from-the-field/x-cover.png]]"`) references the first file that exists
+//   of: that path from the vault root, then that path from the note's own
+//   folder (`cover: x-cover.png` in "Topic/X/X.md" is "Topic/X/x-cover.png").
+//   This is Obsidian's order, minus its third step ("the only file of that
+//   name anywhere"): that step is refused because its answer can change when
+//   a file is added somewhere else. The Cyberchief renderer resolves image
+//   properties by the same two steps (site/components/cc.ts vaultFile).
 //
 // Why this rule and not "fields the site model types as image": publish.yml
 // alone decides what is public, so the selector must not read the site model,
 // and the public site build and vaults without a model (Cyberbase) need the
-// same answer. Why exact vault paths only: that is how renderers read these
-// properties (Quartz's cover/image, the Cyberchief renderer's cover, avatar
-// and portrait), so a note-relative or basename guess would publish a file
-// the page never shows. Pure, no Node imports: the plugin uses it too.
+// same answer. Why these two steps and no name lookup: both are fixed by the
+// note's own path, so the answer never depends on unrelated files. Pure, no
+// Node imports: the plugin uses it too.
 import { parseFrontmatter } from './page-rules.js';
 
 export const PROPERTY_IMAGE_EXTENSIONS = Object.freeze(['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'svg']);
@@ -36,12 +40,30 @@ export function propertyImagePath(value) {
   return PROPERTY_IMAGE_EXTENSIONS.includes(extension) ? p : null;
 }
 
+/** "Topic/X/X.md" -> "Topic/X"; "" at the vault root. */
+const folderOf = (path) => (typeof path === 'string' && path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '');
+
 /**
- * Every image path a note's top-level properties name: [{ key, target, line,
- * kind: 'property', raw }]. Existence is the caller's check (the vault tree).
- * Unreadable properties name nothing.
+ * The vault paths a property image may be, in order: from the vault root,
+ * then from the note's own folder (when notePath is given and it differs).
  */
-export function propertyImageRefs(text) {
+export function propertyImageCandidates(target, notePath = null) {
+  const out = [target];
+  const folder = folderOf(notePath);
+  if (folder !== '') {
+    const relative = `${folder}/${target}`;
+    if (!out.includes(relative)) out.push(relative);
+  }
+  return out;
+}
+
+/**
+ * Every image a note's top-level properties name: [{ key, target, candidates,
+ * line, kind: 'property', raw }]. target: the value as a path; candidates:
+ * where it may be (propertyImageCandidates). Which exists is the caller's
+ * check (resolvePropertyImage). Unreadable properties name nothing.
+ */
+export function propertyImageRefs(text, notePath = null) {
   const fm = parseFrontmatter(typeof text === 'string' ? text : '');
   if (fm.error) return [];
   const lines = typeof text === 'string' ? text.split('\n') : [];
@@ -50,14 +72,22 @@ export function propertyImageRefs(text) {
     const target = propertyImagePath(value);
     if (target === null) continue;
     const at = lines.findIndex((line, i) => i > 0 && line.startsWith(`${key}:`));
-    refs.push({ key, target, line: at < 0 ? 1 : at + 1, kind: 'property', raw: `${key}: ${value}` });
+    refs.push({ key, target, candidates: propertyImageCandidates(target, notePath), line: at < 0 ? 1 : at + 1, kind: 'property', raw: `${key}: ${value}` });
   }
   return refs;
 }
 
-/** The existing images a note names in its properties. exists(path) -> boolean. */
-export function propertyImages(text, exists) {
+/** The first candidate of a ref that exists (exists(path) -> boolean), or null. */
+export function resolvePropertyImage(ref, exists) {
+  return (ref.candidates ?? [ref.target]).find((candidate) => exists(candidate)) ?? null;
+}
+
+/** The existing images a note names in its properties. exists(path) -> boolean; notePath: the note's vault path. */
+export function propertyImages(text, exists, notePath = null) {
   const out = [];
-  for (const ref of propertyImageRefs(text)) if (exists(ref.target) && !out.includes(ref.target)) out.push(ref.target);
+  for (const ref of propertyImageRefs(text, notePath)) {
+    const found = resolvePropertyImage(ref, exists);
+    if (found !== null && !out.includes(found)) out.push(found);
+  }
   return out;
 }
