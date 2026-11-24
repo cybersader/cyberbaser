@@ -6,7 +6,7 @@ import { applyPlan, fileSlug, folderOptions, frontmatterText, newFolderParents, 
 import { parseSiteModel, typeNamed } from '../src/core/site-model.js';
 import { notePublicStatus } from '../src/core/new-page.js';
 
-const { model } = parseSiteModel(readFileSync(new URL('./fixtures/cyberchief-model.yml', import.meta.url), 'utf8'));
+const { model } = parseSiteModel(readFileSync(new URL('./fixtures/cyberchief-model-v1.yml', import.meta.url), 'utf8'));
 const PATHS = [
   'index.md', 'about.md', 'publish.yml', 'authors/the-chief.md', 'authors/the-chief/avatar.png',
   'leadership-and-strategy/index.md', 'leadership-and-strategy/a-security-strategy-that-fits-on-one-page.md',
@@ -50,25 +50,25 @@ test('the name can be edited before Create; it is cleaned by the same rule', () 
   const values = (extra) => ({ ...POST, cover: null, ...extra });
   const plan = (extra) => planNewNote({ model, typeName: 'post', values: values(extra), paths: PATHS, today: '2026-11-24', titleOf });
   expect(plan({}).notePath).toBe('leadership-and-strategy/questions-to-ask-a-new-ciso-the-first-90-days.md');
-  expect(plan({ slug: 'new-ciso-questions' }).notePath).toBe('leadership-and-strategy/new-ciso-questions.md');
-  expect(plan({ slug: '  New CISO: Questions! ' }).notePath).toBe('leadership-and-strategy/new-ciso-questions.md');
-  expect(plan({ slug: '   ' }).notePath).toBe('leadership-and-strategy/questions-to-ask-a-new-ciso-the-first-90-days.md');
-  expect(plan({ slug: '../../etc' }).notePath).toBe('leadership-and-strategy/etc.md');
-  expect(plan({ slug: '!!!' }).errors).toEqual({ slug: 'Use some letters or digits in the file name.' });
-  expect(plan({ slug: 'a-security-strategy-that-fits-on-one-page' }).errors).toEqual({ slug: 'There is already a note with this file name there. Change it.' });
+  expect(plan({ name: 'new-ciso-questions' }).notePath).toBe('leadership-and-strategy/new-ciso-questions.md');
+  expect(plan({ name: '  New CISO: Questions! ' }).notePath).toBe('leadership-and-strategy/new-ciso-questions.md');
+  expect(plan({ name: '   ' }).notePath).toBe('leadership-and-strategy/questions-to-ask-a-new-ciso-the-first-90-days.md');
+  expect(plan({ name: '../../etc' }).notePath).toBe('leadership-and-strategy/etc.md');
+  expect(plan({ name: '!!!' }).errors).toEqual({ name: 'Use some letters or digits in the file name.' });
+  expect(plan({ name: 'a-security-strategy-that-fits-on-one-page' }).errors).toEqual({ name: 'There is already a note with this file name there. Change it.' });
   // The title stays the title.
-  expect(plan({ slug: 'short' }).steps.at(-1).text).toContain('title: "Questions to ask a new CISO: the first 90 days"');
+  expect(plan({ name: 'short' }).steps.at(-1).text).toContain('title: "Questions to ask a new CISO: the first 90 days"');
   // A new folder's name too.
   const kb = planNewNote({ model, typeName: 'kb-page', paths: PATHS, titleOf, values: { title: 'Tabletop basics', description: 'd',
-    folder: { new: { parent: 'risk-and-governance', values: { title: 'Exercises & drills', slug: 'drills', description: 'd' } } } } });
+    folder: { new: { parent: 'risk-and-governance', values: { title: 'Exercises & drills', name: 'drills', description: 'd' } } } } });
   expect(kb.steps.map((step) => step.path)).toEqual(['kb/risk-and-governance/drills', 'kb/risk-and-governance/drills/index.md',
     'kb/risk-and-governance/drills/tabletop-basics.md']);
   const auto = planNewNote({ model, typeName: 'kb-page', paths: PATHS, titleOf, values: { title: 'X', description: 'd',
     folder: { new: { parent: '', values: { title: 'Policy & law', description: 'd' } } } } });
   expect(auto.steps[0].path).toBe('kb/policy-and-law');
   const taken = planNewNote({ model, typeName: 'kb-page', paths: PATHS, titleOf, values: { title: 'X', description: 'd',
-    folder: { new: { parent: 'risk-and-governance', values: { title: 'Anything', slug: 'Frameworks', description: 'd' } } } } });
-  expect(taken.errors['folder.new.slug']).toContain('already there');
+    folder: { new: { parent: 'risk-and-governance', values: { title: 'Anything', name: 'Frameworks', description: 'd' } } } } });
+  expect(taken.errors['folder.new.name']).toContain('already there');
 });
 
 test('properties: model order, quoting where needed, nothing can be injected', () => {
@@ -106,7 +106,7 @@ test('tags: group/value preferred, plain tags allowed by the model, suggested fr
   expect(suggestions).toContain('sector/space'); // from the vault
   expect(suggestions).toContain('kb/risk-and-governance'); // also filed
   expect(suggestions).toContain('strategy'); // a plain tag already in the vault
-  const strict = parseSiteModel(readFileSync(new URL('./fixtures/cyberchief-model.yml', import.meta.url), 'utf8')
+  const strict = parseSiteModel(readFileSync(new URL('./fixtures/cyberchief-model-v1.yml', import.meta.url), 'utf8')
     .replace(/\n *allow_plain: true[^\n]*/u, '')).model;
   expect(tagSuggestions(strict, [['strategy', 'audience/board']])).not.toContain('strategy');
   expect(planNewNote({ model: strict, typeName: 'post', values: { ...POST, cover: null, tags: ['strategy'] }, paths: PATHS, titleOf }).errors.tags)

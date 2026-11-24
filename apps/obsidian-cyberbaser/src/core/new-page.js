@@ -10,6 +10,7 @@
 // receives and what this device later hashes and signs; the node and the
 // publisher refuse any image that still carries a location.
 import { classifyPage, publicAddress, resolveConfigText } from '../../../../packages/publish/src/page-rules.js';
+import { readAddressStyle } from '../../../../packages/publish/src/addresses.js';
 import { checkAsset, imageEmbeds, MediaError, stripLocation } from '../../../../packages/media-check/src/index.js';
 import { findFrontmatterInText } from '../../../../packages/correction/src/frontmatter.js';
 import { propertyImages } from '../../../../packages/publish/src/property-refs.js';
@@ -20,17 +21,24 @@ export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 export const MAX_BUNDLE_BYTES = 12 * 1024 * 1024;
 const REMOTE = /^\s*(?:[a-z][a-z0-9+.-]*:|\/\/)/iu;
 
-/** { published, address, draft, marker, rule } for one note under the vault's publish.yml text. */
-export function notePublicStatus({ path, text, publishYml }) {
+/**
+ * { published, address, draft, marker, rule } for one note under the vault's
+ * publish.yml text. siteYml: the vault's .cyberbaser/site.yml text (or null),
+ * whose `addresses:` says how the renderer turns paths into addresses; a
+ * style this code does not know makes nothing public here (fail closed).
+ */
+export function notePublicStatus({ path, text, publishYml, siteYml = null }) {
   const resolved = resolveConfigText(publishYml);
   if (!resolved.ok) return { published: false, address: null, draft: false, marker: null, rule: 'config-unavailable' };
   const verdict = classifyPage(path, text, resolved);
+  const style = readAddressStyle(siteYml);
+  const address = verdict.published && style.ok ? publicAddress(path, verdict.slug, style.style) : null;
   return {
-    published: verdict.published,
-    address: verdict.published ? publicAddress(path, verdict.slug) : null,
+    published: verdict.published && address !== null,
+    address,
     draft: verdict.marker !== undefined,
     marker: verdict.marker ?? null,
-    rule: verdict.rule,
+    rule: style.ok ? verdict.rule : 'address-style-unknown',
   };
 }
 
@@ -168,12 +176,12 @@ export function withFirstPublishDates(text, stamps = {}) {
  * dates filled in, see withFirstPublishDates) and whether that would go
  * public. { text, status } or null when Draft cannot be turned off here.
  */
-export function draftPublishPlan({ path, text, publishYml, stamps = {} }) {
-  const local = notePublicStatus({ path, text, publishYml });
+export function draftPublishPlan({ path, text, publishYml, siteYml = null, stamps = {} }) {
+  const local = notePublicStatus({ path, text, publishYml, siteYml });
   if (local.marker !== 'draft') return null;
   const off = withDraftOff(text);
   if (off === null) return null;
   const next = withFirstPublishDates(off, stamps);
-  const status = notePublicStatus({ path, text: next, publishYml });
+  const status = notePublicStatus({ path, text: next, publishYml, siteYml });
   return status.published ? { text: next, status } : null;
 }

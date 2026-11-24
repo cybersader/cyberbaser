@@ -9,7 +9,8 @@
 // or end the block. The written block is parsed back and compared before
 // anything is created.
 import yaml from 'js-yaml';
-import { fillLocation, matchLocation, patternSegments, typeNamed } from './site-model.js';
+import { addressFor } from '../../../../packages/publish/src/addresses.js';
+import { DEFAULT_UNSAFE, fillLocation, matchLocation, namePlaceholder, patternSegments, typeNamed } from './site-model.js';
 
 export const IMAGE_EXTENSIONS = Object.freeze(['png', 'jpg', 'jpeg', 'webp', 'gif']);
 const TAG_GROUP_VALUE = /^[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)+$/u;
@@ -35,10 +36,49 @@ export function fileSlug(title) {
     .trim().replace(/ +/gu, '-').slice(0, 80).replace(/-+$/u, '');
 }
 
+const WINDOWS_RESERVED = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu;
+
+/**
+ * Readable file or folder name (site model version 2, `names:`): the title as
+ * typed, minus characters unsafe in file names on Windows, macOS or Linux
+ * (the model's unsafe_characters, default : / \ ? * " < > |) and control
+ * characters (each replaced by a space), spaces collapsed, then trimmed as the model says (leading and
+ * trailing spaces, trailing dots). Leading dots are dropped too, so a name
+ * never makes a hidden file. "Risk & governance" stays "Risk & governance".
+ */
+export function readableName(title, names = null) {
+  const unsafe = new Set([...(names?.unsafe ?? DEFAULT_UNSAFE)]);
+  const trim = names?.trim ?? ['trailing-dot', 'trailing-space', 'leading-space'];
+  // Each unsafe character becomes a space (then spaces collapse), so "Before/after" reads "Before after".
+  let name = [...String(title ?? '').replace(/\s+/gu, ' ')].map((ch) => (unsafe.has(ch) || /\p{Cc}/u.test(ch) ? ' ' : ch)).join('')
+    .replace(/ {2,}/gu, ' ');
+  if (trim.includes('leading-space')) name = name.replace(/^ +/u, '');
+  for (let again = true; again;) {
+    const before = name;
+    if (trim.includes('trailing-space')) name = name.replace(/ +$/u, '');
+    if (trim.includes('trailing-dot')) name = name.replace(/\.+$/u, '');
+    again = name !== before;
+  }
+  name = name.replace(/^\.+/u, '').trim();
+  if ([...name].length > 120) name = [...name].slice(0, 120).join('').replace(/[ .]+$/u, '');
+  return name;
+}
+
+/** The name a title gives under this model: readable (version 2 `names:`) or the older slug. */
+export function nameFromTitle(model, title) {
+  return model?.names ? readableName(title, model.names) : fileSlug(title);
+}
+
 /** The name a note or folder gets: the author's own (cleaned) when given, else from the title. */
-function chosenSlug(values) {
-  const own = oneLine(values?.slug);
-  return own === '' ? fileSlug(values?.title) : fileSlug(own);
+function chosenName(model, values) {
+  const own = oneLine(values?.name);
+  return nameFromTitle(model, own === '' ? values?.title : own);
+}
+
+/** Why this name cannot be a file or folder name, or null. */
+function nameProblem(name, what) {
+  if (WINDOWS_RESERVED.test(name)) return `"${name}" is a name Windows keeps for itself. Change the ${what}.`;
+  return null;
 }
 
 export function todayString(date = new Date()) {
@@ -244,7 +284,8 @@ function propertyEntries(type, values, context, errors, prefix = '') {
         const name = String(value.name ?? '');
         const extension = name.includes('.') ? name.split('.').at(-1).toLowerCase() : '';
         if (!IMAGE_EXTENSIONS.includes(extension)) { errors[key] = 'Pick a PNG, JPEG, WebP or GIF image.'; break; }
-        const target = join(context.folder, `${context.slug}-${field.name}.${extension === 'jpeg' ? 'jpg' : extension}`);
+        // Beside the note: "<name> cover.jpg" (readable names) or "<slug>-cover.jpg".
+        const target = join(context.folder, `${context.slug}${context.model.names ? ' ' : '-'}${field.name}.${extension === 'jpeg' ? 'jpg' : extension}`);
         if (context.exists(target)) { errors[key] = `There is already a file named ${target.split('/').at(-1)} there.`; break; }
         context.images.push({ path: target, source: value.source });
         entries.push([field.name, target]);
@@ -262,11 +303,15 @@ function propertyEntries(type, values, context, errors, prefix = '') {
  * folder field answer is { existing: '<folder under root>' } or
  * { new: { parent: '<folder under root or "">', values: { title, … } } } and
  * an image answer is { name, source } (source is passed through to I/O).
+ * values.name (and a new folder's values.name): the author's own edit of the
+ * file or folder name; empty means "from the title".
  * paths: every file path in the vault. authorNote: this device's author note.
- * Returns { ok: false, errors: { field: sentence } } or
- * { ok: true, notePath, steps: [{ kind: folder|note|image, path, … }] }.
+ * addressStyle: the vault's address style (null: no address worked out).
+ * Returns { ok: false, errors: { field: sentence }, notePath, address } or
+ * { ok: true, notePath, address, steps: [{ kind: folder|note|image, path, … }] };
+ * notePath and address may be null while answers are missing.
  */
-export function planNewNote({ model, typeName, values = {}, paths = [], today, authorNote = null, titleOf = () => null }) {
+export function planNewNote({ model, typeName, values = {}, paths = [], today, authorNote = null, titleOf = () => null, addressStyle = null }) {
   const type = typeNamed(model, typeName);
   if (!type) return { ok: false, errors: { type: 'Pick what you are writing.' } };
   const lower = new Set(paths.map((path) => path.toLowerCase()));
@@ -274,15 +319,16 @@ export function planNewNote({ model, typeName, values = {}, paths = [], today, a
   const exists = (path) => lower.has(path.toLowerCase()) || folderPrefixes.has(path.toLowerCase());
   const errors = {};
   const steps = [];
-  const slug = chosenSlug(values);
-  const ownSlug = oneLine(values.slug) !== '';
+  const slug = chosenName(model, values);
+  const ownSlug = oneLine(values.name) !== '';
   // Problems with the name go to the field that made it.
-  const nameKey = ownSlug ? 'slug' : 'title';
-  if (ownSlug && slug === '') errors.slug = 'Use some letters or digits in the file name.';
+  const nameKey = ownSlug ? 'name' : 'title';
+  if (ownSlug && slug === '') errors.name = 'Use some letters or digits in the file name.';
   else if (oneLine(values.title) !== '' && slug === '') errors.title = 'Use some letters or digits in the title.';
+  else if (slug !== '' && nameProblem(slug, ownSlug ? 'file name' : 'title')) errors[nameKey] = nameProblem(slug, ownSlug ? 'file name' : 'title');
 
   // Where the note lives.
-  const placeholders = { slug };
+  const placeholders = { [namePlaceholder(type) ?? 'slug']: slug };
   const folderField = type.location.field ? type.fields.find((field) => field.name === type.location.field) : null;
   if (folderField) {
     const answer = values[folderField.name];
@@ -292,8 +338,8 @@ export function planNewNote({ model, typeName, values = {}, paths = [], today, a
       if (!folderField.allowNew) errors[folderField.name] = `Pick an existing ${folderField.label.toLowerCase()}.`;
       const folderType = typeNamed(model, folderField.ofType);
       const parent = String(answer.new.parent ?? '');
-      const name = chosenSlug(answer.new.values);
-      const folderNameKey = oneLine(answer.new.values?.slug) !== '' ? 'slug' : 'title';
+      const name = chosenName(model, answer.new.values);
+      const folderNameKey = oneLine(answer.new.values?.name) !== '' ? 'name' : 'title';
       const folderErrors = {};
       if (parent !== '' && !newFolderParents(folderField, options, model, titleOf).some((option) => option.value === parent)) {
         folderErrors.parent = 'Pick where the new folder goes.';
@@ -301,7 +347,11 @@ export function planNewNote({ model, typeName, values = {}, paths = [], today, a
       const value = join(parent, name);
       const folderPath = join(root, value);
       const notePath = join(folderPath, model.taxonomy?.folderNote ?? 'index.md');
-      if (name === '' && (folderNameKey === 'slug' || oneLine(answer.new.values?.title) !== '')) folderErrors[folderNameKey] = 'Use some letters or digits in the folder name.';
+      if (name === '' && (folderNameKey === 'name' || oneLine(answer.new.values?.title) !== '')) folderErrors[folderNameKey] = 'Use some letters or digits in the folder name.';
+      else if (name !== '' && nameProblem(name, 'folder name')) folderErrors[folderNameKey] = nameProblem(name, 'folder name');
+      else if (name !== '' && addressStyle !== null && addressFor(`${join(root, name)}/index.md`, null, addressStyle) === null) {
+        folderErrors[folderNameKey] = 'This folder name has no web address. Use some letters or digits.';
+      }
       else if (name !== '' && exists(folderPath)) folderErrors[folderNameKey] = 'A folder with this name is already there. Pick it from the list instead.';
       const entries = propertyEntries(folderType, answer.new.values ?? {}, { model, today, authorNote, exists, images: [], folder: folderPath, slug: name }, folderErrors);
       if (name !== '' && !folderErrors[folderNameKey] && !matchLocation(folderType.location, notePath)) folderErrors.parent = `A ${folderType.label.toLowerCase()} cannot go there.`;
@@ -321,17 +371,20 @@ export function planNewNote({ model, typeName, values = {}, paths = [], today, a
   // An optional folder part ([<folder...>/]) may be empty: the note goes in the root.
   const optional = new Set(patternSegments(type.location.pattern).filter((segment) => segment.optional).map((segment) => segment.name));
   const filled = Object.entries(placeholders).every(([name, value]) => (typeof value === 'string' && value !== '') || (value === '' && optional.has(name)));
-  const notePath = slug && filled ? fillLocation(type.location, placeholders) : null;
+  const notePath = slug && filled && !errors[nameKey] ? fillLocation(type.location, placeholders) : null;
+  // The web address the site will give it (the vault's address style, .cyberbaser/site.yml).
+  const address = notePath && addressStyle !== null ? addressFor(notePath, null, addressStyle) : null;
   if (notePath && !matchLocation(type.location, notePath)) errors[nameKey] = `A ${type.label.toLowerCase()} cannot be called that.`;
+  else if (notePath && addressStyle !== null && address === null) errors[nameKey] = 'This name has no web address. Use some letters or digits.';
   else if (notePath && exists(notePath)) {
     errors[nameKey] = ownSlug ? 'There is already a note with this file name there. Change it.' : 'There is already a note with this title there. Change the title.';
   }
   const images = [];
   const entries = propertyEntries(type, values, { model, today, authorNote, exists, images, folder: notePath ? dirname(notePath) : '', slug }, errors);
-  if (Object.keys(errors).length > 0) return { ok: false, errors };
+  if (Object.keys(errors).length > 0) return { ok: false, errors, notePath, address };
   for (const image of images) steps.push({ kind: 'image', path: image.path, source: image.source });
   steps.push({ kind: 'note', path: notePath, text: `${frontmatterText(entries)}\n` });
-  return { ok: true, notePath, steps };
+  return { ok: true, notePath, address, steps };
 }
 
 /**

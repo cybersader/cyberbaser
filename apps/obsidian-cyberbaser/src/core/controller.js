@@ -68,6 +68,8 @@ const MESSAGES = Object.freeze({
   'image-has-location': 'A photo still records where it was taken and could not be cleaned.',
   'public-set-removal-refused': 'This change would take pages off your site.',
   'address-changed': 'This change would move a page to another address.',
+  'address-style-unknown': "Your site's settings (.cyberbaser/site.yml) name an address style this version does not know.",
+  'address-mismatch': 'Your site would put this page at a different address than shown, so it was not offered for approval.',
   'public-set-change-unlisted': 'This change would publish files it does not add.',
   'approval-public-unknown': "This device can't read your publish.yml, so it can't check what goes public. Nothing was signed.",
   'approval-private-note': 'This would publish a note your publish.yml keeps private. Nothing was signed.',
@@ -205,7 +207,7 @@ export function createController({ client, store, signingStore = null, tapGate =
      * publishYml: this vault's own publish.yml text, so the device can work
      * out new public pages itself. New images are fetched in chunks.
      */
-    async readApproval(requestId, { publishYml = null } = {}) {
+    async readApproval(requestId, { publishYml = null, siteYml = null } = {}) {
       const current = await requirePairing();
       const key = await requireSigning();
       const request = await client.request(current, 'readApproval', { requestId });
@@ -228,7 +230,7 @@ export function createController({ client, store, signingStore = null, tapGate =
         for (const part of parts) { out.set(part, at); at += part.length; }
         return out;
       };
-      return prepareApproval({ request, signing: key, now: now(), publishYml, readChunk });
+      return prepareApproval({ request, signing: key, now: now(), publishYml, siteYml, readChunk });
     },
 
     /** Sign exactly the checked intent, only on a real tap, and send it back. */
@@ -265,7 +267,7 @@ export function createController({ client, store, signingStore = null, tapGate =
       try {
         const reply = await client.request(current, 'readNoteStatus', { path: file.path });
         const status = statusFor({ reply, waiting: waiting.has(file.path) }, digests);
-        if (status.key === 'live') waiting.delete(file.path);
+        if (status.key !== 'waiting') waiting.delete(file.path);
         return { status, reply };
       } catch (error) {
         const state = error instanceof NodeError && error.kind === 'refused' ? { refused: true } : { unreachable: true };
@@ -329,10 +331,11 @@ export function createController({ client, store, signingStore = null, tapGate =
      * vault note is updated only after the node accepts it (writeBack gets
      * the published text). Same image rules as publishNewPage.
      */
-    async publishDraft(file, text, { publishYml, images = [], remote = [], stamps = {}, writeBack = async () => {} }) {
-      const plan = draftPublishPlan({ path: file.path, text, publishYml, stamps });
+    async publishDraft(file, text, { publishYml, siteYml = null, images = [], remote = [], stamps = {}, writeBack = async () => {} }) {
+      const plan = draftPublishPlan({ path: file.path, text, publishYml, siteYml, stamps });
       if (plan === null) {
-        const local = notePublicStatus({ path: file.path, text, publishYml });
+        const local = notePublicStatus({ path: file.path, text, publishYml, siteYml });
+        if (local.rule === 'address-style-unknown') throw new NodeError('refused', 'address-style-unknown');
         throw new NodeError('refused', local.marker === 'draft' && withDraftOff(text) === null ? 'draft-not-plain' : 'create-outside-publication');
       }
       const outcome = await this.publishNewPage(file, plan.text, { status: plan.status, images, remote });

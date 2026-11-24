@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { creatableTypes, FIELD_TYPES, fillLocation, firstPublishFields, matchLocation, parseSiteModel, typeNamed } from '../src/core/site-model.js';
 
-const CYBERCHIEF = readFileSync(new URL('./fixtures/cyberchief-model.yml', import.meta.url), 'utf8');
+const CYBERCHIEF = readFileSync(new URL('./fixtures/cyberchief-model-v1.yml', import.meta.url), 'utf8');
 
 const minimal = (fields, extra = '') => `version: 0
 types:
@@ -113,7 +113,7 @@ test('an unknown field type is an error that names the field', () => {
 test('each mistake gets its own plain sentence', () => {
   expect(errorsOf('types: [')).toMatch(/not valid YAML near line \d: unexpected end/u);
   expect(errorsOf('- a\n- b\n')).toContain('should start with "version: 0"');
-  expect(errorsOf(minimal('').replace('version: 0', 'version: 2'))).toContain('says version 2; this plugin reads version 0');
+  expect(errorsOf(minimal('').replace('version: 0', 'version: 3'))).toContain('says version 3; this plugin reads version 0, 1, 2');
   expect(errorsOf('version: 0\n')).toContain('needs a "types:" section');
   expect(errorsOf(minimal('', 'pages: {}'))).toContain('has a section "pages"');
   expect(errorsOf(minimal('      x: { type: text, lable: X }'))).toContain('has a setting "lable" that a text field does not use');

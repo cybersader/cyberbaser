@@ -1,15 +1,21 @@
 // The vault's site model (.cyberbaser/model.yml): what kinds of notes the
 // site has, their fields, and which folders hold them. Pure, no Obsidian.
 //
-// The format is the vault's own (versions 0 and 1, written by the site
-// builder). This reads it as written and does not add to it. Errors are plain
+// The format is the vault's own (versions 0 to 2, written by the site
+// builder). This reads it as written and does not add to it. Version 2 adds
+// readable names (`names:`): a new note's file and a new folder are named
+// like their title, and the location placeholder is <name> (<slug> before). Errors are plain
 // sentences that name the type and field, because the person reading them is
 // the site builder fixing one file. The model never decides what is public:
 // publish.yml does.
 import yaml from 'js-yaml';
 
 export const MODEL_PATH = '.cyberbaser/model.yml';
-export const SUPPORTED_VERSIONS = Object.freeze([0, 1]);
+export const SUPPORTED_VERSIONS = Object.freeze([0, 1, 2]);
+// The placeholder a new note's own name fills: <name> (readable, version 2) or <slug> (versions 0 and 1).
+export const NAME_PLACEHOLDERS = Object.freeze(['name', 'slug']);
+export const DEFAULT_UNSAFE = ':/\\?*"<>|';
+const TRIMS = Object.freeze(['trailing-dot', 'trailing-space', 'leading-space']);
 // Date defaults (version 1): the creation date, or the date of the first publish.
 export const DATE_DEFAULTS = Object.freeze(['today', 'first-publish']);
 export const FIELD_TYPES = Object.freeze(['text', 'long-text', 'date', 'checkbox', 'url', 'image', 'choice',
@@ -18,7 +24,7 @@ export const FIELD_TYPES = Object.freeze(['text', 'long-text', 'date', 'checkbox
 const COMMON_KEYS = ['type', 'label', 'required', 'default', 'hint', 'hidden'];
 const EXTRA_KEYS = Object.freeze({ choice: ['options'], 'choice-from-folder': ['root', 'of_type', 'allow_root', 'allow_new', 'max_depth'] });
 const TYPE_KEYS = ['label', 'layout', 'location', 'fields'];
-const TOP_KEYS = ['version', 'site', 'types', 'taxonomy'];
+const TOP_KEYS = ['version', 'site', 'names', 'types', 'taxonomy'];
 const PLACEHOLDER = /^<([a-z][a-z0-9_-]*)(\.\.\.)?>$/u;
 const NAME = /^[a-z][a-z0-9_-]*$/u;
 
@@ -170,7 +176,7 @@ function readLocation(typeName, raw, errors) {
 export function isCreatable(type) {
   if (!type.location?.pattern) return false;
   return patternSegments(type.location.pattern).every((segment) => segment.literal !== undefined
-    || segment.name === 'slug' || segment.name === type.location.field);
+    || NAME_PLACEHOLDERS.includes(segment.name) || segment.name === type.location.field);
 }
 
 function checkType(type, types, errors) {
@@ -205,7 +211,7 @@ function checkType(type, types, errors) {
   }
   if (isCreatable(type)) {
     const title = type.fields.find((field) => field.name === 'title');
-    if (names.includes('slug') && (!title || !['text'].includes(title.type))) {
+    if (names.some((name) => NAME_PLACEHOLDERS.includes(name)) && (!title || !['text'].includes(title.type))) {
       errors.push(`${where}: new notes get their file name from the title, so the type needs a text field named "title".`);
     }
   }
@@ -262,6 +268,7 @@ export function parseSiteModel(text) {
   }
   for (const type of types) checkType(type, types, errors);
   const taxonomy = readTaxonomy(raw.taxonomy, errors);
+  const names = readNames(raw.names, errors);
   if (errors.length > 0) return { ok: false, errors };
   return {
     ok: true,
@@ -271,8 +278,30 @@ export function parseSiteModel(text) {
         defaultAuthor: isText(site.default_author) ? site.default_author : null }),
       types: Object.freeze(types.map((type) => Object.freeze(type))),
       taxonomy,
+      names,
     }),
   };
+}
+
+// names: how new files and folders are named (version 2). null: the older
+// slug rule (lower-case words joined by hyphens).
+function readNames(raw, errors) {
+  if (raw === undefined) return null;
+  if (!isMap(raw)) { errors.push('"names" should be a set of settings, for example { rule: title-minus-unsafe }.'); return null; }
+  for (const key of Object.keys(raw)) {
+    if (!['rule', 'unsafe_characters', 'trim', 'address'].includes(key)) errors.push(`"names" has a setting "${key}" Cyberbaser does not read. It can have: rule, unsafe_characters, trim, address.`);
+  }
+  if (raw.rule !== 'title-minus-unsafe') errors.push('"names.rule" should be title-minus-unsafe: names are the title minus characters unsafe in file names.');
+  if (raw.unsafe_characters !== undefined && typeof raw.unsafe_characters !== 'string') errors.push('"names.unsafe_characters" should be text, like ":/\\?*\"<>|".');
+  if (raw.trim !== undefined && !(Array.isArray(raw.trim) && raw.trim.every((value) => TRIMS.includes(value)))) {
+    errors.push(`"names.trim" should be a list of: ${list(TRIMS)}.`);
+  }
+  if (raw.address !== undefined && typeof raw.address !== 'string') errors.push('"names.address" should name the address style, like lowercase-hyphen.');
+  return Object.freeze({ rule: 'title-minus-unsafe',
+    unsafe: typeof raw.unsafe_characters === 'string' ? raw.unsafe_characters : DEFAULT_UNSAFE,
+    trim: Object.freeze(Array.isArray(raw.trim) ? raw.trim.filter((value) => TRIMS.includes(value)) : [...TRIMS]),
+    // The address style the model expects; .cyberbaser/site.yml is the one that decides.
+    address: typeof raw.address === 'string' ? raw.address : null });
 }
 
 function readTaxonomy(raw, errors) {
@@ -331,6 +360,12 @@ export function firstPublishFields(model, path) {
     }
   }
   return names;
+}
+
+/** The placeholder this type's own name fills (name or slug), or null. */
+export function namePlaceholder(type) {
+  if (!type?.location?.pattern) return null;
+  return patternSegments(type.location.pattern).map((segment) => segment.name).find((name) => NAME_PLACEHOLDERS.includes(name)) ?? null;
 }
 
 /** The types an author can start from the form, in model order. */

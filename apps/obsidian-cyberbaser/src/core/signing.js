@@ -266,7 +266,7 @@ function sideBytes(value) {
  * Throws ApprovalProblem for anything that does not add up. The summary uses
  * only the intent and bytes whose hashes the intent itself fixes.
  */
-export async function prepareApproval({ request, signing, now, publishYml = null, readChunk = null }) {
+export async function prepareApproval({ request, signing, now, publishYml = null, siteYml = null, readChunk = null }) {
   if (!request || typeof request !== 'object' || typeof request.requestId !== 'string') throw new ApprovalProblem('approval-invalid');
   let template;
   try { template = validateIntent({ ...request.intent, keyId: signing.keyId }); } catch { throw new ApprovalProblem('approval-invalid'); }
@@ -304,7 +304,8 @@ export async function prepareApproval({ request, signing, now, publishYml = null
     if (kind === 'added' && markdown) {
       if (typeof publishYml !== 'string') throw new ApprovalProblem('approval-public-unknown');
       if (after === null) throw new ApprovalProblem('approval-invalid');
-      const status = notePublicStatus({ path: change.path, text: after, publishYml });
+      const status = notePublicStatus({ path: change.path, text: after, publishYml, siteYml });
+      if (status.rule === 'address-style-unknown') throw new ApprovalProblem('approval-public-unknown');
       if (!status.published) throw new ApprovalProblem('approval-private-note');
       newPages.push({ path: change.path, address: status.address });
     } else if (kind === 'added' && change.path !== 'publish.yml') {

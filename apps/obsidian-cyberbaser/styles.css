@@ -46,6 +46,8 @@
 .cyberbaser-new-post .cyberbaser-form-wide textarea { width: 100%; resize: vertical; }
 .cyberbaser-new-post .cyberbaser-title-input { font-weight: var(--font-semibold); }
 .cyberbaser-new-post .cyberbaser-field-error { color: var(--text-error); font-size: var(--font-ui-smaller); margin-top: var(--size-4-1); }
+.cyberbaser-new-post .cyberbaser-address-preview { color: var(--text-muted); font-size: var(--font-ui-smaller); margin-top: var(--size-4-1); overflow-wrap: anywhere; }
+.cyberbaser-new-post .cyberbaser-address-preview:empty { display: none; }
 .cyberbaser-new-post .cyberbaser-new-folder { margin: 0 0 var(--size-4-2) var(--size-4-4); padding-left: var(--size-4-3); border-left: 2px solid var(--background-modifier-border); }
 .cyberbaser-new-post .cyberbaser-tags { display: flex; flex-wrap: wrap; gap: var(--size-4-1); flex: 1 1 100%; }
 .cyberbaser-new-post .cyberbaser-tags:empty { display: none; }

@@ -2,8 +2,9 @@
 // they are writing, fills in plain fields, and gets a note to write in. They
 // never see the properties block; the model file stays the site builder's.
 import { AbstractInputSuggest, FuzzySuggestModal, Modal, Notice, Setting, TFile, setIcon } from 'obsidian';
-import { applyPlan, fileSlug, folderOptions, IMAGE_EXTENSIONS, newFolderParents, normalizeTag, planNewNote, tagRules, tagSuggestions, todayString } from './core/new-note.js';
-import { creatableTypes, MODEL_PATH, parseSiteModel, patternSegments, typeNamed } from './core/site-model.js';
+import { applyPlan, folderOptions, IMAGE_EXTENSIONS, nameFromTitle, newFolderParents, normalizeTag, planNewNote, tagRules, tagSuggestions, todayString } from './core/new-note.js';
+import { creatableTypes, MODEL_PATH, NAME_PLACEHOLDERS, parseSiteModel, patternSegments, typeNamed } from './core/site-model.js';
+import { readAddressStyle } from '../../../packages/publish/src/addresses.js';
 
 const NEW_FOLDER = '\u0000new';
 
@@ -60,6 +61,8 @@ export class NewPostModal extends Modal {
     this.typeName = typeName ?? this.types[0]?.name;
     this.values = {};
     this.errors = {};
+    // The vault's address style (.cyberbaser/site.yml), for the web address preview; null when unknown.
+    this.addressStyle = null;
   }
 
   vaultPaths() {
@@ -76,9 +79,26 @@ export class NewPostModal extends Modal {
     return this.app.vault.getMarkdownFiles().map((file) => this.app.metadataCache.getFileCache(file)?.frontmatter?.tags ?? []);
   }
 
-  onOpen() {
+  async onOpen() {
     this.modalEl.addClass('cyberbaser-modal', 'cyberbaser-new-post');
+    const style = readAddressStyle(await this.plugin.readSiteYml());
+    this.addressStyle = style.ok ? style.style : null;
     this.render();
+  }
+
+  // The plan as the answers stand (for the address preview; nothing is written).
+  currentPlan() {
+    return planNewNote({ model: this.model, typeName: this.typeName, values: this.values, paths: this.vaultPaths(),
+      today: todayString(), authorNote: this.plugin.authorNote(), titleOf: (path) => this.titleOf(path), addressStyle: this.addressStyle });
+  }
+
+  // "On your site at /address", under the name; empty until the answers place the note.
+  updateAddress() {
+    const line = this.contentEl.querySelector('.cyberbaser-address-preview');
+    if (!line) return;
+    const plan = this.currentPlan();
+    line.setText(plan.address ? `On your site at ${plan.address}` : this.addressStyle === null
+      ? "Your site's address settings (.cyberbaser/site.yml) are not readable here." : '');
   }
 
   render() {
@@ -90,7 +110,7 @@ export class NewPostModal extends Modal {
       new Setting(contentEl).setName('What are you writing?').addDropdown((dropdown) => {
         for (const candidate of this.types) dropdown.addOption(candidate.name, candidate.label);
         dropdown.setValue(this.typeName).onChange((value) => {
-          const keep = { title: this.values.title, description: this.values.description, ...(this.values.slug !== undefined ? { slug: this.values.slug } : {}) };
+          const keep = { title: this.values.title, description: this.values.description, ...(this.values.name !== undefined ? { name: this.values.name } : {}) };
           this.typeName = value;
           this.values = keep;
           this.errors = {};
@@ -100,8 +120,9 @@ export class NewPostModal extends Modal {
     }
     const form = contentEl.createDiv({ cls: 'cyberbaser-form' });
     const last = patternSegments(type.location.pattern).at(-1);
-    const nameLabel = last?.name === 'slug' ? 'File name' : 'Folder name';
+    const nameLabel = NAME_PLACEHOLDERS.includes(last?.name) ? 'File name' : 'Folder name';
     for (const field of type.fields) this.renderField(form, field, this.values, '', { nameLabel });
+    this.updateAddress();
     if (this.errors.type) form.createDiv({ cls: 'cyberbaser-field-error', text: this.errors.type });
     const actions = contentEl.createDiv({ cls: 'cyberbaser-actions' });
     const create = actions.createEl('button', { text: 'Create', cls: 'mod-cta' });
@@ -180,11 +201,12 @@ export class NewPostModal extends Modal {
   }
 
   // The name in the vault (file or folder), made from the title by the site
-  // model's rule and editable before Create. values.slug is set only once the
-  // author edits it; until then it follows the title.
+  // model's rule (readable names in version 2) and editable before Create.
+  // values.name is set only once the author edits it; until then it follows
+  // the title. The note's own name row also shows where it will be on the site.
   renderName(container, values, titleKey, label) {
     const prefix = titleKey.slice(0, -'title'.length);
-    const key = `${prefix}slug`;
+    const key = `${prefix}name`;
     const setting = new Setting(container).setName(label);
     setting.settingEl.addClass('cyberbaser-form-row', 'cyberbaser-name-row');
     setting.settingEl.dataset.field = key;
@@ -192,28 +214,32 @@ export class NewPostModal extends Modal {
     setting.addText((text) => {
       text.inputEl.addClass('cyberbaser-name-input');
       text.inputEl.spellcheck = false;
-      text.inputEl.autocapitalize = 'off';
-      text.setValue(values.slug ?? fileSlug(values.title)).onChange((value) => {
-        values.slug = value;
+      text.setValue(values.name ?? nameFromTitle(this.model, values.title)).onChange((value) => {
+        values.name = value;
         if (this.errors[key]) { delete this.errors[key]; setting.settingEl.removeClass('cyberbaser-has-error'); setting.descEl.querySelector('.cyberbaser-field-error')?.remove(); }
+        this.updateAddress();
       });
       // Show the cleaned name once the author leaves the field.
       text.inputEl.addEventListener('blur', () => {
-        if (values.slug === undefined) return;
-        const cleaned = fileSlug(values.slug);
-        if (cleaned === '' && String(values.slug).trim() === '') { delete values.slug; text.setValue(fileSlug(values.title)); return; }
-        if (cleaned !== '') { values.slug = cleaned; text.setValue(cleaned); }
+        if (values.name === undefined) return;
+        const cleaned = nameFromTitle(this.model, values.name);
+        if (String(values.name).trim() === '') { delete values.name; text.setValue(nameFromTitle(this.model, values.title)); this.updateAddress(); return; }
+        if (cleaned !== '') { values.name = cleaned; text.setValue(cleaned); }
+        this.updateAddress();
       });
     });
+    if (prefix === '') setting.descEl.createDiv({ cls: 'cyberbaser-address-preview' });
     const error = this.errors[key];
     if (error) { setting.settingEl.addClass('cyberbaser-has-error'); setting.descEl.createDiv({ cls: 'cyberbaser-field-error', text: error }); }
   }
 
   followTitle(values, titleKey) {
-    if (values.slug !== undefined) return;
-    const key = `${titleKey.slice(0, -'title'.length)}slug`;
-    const input = this.contentEl.querySelector(`[data-field="${key}"] input`);
-    if (input) input.value = fileSlug(values.title);
+    if (values.name === undefined) {
+      const key = `${titleKey.slice(0, -'title'.length)}name`;
+      const input = this.contentEl.querySelector(`[data-field="${CSS.escape(key)}"] input`);
+      if (input) input.value = nameFromTitle(this.model, values.title);
+    }
+    this.updateAddress();
   }
 
   renderFolder(container, setting, field, values, touched) {
@@ -230,6 +256,7 @@ export class NewPostModal extends Modal {
         values[field.name] = value === NEW_FOLDER ? { new: { parent: '', values: {} } } : value !== PICK ? { existing: value } : undefined;
         touched();
         if (value === NEW_FOLDER || answer?.new) this.render();
+        else this.updateAddress();
       });
     });
     if (!answer?.new) return;
@@ -240,7 +267,7 @@ export class NewPostModal extends Modal {
     if (parents.length > 1) {
       const parent = new Setting(box).setName('Inside').addDropdown((dropdown) => {
         for (const option of parents) dropdown.addOption(option.value, option.label);
-        dropdown.setValue(answer.new.parent).onChange((value) => { answer.new.parent = value; });
+        dropdown.setValue(answer.new.parent).onChange((value) => { answer.new.parent = value; this.updateAddress(); });
       });
       parent.settingEl.addClass('cyberbaser-form-row');
       const error = this.errors[`${field.name}.new.parent`];
@@ -307,8 +334,7 @@ export class NewPostModal extends Modal {
   }
 
   async create(button) {
-    const plan = planNewNote({ model: this.model, typeName: this.typeName, values: this.values, paths: this.vaultPaths(),
-      today: todayString(), authorNote: this.plugin.authorNote(), titleOf: (path) => this.titleOf(path) });
+    const plan = this.currentPlan();
     if (!plan.ok) {
       this.errors = plan.errors;
       this.render();

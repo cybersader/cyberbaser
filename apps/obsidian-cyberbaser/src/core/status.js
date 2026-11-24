@@ -61,7 +61,10 @@ export function statusFor(state, digests) {
   if (state.refused) return { key: 'noAccess', label: STATUS.noAccess };
   const reply = state.reply;
   const current = reply?.live ? (reply.live.folded ? digests?.folded : digests?.exact) : null;
-  if (state.waiting && !(current && current === reply.live.digest)) return { key: 'waiting', label: STATUS.waiting };
+  // A new page stops waiting once the site's repository has this text (published), even before it is confirmed live.
+  const published = typeof reply?.committed?.digest === 'string'
+    && reply.committed.digest === (reply.committed.folded ? digests?.folded : digests?.exact);
+  if (state.waiting && !published && !(current && current === reply.live.digest)) return { key: 'waiting', label: STATUS.waiting };
   if (!reply || reply.selected !== true) return { key: 'notSelected', label: STATUS.notSelected };
   if (!reply.live) return { key: 'pending', label: STATUS.pending };
   const extra = { version: reply.live.version, ...(typeof reply.live.at === 'string' ? { at: reply.live.at } : {}) };

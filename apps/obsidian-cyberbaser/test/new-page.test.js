@@ -4,7 +4,7 @@ import { hasLocation } from '../../../packages/media-check/src/index.js';
 import { createController, messageFor } from '../src/core/controller.js';
 import { NodeError } from '../src/core/client.js';
 import { embeddedImages, newPageProblem, notePublicStatus, prepareImages } from '../src/core/new-page.js';
-import { STATUS, statusFor } from '../src/core/status.js';
+import { STATUS, statusFor, textDigests } from '../src/core/status.js';
 
 const PUBLISH_YML = 'allow:\n  - "topic/**"\n';
 
@@ -76,12 +76,13 @@ test('a draft is never sent: publishNewPage refuses before any request', async (
   expect(messageFor(new NodeError('refused', 'image-has-location'))).toContain('where it was taken');
 });
 
-test('images go in 256 KiB chunks, then one bundle; the status reads Waiting for approval until live', async () => {
+test('images go in 256 KiB chunks, then one bundle; the status reads Waiting for approval until published', async () => {
   const calls = [];
+  const replies = { status: { path: 'topic/n.md', selected: false, live: null } };
   const controller = createController({ client: { request: async (_p, command, input) => {
     calls.push([command, input]);
     if (command === 'submitPageBundle') return { bundleId: 'bundle-x', state: 'signing', publicAdditions: [{ path: 'topic/n.md', address: '/topic/n' }] };
-    if (command === 'readNoteStatus') return { path: 'topic/n.md', selected: false, live: null };
+    if (command === 'readNoteStatus') return replies.status;
     return { complete: false };
   } }, store: { load: async () => ({ keyId: 'k', grants: ['publish', 'propose'] }) } });
   const big = new Uint8Array(600 * 1024);
@@ -96,4 +97,13 @@ test('images go in 256 KiB chunks, then one bundle; the status reads Waiting for
   const draft = await controller.status({ path: 'topic/n.md' }, '---\ndraft: true\n---\n', { publishYml: PUBLISH_YML });
   expect(draft.status).toEqual({ key: 'draft', label: STATUS.draft });
   expect(statusFor({ reply: { selected: true, live: { digest: 'd', folded: false } }, waiting: true }, { exact: 'd' }).key).toBe('live');
+  // Published (the branch head has this text) but not confirmed live: no longer waiting.
+  const digests = await textDigests('![[n.png]]');
+  expect(statusFor({ reply: { selected: true, live: null, committed: { digest: digests.folded, folded: true } }, waiting: true }, digests).key).toBe('pending');
+  expect(statusFor({ reply: { selected: true, live: null, committed: { digest: 'sha-256=:other:', folded: true } }, waiting: true }, digests).key).toBe('waiting');
+  // The controller forgets the wait once the node reports it published.
+  replies.status = { path: 'topic/n.md', selected: true, live: null, committed: { digest: digests.folded, folded: true } };
+  expect((await controller.status({ path: 'topic/n.md' }, '![[n.png]]')).status.key).toBe('pending');
+  replies.status = { path: 'topic/n.md', selected: false, live: null };
+  expect((await controller.status({ path: 'topic/n.md' }, '![[n.png]]')).status.key).toBe('notSelected');
 });
