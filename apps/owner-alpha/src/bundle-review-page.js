@@ -95,7 +95,7 @@ img{max-width:100%;height:auto;display:block;margin:.5rem 0}.missing{color:#8a2c
 }
 
 /** The review shell: what the bundle adds, its sender, the page frame, and the decision controls. */
-export function bundleShellPage({ record, csrfToken }) {
+export function bundleShellPage({ record, csrfToken, colorScheme = 'light' }) {
   const id = encodeURIComponent(record.bundleId);
   const additions = record.publicAdditions.map((entry) => `<li>New page at <strong>${escapeHtml(entry.address)}</strong> <span class="rv-soft">(${escapeHtml(entry.path)})</span></li>`).join('');
   const images = record.images.map((image, index) => `<li><a href="/owner/bundles/${id}/image/${index}">${escapeHtml(image.path)}</a> <span class="rv-soft">${escapeHtml(image.mediaType)}, ${Math.ceil(image.byteLength / 1024)} KiB</span></li>`).join('');
@@ -103,7 +103,7 @@ export function bundleShellPage({ record, csrfToken }) {
   const actions = record.state !== 'review' ? '' : `<form method="post" action="/owner/bundles/${id}/approve"><input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}"><button type="submit">Approve, then sign on your phone</button></form>
 <form method="post" action="/owner/bundles/${id}/decline"><input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}"><button type="submit">Decline</button></form>`;
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>New page</title><link rel="stylesheet" href="/owner/assets/review.css"></head>
-<body class="rv-doc"><main><h1>New page</h1><p>From ${sender}. ${escapeHtml(STATE_TEXT[record.state] ?? record.state)}${record.reason ? ` (${escapeHtml(record.reason)})` : ''}</p>
+<body class="rv-doc rv-bundle rv-scheme-${['dark', 'light', 'system'].includes(colorScheme) ? colorScheme : 'light'}"><main><h1>New page</h1><p>From ${sender}. ${escapeHtml(STATE_TEXT[record.state] ?? record.state)}${record.reason ? ` (${escapeHtml(record.reason)})` : ''}</p>
 <ul>${additions}</ul>${images === '' ? '' : `<p>Images</p><ul>${images}</ul>`}
 ${record.publicAdditions.map((_, index) => `<iframe title="The new page" sandbox="" src="/owner/bundles/${id}/page/${index}"></iframe>`).join('')}
 ${actions}</main></body></html>\n`;

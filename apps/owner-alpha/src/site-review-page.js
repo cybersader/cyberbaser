@@ -11,6 +11,7 @@ import path from 'node:path';
 import { parseFrontmatter } from '@cyberbaser/publish';
 import { escapeHtml, replacementHtml, REWRITE_THRESHOLD, wholeWordChange } from './proposal-review-page.js';
 import { hasHiddenProposalSource, refineForDisplay } from './publication-display.js';
+import { BUNDLED_RENDERER_NAME } from './renderer-slot.js';
 
 export const SITE_REVIEW_REASONS = Object.freeze({
   unavailable: 'Shown simplified: your site’s page for this note isn’t available.',
@@ -92,13 +93,13 @@ export function sitePageSlug(sourcePath, baseText) {
   return quartzSlug(`${target}.md`);
 }
 
-async function readManifest(siteRoot) {
+async function readManifest(siteRoot, rendererName) {
   const bytes = await readContained(siteRoot, MANIFEST, LIMITS.manifest);
   if (bytes === null) return null;
   try {
     const value = JSON.parse(bytes.toString('utf8'));
     if (value?.artifactType !== 'owner-alpha-site-manifest' || value.schemaVersion !== 1
-      || value.renderer?.name !== 'quartz-cyberbase' || !COMMIT_RE.test(value.source?.head ?? '')) return null;
+      || value.renderer?.name !== rendererName || !COMMIT_RE.test(value.source?.head ?? '')) return null;
     return { head: value.source.head, generatedAt: String(value.generatedAt), digest: createHash('sha256').update(bytes).digest('hex') };
   } catch {
     return null;
@@ -116,9 +117,9 @@ function validProvenance(value, sourcePath, baseBytes) {
  * The note's built page and provenance, only when the private build was made
  * from the pinned base and rendered exactly these base bytes.
  */
-export async function loadSitePage({ siteRoot, sourcePath, revision, baseText }) {
+export async function loadSitePage({ siteRoot, sourcePath, revision, baseText, rendererName = BUNDLED_RENDERER_NAME }) {
   if (typeof siteRoot !== 'string' || typeof baseText !== 'string') return { reason: 'unavailable' };
-  const before = await readManifest(siteRoot);
+  const before = await readManifest(siteRoot, rendererName);
   if (before === null) return { reason: 'unavailable' };
   if (before.head !== revision) return { reason: 'changed' };
   const slug = sitePageSlug(sourcePath, baseText);
@@ -132,7 +133,7 @@ export async function loadSitePage({ siteRoot, sourcePath, revision, baseText })
   try { provenance = JSON.parse(sidecar.toString('utf8')); } catch { return { reason: 'unavailable' }; }
   if (!validProvenance(provenance, sourcePath, Buffer.from(baseText, 'utf8'))) return { reason: 'unavailable' };
   // The page and its provenance came from one published build.
-  const after = await readManifest(siteRoot);
+  const after = await readManifest(siteRoot, rendererName);
   if (after === null || after.digest !== before.digest) return { reason: 'unavailable' };
   let html;
   try { html = new TextDecoder('utf-8', { fatal: true }).decode(page); } catch { return { reason: 'unavailable' }; }
@@ -463,6 +464,8 @@ del{text-decoration:line-through;background:var(--cbr-del-bg);color:var(--cbr-de
 .cbr-old summary::-webkit-details-marker{display:none}
 .cbr-was{color:var(--cbr-soft);text-decoration:line-through;text-decoration-color:var(--cbr-del)}
 @media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+.cbr-banner{position:sticky;top:0;z-index:50;margin:0;padding:7px 14px;font:600 .82rem/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--cbr-ins-bg);color:var(--cbr-ins);border-bottom:2px solid var(--cbr-acc)}
+.cbr-banner strong{font-weight:700;overflow-wrap:anywhere}
 `;
 
 // `data-cyberbaser-review="hide"` lets a renderer mark site furniture (a fixed
@@ -495,7 +498,7 @@ function collect(html) {
 }
 
 /** Strip and inline. `readAsset(relative, maxBytes)` reads one private-site file. */
-export async function prepareSiteFrame({ html, slug, readAsset, colorScheme = 'light' }) {
+export async function prepareSiteFrame({ html, slug, readAsset, colorScheme = 'light', banner = null, imageLimits = LIMITS }) {
   const { sheets, images } = collect(html);
   const css = new Map();
   for (const href of sheets) {
@@ -529,8 +532,8 @@ export async function prepareSiteFrame({ html, slug, readAsset, colorScheme = 'l
     const relative = siteRelative(slug, src);
     const type = relative === null ? undefined : IMAGE_TYPES[path.extname(relative).toLowerCase()];
     if (type === undefined || data.has(src)) continue;
-    const bytes = await readAsset(relative, LIMITS.image);
-    if (bytes === null || total + bytes.length > LIMITS.images) continue;
+    const bytes = await readAsset(relative, imageLimits.image);
+    if (bytes === null || total + bytes.length > imageLimits.images) continue;
     total += bytes.length;
     data.set(src, `data:${type};base64,${bytes.toString('base64')}`);
   }
@@ -551,6 +554,11 @@ export async function prepareSiteFrame({ html, slug, readAsset, colorScheme = 'l
       } else element.remove();
     } })
     .on('form', { element(element) { element.removeAndKeepContent(); } })
+    .on('body', { element(element) {
+      if (banner !== null) {
+        element.prepend(`<p class="cbr-banner">${escapeHtml(banner.label)} <strong>${escapeHtml(banner.address)}</strong></p>`, { html: true });
+      }
+    } })
     .on('*', { element(element) {
       const isImage = element.tagName === 'img';
       const src = isImage ? element.getAttribute('src') : null;
@@ -566,13 +574,27 @@ export async function prepareSiteFrame({ html, slug, readAsset, colorScheme = 'l
 }
 
 /**
+ * One built page of a private build, made safe to show, or null. Used for a
+ * wholly new page (route C), which needs no provenance: it is all new.
+ */
+export async function readBuiltSitePage({ siteRoot, slug, colorScheme, banner = null, imageLimits = LIMITS }) {
+  if (typeof slug !== 'string' || slug === '') return null;
+  const page = await readContained(siteRoot, `${slug}.html`, LIMITS.page);
+  if (page === null) return null;
+  let html;
+  try { html = new TextDecoder('utf-8', { fatal: true }).decode(page); } catch { return null; }
+  return prepareSiteFrame({ html, slug, colorScheme, banner, imageLimits,
+    readAsset: (relative, maxBytes) => readContained(siteRoot, relative, maxBytes) });
+}
+
+/**
  * The whole decision: the site page with its changes, or the reason the
  * simplified rendering is shown instead. Never throws.
  */
-export async function siteReviewFrame({ siteRoot, sourcePath, revision, document, operations, model, colorScheme }) {
+export async function siteReviewFrame({ siteRoot, sourcePath, revision, document, operations, model, colorScheme, rendererName = BUNDLED_RENDERER_NAME }) {
   try {
     if (!document || document.reason !== null || typeof document.baseText !== 'string') return { html: null, reason: 'unavailable' };
-    const loaded = await loadSitePage({ siteRoot, sourcePath, revision, baseText: document.baseText });
+    const loaded = await loadSitePage({ siteRoot, sourcePath, revision, baseText: document.baseText, rendererName });
     if (loaded.reason) return { html: null, reason: loaded.reason };
     const page = markSitePage({ html: loaded.html, provenance: loaded.provenance, baseText: document.baseText, operations, model });
     if (page === null) return { html: null, reason: 'unplaceable' };

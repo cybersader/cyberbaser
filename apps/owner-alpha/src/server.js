@@ -23,6 +23,8 @@ import { createOwnerPublicationRuntime, createPublicationSourceGuard } from './o
 import { hasHiddenProposalSource, proposalDisplay, publicationDisplay } from './publication-display.js';
 import { excerptDocument, escapeHtml as escapeReviewHtml, FRAME_CSP, frameDocument, noticeShell, receiptShell, reviewModel, reviewShell } from './proposal-review-page.js';
 import { SITE_FRAME_CSP, SITE_REVIEW_REASONS, siteReviewFrame } from './site-review-page.js';
+import { rendererIdentity } from './renderer-slot.js';
+import { createBundlePreview } from './bundle-preview.js';
 
 import { createOwnerCommands, OwnerCommandPrecondition } from './core/commands.js';
 import { createApprovalRelay, publisherSigningFromSocket } from './core/approvals.js';
@@ -1848,6 +1850,9 @@ export function createOwnerAlphaHandler({
   // The owner-private site build whose pages a proposal is shown on. Null
   // shows every proposal on the simplified rendering.
   reviewSiteRoot = null,
+  // New pages from bundles on the site's own design (bundle-preview.js). By
+  // default only with a configured renderer; null keeps the simplified page.
+  bundlePreview = undefined,
   // { store, pairing } when Iroh reach is on: the Devices and agents page.
   devices = null,
   // Publishing to GitHub: relays to the publisher's forge control, never a credential.
@@ -1867,6 +1872,8 @@ export function createOwnerAlphaHandler({
   const config = validateOwnerAlphaConfig(configInput);
   if (typeof recovering !== 'function') throw new TypeError('recovering must be a function');
   const appearance = validReviewAppearance(reviewAppearance, config);
+  const previewBundle = bundlePreview === undefined ? createBundlePreview({ config, projectRoot }) : bundlePreview;
+  if (previewBundle !== null && typeof previewBundle !== 'function') throw new TypeError('bundlePreview must be null or a function');
   if (reviewSiteRoot !== null && (typeof reviewSiteRoot !== 'string' || !path.isAbsolute(reviewSiteRoot))) {
     throw new TypeError('reviewSiteRoot must be null or one absolute path');
   }
@@ -1875,7 +1882,7 @@ export function createOwnerAlphaHandler({
     if (reviewSiteRoot === null) return { html: null, reason: null };
     const { document, operations, model } = reviewDisplay(entry);
     return siteReviewFrame({ siteRoot: reviewSiteRoot, sourcePath: entry.summary.source.path, revision: entry.summary.source.revision,
-      document, operations, model, colorScheme: appearance.colorScheme });
+      document, operations, model, colorScheme: appearance.colorScheme, rendererName: rendererIdentity(config).name });
   }
   if (typeof createEditSession !== 'function'
     || typeof saveEdit !== 'function'
@@ -2193,7 +2200,7 @@ export function createOwnerAlphaHandler({
         }
         if (request.method !== 'GET') return response(null, 405, { Allow: 'GET' });
         const record = await desk.load(bundleId);
-        if (part === undefined) return html(bundleShellPage({ record, csrfToken }), 200, { 'Content-Security-Policy': REVIEW_SHELL_CSP });
+        if (part === undefined) return html(bundleShellPage({ record, csrfToken, colorScheme: appearance.colorScheme }), 200, { 'Content-Security-Policy': REVIEW_SHELL_CSP });
         if (index === undefined) return errorResponse(404, 'bundle-not-found');
         const bundle = parsePageBundle(record.bundleText);
         if (part === 'image') {
@@ -2207,6 +2214,11 @@ export function createOwnerAlphaHandler({
         const addition = record.publicAdditions[Number(index)];
         const note = addition && bundle.files.find((file) => file.path === addition.path && file.kind === 'create');
         if (!note) return errorResponse(404, 'bundle-not-found');
+        if (previewBundle !== null) {
+          const site = await previewBundle({ bundleId, index: Number(index), bundle, record, colorScheme: appearance.colorScheme,
+            readImage: (imagePath) => desk.readImage(bundleId, imagePath) });
+          if (typeof site === 'string') return frameResponse(site, 200, SITE_FRAME_CSP);
+        }
         const images = new Map();
         for (const image of record.images) images.set(image.path, await desk.readImage(bundleId, image.path));
         return frameResponse(bundleFramePage({ path: note.path, text: note.text, address: addition.address, images }), 200, BUNDLE_FRAME_CSP);

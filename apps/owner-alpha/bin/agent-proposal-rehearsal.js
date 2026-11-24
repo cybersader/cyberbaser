@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { PINNED_QUARTZ_COMMIT, PINNED_QUARTZ_REF } from '../src/quartz-renderer.js';
+import { BUNDLED_RENDERER_NAME } from '../src/renderer-slot.js';
 import { readWorkspaceCapture } from '../src/workspace-capture.js';
 import { agentProcessEnvironment } from './agent-propose.js';
 import { generateKey } from './owner-alpha-keys.js';
@@ -27,7 +28,7 @@ async function renderFixture({ contentDir, outputDir, editLinkMode, ownerOrigin 
     await writeFile(path.join(outputDir, `${slug}.html`),
       `<!doctype html><html lang="en"><meta charset="utf-8"><title>Simulated build</title><main><p>Simulated build. Disposable local rehearsal only.</p><pre>${text}</pre>${editLink}</main></html>\n`);
   }
-  return { renderer: 'quartz-cyberbase', revision: PINNED_QUARTZ_COMMIT, tag: PINNED_QUARTZ_REF, synthetic: true };
+  return { renderer: BUNDLED_RENDERER_NAME, revision: PINNED_QUARTZ_COMMIT, tag: PINNED_QUARTZ_REF, synthetic: true };
 }
 
 export async function runAgentChild({ capture, checkout, key, socket }) {

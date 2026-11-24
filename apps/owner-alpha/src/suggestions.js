@@ -16,7 +16,7 @@ import { getChallengeProvider } from '../../account-free-intake/src/challenge/re
 import { forgeIdentity, suggestionsEnabled, validateOwnerAlphaConfig } from './config.js';
 import { fail, OwnerAlphaError } from './errors.js';
 import { canonicalJson, deepFreeze } from './json.js';
-import { PINNED_QUARTZ_COMMIT } from './quartz-renderer.js';
+import { rendererIdentity } from './renderer-slot.js';
 
 /**
  * Suggestions: the owner app's one place for the outside lanes.
@@ -425,7 +425,7 @@ export async function retainPublication({
       publishPolicyDigest: sha256Digest(blobs.get(policyEntry.objectId)),
       selectedTreeDigest: treeDigest,
     },
-    renderer: { name: 'quartz-cyberbase', revision: PINNED_QUARTZ_COMMIT },
+    renderer: { name: rendererIdentity(config).name, revision: rendererIdentity(config).revision },
     trustPolicy,
     pages,
   });

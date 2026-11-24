@@ -182,3 +182,15 @@ dialog::backdrop{background:rgba(20,26,23,.42)}
 /* Disposable rehearsals label the owner page; keep the label out of the way. */
 .proposal-rehearsal-notice{flex:none;width:fit-content;margin:6px auto;display:flex;align-items:center;gap:6px;max-width:calc(100% - 24px);padding:4px 4px 4px 12px;border-radius:999px;background:#fff4d6;color:#5a4300;border:1px solid #e7cf8a;font-size:.74rem;box-shadow:0 2px 8px rgba(20,30,25,.12)}
 .proposal-rehearsal-notice button{font:inherit;font-size:1rem;line-height:1;background:none;border:0;color:inherit;min-width:32px;min-height:32px;cursor:pointer;border-radius:999px}
+
+/* New pages (route C): the page frame at a readable size, the rest quiet. */
+body.rv-bundle{background:var(--site-bg);color:var(--site-ink)}
+.rv-bundle main{max-width:72rem;margin:0 auto;padding:12px 16px 32px}
+.rv-bundle h1{font-size:1.15rem;margin:4px 0 6px}
+.rv-bundle p,.rv-bundle li{font-size:.86rem}
+.rv-bundle a{color:var(--site-acc)}
+.rv-bundle .rv-soft{color:var(--site-soft)}
+.rv-bundle iframe{display:block;width:100%;height:min(78dvh,900px);margin:12px 0;border:1px solid var(--site-line);border-radius:8px;background:var(--site-bg)}
+.rv-bundle form{display:inline-block;margin:0 8px 8px 0}
+.rv-bundle button{font:inherit;font-weight:600;font-size:.9rem;min-height:44px;padding:0 16px;border-radius:8px;cursor:pointer;background:var(--field);border:1px solid var(--edge);color:var(--ink)}
+.rv-bundle form:first-of-type button{background:var(--pri-bg);border-color:var(--pri-bg);color:var(--pri-ink)}

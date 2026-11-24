@@ -4,6 +4,7 @@ import { open } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fail, OwnerAlphaError } from './errors.js';
+import { PINNED_QUARTZ_COMMIT } from './quartz-renderer.js';
 import {
   assertNoCredentialMaterial,
   canonicalJson,
@@ -851,6 +852,52 @@ function validatePublisher(value) {
   return { socketPath, mirror };
 }
 
+// The owner's renderer slot (renderer-slot.js). Local build routing: it never
+// enters the policy revision; the owner site manifest records and re-checks it.
+const RENDERER_NAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/u;
+const MAX_RENDERER_FINGERPRINT = 64;
+
+function overlaps(left, right) {
+  const relative = path.relative(left, right);
+  const back = path.relative(right, left);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
+    || (!back.startsWith('..') && !path.isAbsolute(back));
+}
+
+function validateRenderer(value, repository) {
+  const input = objectAt(value, '$.renderer', ['name', 'directory', 'quartzCommit', 'fingerprint']);
+  const name = exactString(input.name, '$.renderer.name', { max: 64 });
+  if (!RENDERER_NAME_PATTERN.test(name)) {
+    fail('invalid-config', '$.renderer.name must be lowercase letters, digits and hyphens');
+  }
+  if (name === 'quartz-cyberbase') {
+    fail('invalid-config', '$.renderer.name quartz-cyberbase is the bundled renderer; omit $.renderer to use it');
+  }
+  const directory = absoluteCheckout(input.directory, '$.renderer.directory');
+  if (overlaps(directory, repository.checkout)) {
+    fail('renderer-checkout-overlap', '$.renderer.directory must be outside the vault checkout');
+  }
+  if (typeof input.quartzCommit !== 'string' || !/^[0-9a-f]{40}$/u.test(input.quartzCommit)) {
+    fail('invalid-config', '$.renderer.quartzCommit must be one full commit ID');
+  }
+  if (input.quartzCommit !== PINNED_QUARTZ_COMMIT) {
+    fail('renderer-quartz-unsupported', `$.renderer.quartzCommit must be the pinned Quartz commit ${PINNED_QUARTZ_COMMIT}`);
+  }
+  if (!Array.isArray(input.fingerprint) || input.fingerprint.length === 0 || input.fingerprint.length > MAX_RENDERER_FINGERPRINT) {
+    fail('invalid-config', `$.renderer.fingerprint must list 1 to ${MAX_RENDERER_FINGERPRINT} files or folders`);
+  }
+  const fingerprint = input.fingerprint.map((entry, index) => repositoryRelativePath(entry, `$.renderer.fingerprint[${index}]`));
+  if (new Set(fingerprint).size !== fingerprint.length) fail('invalid-config', '$.renderer.fingerprint entries must be unique');
+  fingerprint.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  if (!fingerprint.includes('build')) {
+    fail('invalid-config', '$.renderer.fingerprint must include the build entry');
+  }
+  if (fingerprint.some((entry) => fingerprint.some((other) => other.startsWith(`${entry}/`)))) {
+    fail('invalid-config', '$.renderer.fingerprint entries must not contain one another');
+  }
+  return { name, directory, quartzCommit: input.quartzCommit, fingerprint };
+}
+
 export function validateOwnerAlphaConfig(value) {
   assertNoCredentialMaterial(value);
   const input = objectAt(value, '$', [
@@ -873,6 +920,7 @@ export function validateOwnerAlphaConfig(value) {
     ...(isPlainObject(value) && Object.hasOwn(value, 'signedRequestSocket') ? ['signedRequestSocket'] : []),
     ...(isPlainObject(value) && Object.hasOwn(value, 'iroh') ? ['iroh'] : []),
     ...(isPlainObject(value) && Object.hasOwn(value, 'forgeAccess') ? ['forgeAccess'] : []),
+    ...(isPlainObject(value) && Object.hasOwn(value, 'renderer') ? ['renderer'] : []),
   ]);
   if (input.schemaVersion !== CONFIG_SCHEMA_VERSION) {
     fail('unsupported-config-version', `schemaVersion must be ${CONFIG_SCHEMA_VERSION}`);
@@ -930,7 +978,12 @@ export function validateOwnerAlphaConfig(value) {
     // Local reach routing, not publication policy: it never enters the policy revision.
     ...(iroh === null ? {} : { iroh }),
     ...(Object.hasOwn(input, 'forgeAccess') ? { forgeAccess: validateForgeAccess(input.forgeAccess, provider) } : {}),
+    // Local build routing, not publication policy.
+    ...(Object.hasOwn(input, 'renderer') ? { renderer: validateRenderer(input.renderer, repository) } : {}),
   };
+  if (normalized.renderer && normalized.suggestions.form.enabled) {
+    fail('renderer-form-unsupported', 'the suggestion form needs the bundled renderer; remove $.renderer or turn the form off');
+  }
   return deepFreeze(normalized);
 }
 

@@ -184,6 +184,7 @@ export async function createSuggestionsFixture({ port = 46437, host = '127.0.0.1
 export function createRehearsalRenderer({ seed = RENDERER_SEED } = {}) {
   return async ({ contentDir, outputDir, workspaceDir, ownerOrigin, suggestions = null, siteConfigPath = null, sourceCheckout = null }) => {
     const { PINNED_QUARTZ_COMMIT, PINNED_QUARTZ_REF, suggestionEnvironment, provenanceReportEnvironment, readProvenanceReport } = await import('../src/quartz-renderer.js');
+    const { BUNDLED_RENDERER_NAME } = await import('../src/renderer-slot.js');
     const quartz = path.join(workspaceDir, 'quartz');
     const renderer = path.join(PROJECT_ROOT, 'renderers/quartz-cyberbase');
     await mkdir(workspaceDir, { recursive: true });
@@ -198,7 +199,7 @@ export function createRehearsalRenderer({ seed = RENDERER_SEED } = {}) {
       // The vault's own site settings and read-only note dates, as the real renderer passes them.
       ...(siteConfigPath ? { CYBERBASER_SITE_CONFIG: siteConfigPath } : {}),
       ...(sourceCheckout ? { CYBERBASER_SOURCE_CHECKOUT: sourceCheckout } : {}) } });
-    return { renderer: 'quartz-cyberbase', revision: PINNED_QUARTZ_COMMIT, tag: PINNED_QUARTZ_REF, outputDir, suggestionForm: suggestions !== null,
+    return { renderer: BUNDLED_RENDERER_NAME, revision: PINNED_QUARTZ_COMMIT, tag: PINNED_QUARTZ_REF, outputDir, suggestionForm: suggestions !== null,
       provenanceSkipped: await readProvenanceReport(report) };
   };
 }
@@ -221,6 +222,7 @@ async function assertLocalAgentConfiguration(fixture) {
   }
 }
 
+// renderer: null builds through the renderer the fixture config selects (the owner's slot).
 export async function startSuggestionsRehearsal(fixture, { renderer = createRehearsalRenderer(), simulatedRender = false, readAuthoringNote, publisherSigning = null } = {}) {
   if (simulatedRender) await assertLocalAgentConfiguration(fixture);
   // The site manifest hashes actual runtime resources. Copy, never symlink,
@@ -270,7 +272,7 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
       const pipeline = createSaveHandler({ config, context, projectRoot: fixture.projectRoot, dependencies: {
         ...dependencies, assertCheckoutReady: ready,
         createEditSession: (input) => createEditSession({ ...input, git: policyGit }),
-        runPreApplyChecks: (input) => runPreApplyChecks({ ...input, renderer }, simulatedRender ? {
+        runPreApplyChecks: (input) => runPreApplyChecks({ ...input, ...(renderer === null ? {} : { renderer }) }, simulatedRender ? {
           createTemporaryRoot: () => mkdtemp(path.join(fixture.root, 'checks-')),
         } : undefined),
         applyAcceptedOperation: (input) => applyAcceptedOperation(input, { git: effectGit }),
@@ -287,7 +289,7 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
         rebuildLocal: async ({ commit, jobId, sourcePath }) => {
           const built = await rebuild({ config });
           if (built.manifest.source.head !== commit) throw new Error('Local rebuild commit mismatch.');
-          return { status: 'local-rebuilt', commit, jobId, sourcePath, renderer: 'quartz-cyberbase', rendererRevision: built.manifest.renderer.revision };
+          return { status: 'local-rebuilt', commit, jobId, sourcePath, renderer: built.manifest.renderer.name, rendererRevision: built.manifest.renderer.revision };
         },
       } });
       return { ...pipeline, saveEdit(input) {

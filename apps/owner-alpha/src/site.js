@@ -18,12 +18,8 @@ import { select } from '@cyberbaser/publish';
 import { computePolicyRevision, validateOwnerAlphaConfig } from './config.js';
 import { fail, OwnerAlphaError } from './errors.js';
 import { canonicalJson, deepFreeze, isPlainObject } from './json.js';
-import {
-  PINNED_QUARTZ_COMMIT,
-  PINNED_QUARTZ_REF,
-  PINNED_QUARTZ_REPOSITORY,
-  renderPinnedQuartz,
-} from './quartz-renderer.js';
+import { renderPinnedQuartz } from './quartz-renderer.js';
+import { assertRendererDirectory, createConfiguredRenderer, rendererIdentity } from './renderer-slot.js';
 import { assertCheckoutReady } from './source.js';
 import {
   retainPublication as retainPublicationDefault,
@@ -310,11 +306,43 @@ async function digestRegularTree(root, label, { exclude = [] } = {}) {
   };
 }
 
-async function runtimeResourceIdentity(projectRoot) {
+// The files the owner named as the identity of a configured renderer, hashed
+// with the same no-symlink, one-link reads as every other runtime resource.
+async function updateRendererFingerprint(hash, renderer) {
+  const directory = await assertRendererDirectory(renderer);
+  let files = 0;
+  let bytes = 0;
+  for (const entry of renderer.fingerprint) {
+    const target = path.join(directory, ...entry.split('/'));
+    let metadata;
+    try {
+      metadata = await lstat(target);
+    } catch (error) {
+      fail('renderer-fingerprint-missing', `renderer fingerprint entry ${entry} is missing`, { cause: error?.code ?? 'unknown' });
+    }
+    if (metadata.isSymbolicLink()) fail('renderer-symlink-rejected', `renderer fingerprint entry ${entry} must not be a symlink`);
+    const relativePaths = metadata.isDirectory()
+      ? (await inspectRegularTree(await exactExistingDirectory(target, `renderer ${entry}`), `renderer ${entry}`))
+        .map((relativePath) => `${entry}/${relativePath}`)
+      : [entry];
+    for (const relativePath of relativePaths) {
+      const contents = await readRegularNoFollow(directory, path.join(directory, ...relativePath.split('/')),
+        `renderer ${relativePath}`);
+      updateTreeDigest(hash, `renderer:${renderer.name}/${relativePath}`, contents);
+      files += 1;
+      bytes += contents.length;
+    }
+  }
+  return { files, bytes };
+}
+
+async function runtimeResourceIdentity(projectRoot, config) {
+  const configured = config.renderer ?? null;
   const roots = [
     'apps/owner-alpha/src',
     'apps/owner-alpha/public',
-    'renderers/quartz-cyberbase',
+    // The bundled renderer, unless the owner configured their own (below).
+    ...(configured === null ? ['renderers/quartz-cyberbase'] : []),
     'packages/correction/src',
     'packages/linkcheck/src',
     'packages/ofm/src',
@@ -343,6 +371,11 @@ async function runtimeResourceIdentity(projectRoot) {
       files += 1;
       bytes += contents.length;
     }
+  }
+  if (configured !== null) {
+    const counted = await updateRendererFingerprint(hash, configured);
+    files += counted.files;
+    bytes += counted.bytes;
   }
   return {
     digest: `sha256:${hash.digest('hex')}`,
@@ -538,6 +571,16 @@ function suggestionsMatch(value, formOrigin, editEntry, agents = false) {
     && typeof value.bindingDigest === 'string';
 }
 
+// The manifest names exactly the renderer the config selects: its name, Quartz
+// pin and, for a configured renderer, its directory (absent for the bundled one).
+function sameRendererIdentity(recorded, expected) {
+  return recorded.name === expected.name
+    && recorded.revision === expected.revision
+    && recorded.tag === expected.tag
+    && recorded.repository === expected.repository
+    && recorded.directory === expected.directory;
+}
+
 function reusableManifest(value, config, checkout, htmlPages, resources, outputTree) {
   if (!isPlainObject(value)
     || value.schemaVersion !== OWNER_SITE_SCHEMA_VERSION
@@ -550,10 +593,7 @@ function reusableManifest(value, config, checkout, htmlPages, resources, outputT
     || value.source.remote?.name !== config.repository.remote.name
     || value.source.remote?.url !== config.repository.remote.url
     || value.policyRevision !== computePolicyRevision(config)
-    || value.renderer.name !== 'quartz-cyberbase'
-    || value.renderer.revision !== PINNED_QUARTZ_COMMIT
-    || value.renderer.tag !== PINNED_QUARTZ_REF
-    || value.renderer.repository !== PINNED_QUARTZ_REPOSITORY
+    || !sameRendererIdentity(value.renderer, rendererIdentity(config))
     || value.renderer.editLinkMode !== 'owner'
     || value.renderer.ownerOrigin !== `http://${config.listen.host}:${config.listen.port}`
     || value.renderer.resources?.digest !== resources.digest
@@ -577,7 +617,7 @@ export async function reuseOwnerSite({
 } = {}, dependencyOverrides = {}) {
   const config = validateOwnerAlphaConfig(configInput);
   const project = await exactExistingDirectory(projectRoot, 'projectRoot');
-  const resources = await runtimeResourceIdentity(project);
+  const resources = await runtimeResourceIdentity(project, config);
   const workspaceRoot = contained(project, path.resolve(project, config.workspace.root), {
     strict: true,
     code: 'site-workspace-outside-project',
@@ -664,11 +704,13 @@ export async function ensureOwnerSite(options = {}, dependencyOverrides = {}) {
 export async function rebuildOwnerSite({
   config: configInput,
   projectRoot = DEFAULT_OWNER_ALPHA_PROJECT_ROOT,
-  renderer = renderPinnedQuartz,
+  // null: the renderer the config selects (bundled, or the owner's slot).
+  renderer = null,
 } = {}, dependencyOverrides = {}) {
   const config = validateOwnerAlphaConfig(configInput);
   const project = await exactExistingDirectory(projectRoot, 'projectRoot');
-  const resources = await runtimeResourceIdentity(project);
+  const resources = await runtimeResourceIdentity(project, config);
+  const expectedRenderer = rendererIdentity(config);
   const workspaceRoot = contained(project, path.resolve(project, config.workspace.root), {
     strict: true,
     code: 'site-workspace-outside-project',
@@ -684,6 +726,11 @@ export async function rebuildOwnerSite({
   if (pathsOverlap(siteRoot, cacheRoot)) {
     fail('site-workspace-path-overlap', 'configured owner site and cache paths must not overlap');
   }
+  if (expectedRenderer.directory !== undefined && (pathsOverlap(expectedRenderer.directory, workspaceRoot)
+    || containedWithoutFailure(project, expectedRenderer.directory) || containedWithoutFailure(expectedRenderer.directory, project)
+    || expectedRenderer.directory === project)) {
+    fail('renderer-workspace-overlap', 'the renderer directory must be outside the owner workspace and project');
+  }
 
   await prepareContainedDirectory(project, workspaceRoot, workspaceRoot, 'workspace root');
   await prepareContainedDirectory(project, workspaceRoot, cacheRoot, 'cache root');
@@ -693,7 +740,8 @@ export async function rebuildOwnerSite({
   const selectPublic = dependencyOverrides.select ?? select;
   const projectPublic = dependencyOverrides.project ?? projectContent;
   const verifyPublic = dependencyOverrides.verifyProjection ?? verifyProjection;
-  const render = dependencyOverrides.renderPinnedQuartz ?? renderer;
+  const render = dependencyOverrides.renderPinnedQuartz ?? renderer
+    ?? (config.renderer ? createConfiguredRenderer(config.renderer) : renderPinnedQuartz);
   const checkLinks = dependencyOverrides.checkSite ?? checkSite;
   const retain = dependencyOverrides.retainPublication ?? retainPublicationDefault;
   const now = dependencyOverrides.now ?? (() => new Date());
@@ -902,11 +950,19 @@ export async function rebuildOwnerSite({
       });
     }
     if (!isPlainObject(rendererResult)
-      || rendererResult.renderer !== 'quartz-cyberbase'
-      || rendererResult.revision !== PINNED_QUARTZ_COMMIT
-      || rendererResult.tag !== PINNED_QUARTZ_REF
+      || rendererResult.renderer !== expectedRenderer.name
+      || rendererResult.revision !== expectedRenderer.revision
+      || rendererResult.tag !== expectedRenderer.tag
       || (rendererResult.outputDir !== undefined && path.resolve(rendererResult.outputDir) !== candidateSite)) {
-      fail('site-renderer-identity-mismatch', 'renderer result did not prove the pinned Quartz owner build identity');
+      fail('site-renderer-identity-mismatch', 'renderer result did not prove the configured renderer identity');
+    }
+    // A configured renderer is the same files after its build as before it:
+    // the manifest records the identity the build actually ran with.
+    if (expectedRenderer.directory !== undefined) {
+      const afterBuild = await runtimeResourceIdentity(project, config);
+      if (afterBuild.digest !== resources.digest) {
+        fail('renderer-changed-during-build', 'the renderer files changed while the site was built; fingerprint only files the build does not write');
+      }
     }
 
     const html = await inspectHtmlSite(candidateSite);
@@ -970,10 +1026,11 @@ export async function rebuildOwnerSite({
         bytePreserving: byteVerification,
       },
       renderer: {
-        name: 'quartz-cyberbase',
-        revision: PINNED_QUARTZ_COMMIT,
-        tag: PINNED_QUARTZ_REF,
-        repository: PINNED_QUARTZ_REPOSITORY,
+        name: expectedRenderer.name,
+        revision: expectedRenderer.revision,
+        tag: expectedRenderer.tag,
+        repository: expectedRenderer.repository,
+        ...(expectedRenderer.directory === undefined ? {} : { directory: expectedRenderer.directory }),
         editLinkMode: 'owner',
         ownerOrigin: `http://${config.listen.host}:${config.listen.port}`,
         resources,
