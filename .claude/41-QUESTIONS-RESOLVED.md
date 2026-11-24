@@ -4,6 +4,14 @@
 
 ## Log
 
+### Signed publishing: first device, recovery, automatic lane (2026-11-23, owner decisions)
+Asked in question dialogs after the design in `design/signed-publish.mdx`:
+- **First signing device at setup:** scan a code the installer (publisher) shows, so a compromised setup page cannot add its own key.
+- **Recovery:** a written recovery code the publisher accepts once, plus the admin console on the machine.
+- **Unattended publishing:** "Allow a narrow automatic lane later": design so the owner could grant a specific agent a limited, revocable right to publish certain notes unattended; not built now, and nothing publishes without a human signature until it is.
+- **Passkeys:** open. The owner asked for a realistic threat model of letting the browser app request passkey approvals ("I don't see the issue with the browser app code").
+
+
 ### Every publish carries the owner's own signature, checked by the publisher (2026-11-23, owner decision)
 - **Asked** (question dialog): "The publisher's wall stops a compromised app from stealing your GitHub key, but not from asking the publisher to push a change you never approved. Should every publish carry your own signature from your device, checked by the publisher itself?" **Answer:** "Yes, publisher checks your signature (Recommended)". That option read: approving a publish is signed by the owner's phone or computer device key, or a passkey, and the publisher refuses anything without it, so even a fully compromised app cannot publish; it costs one extra confirmation on the owner's device and build work.
 - **Consequence:** the publisher keeps its own record of the owner's signing keys, which the node cannot change, and verifies a signature over the exact push intent before every push.
