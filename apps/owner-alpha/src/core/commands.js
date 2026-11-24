@@ -103,6 +103,15 @@ export function createOwnerCommands({
     if (approvals === null) fail('signing-unavailable', 'this node does not relay signed approvals');
   }
 
+  // Page bundles: an owner device that may publish sends straight to its own
+  // signature ('owner'); any other device needs the propose grant ('propose').
+  function bundleGrant(principal) {
+    if (isOwnerDevice(principal) && devicePrincipalAdapter?.isVerified(principal) === true
+      && devicePrincipalAdapter.hasGrant(principal, 'publish')) return 'owner';
+    requireGrant('propose', principal);
+    return 'propose';
+  }
+
   function requireGrant(grant, principal) {
     const bootstrap = principalAdapter?.isVerified(principal) && principal.method === 'bootstrap-session';
     const device = !bootstrap && devicePrincipalAdapter?.isVerified(principal) && principal.method === 'device-key'
@@ -266,7 +275,7 @@ export function createOwnerCommands({
 
     // One chunk of an image for a page bundle, held in memory until the
     // bundle that names it arrives (or 15 minutes pass).
-    stageAsset: command('propose', 'proposal-submission-refused', async (input, principal) => {
+    stageAsset: command(bundleGrant, 'proposal-submission-refused', async (input, principal) => {
       if (bundleDesk === null) fail('proposal-submission-refused', 'this node does not accept new pages');
       const request = closedInput(input, 'sha256', ['size', 'offset', 'data']);
       return bundleDesk.staging.stage({ keyId: principal.keyId, ...request });
@@ -276,10 +285,11 @@ export function createOwnerCommands({
     // publish sends it straight to its own signature; any other device's
     // bundle waits for the owner's review. Nothing publishes without the
     // owner's signature, which the publisher checks.
-    submitPageBundle: command('propose', 'proposal-submission-refused', async (input, principal) => {
+    submitPageBundle: command(bundleGrant, 'proposal-submission-refused', async (input, principal, tier) => {
       if (bundleDesk === null) fail('proposal-submission-refused', 'this node does not accept new pages');
-      const owner = isOwnerDevice(principal) && devicePrincipalAdapter?.hasGrant(principal, 'publish') === true;
-      return submitProposal.submitBuilt(async () => null, principal).then(() => bundleDesk.submit(input, principal, owner ? 'owner' : 'propose'));
+      // Charged before any Git read, like every other submission.
+      await submitProposal.submitBuilt(async () => null, principal);
+      return bundleDesk.submit(input, principal, tier);
     }, { preserveCode: true }),
 
     listBundles: command('review', 'review-list-failed', async () => {

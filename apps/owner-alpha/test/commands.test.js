@@ -174,3 +174,30 @@ test('unexpected effect errors use the existing route fallback codes', async () 
     await expect(result).rejects.toHaveProperty('code', code);
   }
 });
+
+test.each(['stageAsset', 'submitPageBundle', 'listBundles', 'approveBundle', 'declineBundle', 'readApprovalChunk'])(
+  'page bundle command %s refuses an absent or invalid principal before reading input', async (command) => {
+    const commands = fixtureCommands();
+    const untouchable = new Proxy({}, { get() { throw new Error('input read before authorization'); } });
+    for (const rejected of unverified) {
+      const result = commands[command](untouchable, rejected);
+      await expect(result).rejects.toBeInstanceOf(OwnerAlphaError);
+      await expect(result).rejects.toHaveProperty('code', 'invalid-session');
+    }
+  });
+
+test('page bundles: an owner device that may publish goes to its signature, a propose-only device to review', async () => {
+  const submitted = [];
+  const bundleDesk = { staging: { stage: () => ({ received: 1, complete: true }) },
+    submit: async (input, who, tier) => { submitted.push([who.keyId, tier]); return { bundleId: 'b', state: tier === 'owner' ? 'signing' : 'review' }; } };
+  const device = (keyId, kind, grants) => ({ method: 'device-key', keyId, id: kind === 'owner-device' ? example.owner.identity : 'agent-1',
+    actor: { kind, id: kind === 'owner-device' ? example.owner.identity : 'agent-1', label: keyId }, grants });
+  const devicePrincipalAdapter = { ownerId: example.owner.identity, isVerified: () => true, consumeRequest: () => true,
+    hasGrant: (p, grant) => p.grants.includes(grant) };
+  const commands = fixtureCommands({ devicePrincipalAdapter, bundleDesk, proposalReview: { submitSigned: async () => ({}) } });
+  const input = { main: { path: 'topic/a.md', text: '# A\n' }, assets: [] };
+  expect(await commands.submitPageBundle(input, device('phone', 'owner-device', ['publish', 'propose']))).toMatchObject({ state: 'signing' });
+  expect(await commands.submitPageBundle(input, device('agent', 'agent', ['propose']))).toMatchObject({ state: 'review' });
+  expect(submitted).toEqual([['phone', 'owner'], ['agent', 'propose']]);
+  await expect(commands.submitPageBundle(input, device('reader', 'agent', []))).rejects.toHaveProperty('code', 'invalid-session');
+});
