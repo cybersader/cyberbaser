@@ -2,7 +2,7 @@
 
 > Update when direction changes, milestones complete, or priorities shift.
 
-**New post form, 2026-11-24:** the plugin reads `.cyberbaser/model.yml` and offers a New post form; Publish turns Draft off inside the signed bundle. Harness-verified on a Cyberchief copy; cover-by-property fix in progress. Record: `agent-context/zz-log/2026-11-24-new-post-form.mdx`.
+**New post form, 2026-11-24:** the plugin reads `.cyberbaser/model.yml` and offers a New post form; Publish turns Draft off inside the signed bundle. Harness-verified on a Cyberchief copy; property-named images now count as shown (`2026-11-24-property-images.mdx`). Record: `agent-context/zz-log/2026-11-24-new-post-form.mdx`.
 
 **Shape decided, 2026-11-24: Cyberbaser is the gate, not a CMS.** It accepts, checks, approves and publishes changes; editors, forms, media, accounts, rendering, storage and sync belong to other tools, and page types and author profiles are plain vault files. Gaps for a non-technical author (Cyberchief): new notes and images through the gate, a device-to-author-note link, and a renderer for Cyberchief's own site. Open: own a neutral meta schema or adopt an existing page-type format (research next). Real install continues (GitHub App registration in progress). Record: `41-QUESTIONS-RESOLVED.md`, `agent-context/zz-log/2026-11-24-gate-not-cms.mdx`.
 
