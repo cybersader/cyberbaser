@@ -14,7 +14,7 @@ import { PINNED_QUARTZ_COMMIT, PINNED_QUARTZ_REF } from '../src/quartz-renderer.
 import { createMemoryEditSessionStore, createOwnerAlphaHandler } from '../src/server.js';
 import { SITE_FRAME_CSP } from '../src/site-review-page.js';
 import { parsePageBundle } from '../../../packages/proposal/src/page-bundle.js';
-import { bundleVault, gitSync, REMOTE_URL } from './bundle-fixture.js';
+import { bundleVault, gitSync, REMOTE_URL, VAULT } from './bundle-fixture.js';
 
 const ORIGIN = 'http://127.0.0.1:4317';
 const HOST = '127.0.0.1:4317';
@@ -38,9 +38,18 @@ function fakeRenderer(calls, { name = 'cyberchief' } = {}) {
   };
 }
 
+// The vault the preview builds from: the fixture plus a folder note and an
+// author note (published), and a private author draft (not published).
+const PREVIEW_VAULT = Object.freeze({ ...VAULT,
+  'publish.yml': 'allow:\n  - "topic/**"\n  - "authors/**"\n',
+  'topic/index.md': '---\ntitle: The topic\n---\n# The topic\n',
+  'authors/the-chief.md': '---\ntitle: The Chief\n---\nAuthor note.\n',
+  'authors/secret.md': '---\ndraft: true\n---\nNot published.\n',
+});
+
 let world;
 beforeAll(async () => {
-  const vault = await bundleVault();
+  const vault = await bundleVault(PREVIEW_VAULT);
   const projectRoot = await mkdtemp(path.join(os.tmpdir(), 'owner-alpha-bundle-preview-'));
   const rendererRoot = await mkdtemp(path.join(os.tmpdir(), 'owner-alpha-bundle-renderer-'));
   const raw = JSON.parse(await readFile(path.join(import.meta.dir, '..', 'owner-alpha.example.json'), 'utf8'));
@@ -67,7 +76,9 @@ beforeAll(async () => {
     devices: { bundleDesk: desk }, bundlePreview,
   });
   const signIn = async (fetch) => (await fetch(request(`/owner/bootstrap?token=${TOKENS.bootstrap}`))).headers.get('set-cookie')?.split(';', 1)[0];
-  world = { vault, desk, projectRoot, rendererRoot, config, bundled, bundleId: submitted.bundleId, cover, handler, signIn };
+  // The checkout readiness check, standing in for the configured checkout.
+  const checkout = (head = gitSync(vault.repo, 'rev-parse', 'main')) => ({ assertCheckoutReady: async () => ({ root: vault.repo, head }) });
+  world = { checkout, vault, desk, projectRoot, rendererRoot, config, bundled, bundleId: submitted.bundleId, cover, handler, signIn };
 });
 afterAll(async () => {
   for (const root of [world.vault.root, world.projectRoot, world.rendererRoot]) await rm(root, { recursive: true, force: true });
@@ -85,12 +96,17 @@ describe('a new page on the site design', () => {
     expect(createBundlePreview({ config: world.config, projectRoot: world.projectRoot })).toBeFunction();
   });
 
-  test('builds just the bundle files privately, shows the page safely with a banner, and cleans up', async () => {
+  test('builds the published vault at the base plus the bundle files privately, shows the page safely with a banner, and cleans up', async () => {
     const calls = [];
-    const preview = createBundlePreview({ config: world.config, projectRoot: world.projectRoot, render: fakeRenderer(calls) });
+    const preview = createBundlePreview({ config: world.config, projectRoot: world.projectRoot, render: fakeRenderer(calls), dependencies: world.checkout() });
     const html = await preview(await previewInput());
     expect(calls).toHaveLength(1);
-    expect(calls[0].files.sort()).toEqual(['topic', 'topic/cover.png', 'topic/new-post.md']);
+    // The renderer sees the other published files (folder note, author note,
+    // linked image) beside the new note, and nothing unpublished.
+    const files = calls[0].files.sort();
+    expect(files).toEqual(expect.arrayContaining(['authors/the-chief.md', 'topic/index.md', 'topic/existing.md',
+      'shared/shown.png', 'topic/cover.png', 'topic/new-post.md']));
+    for (const hidden of ['authors/secret.md', 'topic/draft.md', 'shared/private.png', 'index.md', 'publish.yml']) expect(files).not.toContain(hidden);
     expect(calls[0].ownerOrigin).toBe('http://127.0.0.1:4317');
     expect(calls[0].outputDir.startsWith(path.join(world.projectRoot, '.workspace/owner-alpha/cache/bundle-previews/'))).toBe(true);
     expect(html).toContain('<p class="cbr-banner">New page at <strong>/topic/new-post</strong></p>');
@@ -105,17 +121,36 @@ describe('a new page on the site design', () => {
   });
 
   test('a failed build or a result from another renderer gives the simplified page', async () => {
-    const failing = createBundlePreview({ config: world.config, projectRoot: world.projectRoot, render: async () => { throw new Error('boom'); } });
+    const failing = createBundlePreview({ config: world.config, projectRoot: world.projectRoot, render: async () => { throw new Error('boom'); }, dependencies: world.checkout() });
     expect(await failing(await previewInput())).toBeNull();
-    const other = createBundlePreview({ config: world.config, projectRoot: world.projectRoot, render: fakeRenderer([], { name: 'quartz-cyberbase' }) });
+    const other = createBundlePreview({ config: world.config, projectRoot: world.projectRoot, render: fakeRenderer([], { name: 'quartz-cyberbase' }), dependencies: world.checkout() });
     expect(await other(await previewInput())).toBeNull();
-    const preview = createBundlePreview({ config: world.config, projectRoot: world.projectRoot, render: fakeRenderer([]) });
+    const preview = createBundlePreview({ config: world.config, projectRoot: world.projectRoot, render: fakeRenderer([]), dependencies: world.checkout() });
     expect(await preview({ ...(await previewInput()), bundleId: '../escape' })).toBeNull();
     expect(await preview({ ...(await previewInput()), index: 3 })).toBeNull();
   });
 
+  test('a checkout not at the bundle base, or a new file over an existing path, gives the simplified page', async () => {
+    const calls = [];
+    const moved = createBundlePreview({ config: world.config, projectRoot: world.projectRoot, render: fakeRenderer(calls),
+      dependencies: world.checkout('f'.repeat(40)) });
+    expect(await moved(await previewInput())).toBeNull();
+    // An untracked file where the bundle creates its note: never overwritten.
+    const clash = path.join(world.vault.repo, 'topic', 'new-post.md');
+    await writeFile(clash, '# Already here\n');
+    try {
+      const collide = createBundlePreview({ config: world.config, projectRoot: world.projectRoot, render: fakeRenderer(calls),
+        dependencies: world.checkout() });
+      expect(await collide(await previewInput())).toBeNull();
+      expect(await readFile(clash, 'utf8')).toBe('# Already here\n');
+    } finally {
+      await rm(clash);
+    }
+    expect(calls).toHaveLength(0);
+  });
+
   test('the owner app frames the site page with the site frame policy, or falls back to the simplified page', async () => {
-    const preview = createBundlePreview({ config: world.config, projectRoot: world.projectRoot, render: fakeRenderer([]) });
+    const preview = createBundlePreview({ config: world.config, projectRoot: world.projectRoot, render: fakeRenderer([]), dependencies: world.checkout() });
     const fetch = world.handler(preview);
     const cookie = await world.signIn(fetch);
     const site = await fetch(request(`/owner/bundles/${world.bundleId}/page/0`, { headers: { Cookie: cookie } }));

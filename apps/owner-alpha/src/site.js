@@ -201,7 +201,7 @@ function updateTreeDigest(hash, relativePath, bytes) {
   hash.update(bytes);
 }
 
-async function verifyBytePreservingProjection(checkoutRoot, projectionRoot, published) {
+export async function verifyBytePreservingProjection(checkoutRoot, projectionRoot, published) {
   const paths = [...published].map(exactPublishedPath).sort();
   if (new Set(paths).size !== paths.length) {
     fail('duplicate-published-path', 'publication selection returned duplicate paths');

@@ -1,20 +1,29 @@
 // Route C on the site's own design: a new page from a bundle, built by the
-// owner's configured renderer in a private build of just the bundle's files
-// (its note, folder index and images), then shown like any site page in the
-// review frame: scripts and links removed, stylesheets, fonts and images
-// inlined, nothing loaded by address. The whole page is new, so it carries a
-// "New page at" banner instead of change marks. Anything that does not work
-// returns null and the simplified rendering is shown instead.
+// owner's configured renderer in a private build of the whole public
+// selection of the vault at the bundle's base commit with the bundle's new
+// files (its note, folder index and images) added, so the renderer sees the
+// same folder notes, author notes, links and images as a full site build.
+// The page is then shown like any site page in the review frame: scripts and
+// links removed, stylesheets, fonts and images inlined, nothing loaded by
+// address. The whole page is new, so it carries a "New page at" banner
+// instead of change marks. Anything that does not work (the checkout is not
+// at the bundle's base, a new file would replace an existing path, the build
+// fails) returns null and the simplified rendering is shown instead.
 //
 // Only for a configured renderer (renderer-slot.js): its builds run offline
 // and one at a time with the site build. The bundled renderer keeps the
 // simplified rendering for bundles.
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { project as projectContent, verifyProjection } from '@cyberbaser/projection';
+import { select } from '@cyberbaser/publish';
 import { createConfiguredRenderer, rendererIdentity } from './renderer-slot.js';
+import { verifyBytePreservingProjection } from './site.js';
+import { assertCheckoutReady } from './source.js';
 import { readBuiltSitePage, sitePageSlug } from './site-review-page.js';
 
 const BUNDLE_ID_RE = /^bundle-[0-9a-f-]{36}$/u;
+const COMMIT_RE = /^[0-9a-f]{40}$/u;
 const CACHE_ENTRIES = 8;
 // Bundle images may be up to 5 MiB each, four per bundle.
 const IMAGE_LIMITS = Object.freeze({ image: 5 * 1024 * 1024, images: 20 * 1024 * 1024 });
@@ -24,18 +33,30 @@ function safeRelative(value) {
     && value.split('/').every((part) => part !== '' && part !== '.' && part !== '..');
 }
 
+async function exists(target) {
+  try {
+    await lstat(target);
+    return true;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
 /**
  * previewBundle({ bundleId, index, bundle, record, readImage, colorScheme })
  * -> Promise<string | null>. `readImage(path)` returns { bytes } already
- * checked against the bundle.
+ * checked against the bundle. `dependencies` may replace the checkout
+ * readiness check (tests); selection and projection are the site build's own.
  */
-export function createBundlePreview({ config, projectRoot, render = null }) {
+export function createBundlePreview({ config, projectRoot, render = null, dependencies = {} }) {
   if (!config?.renderer) return null;
   const identity = rendererIdentity(config);
   const build = render ?? createConfiguredRenderer(config.renderer);
   const cacheRoot = path.resolve(projectRoot, config.workspace.cache, 'bundle-previews');
   const ownerOrigin = `http://${config.listen.host}:${config.listen.port}`;
   const cache = new Map();
+  const checkCheckout = dependencies.assertCheckoutReady ?? assertCheckoutReady;
 
   async function produce({ bundleId, index, bundle, record, readImage, colorScheme }) {
     const addition = record.publicAdditions[index];
@@ -43,12 +64,29 @@ export function createBundlePreview({ config, projectRoot, render = null }) {
     if (!note) return null;
     const files = bundle.files.filter((file) => file.kind === 'create' || file.kind === 'create-asset');
     if (!files.every((file) => safeRelative(file.path))) return null;
+    const base = bundle.source?.revision;
+    if (typeof base !== 'string' || !COMMIT_RE.test(base)) return null;
+    // Preview on exactly the base the bundle was made against, never another.
+    const checkout = await checkCheckout(config);
+    if (checkout?.head !== base || typeof checkout.root !== 'string' || !path.isAbsolute(checkout.root)) return null;
+    // New files only: a path that exists at the base, published or not, is a refusal.
+    for (const file of files) {
+      if (await exists(path.join(checkout.root, ...file.path.split('/')))) return null;
+    }
     const root = path.join(cacheRoot, bundleId);
     const content = path.join(root, 'content');
     const site = path.join(root, 'site');
     await rm(root, { recursive: true, force: true });
-    await mkdir(content, { recursive: true, mode: 0o700 });
+    await mkdir(root, { recursive: true, mode: 0o700 });
     try {
+      // The site build's own public selection, projected byte for byte.
+      const selection = await select(checkout.root, { audience: 'public' });
+      if (!Array.isArray(selection?.published) || selection.published.length === 0) return null;
+      const projection = await projectContent(checkout.root, content, { audience: 'public', selectResult: selection,
+        lowercase: false, verify: true, writeReport: false });
+      if (projection?.ok !== true) return null;
+      if ((await verifyProjection(checkout.root, content, selection, { lowercase: false }))?.ok !== true) return null;
+      await verifyBytePreservingProjection(checkout.root, content, selection.published);
       for (const file of files) {
         const target = path.join(content, ...file.path.split('/'));
         await mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
@@ -69,7 +107,7 @@ export function createBundlePreview({ config, projectRoot, render = null }) {
   return async function previewBundle(input) {
     if (!BUNDLE_ID_RE.test(input?.bundleId ?? '') || !Number.isSafeInteger(input.index) || input.index < 0) return null;
     // A bundle never changes; its preview is kept for the life of this process.
-    const key = `${input.bundleId}/${input.index}/${input.colorScheme ?? ''}`;
+    const key = `${input.bundleId}/${input.bundle?.source?.revision ?? ''}/${input.index}/${input.colorScheme ?? ''}`;
     if (!cache.has(key)) {
       const pending = produce(input).catch(() => null);
       cache.set(key, pending);
