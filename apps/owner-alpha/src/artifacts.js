@@ -4,6 +4,7 @@ import { link, lstat, open, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fail, OwnerAlphaError } from './errors.js';
 import { artifactJson } from './json.js';
+import { storeModes } from './store-modes.js';
 import {
   assertSafeStoreTarget,
   prepareStore,
@@ -27,14 +28,14 @@ function bytesFor(value, maxBytes) {
   return contents;
 }
 
-async function writeTemporary(file, contents) {
+async function writeTemporary(file, contents, storeRoot) {
   const temporary = temporaryName(file);
   let handle;
   try {
     handle = await open(
       temporary,
       constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW,
-      0o600,
+      storeModes(file, storeRoot).file,
     );
     await handle.writeFile(contents, 'utf8');
     await handle.sync();
@@ -80,7 +81,7 @@ export async function createJsonArtifactOnce(
   const file = resolveStorePath(context, relativePath);
   await prepareStoreParent(context, file);
   const contents = bytesFor(value, maxBytes);
-  const temporary = await writeTemporary(file, contents);
+  const temporary = await writeTemporary(file, contents, context.storeRoot);
   try {
     await link(temporary, file);
     await syncDirectory(path.dirname(file));
@@ -106,7 +107,7 @@ export async function replaceJsonArtifactAtomic(
   await prepareStoreParent(context, file);
   await assertExistingRegularFile(file);
   const contents = bytesFor(value, maxBytes);
-  const temporary = await writeTemporary(file, contents);
+  const temporary = await writeTemporary(file, contents, context.storeRoot);
   try {
     await rename(temporary, file);
     await syncDirectory(path.dirname(file));

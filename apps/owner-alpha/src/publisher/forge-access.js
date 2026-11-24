@@ -372,7 +372,10 @@ export function createGithubAppAccess({
             ...(still?.repository ? { repository: still.repository.fullName } : {}) };
         }
         if (!current.repository) return { provider: 'github-app', state: 'pick-repository' };
-        const matches = current.repository.remoteUrl === remoteUrl;
+        // First-run setup runs this provider with no repository yet (remoteUrl
+        // null): any picked repository is connected, and pushCredential still
+        // refuses, so a setup-time publisher can never push.
+        const matches = remoteUrl === null || current.repository.remoteUrl === remoteUrl;
         return {
           provider: 'github-app', state: matches ? 'connected' : 'problem', repository: current.repository.fullName,
           renewsAutomatically: true, signInRenewBy: new Date(current.refreshExpiresAt).toISOString(),

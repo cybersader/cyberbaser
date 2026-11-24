@@ -1,0 +1,16 @@
+{
+  "name": "@cyberbaser/packaging",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Builds the one Cyberbaser program (all modes in one executable) and installs it as a background service with the publisher under its own account.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "cyberbaser": "./src/cli.js"
+  },
+  "scripts": {
+    "build": "bun build.js",
+    "test": "bun test test/binary-smoke.test.js",
+    "test:container": "CYBERBASER_CONTAINER_TEST=1 bun test test/container-install.test.js"
+  }
+}

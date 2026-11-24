@@ -1,0 +1,33 @@
+[Unit]
+Description=Cyberbaser owner node
+Documentation=https://cybersader.github.io/cyberbaser/design/deployment-and-reach/
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=cyberbaser
+# Primary group is the share group: files the node shares come out in it, and
+# the node's own checks (directory group = process group) still hold.
+Group=cyberbaser-share
+# Group read and write on the shared job store and notes copy; nothing for others.
+UMask=0007
+# Runs first-run setup until the node config exists, then the node itself.
+ExecStart=/opt/cyberbaser/bin/cyberbaser service-node
+Restart=always
+RestartSec=2
+StandardInput=null
+Environment=HOME=/var/lib/cyberbaser/home XDG_CACHE_HOME=/var/lib/cyberbaser/cache TMPDIR=/tmp
+Environment=PATH=/opt/cyberbaser/libexec:/usr/local/bin:/usr/bin:/bin
+Environment=CYBERBASER_SHARED_STORE=group
+RuntimeDirectory=cyberbaser
+RuntimeDirectoryMode=0700
+BindPaths=/var/lib/cyberbaser-shared/workspace:/opt/cyberbaser/.workspace
+ReadWritePaths=/var/lib/cyberbaser /var/lib/cyberbaser-shared
+InaccessiblePaths=-/var/lib/cyberbaser-publisher
+@HARDENING@
+
+[Install]
+WantedBy=multi-user.target

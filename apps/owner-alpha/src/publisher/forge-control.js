@@ -3,11 +3,11 @@
 // It sits beside the publication socket, in the same owner-only directory, and
 // never carries a credential in either direction: requests name an operation,
 // responses carry only ForgeAccess's plain status and repository rows.
-import { chmod, lstat, unlink } from 'node:fs/promises';
+import { lstat, unlink } from 'node:fs/promises';
 import net from 'node:net';
 import { OwnerAlphaError, fail } from '../errors.js';
 import { FORGE_PROBLEMS, validFullName } from './forge-access.js';
-import { MAX_FRAME_BYTES, READ_TIMEOUT_MS, readFrame, validSocketPath } from './protocol.js';
+import { MAX_FRAME_BYTES, READ_TIMEOUT_MS, readFrame, restrictSocket, validSocketPath } from './protocol.js';
 
 export const FORGE_OPERATIONS = Object.freeze(['status', 'check', 'start', 'cancel', 'repositories', 'select', 'disconnect']);
 export const MAX_FORGE_RESPONSE_BYTES = 512 * 1024;
@@ -37,7 +37,7 @@ function failureCode(error) {
   return 'forge-failed';
 }
 
-export async function startForgeControl({ socketPath, forgeAccess, uid = process.getuid() }) {
+export async function startForgeControl({ socketPath, forgeAccess, uid = process.getuid(), socketGroup = null }) {
   const address = forgeSocketPath(socketPath);
   // The caller holds the publisher's socket lifetime lock in this owner-only
   // directory, so a leftover socket of ours here is stale.
@@ -81,7 +81,8 @@ export async function startForgeControl({ socketPath, forgeAccess, uid = process
     server.once('error', reject);
     server.listen({ path: address, backlog: 8 }, () => { server.off('error', reject); resolve(); });
   });
-  await chmod(address, 0o600);
+  // Same access as the publication socket beside it.
+  await restrictSocket(address, uid, socketGroup);
   return Object.freeze({
     address,
     async close() {

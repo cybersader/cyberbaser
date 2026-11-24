@@ -1,0 +1,33 @@
+---
+title: One-app packaging
+description: Build step 4 of the deployment design. One compiled program with every mode, a Linux install that puts the publisher under its own account, the pinned site builder running on the program's own runtime, a home-server image from the same program, and an evaluation of Windows, macOS and desktop shells. Tested in disposable containers and private namespaces only.
+status: log
+---
+
+## What happened
+
+The owner asked to start building toward the one-app setup ("let's start designing that stuff then and getting it moving"), after deciding that the first real install waits for it and that the publisher runs under its own account behind an admin-once background service. Mid-task the owner added: "Needs to work on Windows ideally too, or even Mac if we can make it really simple. The GPUI or even Tauri plus Rust, maybe those are some routes to go." The result is in [Deployment and reach, section 4](/cyberbaser/design/deployment-and-reach/#one-program-and-the-linux-install-as-built-2026-11-23).
+
+## Three unknowns, settled
+
+1. **One program.** `bun build --compile` (Bun 1.3.14) gives one 130 MB Linux x64 executable with the `@number0/iroh` 1.2.0 addon inside. From an empty folder with no network, pairing loads the addon; `version` returns in 0.05 to 0.10 s using 52 MB. The build itself takes about 0.3 s. The wrapped entry points are unchanged: a build plugin points their `import.meta.url` at the installed folder and runs each one's main block when its mode is chosen.
+2. **The site builder.** The pinned Quartz private build runs on Bun with no network: 1.10 s against 1.51 s on Node 22 for a two-page vault, the pages differing only in function-text whitespace and a source-map path. The stock Quartz config fails offline (it fetches fonts for social images); the owner-mode config from `2a0609f` does not. The seed (Quartz plus locked dependencies, 465 MB) packs deterministically to a 107 MB zstd archive, SHA-256 `d563d041…f06f2`, pinned in the program.
+3. **Modes in one program.** `node`, `publisher`, `intake`, `pair`, `install`, `uninstall`, `status` (plus two internal ones the services use). Each refuses root; on an installed machine each refuses every account but its own. The account name comes from the user database by uid, because Bun's `os.userInfo()` read an empty name in containers.
+
+## What did not fit, and the fixes
+
+- **The publisher could not serve another account.** Its socket folder had to be 0700 and its own, and the job store was owner-only, while the publisher reads job records and writes its push receipt there. Two opt-in changes: a socket group for the publisher (folder 0710, sockets 0660), and `CYBERBASER_SHARED_STORE=group`, which shares only `jobs/` (0770/0640) and leaves the store root traversable (0710). Sharing the whole store first broke the node's own check that its decision folder is 0700 in its own group; so did set-group-ID folders. Both services now use the share group as their primary group, with no set-group-ID anywhere.
+- **Git refused root-owned folders.** The renderer passes only `HOME` to its children, so the install writes `safe.directory` for the program and renderer folders into the node account's own `~/.gitconfig`.
+- **First-run setup** (built at the same time by another worker) requires an owner-only state folder and clones the notes inside it. The install keeps setup state in the node's private folder and offers `/var/lib/cyberbaser-shared/notes/notes` in the setup layout as the place the publisher can read.
+
+## Evidence
+
+- `packaging/test/binary-smoke.test.js`: 3 pass. In a private user, mount and network namespace (no host changes, loopback only) the program started the node from a synthetic config, built the private site with its own runtime, started the intake through itself, opened Iroh sockets with no relay, and answered its health check in 3.5 to 5.5 s. Only the forge lookup at startup was pointed at a local bare repository.
+- `packaging/test/container/run.sh` (opt-in through `packaging/test/container-install.test.js`): Fedora 44 with systemd in rootless Podman, 61 checks, 0 failures. Install about 2 s; setup link printed; accounts, folders and modes as designed; the node cannot read the publisher's folder, stand-in forge key, config copy, environment or memory map, and cannot list or write its socket folder but can connect; an unrelated user cannot connect; the publisher cannot read the node's keys; inside the running node service the publisher folder is an empty locked stub and program files are read-only even for root. One synthetic job crossed accounts: the node committed, the publisher pushed the exact commit to a local bare repository, receipt 0640. Uninstall kept data; reinstall and update reused the accounts; install refused an unknown `/opt/cyberbaser` and an unknown `cyberbaser-publisher` account. `systemd-analyze security`: 2.9 for both units. The test container needs `CAP_SYS_ADMIN` (systemd bind mounts) and `CAP_SYS_PTRACE` (looking into a service's view) inside its own namespace; a real host's systemd has them.
+- `deploy/owner-alpha/one-app/`: a local 1.07 GB image built from the program; as two containers the node printed its setup link, refused to run as the publisher, and could not list the publisher volume. Not pushed anywhere, not run end to end.
+- Cross-builds for Windows x64, macOS arm64 and Linux arm64 compile; with n0's win32-x64 and darwin-arm64 addons (darwin-x64 does not exist) they embed Iroh. Not run: no Windows or Mac here, and the publisher's object import and `flock` are Linux-only.
+- Existing suites unchanged in outcome: owner app, intake and queue 1106 pass, 10 skip, 0 fail; container deployment 21 pass, 8 skip, 0 fail.
+
+## Still open
+
+The node needs network to start (it asks the forge for the branch head). Setup needs the publisher before a config exists. A compromised node can still ask for any commit to be pushed to the one repository; the split protects the key, not push authority. The renderer bundle is a separate download. Windows needs named pipes, ACLs and a lock without `flock`; macOS needs launchd daemons and a path without `/proc`. A Tauri shell would wrap the same program later; GPUI would mean a second UI. Nothing was installed on the owner's machine.

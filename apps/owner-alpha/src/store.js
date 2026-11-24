@@ -4,6 +4,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { fail, OwnerAlphaError } from './errors.js';
 import { deepFreeze } from './json.js';
+import { storeModes } from './store-modes.js';
 
 const execFileAsync = promisify(execFile);
 // This exception belongs to a validated publisher process context, never a
@@ -143,7 +144,7 @@ export async function prepareStore(context) {
   if (publisherStores.has(context)) await assertPublisherStoreLocation(context, publisherStores.get(context));
   await assertNoSymlinkComponents(context, context.workspaceRoot);
   await assertIgnoredPath(context, context.workspaceRoot);
-  await mkdir(context.storeRoot, { recursive: true, mode: 0o700 });
+  await mkdir(context.storeRoot, { recursive: true, mode: storeModes(context.storeRoot, context.storeRoot).directory });
   await assertNoSymlinkComponents(context, context.storeRoot);
   await assertIgnoredPath(context, context.storeRoot);
 
@@ -170,7 +171,7 @@ export async function assertSafeStoreTarget(context, target) {
 export async function prepareStoreParent(context, target) {
   const absolute = await assertSafeStoreTarget(context, target);
   const parent = path.dirname(absolute);
-  await mkdir(parent, { recursive: true, mode: 0o700 });
+  await mkdir(parent, { recursive: true, mode: storeModes(parent, context.storeRoot).directory });
   await assertNoSymlinkComponents(context, parent);
   await assertIgnoredPath(context, parent);
   return absolute;

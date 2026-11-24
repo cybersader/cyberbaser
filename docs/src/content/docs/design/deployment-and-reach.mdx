@@ -5,7 +5,7 @@ status: planning
 tags: [architecture, planning, security, deployment]
 ---
 
-**Status: design, 2026-11-23. Build steps 1 (Iroh in the node, agent pairing) and 2 (the Obsidian plugin) are built and tested on synthetic vaults; step 2 has not been tried on a real phone; the rest is not built.** It answers the owner's decision that the first real install waits for Iroh reach and a one-app setup ([decision log](https://github.com/cybersader/cyberbaser/blob/main/.claude/41-QUESTIONS-RESOLVED.md)). Settled matters are linked, not repeated: the five layers and Iroh-via-n0-relay choice are in the [editing roadmap](/cyberbaser/design/editing-and-trust-roadmap/), the passkey-over-Iroh evidence is in the [Iroh carrier research](/cyberbaser/research/iroh-editor-carrier/), and the container identities are in the [container deployment guide](/cyberbaser/development/owner-alpha-container-deployment/).
+**Status: design, 2026-11-23. Build steps 1 (Iroh in the node, agent pairing) and 2 (the Obsidian plugin) are built and tested on synthetic vaults; step 2 has not been tried on a real phone; step 4 (one program, Linux install with two accounts) is built and tested in disposable containers only; the rest is not built.** It answers the owner's decision that the first real install waits for Iroh reach and a one-app setup ([decision log](https://github.com/cybersader/cyberbaser/blob/main/.claude/41-QUESTIONS-RESOLVED.md)). Settled matters are linked, not repeated: the five layers and Iroh-via-n0-relay choice are in the [editing roadmap](/cyberbaser/design/editing-and-trust-roadmap/), the passkey-over-Iroh evidence is in the [Iroh carrier research](/cyberbaser/research/iroh-editor-carrier/), and the container identities are in the [container deployment guide](/cyberbaser/development/owner-alpha-container-deployment/).
 
 ## The recommendation
 
@@ -91,7 +91,76 @@ Built on the existing [device-key registry](https://github.com/cybersader/cyberb
 
 **First run** is the five steps above, served on loopback (`127.0.0.1`) with a one-time setup token opened automatically, which is how the [bootstrap console](https://github.com/cybersader/cyberbaser/blob/main/apps/owner-alpha/src/bootstrap-console.js) already works. On a NAS the setup link comes from the container log.
 
+### First-run setup, as built (2026-11-23)
+
+A short guided flow in the owner app, shown only until setup is finished. It opens from a one-time link the app prints when it starts (`127.0.0.1` only, works once, for 15 minutes; a restart prints a new one). After setup, the normal owner sign-in applies.
+
+1. **Welcome:** one sentence on what Cyberbaser does, and Start.
+2. **Connect GitHub:** the same sign-in code and searchable repository list as the Publishing to GitHub page. During setup the publisher can sign in, list and pick a repository, but it cannot push.
+3. **Your notes:** the node makes its private copy of the repository, shows a calm progress line, then how many notes it copied. If the repository has no `publish.yml`, it says nothing will be published without one and offers **Publish nothing yet** or **Write a starter file**, where the owner picks the public folders (none are picked for them). A starter file stays on this machine until the owner publishes it. If this machine cannot build the private preview, it says so and continues.
+4. **Your website:** found from the repository's own Pages workflow or `CNAME` file when they exist; otherwise one address field and **Skip for now**.
+5. **Pair your phone:** the Devices pairing with QR code and matching words, or **Pair later**.
+6. **Pair an agent:** optional; shows the one-line `cyberbaser pair` command, or **Skip**.
+7. **Done:** "Changes your agents and visitors suggest will appear in Proposals", with links to Proposals and Devices.
+
+Each step is saved to an owner-only file, so a restart resumes at the same step. Every action needs the setup session and its CSRF token and names the step on screen, so a stale click does nothing. Nothing is published during setup. An installer that starts the node in the same process can hand over the setup session, so the owner is still signed in at Done.
+
+**Not yet:** copying a private repository needs the publisher to fetch it (today the node clones without credentials, so only public repositories, or the test fake, copy). Adding a confirmed starter `publish.yml` to the repository is not wired. A custom website address is recorded, but live checks still use the GitHub Pages address. Pairing during setup has not run against a real Iroh endpoint.
+
 **Cross-builds.** Bun cross-compiles with `--target` and can embed `.node` addons, but each target needs that platform's addon package installed ([Bun executables](https://bun.com/docs/compiler/executables)), so build per platform in CI. No macOS Intel binding exists.
+
+### One program and the Linux install, as built (2026-11-23)
+
+**What a Linux user runs:** download one file and run `cyberbaser install --quartz-seed quartz-seed-v4.5.2.tar.zst`. It asks for the admin password once (pkexec on a desktop, sudo in a terminal, and says which), installs a background service, and prints one line: the local setup address with its one-time token. `cyberbaser status` shows what runs; `cyberbaser uninstall` removes the program and services and keeps the notes and keys unless `--purge`. Running install again updates in place; it refuses to touch a setup it did not make.
+
+**The program.** `packaging/build.js` compiles one 130 MB Linux x64 executable with `bun build --compile`. The Iroh addon is inside it: pairing loads it from an empty folder with no network. It starts in about 0.1 s. Its modes wrap the existing entry points unchanged: `node`, `publisher`, `intake` (the node starts it through the same program), `pair`, `install`, `uninstall`, `status`. Each refuses root, and on an installed machine refuses any account but its own. The web pages, renderer files and the sources the site-identity check hashes (2.7 MB) are embedded and written to `/opt/cyberbaser` at install.
+
+**The site builder.** The pinned Quartz runs on the program's own runtime: `node` and `bun` in the install are two-line scripts that start the same program as Bun. No Node.js is needed. With no network at all, a private build of a small vault took 1.1 s under Bun against 1.5 s under Node 22; the pages differ only in whitespace inside serialized functions and a source-map path. Quartz and its locked dependencies (465 MB installed) ship as one archive, 107 MB with zstd, whose SHA-256 the program pins; install checks the digest, unpacks it, and the renderer's own setup checks origin, tag, commit and lockfile again.
+
+**Two accounts.** `cyberbaser` runs the node and the intake; `cyberbaser-publisher` runs the publisher; both have the group `cyberbaser-share` as their primary group.
+
+| Place | Owner, mode | Who can read it |
+|---|---|---|
+| `/var/lib/cyberbaser` (config, Iroh keys, setup state) | `cyberbaser`, 0700 | the node only |
+| `/var/lib/cyberbaser-publisher` (forge key, push repository, its copy of the config) | `cyberbaser-publisher`, 0700 | the publisher only |
+| `/var/lib/cyberbaser-shared/workspace` (job store, seen at `/opt/cyberbaser/.workspace`) | node, group share, 0770; job records 0640 | both; the publisher adds its push receipt |
+| `/var/lib/cyberbaser-shared/notes` (the notes copy) | node, group share, 0770 | both; the publisher reads commits |
+| `/run/cyberbaser-publisher` (publisher sockets) | publisher, group share, 0710; sockets 0660 | the node may connect, not list or write |
+
+The units use `ProtectSystem=strict`, `NoNewPrivileges`, `PrivateTmp`, `ProtectHome`, `ProtectProc=invisible`, no capabilities, and only the paths above as writable; each unit cannot see the other's private folder at all. Before the publisher starts, root copies the node's config into the publisher's own 0600 file (refusing links and any file not the node's own), and a path unit restarts the publisher when that config changes.
+
+**Two small code changes made this possible, both off unless the installed service turns them on.** The publisher was written as a separate process under the same user: its sockets accepted only its own account, and the job store was owner-only. Now the publisher takes a socket group (`--socket-group`: directory 0710, sockets 0660), and `CYBERBASER_SHARED_STORE=group` makes only the job records under `jobs/` group-shared (directories 0770, files 0640; the store root 0710). Everything else in the store stays owner-only; the node's other checks require that.
+
+**Evidence** (`packaging/test/container/run.sh`, a disposable Fedora 44 container running systemd under rootless Podman, 61 checks, all pass): install in about 2 s and the setup link printed; the node cannot list the publisher's folder, read a stand-in forge key or the publisher's config, read the publisher's environment or memory maps, or list or write the socket folder, but can connect to the socket; an unrelated user cannot connect or read the shared store; the publisher cannot read the node's keys or config; inside the running node service the publisher folder is an empty locked stub and the program files are read-only even for root. One synthetic job ran end to end across accounts: the node applied and committed, the publisher pushed that exact commit to a local bare repository, and its receipt was group-readable only. Uninstall kept data, reinstall and update reused the same accounts, and install refused an unknown `/opt/cyberbaser` and an unknown `cyberbaser-publisher` account. `systemd-analyze security` rates both units 2.9 ("OK"). A separate test runs the program with no network in a private namespace: the node built its private site, started the intake and Iroh, and answered its health check in 3.5 to 5.5 s.
+
+**Home server.** `deploy/owner-alpha/one-app/` builds a local image from the same program (1.07 GB: Fedora base, program, renderer bundle) with the same layout as two containers: node as uid 65532 and publisher as 65533, sharing group 65530; only the publisher container mounts the publisher volume. Checked: the node container prints the setup link, refuses to run as the publisher, and cannot list the publisher volume. Not yet run end to end with a push; the earlier image and its guide are unchanged.
+
+**What still does not hold up.**
+- The node's startup asks the forge for the branch head (`git ls-remote`), so it cannot start with no network, and the tests stand a local repository in for GitHub.
+- First-run setup needs the publisher for GitHub sign-in, but the publisher only starts once a config exists. Setup also keeps its state owner-only and clones the notes inside it, where the publisher cannot read them; the install writes `checkout: /var/lib/cyberbaser-shared/notes/notes` into the setup layout for setup to use.
+- A compromised node still owns the job store, so it can ask the publisher to push any commit to the one repository. What the split protects is the key itself: the node can never read or copy it, and revoking it is immediate.
+- The renderer bundle is a separate 107 MB download; the program does not fetch it yet.
+
+### Other platforms (evaluation, 2026-11-23)
+
+**Cross-compiling, checked here.** `bun build --compile --target` produced a Windows x64 `.exe`, a macOS arm64 executable and a Linux arm64 executable from this machine in about 1.5 s each. n0 publishes the Iroh addon for win32-x64, win32-arm64 and darwin-arm64 (version 1.2.0; darwin-x64 does not exist, npm returns 404). With the target's addon package unpacked beside the others, the builds embed it (Windows 120 MB, macOS 77 MB); without it they build but carry no Iroh. None of these was run: there is no Windows or Mac here. Running is not enough anyway: the publisher's repository import refuses any platform but Linux (it reads objects through `/proc/self/fd`), and the node and publisher call `flock`, which Windows lacks. Those two need a port before Windows works; macOS has neither `/proc` nor `flock(1)` by default either.
+
+**Desktop shell.**
+
+| Option | Reuses our web UI | Installers | Cost | Verdict |
+|---|---|---|---|---|
+| No shell: service plus the browser | Yes, as is | Linux built here; per-OS installers to build | None beyond the installers | **First.** What is built now. |
+| Tauri 2 | Yes: a webview showing the local page | `.msi`/NSIS `.exe`, `.dmg`/`.app`, `.deb`/`.rpm`/AppImage from one config; ships our program as a sidecar | Rust toolchain and signing per platform; the webview differs by OS | **Later**, as the tray and installer wrapper around the same program. |
+| GPUI (Zed's Rust UI) | No: a second, native UI written in Rust | None of its own | Rebuild every screen; young, mainly tested on macOS and Linux | **No.** |
+
+The Tauri row is from its documentation, not built here.
+
+**The publisher's own account on each OS** (design, not built).
+- **Windows:** two Windows services, each under its own virtual service account (`NT SERVICE\CyberbaserNode`, `NT SERVICE\CyberbaserPublisher`). The publisher's folder under `ProgramData` gets an ACL for the publisher service only; the socket becomes a named pipe whose ACL admits only the node service. Admin once: the MSI asks through UAC. Not equivalent: administrators can still take ownership of anything, and the code's Unix checks (owner, mode bits, `flock`, `/proc`) need Windows versions.
+- **macOS:** two launchd daemons in `/Library/LaunchDaemons` with `UserName` set to two hidden role accounts the installer creates, state under `/Library/Application Support/Cyberbaser` with the same modes; Unix sockets work as on Linux. Admin once: the `.pkg` installer's password prompt. The Keychain is not a better home for the key: the publisher daemon has no login keychain, and the System keychain is shared with root processes. Same strength as Linux except `/proc`-based code, which needs a macOS path.
+- **Without admin rights** on any OS: two processes under one user, not credential isolation, and labelled so.
+
+**Sockets on Windows.** Today: Unix sockets with owner and mode checks, `chmod`/`chown`, a `flock` ownership lock, and `lstat` inode fingerprints. On Windows: named pipes (`\\.\pipe\…`, which Bun's `net` supports) with an ACL instead of modes, a lock file opened exclusively instead of `flock`, and no inode fingerprint. These checks should sit behind one small socket interface per platform; Linux keeps today's code.
 
 ## 5. What is genuinely hard or risky
 
@@ -133,6 +202,8 @@ Built on the existing [device-key registry](https://github.com/cybersader/cyberb
 
    **To register the real app:** a name, the docs site as homepage, Repository contents read and write and nothing else, "Enable Device Flow" ticked, expiring user tokens left on, no webhook. Then set its client ID in the config. **Limits:** untested against real GitHub (including the refusal of workflow-file pushes); a different repository needs a restart and a local clone; the app must sit on that one repository only.
 4. **One app.** Compiled binary with node and publisher modes, Linux service install with two accounts, renderer bundle, container refresh.
+
+   **Built (2026-11-23), tested in disposable containers only.** One compiled program (`packaging/`) with all modes; `cyberbaser install` for Linux with systemd, two accounts, hardened units, uninstall that keeps data, and refusal of unknown setups; the pinned Quartz bundle as one 107 MB archive running on the program's own runtime; a home-server image from the same program as two containers. The cross-account push worked in a systemd container. Details and limits are in [One program and the Linux install](#one-program-and-the-linux-install-as-built-2026-11-23). **Not yet:** first-run setup and the publisher are not wired together (setup needs the publisher before a config exists), the node needs network to start, the bundle is not downloaded for the user, and nothing was installed on the owner's machine. Windows and macOS builds compile but were not run.
 5. **First real install** on the owner's machine, as decided.
 
 ## Decisions for the owner

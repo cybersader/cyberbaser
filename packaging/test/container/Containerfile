@@ -1,0 +1,10 @@
+# A disposable Fedora machine with systemd, for the install test only.
+# Never pushed anywhere.
+FROM registry.fedoraproject.org/fedora:44
+RUN dnf -y install --setopt=install_weak_deps=False \
+      systemd dbus-broker git-core rsync util-linux shadow-utils zstd tar curl procps-ng iproute findutils \
+    && dnf clean all \
+    && systemctl mask systemd-logind.service getty.target console-getty.service systemd-firstboot.service \
+    && systemctl set-default multi-user.target
+STOPSIGNAL SIGRTMIN+3
+CMD ["/sbin/init"]

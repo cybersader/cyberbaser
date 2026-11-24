@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { constants } from 'node:fs';
-import { chmod, lstat, open, realpath, unlink } from 'node:fs/promises';
+import { lstat, open, realpath, unlink } from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
 import { validateOwnerAlphaConfig } from '../config.js';
@@ -8,7 +8,7 @@ import { OwnerAlphaError, fail } from '../errors.js';
 import { validateJobId } from '../job-state.js';
 import { createJobPublisher } from '../pipeline.js';
 import { createPublisherStoreContext } from '../store.js';
-import { READ_TIMEOUT_MS, REJECTION_CODES, readFrame, validSocketPath } from './protocol.js';
+import { READ_TIMEOUT_MS, REJECTION_CODES, readFrame, restrictSocket, validSocketGroup, validSocketPath } from './protocol.js';
 import { FORGE_PROBLEMS, createForgeAccess } from './forge-access.js';
 import { startForgeControl } from './forge-control.js';
 import { createIsolatedPush } from './repository.js';
@@ -22,14 +22,23 @@ function unchanged(left, right) {
   return right !== null && left.dev === right.dev && left.ino === right.ino && left.ctimeNs === right.ctimeNs;
 }
 
-async function assertPrivateDirectory(directory, uid) {
+// With a socket group (an installed setup where the node runs under another
+// account), the directory may let exactly that group reach the socket by name:
+// mode 0710, never listable, never writable by the group.
+async function assertPrivateDirectory(directory, uid, socketGroup = null) {
   const metadata = await lstat(directory, { bigint: true });
-  if (!metadata.isDirectory() || metadata.uid !== uid || (metadata.mode & 0o7777n) !== 0o700n
+  const shared = socketGroup !== null;
+  if (!metadata.isDirectory() || metadata.uid !== uid
+    || (metadata.mode & 0o7777n) !== (shared ? 0o710n : 0o700n)
+    || (shared && metadata.gid !== BigInt(socketGroup))
     || await realpath(directory) !== directory) {
-    fail('publisher-unsafe-socket', 'publisher socket needs an owner-only real parent directory');
+    fail('publisher-unsafe-socket', shared
+      ? 'publisher socket needs a real parent directory owned by the publisher, mode 0710, in the socket group'
+      : 'publisher socket needs an owner-only real parent directory');
   }
   return metadata;
 }
+
 
 function refuseOccupied() {
   fail('publisher-socket-in-use', 'existing publisher socket path was not proven stale');
@@ -100,8 +109,8 @@ function rejectionCode(error) {
   return REJECTION_CODES.includes(error.code) ? error.code : 'publisher-failed';
 }
 
-export async function startPublisher({ config, context, socketPath, repository, forgeAccess, forgeOptions } = {}) {
-  if (!validSocketPath(socketPath) || typeof process.getuid !== 'function') {
+export async function startPublisher({ config, context, socketPath, repository, forgeAccess, forgeOptions, socketGroup = null } = {}) {
+  if (!validSocketPath(socketPath) || typeof process.getuid !== 'function' || !validSocketGroup(socketGroup)) {
     fail('publisher-unsafe-socket', 'publisher needs a private local Unix socket');
   }
   const uid = BigInt(process.getuid());
@@ -155,7 +164,7 @@ export async function startPublisher({ config, context, socketPath, repository, 
   server.on('error', () => {});
   let ownerFile;
   try {
-    const parent = await assertPrivateDirectory(directory, uid);
+    const parent = await assertPrivateDirectory(directory, uid, socketGroup);
     const ownerPath = `${socketPath}.lock`;
     ownerFile = await open(ownerPath, constants.O_CREAT | constants.O_RDWR | constants.O_NOFOLLOW | constants.O_NONBLOCK, 0o600);
     const file = await ownerFile.stat({ bigint: true });
@@ -163,7 +172,7 @@ export async function startPublisher({ config, context, socketPath, repository, 
       fail('publisher-unsafe-socket', 'publisher socket ownership record must be a private regular file');
     }
     await lockSocketOwner(ownerFile);
-    const lockedParent = await assertPrivateDirectory(directory, uid);
+    const lockedParent = await assertPrivateDirectory(directory, uid, socketGroup);
     const lockedFile = await socketStat(ownerPath);
     if (parent.dev !== lockedParent.dev || parent.ino !== lockedParent.ino
       || lockedFile === null || file.dev !== lockedFile.dev || file.ino !== lockedFile.ino) {
@@ -178,16 +187,11 @@ export async function startPublisher({ config, context, socketPath, repository, 
     // The caller holds the pipeline mutation lock; taking it here would deadlock.
     publish = createJobPublisher({ config, context: publisherContext, pushCommit, bindCommitMessage: true });
     await listen(server, socketPath);
-    await chmod(socketPath, 0o600);
-    ownedSocket = await socketStat(socketPath);
-    if (ownedSocket === null || !ownedSocket.isSocket() || ownedSocket.uid !== uid
-      || (ownedSocket.mode & 0o7777n) !== 0o600n) {
-      fail('publisher-unsafe-socket', 'publisher Unix socket permissions could not be secured');
-    }
+    ownedSocket = await restrictSocket(socketPath, Number(uid), socketGroup);
     await ownerFile.truncate(0);
     await ownerFile.writeFile(fingerprint(ownedSocket));
     await ownerFile.sync();
-    if (forgeAccess !== null) forgeControl = await startForgeControl({ socketPath, forgeAccess, uid: Number(uid) });
+    if (forgeAccess !== null) forgeControl = await startForgeControl({ socketPath, forgeAccess, uid: Number(uid), socketGroup });
     ready = true;
   } catch (error) {
     if (server.listening) await new Promise((resolve) => server.close(resolve));

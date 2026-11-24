@@ -1,4 +1,6 @@
+import { chmod, chown, lstat } from 'node:fs/promises';
 import path from 'node:path';
+import { fail } from '../errors.js';
 
 export const MAX_FRAME_BYTES = 1024;
 export const READ_TIMEOUT_MS = 1_000;
@@ -49,4 +51,21 @@ export function readFrame(socket, onFrame, onInvalid, { maxBytes = MAX_FRAME_BYT
   }
   socket.on('data', data);
   return stop;
+}
+
+export function validSocketGroup(value) {
+  return value === null || (Number.isSafeInteger(value) && value > 0);
+}
+
+// Owner-only by default; owner and the one socket group when a group is given.
+export async function restrictSocket(address, uid, socketGroup) {
+  if (socketGroup !== null) await chown(address, uid, socketGroup);
+  await chmod(address, socketGroup === null ? 0o600 : 0o660);
+  const metadata = await lstat(address, { bigint: true });
+  if (!metadata.isSocket() || metadata.uid !== BigInt(uid)
+    || (metadata.mode & 0o7777n) !== (socketGroup === null ? 0o600n : 0o660n)
+    || (socketGroup !== null && metadata.gid !== BigInt(socketGroup))) {
+    fail('publisher-unsafe-socket', 'publisher Unix socket permissions could not be secured');
+  }
+  return metadata;
 }

@@ -38,6 +38,13 @@ import { createForgeSetup, handleForgeSetup } from './forge-setup.js';
 
 export { createOwnerProposalReviewService, createMemoryEditSessionStore };
 
+// Shared with first-run setup so both servers answer with the same headers,
+// body limits and secret comparison.
+export function ownerHttpTools() {
+  return Object.freeze({ html, json, errorResponse, response, pageShell, readBoundedJson, sameSecret, exactToken, escapeHtml,
+    cookieHeader, requestCookie, token, staticResponse });
+}
+
 const COOKIE_NAME = 'owner_alpha_session';
 export const MAX_OWNER_SESSIONS = 64;
 const MAX_REVIEW_DECISION_BODY_BYTES = OWNER_DECISION_REASON_MAX_BYTES + 16 * 1024;
@@ -1665,6 +1672,26 @@ function segmented(name, legend, options, checked) {
   return `<fieldset class="segmented" data-field="${name}"><legend>${escapeHtml(legend)}</legend><div class="segmented-track">${options.map(([value, label]) => `<label class="segment"><input type="radio" name="${name}" value="${escapeHtml(value)}"${value === checked ? ' checked' : ''}><span>${escapeHtml(label)}</span></label>`).join('')}</div></fieldset>`;
 }
 
+// The pairing form shared by Devices and first-run setup. A fixed kind
+// renders as a hidden field, so setup asks only what matters for that step.
+export function pairFormHtml({ kind = null, label = 'My agent' } = {}) {
+  const kindField = kind === null
+    ? segmented('kind', 'What is it?', [['agent', 'Agent'], ['owner-device', 'Phone or computer']], 'agent')
+    : `<input type="hidden" name="kind" value="${escapeHtml(kind)}">`;
+  const accessField = kind === 'agent'
+    ? '<input type="hidden" name="access" value="propose">'
+    : segmented('access', 'What may it do?', Object.entries(ACCESS_LABELS), kind === 'owner-device' ? 'review' : 'propose');
+  return `<form id="pair-form" class="pair-form">
+${kindField}
+${accessField}
+<p class="access-note" id="access-note"${kind === 'owner-device' ? ' hidden' : ''}>Agents can only suggest changes. You review each one.</p>
+<label class="field" for="pair-label">Name<input id="pair-label" name="label" maxlength="64" autocomplete="off" value="${escapeHtml(label)}" required></label>
+<div class="pair-actions"><button type="submit">${kind === 'agent' ? 'Get pairing line' : kind === 'owner-device' ? 'Show QR code' : 'Get pairing code'}</button></div>
+<p class="status" id="pair-status" role="status" aria-live="polite"></p>
+</form>
+<div id="pair-live" class="pair-live" hidden aria-live="polite"></div>`;
+}
+
 function devicesPage({ csrfToken, devices, reachable, linking = false }) {
   const active = devices.filter((device) => !device.revoked);
   const revoked = devices.filter((device) => device.revoked);
@@ -1680,15 +1707,7 @@ function devicesPage({ csrfToken, devices, reachable, linking = false }) {
 <section class="devices-section" aria-labelledby="paired-heading"><h2 id="paired-heading">Paired</h2><div id="device-list-slot">${list}</div>
 ${revoked.length ? `<details class="revoked-list"><summary>Revoked (${revoked.length})</summary><ul class="device-list">${revoked.map(deviceRow).join('')}</ul></details>` : ''}</section>
 <section class="devices-section" aria-labelledby="pair-heading"><h2 id="pair-heading">Pair a new one</h2>
-${reachable ? `<form id="pair-form" class="pair-form">
-${segmented('kind', 'What is it?', [['agent', 'Agent'], ['owner-device', 'Phone or computer']], 'agent')}
-${segmented('access', 'What may it do?', Object.entries(ACCESS_LABELS), 'propose')}
-<p class="access-note" id="access-note">Agents can only suggest changes. You review each one.</p>
-<label class="field" for="pair-label">Name<input id="pair-label" name="label" maxlength="64" autocomplete="off" value="My agent" required></label>
-<div class="pair-actions"><button type="submit">Get pairing code</button></div>
-<p class="status" id="pair-status" role="status" aria-live="polite"></p>
-</form>
-<div id="pair-live" class="pair-live" hidden aria-live="polite"></div>` : '<p class="devices-empty">Pairing needs Iroh reach turned on for this node.</p>'}
+${reachable ? pairFormHtml() : '<p class="devices-empty">Pairing needs Iroh reach turned on for this node.</p>'}
 <noscript><p>Pairing and Revoke need scripting enabled in this browser.</p></noscript>
 </section>
 ${linking ? `<section class="devices-section" id="link-notes" aria-labelledby="link-heading" hidden><h2 id="link-heading">Notes to link</h2>
@@ -1705,6 +1724,63 @@ function parseDevicesBody(fields) {
       || Object.keys(value).sort().join(',') !== [...fields, 'csrf'].sort().join(',') || !exactToken(value.csrf)) throw new Error('fields');
     return value;
   };
+}
+
+/**
+ * Routes under /owner/devices, shared by the owner app and first-run setup.
+ * Returns null for any other path. `page` renders the full Devices page.
+ */
+export async function handleDeviceRoutes({ request, url, csrfToken, devices, page = true }) {
+  if (url.pathname !== '/owner/devices' && !url.pathname.startsWith('/owner/devices/')) return null;
+  if (devices === null) return errorResponse(404, 'devices-unavailable');
+  const { store, pairing } = devices;
+  if (url.search !== '') return errorResponse(400, 'unexpected-query');
+  if (url.pathname === '/owner/devices') {
+    if (!page) return errorResponse(404, 'not-found');
+    if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
+    return html(request.method === 'HEAD' ? null : devicesPage({ csrfToken, devices: store.list(), reachable: pairing.available(),
+      linking: Boolean(devices.links) }));
+  }
+  if (url.pathname === '/owner/devices/state') {
+    if (request.method !== 'GET') return response(null, 405, { Allow: 'GET' });
+    return json({ devices: store.list(), pairings: pairing.list() });
+  }
+  if (url.pathname === '/owner/devices/links') {
+    // Owner session only: paths the devices reported and the published
+    // vault paths to pick from. Never note text.
+    if (request.method !== 'GET') return response(null, 405, { Allow: 'GET' });
+    if (!devices.links) return errorResponse(404, 'not-found');
+    let paths = [];
+    try { paths = await devices.noteStatus.publishedPaths(); } catch { /* picker stays empty */ }
+    return json({ requests: devices.links.list(), paths });
+  }
+  const action = { '/owner/devices/pair': ['kind', 'access', 'label'], '/owner/devices/confirm': ['enrollmentId', 'words'],
+    '/owner/devices/cancel': ['enrollmentId'], '/owner/devices/revoke': ['keyId'],
+    ...(devices.links ? { '/owner/devices/link': ['requestId', 'vaultPath'], '/owner/devices/link-dismiss': ['requestId'] } : {}) }[url.pathname];
+  if (!action) return errorResponse(404, 'not-found');
+  if (request.method !== 'POST') return response(null, 405, { Allow: 'POST' });
+  let body;
+  try { body = await readBoundedJson(request, 2048, parseDevicesBody(action)); }
+  catch (error) { return errorResponse(error?.status ?? 400, 'invalid-devices-body'); }
+  if (!sameSecret(body.csrf, csrfToken)) return errorResponse(403, 'invalid-csrf');
+  try {
+    if (url.pathname === '/owner/devices/pair') {
+      const started = pairing.start({ kind: body.kind, access: body.access, label: typeof body.label === 'string' ? body.label.trim() : null });
+      // A phone camera opens obsidian://cyberbaser-pair?code=… straight into pairing.
+      const link = `obsidian://cyberbaser-pair?code=${encodeURIComponent(started.code)}`;
+      const matrix = qrMatrix(link);
+      return json({ ok: true, ...started, link, qr: { size: matrix.size + 8, path: qrPath(matrix) } });
+    }
+    if (url.pathname === '/owner/devices/link') {
+      try { return json({ ok: true, ...(await devices.links.confirm({ requestId: body.requestId, vaultPath: body.vaultPath })) }); }
+      catch (error) { return json({ ok: false, reason: error instanceof OwnerAlphaError ? error.code : 'link-refused' }, 409); }
+    }
+    if (url.pathname === '/owner/devices/link-dismiss') { devices.links.dismiss(body.requestId); return json({ ok: true }); }
+    if (url.pathname === '/owner/devices/confirm') return json({ ok: true, ...(await pairing.confirm({ enrollmentId: body.enrollmentId, words: body.words })) });
+    if (url.pathname === '/owner/devices/cancel') { pairing.cancel(body.enrollmentId); return json({ ok: true }); }
+    await store.revoke(body.keyId);
+    return json({ ok: true });
+  } catch { return errorResponse(409, 'devices-refused'); }
 }
 
 export function createOwnerAlphaHandler({
@@ -1730,6 +1806,9 @@ export function createOwnerAlphaHandler({
   devices = null,
   // Publishing to GitHub: relays to the publisher's forge control, never a credential.
   forgeSetup = null,
+  // { sessionToken, csrfToken } the first-run setup in this same process
+  // already gave the owner's browser, so setup ends signed in. Never on disk.
+  adoptSession = null,
 } = {}) {
   const config = validateOwnerAlphaConfig(configInput);
   const appearance = validReviewAppearance(reviewAppearance, config);
@@ -1824,6 +1903,16 @@ export function createOwnerAlphaHandler({
     return found;
   }
 
+  if (adoptSession !== null) {
+    const { sessionToken, csrfToken } = adoptSession ?? {};
+    if (!exactToken(sessionToken) || !exactToken(csrfToken) || sessionToken === csrfToken) {
+      throw new TypeError('adoptSession needs two distinct 32-byte base64url tokens');
+    }
+    issuedTokens.add(sessionToken);
+    issuedTokens.add(csrfToken);
+    sessions.set(sessionToken, { csrfToken, principal: principalAdapter.fromSession({
+      id: config.owner.identity, sessionId: randomUUID(), authenticatedAt: Date.now() }) });
+  }
   issueBootstrap();
   const initialBootstrapToken = outstanding.bootstrapToken;
   const expectedHost = `${config.listen.host}:${config.listen.port}`;
@@ -1950,56 +2039,8 @@ export function createOwnerAlphaHandler({
       tools: { html, json, errorResponse, response, pageShell, readBoundedJson, sameSecret } });
     if (forgeResponse !== null) return forgeResponse;
 
-    if (url.pathname === '/owner/devices' || url.pathname.startsWith('/owner/devices/')) {
-      if (devices === null) return errorResponse(404, 'devices-unavailable');
-      const { store, pairing } = devices;
-      if (url.search !== '') return errorResponse(400, 'unexpected-query');
-      if (url.pathname === '/owner/devices') {
-        if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
-        return html(request.method === 'HEAD' ? null : devicesPage({ csrfToken, devices: store.list(), reachable: pairing.available(),
-          linking: Boolean(devices.links) }));
-      }
-      if (url.pathname === '/owner/devices/state') {
-        if (request.method !== 'GET') return response(null, 405, { Allow: 'GET' });
-        return json({ devices: store.list(), pairings: pairing.list() });
-      }
-      if (url.pathname === '/owner/devices/links') {
-        // Owner session only: paths the devices reported and the published
-        // vault paths to pick from. Never note text.
-        if (request.method !== 'GET') return response(null, 405, { Allow: 'GET' });
-        if (!devices.links) return errorResponse(404, 'not-found');
-        let paths = [];
-        try { paths = await devices.noteStatus.publishedPaths(); } catch { /* picker stays empty */ }
-        return json({ requests: devices.links.list(), paths });
-      }
-      const action = { '/owner/devices/pair': ['kind', 'access', 'label'], '/owner/devices/confirm': ['enrollmentId', 'words'],
-        '/owner/devices/cancel': ['enrollmentId'], '/owner/devices/revoke': ['keyId'],
-        ...(devices.links ? { '/owner/devices/link': ['requestId', 'vaultPath'], '/owner/devices/link-dismiss': ['requestId'] } : {}) }[url.pathname];
-      if (!action) return errorResponse(404, 'not-found');
-      if (request.method !== 'POST') return response(null, 405, { Allow: 'POST' });
-      let body;
-      try { body = await readBoundedJson(request, 2048, parseDevicesBody(action)); }
-      catch (error) { return errorResponse(error?.status ?? 400, 'invalid-devices-body'); }
-      if (!sameSecret(body.csrf, csrfToken)) return errorResponse(403, 'invalid-csrf');
-      try {
-        if (url.pathname === '/owner/devices/pair') {
-          const started = pairing.start({ kind: body.kind, access: body.access, label: typeof body.label === 'string' ? body.label.trim() : null });
-          // A phone camera opens obsidian://cyberbaser-pair?code=… straight into pairing.
-          const link = `obsidian://cyberbaser-pair?code=${encodeURIComponent(started.code)}`;
-          const matrix = qrMatrix(link);
-          return json({ ok: true, ...started, link, qr: { size: matrix.size + 8, path: qrPath(matrix) } });
-        }
-        if (url.pathname === '/owner/devices/link') {
-          try { return json({ ok: true, ...(await devices.links.confirm({ requestId: body.requestId, vaultPath: body.vaultPath })) }); }
-          catch (error) { return json({ ok: false, reason: error instanceof OwnerAlphaError ? error.code : 'link-refused' }, 409); }
-        }
-        if (url.pathname === '/owner/devices/link-dismiss') { devices.links.dismiss(body.requestId); return json({ ok: true }); }
-        if (url.pathname === '/owner/devices/confirm') return json({ ok: true, ...(await pairing.confirm({ enrollmentId: body.enrollmentId, words: body.words })) });
-        if (url.pathname === '/owner/devices/cancel') { pairing.cancel(body.enrollmentId); return json({ ok: true }); }
-        await store.revoke(body.keyId);
-        return json({ ok: true });
-      } catch { return errorResponse(409, 'devices-refused'); }
-    }
+    const devicesResponse = await handleDeviceRoutes({ request, url, csrfToken, devices });
+    if (devicesResponse !== null) return devicesResponse;
 
     if (url.pathname === '/owner/publication' || url.pathname.startsWith('/owner/publication/')
       || url.pathname.startsWith('/api/publication/')) {
@@ -2571,6 +2612,7 @@ export async function runOwnerAlphaServer({
   startSuggestions = startSuggestionIntake,
   readAuthoringNote,
   createPublication = createOwnerPublicationRuntime,
+  adoptSession = null,
 } = {}) {
   if (typeof rebuildSite !== 'function'
     || typeof loadPipeline !== 'function'
@@ -2666,6 +2708,7 @@ export async function runOwnerAlphaServer({
     ownerPublication,
     devices,
     forgeSetup: createForgeSetup({ config, configFile: configFile instanceof URL ? fileURLToPath(configFile) : configFile }),
+    ...(adoptSession === null ? {} : { adoptSession }),
   });
   const readerFetch = createReader({ config, projectRoot });
   let runtime;

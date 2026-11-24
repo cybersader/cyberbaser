@@ -1,0 +1,35 @@
+# Home-server image built from the one Cyberbaser program (packaging/build.js),
+# not from the source tree. Two users, two containers from this one image:
+#   node       uid 65532 (cyberbaser)            primary group 65530 (cyberbaser-share)
+#   publisher  uid 65533 (cyberbaser-publisher)  primary group 65530 (cyberbaser-share)
+# Build context: the folder that build-image.sh stages (program + renderer bundle).
+# Local only: never pushed.
+FROM registry.fedoraproject.org/fedora:44
+RUN dnf -y install --setopt=install_weak_deps=False git-core rsync util-linux bash tar zstd ca-certificates \
+    && dnf clean all \
+    && groupadd --gid 65530 cyberbaser-share \
+    && useradd --uid 65532 --gid 65530 --no-create-home --home-dir /var/lib/cyberbaser/home --shell /sbin/nologin cyberbaser \
+    && useradd --uid 65533 --gid 65530 --no-create-home --home-dir /var/lib/cyberbaser-publisher --shell /sbin/nologin cyberbaser-publisher \
+    && find / -xdev -type f -perm /6000 -exec chmod a-s {} + 2>/dev/null; true
+COPY cyberbaser /opt/cyberbaser/bin/cyberbaser
+COPY resources.tar quartz-seed.tar.zst /tmp/stage/
+COPY install.json /etc/cyberbaser/install.json
+COPY container-init.sh /usr/local/bin/cyberbaser-container-init
+RUN set -eux; \
+    tar --no-same-owner -C /opt/cyberbaser -xf /tmp/stage/resources.tar; \
+    mkdir -p /opt/cyberbaser/libexec /opt/cyberbaser/.workspace /opt/cyberbaser/vendor/quartz; \
+    tar --zstd --no-same-owner -C /opt/cyberbaser/vendor/quartz -xf /tmp/stage/quartz-seed.tar.zst; \
+    for name in node bun; do printf '#!/bin/sh\nBUN_BE_BUN=1 exec /opt/cyberbaser/bin/cyberbaser "$@"\n' > /opt/cyberbaser/libexec/$name; done; \
+    git init -q /opt/cyberbaser; \
+    git config --system --add safe.directory /opt/cyberbaser; \
+    git config --system --add safe.directory /opt/cyberbaser/vendor/quartz; \
+    chmod -R a+rX,go-w /opt/cyberbaser; chmod 0755 /opt/cyberbaser/bin/cyberbaser /opt/cyberbaser/libexec/* /usr/local/bin/cyberbaser-container-init; \
+    chmod 0644 /etc/cyberbaser/install.json; \
+    rm -rf /tmp/stage; \
+    mkdir -p /var/lib/cyberbaser /var/lib/cyberbaser-shared/workspace /var/lib/cyberbaser-shared/notes /var/lib/cyberbaser-publisher /run/cyberbaser-publisher /run/cyberbaser
+ENV PATH=/opt/cyberbaser/libexec:/usr/local/bin:/usr/bin:/bin \
+    CYBERBASER_SHARED_STORE=group \
+    TMPDIR=/tmp
+STOPSIGNAL SIGTERM
+ENTRYPOINT ["/opt/cyberbaser/bin/cyberbaser"]
+CMD ["--help"]

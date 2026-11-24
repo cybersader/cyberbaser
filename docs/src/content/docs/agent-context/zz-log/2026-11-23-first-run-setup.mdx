@@ -1,0 +1,25 @@
+---
+title: First-run setup built
+description: The owner app's first-run setup, from the one-time setup link to Done, built and tested against a fake GitHub and a synthetic notes repository.
+status: log
+---
+
+## What happened
+
+Built the first-run setup the [deployment and reach design](/cyberbaser/design/deployment-and-reach/) calls for, so the first real install is the one a regular user would get. Seven short steps: Welcome, Connect GitHub, Your notes, Your website, Pair your phone, Pair an agent (optional), Done. It reuses the existing GitHub sign-in and repository search and the Devices pairing with QR code and matching words.
+
+## Decisions taken while building
+
+- **A separate setup server runs before the node has a configuration.** It listens on `127.0.0.1` only and opens from a one-time link valid for 15 minutes. At Done it hands back the finished state and the owner's session. The node can adopt that session in the same process, and the node configuration is built from what setup found.
+- **The publisher in setup mode cannot push.** It is given no repository, so its push credential is always refused.
+- **A missing `publish.yml` is never guessed.** The owner chooses Publish nothing yet, or picks the public folders for a starter file, which stays on this machine.
+- **Each step is saved** to an owner-only file. Actions carry the CSRF token and the step on screen.
+
+## Evidence
+
+- `apps/owner-alpha/test/first-run.test.js`: single-use and expiring link, loopback and host checks, CSRF and stale-step refusal, step order, restart resume, escaping of repository-supplied names, the missing `publish.yml` path, skip paths, session handover, and a full run against the fake GitHub with a real Git clone in which nothing was pushed.
+- Screenshots of every step at phone and desktop width, light and dark, in `.workspace/setup-wizard/` (local record).
+
+## Still open
+
+Cloning a private repository needs a publisher-side fetch. Publishing a confirmed starter `publish.yml` is not wired. Pairing during setup has not run on a real Iroh endpoint, and the installer that starts setup and then the node belongs to the packaging work.

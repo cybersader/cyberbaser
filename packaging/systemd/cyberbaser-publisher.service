@@ -1,0 +1,32 @@
+[Unit]
+Description=Cyberbaser publisher (the only process that holds the forge key)
+Documentation=https://cybersader.github.io/cyberbaser/design/deployment-and-reach/
+Wants=network-online.target
+After=network-online.target
+# The node writes its config at the end of first-run setup.
+ConditionPathExists=/var/lib/cyberbaser/config/owner-alpha.json
+
+[Service]
+Type=simple
+User=cyberbaser-publisher
+# Primary group is the share group, so the socket directory is reachable by the node.
+Group=cyberbaser-share
+UMask=0027
+# Root copies the node config into the publisher's own owner-only file first.
+ExecStartPre=+/opt/cyberbaser/bin/cyberbaser sync-publisher-config
+ExecStart=/opt/cyberbaser/bin/cyberbaser publisher /var/lib/cyberbaser-publisher/owner-alpha.json /run/cyberbaser-publisher/publisher.sock /var/lib/cyberbaser-publisher/push.git --socket-group cyberbaser-share
+Restart=on-failure
+RestartSec=5
+StandardInput=null
+Environment=HOME=/var/lib/cyberbaser-publisher TMPDIR=/tmp
+Environment=PATH=/opt/cyberbaser/libexec:/usr/local/bin:/usr/bin:/bin
+Environment=CYBERBASER_SHARED_STORE=group
+RuntimeDirectory=cyberbaser-publisher
+RuntimeDirectoryMode=0710
+BindPaths=/var/lib/cyberbaser-shared/workspace:/opt/cyberbaser/.workspace
+ReadWritePaths=/var/lib/cyberbaser-publisher
+InaccessiblePaths=-/var/lib/cyberbaser
+@HARDENING@
+
+[Install]
+WantedBy=multi-user.target

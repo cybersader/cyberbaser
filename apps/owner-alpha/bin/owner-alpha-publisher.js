@@ -1,12 +1,13 @@
 #!/usr/bin/env bun
 
 import { loadOwnerAlphaConfig } from '../src/config.js';
-import { createForgeAccess } from '../src/publisher/forge-access.js';
+import { createForgeAccess, createGithubAppAccess } from '../src/publisher/forge-access.js';
+import { startForgeControl } from '../src/publisher/forge-control.js';
 import { startPublisher } from '../src/publisher/server.js';
 import { DEFAULT_OWNER_ALPHA_PROJECT_ROOT } from '../src/site.js';
 import { storeContextFromConfig } from '../src/store.js';
 
-export async function runPublisherCli({ configFile, socketPath, repository, projectRoot = DEFAULT_OWNER_ALPHA_PROJECT_ROOT }) {
+export async function runPublisherCli({ configFile, socketPath, repository, projectRoot = DEFAULT_OWNER_ALPHA_PROJECT_ROOT, socketGroup = null }) {
   let publisher;
   let stopRequested = false;
   let stopped;
@@ -16,7 +17,7 @@ export async function runPublisherCli({ configFile, socketPath, repository, proj
   process.once('SIGINT', stop);
   try {
     const config = await loadOwnerAlphaConfig(configFile);
-    publisher = await startPublisher({ config, context: storeContextFromConfig(config, projectRoot), socketPath, repository });
+    publisher = await startPublisher({ config, context: storeContextFromConfig(config, projectRoot), socketPath, repository, socketGroup });
     if (!stopRequested) process.stdout.write('owner-alpha publisher ready\n');
     await stopping;
   } finally {
@@ -40,7 +41,26 @@ export async function saveTokenCli({ configFile, repository, input = process.std
   return saved.repository.fullName;
 }
 
-if (import.meta.main && process.argv[2] === 'save-token') {
+// First-run setup: GitHub sign-in and repository choice only. There is no
+// repository yet, so this publisher can list and bind but never push.
+export async function runSetupForgeCli({ socketPath, stateDirectory, clientId }) {
+  const access = createGithubAppAccess({ clientId, stateDirectory, remoteUrl: null });
+  const control = await startForgeControl({ socketPath, forgeAccess: access });
+  process.stdout.write('owner-alpha publisher ready for setup\n');
+  await new Promise((resolve) => { process.once('SIGTERM', resolve); process.once('SIGINT', resolve); });
+  access.close();
+  await control.close();
+}
+
+if (import.meta.main && process.argv[2] === 'setup') {
+  if (process.argv.length !== 6) {
+    process.stderr.write('usage: owner-alpha-publisher setup <socket-path> <forge-state-dir> <github-app-client-id>\n');
+    process.exitCode = 1;
+  } else {
+    try { await runSetupForgeCli({ socketPath: process.argv[3], stateDirectory: process.argv[4], clientId: process.argv[5] }); }
+    catch { process.stderr.write('owner-alpha publisher failed\n'); process.exitCode = 1; }
+  }
+} else if (import.meta.main && process.argv[2] === 'save-token') {
   if (process.argv.length !== 5) {
     process.stderr.write('usage: owner-alpha-publisher save-token <config-file> <owner/name>   (token on standard input)\n');
     process.exitCode = 1;

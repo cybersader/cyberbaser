@@ -1,0 +1,6 @@
+[Unit]
+Description=Apply a changed Cyberbaser config to the publisher
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl restart cyberbaser-publisher.service

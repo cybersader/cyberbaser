@@ -45,6 +45,12 @@
     panel.replaceChildren(...nodes);
   }
 
+  // First-run setup listens for this to know when it may continue.
+  const setupMode = root.dataset.mode === 'setup';
+  function announce(state) {
+    root.dispatchEvent(new CustomEvent('forge-state', { detail: { state: state.state, repository: state.repository ?? null } }));
+  }
+
   function relative(iso) {
     if (!iso) return null;
     const days = Math.round((Date.now() - Date.parse(iso)) / 86_400_000);
@@ -63,7 +69,7 @@
     stopTimers();
     const connect = button('Connect GitHub', startSignIn);
     show(el('div', { class: 'forge-sheet' },
-      el('h3', {}, problemMessage ? 'GitHub needs attention' : 'Connect GitHub'),
+      setupMode && !problemMessage ? null : el('h3', {}, problemMessage ? 'GitHub needs attention' : 'Connect GitHub'),
       problemMessage ? el('p', { class: 'forge-problem', role: 'alert' }, problemMessage) : null,
       el('p', { class: 'pair-hint' }, 'You sign in on github.com and install the Cyberbaser app on the one repository that holds your notes. It can update files there and nothing else.'),
       el('div', { class: 'pair-row forge-actions' }, connect),
@@ -76,6 +82,7 @@
     if (trigger) trigger.disabled = true;
     try {
       const started = await call('/owner/github/start', {});
+      announce({ state: 'waiting-for-code' });
       waiting(started);
     } catch (error) {
       notConnected(error.message);
@@ -200,8 +207,9 @@
         }
       });
       const changes = row.fullName !== root.dataset.configured;
+      if (setupMode) use.textContent = 'Use this repository';
       confirmSlot.replaceChildren(el('div', { class: 'forge-confirm' },
-        el('p', {}, changes
+        el('p', {}, setupMode ? `Cyberbaser will keep a private copy of ${row.fullName} on this machine. Nothing is published.` : changes
           ? `Your site will publish to ${row.fullName}. This changes your publishing settings; Cyberbaser restarts to use it.`
           : `Your site publishes to ${row.fullName}.`),
         el('div', { class: 'pair-row forge-actions' }, use, button('Back', () => { confirmSlot.replaceChildren(); search.focus(); }, 'quiet'))));
@@ -251,11 +259,11 @@
       el('div', { class: 'forge-status-main' },
         el('span', { class: 'forge-state-dot', 'aria-hidden': 'true' }),
         el('div', { class: 'device-name' },
-          el('strong', {}, restart ? `Picked ${state.repository}` : `Publishing to ${state.repository}`),
+          el('strong', {}, setupMode ? state.repository : restart ? `Picked ${state.repository}` : `Publishing to ${state.repository}`),
           el('span', {}, restart ? state.message : renew))),
       el('div', { class: 'pair-row forge-status-actions' },
         root.dataset.provider === 'github-app' ? button('Change repository', () => picker(state), 'quiet') : null,
-        disconnect),
+        setupMode ? null : disconnect),
     ));
   }
 
@@ -277,6 +285,7 @@
   }
 
   function render(state) {
+    announce(state);
     if (state.state === 'waiting-for-code') return waiting(state);
     if (state.state === 'pick-repository') return picker();
     if (state.state === 'connected' || state.state === 'restart-needed') return connected(state);

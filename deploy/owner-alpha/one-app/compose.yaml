@@ -1,0 +1,86 @@
+name: cyberbaser-one-app
+
+# Home-server form of the one-app setup: the same program and layout as the
+# Linux installer, as two containers with two users. The node container never
+# mounts the publisher's state volume; the publisher's forge key stays there.
+# Host networking keeps the setup page and site on the server's own 127.0.0.1;
+# reach from phones and agents goes through Iroh, not open ports.
+x-common: &common
+  image: ${CYBERBASER_IMAGE:-localhost/cyberbaser-one-app:dev}
+  pull_policy: never
+  read_only: true
+  init: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs: [/tmp:rw,nosuid,nodev,size=2g]
+
+services:
+  volumes-init:
+    <<: *common
+    network_mode: none
+    user: "0:0"
+    cap_add: [CHOWN, FOWNER]
+    entrypoint: [/usr/local/bin/cyberbaser-container-init]
+    command: []
+    restart: "no"
+    volumes:
+      - node-state:/var/lib/cyberbaser
+      - workspace:/var/lib/cyberbaser-shared/workspace
+      - notes:/var/lib/cyberbaser-shared/notes
+      - publisher-state:/var/lib/cyberbaser-publisher
+      - publisher-sockets:/run/cyberbaser-publisher
+
+  node:
+    <<: *common
+    network_mode: host
+    user: "65532:65530"
+    environment:
+      HOME: /var/lib/cyberbaser/home
+      XDG_CACHE_HOME: /var/lib/cyberbaser/cache
+    command: [service-node]
+    restart: unless-stopped
+    depends_on:
+      volumes-init: { condition: service_completed_successfully }
+    volumes:
+      - node-state:/var/lib/cyberbaser
+      - workspace:/opt/cyberbaser/.workspace
+      - notes:/var/lib/cyberbaser-shared/notes
+      - publisher-sockets:/run/cyberbaser-publisher:ro
+
+  # After first-run setup writes the node config, copy it into the publisher's
+  # own owner-only file (run again after a config change: docker compose up -d).
+  publisher-config:
+    <<: *common
+    network_mode: none
+    user: "0:0"
+    cap_add: [CHOWN, DAC_OVERRIDE]
+    command: [sync-publisher-config]
+    restart: "no"
+    depends_on:
+      volumes-init: { condition: service_completed_successfully }
+    volumes:
+      - node-state:/var/lib/cyberbaser:ro
+      - publisher-state:/var/lib/cyberbaser-publisher
+
+  publisher:
+    <<: *common
+    user: "65533:65530"
+    environment:
+      HOME: /var/lib/cyberbaser-publisher
+    command: [publisher, /var/lib/cyberbaser-publisher/owner-alpha.json, /run/cyberbaser-publisher/publisher.sock,
+      /var/lib/cyberbaser-publisher/push.git, --socket-group, cyberbaser-share]
+    restart: unless-stopped
+    depends_on:
+      publisher-config: { condition: service_completed_successfully }
+    volumes:
+      - publisher-state:/var/lib/cyberbaser-publisher
+      - workspace:/opt/cyberbaser/.workspace
+      - notes:/var/lib/cyberbaser-shared/notes:ro
+      - publisher-sockets:/run/cyberbaser-publisher
+
+volumes:
+  node-state: {}
+  workspace: {}
+  notes: {}
+  publisher-state: {}
+  publisher-sockets: {}

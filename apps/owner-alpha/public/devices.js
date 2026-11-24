@@ -39,10 +39,11 @@
     for (const input of form.querySelectorAll('input[name="access"]')) {
       const allowed = kind !== 'agent' || input.value === 'propose';
       input.disabled = !allowed;
-      input.closest('.segment').hidden = !allowed;
+      const segment = input.closest('.segment');
+      if (segment) segment.hidden = !allowed; // a fixed choice is a hidden field
       if (!allowed && input.checked) form.querySelector('input[name="access"][value="propose"]').checked = true;
     }
-    note.hidden = kind !== 'agent';
+    if (note) note.hidden = kind !== 'agent';
     const label = form.elements.label;
     if (['My agent', 'My phone'].includes(label.value)) label.value = kind === 'agent' ? 'My agent' : 'My phone';
   }
@@ -72,7 +73,8 @@
 
   function showCode() {
     const agent = current.kind === 'agent';
-    const text = agent ? `bun apps/owner-alpha/bin/cyberbaser-pair.js ${current.code}` : current.code;
+    const command = root.dataset.pairCommand || 'bun apps/owner-alpha/bin/cyberbaser-pair.js';
+    const text = agent ? `${command} ${current.code}` : current.code;
     const copy = el('button', { type: 'button', class: 'quiet' }, agent ? 'Copy' : 'Copy code');
     copy.addEventListener('click', async () => {
       try { await navigator.clipboard.writeText(text); copy.textContent = 'Copied'; } catch { copy.textContent = 'Select and copy'; }
