@@ -11,6 +11,8 @@
 // publisher refuse any image that still carries a location.
 import { classifyPage, publicAddress, resolveConfigText } from '../../../../packages/publish/src/page-rules.js';
 import { checkAsset, imageEmbeds, MediaError, stripLocation } from '../../../../packages/media-check/src/index.js';
+import { findFrontmatterInText } from '../../../../packages/correction/src/frontmatter.js';
+import yaml from 'js-yaml';
 
 export const MAX_IMAGES = 4;
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -83,4 +85,46 @@ export function newPageProblem({ status, images, remote }) {
   if (refused) return refused.refused;
   if (images.reduce((sum, image) => sum + image.size, 0) > MAX_BUNDLE_BYTES) return 'bundle-too-large';
   return null;
+}
+
+const DRAFT_ON = /^(draft:[ \t]*)(?:true|True|TRUE|yes|Yes|YES|on|On|ON)([ \t]*(?:#.*)?)$/gmu;
+
+/**
+ * The note's text with Draft turned off, for "Publish to your site": the one
+ * `draft: true` line becomes `draft: false` and every other byte stays as it
+ * was. This text is what is sent, and so what the owner signs: turning Draft
+ * off is part of the same approved change. Null when the note has no single
+ * plain `draft: true` line to change.
+ */
+export function withDraftOff(text) {
+  const block = findFrontmatterInText(text);
+  if (block.kind !== 'block') return null;
+  const start = text.indexOf(block.yamlText, block.textRange.start);
+  if (start < 0) return null;
+  const matches = [...block.yamlText.matchAll(DRAFT_ON)];
+  if (matches.length !== 1) return null;
+  const at = start + matches[0].index;
+  const next = `${text.slice(0, at)}${matches[0][1]}false${matches[0][2]}${text.slice(at + matches[0][0].length)}`;
+  // Only draft changed, and it now reads as false.
+  let before;
+  let after;
+  try {
+    before = yaml.load(block.yamlText, { schema: yaml.CORE_SCHEMA });
+    after = yaml.load(findFrontmatterInText(next).yamlText, { schema: yaml.CORE_SCHEMA });
+  } catch { return null; }
+  if (after?.draft !== false || JSON.stringify({ ...before, draft: false }) !== JSON.stringify(after)) return null;
+  return next;
+}
+
+/**
+ * What Publish does with a draft: its draft-off text and whether that would
+ * go public. { text, status } or null when Draft cannot be turned off here.
+ */
+export function draftPublishPlan({ path, text, publishYml }) {
+  const local = notePublicStatus({ path, text, publishYml });
+  if (local.marker !== 'draft') return null;
+  const next = withDraftOff(text);
+  if (next === null) return null;
+  const status = notePublicStatus({ path, text: next, publishYml });
+  return status.published ? { text: next, status } : null;
 }

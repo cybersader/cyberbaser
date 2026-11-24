@@ -5,7 +5,7 @@ import { MarkdownView, Modal, Notice, Platform, Plugin, PluginSettingTab, Settin
 import { lazyCarrier } from './carrier.js';
 import { createNodeClient } from './core/client.js';
 import { createController, DEFAULT_SETTINGS, messageFor, publicSettings } from './core/controller.js';
-import { embeddedImages, notePublicStatus, prepareImages } from './core/new-page.js';
+import { draftPublishPlan, embeddedImages, notePublicStatus, prepareImages } from './core/new-page.js';
 import { createDeviceStore, indexedDbBackend } from './core/device-store.js';
 import { codeFromLink, PAIR_LINK_ACTION } from './core/pairing-code.js';
 import { createSigningStore, ENROL_LINK_ACTION, signingDatabase } from './core/signing.js';
@@ -110,9 +110,12 @@ class SendModal extends Modal {
     // A note the site does not have yet: list its images (cleaned of where
     // they were taken, checked) before anything is sent.
     const publishYml = await this.plugin.readPublishYml();
-    const local = publishYml === null ? null : notePublicStatus({ path: file.path, text: this.view.editor.getValue(), publishYml });
-    if (local?.published && !reply?.live) {
-      const text = this.view.editor.getValue();
+    const text = this.view.editor.getValue();
+    const local = publishYml === null ? null : notePublicStatus({ path: file.path, text, publishYml });
+    // A draft: Publish turns Draft off inside the change you approve.
+    const draft = local?.draft && !reply?.live ? draftPublishPlan({ path: file.path, text, publishYml }) : null;
+    const newPage = local?.published && !reply?.live ? local : draft?.status ?? null;
+    if (newPage) {
       const { local: paths, remote } = embeddedImages({ path: file.path, text,
         resolve: (target, from) => this.plugin.app.metadataCache.getFirstLinkpathDest(target, from)?.path ?? null });
       const images = prepareImages(await Promise.all(paths.map(async (path) => ({ path,
@@ -125,9 +128,17 @@ class SendModal extends Modal {
         list.createEl('li', { text: `${image.path} (${image.type ?? 'not allowed'}, ${size})${note ? `: ${note}` : ''}` });
       }
       for (const raw of remote) list.createEl('li', { cls: 'cyberbaser-warning', text: `${raw}: from another site, not allowed` });
-      contentEl.createEl('p', { cls: 'cyberbaser-muted', text: `New public page: ${local.address}${images.length ? `, plus ${images.length} image${images.length === 1 ? '' : 's'}` : ''}` });
-      const create = actions.createEl('button', { text: 'Publish new page', cls: 'mod-cta' });
-      create.addEventListener('click', () => run(create, (f, value) => this.plugin.controller.publishNewPage(f, value, { status: local, images, remote })));
+      contentEl.createEl('p', { cls: 'cyberbaser-muted', text: `New public page: ${newPage.address}${images.length ? `, plus ${images.length} image${images.length === 1 ? '' : 's'}` : ''}` });
+      if (draft) {
+        contentEl.createEl('p', { cls: 'cyberbaser-muted', text: 'Turns Draft off and sends it for your approval. Nothing goes live until you approve.' });
+        const publish = actions.createEl('button', { text: 'Publish to your site', cls: 'mod-cta' });
+        // The note in the vault turns Draft off only once your node has the change.
+        const writeBack = (next) => this.plugin.app.vault.process(file, (current) => (current === text ? next : current));
+        publish.addEventListener('click', () => run(publish, (f) => this.plugin.controller.publishDraft(f, text, { publishYml, images, remote, writeBack })));
+      } else {
+        const create = actions.createEl('button', { text: 'Publish new page', cls: 'mod-cta' });
+        create.addEventListener('click', () => run(create, (f, value) => this.plugin.controller.publishNewPage(f, value, { status: local, images, remote })));
+      }
     } else if (local?.draft) {
       contentEl.createEl('p', { cls: 'cyberbaser-muted', text: 'Draft: turn Draft off in its properties to publish it.' });
     }

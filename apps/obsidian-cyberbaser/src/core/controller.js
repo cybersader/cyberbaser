@@ -4,7 +4,7 @@ import {
   parseEnrolCode, prepareApproval,
 } from './signing.js';
 import { statusFor, textDigests } from './status.js';
-import { newPageProblem, notePublicStatus } from './new-page.js';
+import { draftPublishPlan, newPageProblem, notePublicStatus, withDraftOff } from './new-page.js';
 import { fromBase64, hex, sha256, toBase64 } from './wire.js';
 import { createTapGate, TapRequired } from './tap.js';
 
@@ -49,6 +49,7 @@ const MESSAGES = Object.freeze({
   'tap-required': 'Tap the button yourself to approve. Nothing was signed.',
   // New pages and images.
   'note-is-draft': 'This note is a draft. Turn Draft off to publish it.',
+  'draft-not-plain': "This note's Draft property could not be turned off here. Turn Draft off in its properties, then publish.",
   'create-outside-publication': 'This note would not be on your site, so it was not sent. Check its folder and properties.',
   'create-path-refused': 'This file name or folder cannot be published.',
   'selection-config-change-refused': 'publish.yml is changed on its own, not with a page.',
@@ -316,6 +317,23 @@ export function createController({ client, store, signingStore = null, tapGate =
         ? { kind: 'publishing', bundleId: receipt.bundleId, address,
           text: 'Waiting for approval. Approve it on your signing device; it goes live after that.' }
         : { kind: 'proposed', bundleId: receipt?.bundleId, address, text: 'Sent for review. It waits for the owner.' };
+    },
+
+    /**
+     * "Publish to your site" for a draft: Draft is turned off in the text
+     * that is sent, so the owner's signature covers that change too. The
+     * vault note is updated only after the node accepts it (writeBack gets
+     * the published text). Same image rules as publishNewPage.
+     */
+    async publishDraft(file, text, { publishYml, images = [], remote = [], writeBack = async () => {} }) {
+      const plan = draftPublishPlan({ path: file.path, text, publishYml });
+      if (plan === null) {
+        const local = notePublicStatus({ path: file.path, text, publishYml });
+        throw new NodeError('refused', local.marker === 'draft' && withDraftOff(text) === null ? 'draft-not-plain' : 'create-outside-publication');
+      }
+      const outcome = await this.publishNewPage(file, plan.text, { status: plan.status, images, remote });
+      if (outcome.kind !== 'unchanged') await writeBack(plan.text);
+      return outcome;
     },
 
     async publish(file, text, reply) {

@@ -24,6 +24,7 @@ export function needsMark(status) {
 // The on-demand sentence: the status plus when the node confirmed it live.
 export function describeStatus(status) {
   if (!status?.label) return '';
+  if (status.key === 'draft') return 'Draft, not on your site. Publish to your site turns Draft off in the change you approve.';
   const at = typeof status.at === 'string' ? new Date(status.at) : null;
   if (!at || Number.isNaN(at.getTime())) return status.label;
   const when = at.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
