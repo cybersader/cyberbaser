@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { copyCommittedFolder, DEFAULT_MAX_PAGES, validateCopyOptions } from './suggestions-rehearsal-source.js';
 import { validatePrivateNetworkIpv4Host } from '../src/network.js';
+import { readSiteBase } from '../src/site-base.js';
 
 const exec = promisify(execFile);
 export const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -172,8 +173,10 @@ export async function createSuggestionsFixture({ port = 46437, host = '127.0.0.1
       config.suggestions.form.challenge = { provider: 'turnstile', siteKey: TEST_KEYS[challenge][0], secretFile, expectedHostnames: ['example.com'] };
     }
     await writeFile(configFile, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+    // The private site home: the reader serves at the base the vault is built for (site-base.js).
+    const readerHome = `http://${host}:${port + 1}${await readSiteBase(config)}`;
     return { root, checkout, remote, config, configFile, projectRoot, challenge, keep, copied, git, cleanup,
-      ownerOrigin: `http://${host}:${port}`, readerOrigin: `http://${host}:${port + 1}`, intakeOrigin: `http://${host}:${port + 2}`,
+      ownerOrigin: `http://${host}:${port}`, readerOrigin: `http://${host}:${port + 1}`, readerHome, intakeOrigin: `http://${host}:${port + 2}`,
       track(promise) { active.add(promise); promise.then(() => active.delete(promise), () => active.delete(promise)); return promise; },
       attachRuntime(value) { runtime = value; },
     };
