@@ -300,18 +300,21 @@ export function createOwnerCommands({
       if (typeof bundleId !== 'string' || !/^bundle-[0-9a-f-]{36}$/u.test(bundleId)) fail('bundle-not-found', 'no such bundle');
       const record = await bundleDesk.load(bundleId);
       if (record.submitter?.keyId !== principal.keyId) fail('bundle-not-found', 'no such bundle');
+      // After the push the bundle's own job record is the only answer. Not
+      // recorded yet: still publishing. Unreadable, or no job lookup on this
+      // carrier: a refusal, never a guess from other evidence.
       let job = null;
-      if (record.state === 'published' && typeof lookupJob === 'function') job = await lookupJob(bundleJobId(bundleId)).catch(() => null);
-      const progress = bundleProgress({ config, record, job });
-      // The job's own record is the answer; when it cannot be read, the note
-      // status (the same live evidence) says whether every new page is live.
-      if (progress.step === 'publishing' && job === null && noteStatus !== null && record.publicAdditions?.length > 0) {
-        const found = await Promise.all(record.publicAdditions.map((entry) => noteStatus.status(entry.path).catch(() => null)));
-        if (found.every((entry) => entry?.live && entry.live.commit === record.commit)) {
-          return { ...progress, step: 'live', at: typeof found[0].live.at === 'string' ? found[0].live.at : null };
+      if (record.state === 'published') {
+        if (typeof lookupJob !== 'function') fail('bundle-progress-unavailable', 'this node cannot read job records');
+        try {
+          job = await lookupJob(bundleJobId(bundleId));
+        } catch (error) {
+          if (!(error instanceof OwnerAlphaError) || !['artifact-not-found', 'job-not-found'].includes(error.code)) {
+            fail('bundle-progress-unavailable', 'the bundle job record could not be read');
+          }
         }
       }
-      return progress;
+      return bundleProgress({ config, record, job: job ?? null });
     }, { preserveCode: true }),
 
     // The device takes back what it sent, before it is signed. The waiting

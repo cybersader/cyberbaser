@@ -1065,7 +1065,8 @@ export async function getOwnerAlphaJob({ config: configInput, projectRoot, conte
   } else if (live?.oldWitnessAbsent === true && live.newWitnessUnique === true) {
     liveKind = 'text';
   }
-  return deepFreeze({ ...pipelineSummary(state, paths), origin, page, ...(liveKind && { liveKind }) });
+  const liveConfirmedAt = liveKind ? state.history.findLast(({ to }) => to === 'live-confirmed')?.at ?? null : null;
+  return deepFreeze({ ...pipelineSummary(state, paths), origin, page, ...(liveKind && { liveKind, liveConfirmedAt }) });
 }
 
 /** Narrow server adapter: durable acceptance precedes the automatic effect pipeline. */

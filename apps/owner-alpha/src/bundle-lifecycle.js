@@ -34,7 +34,9 @@ export function pageLiveUrl(config, address) {
  * at, pages: [{ path, address, url }] }. step is one of review (waits for the
  * owner on the node), waiting (for the signature), publishing (pushed, the site
  * is updating), live, withdrawn, declined, failed. job: the bundle's durable
- * job (null before the push). No commits, branches or repository names.
+ * job as getOwnerAlphaJob reads it (null before the push). Live only when that
+ * job is this bundle's and carries its verified new-page proof (liveKind); its
+ * time is the job's live-confirmed time. No commits, branches or repository names.
  */
 export function bundleProgress({ config, record, job = null }) {
   const pages = (record.publicAdditions ?? []).map(({ path, address }) => ({ path, address, url: pageLiveUrl(config, address) }));
@@ -46,10 +48,15 @@ export function bundleProgress({ config, record, job = null }) {
     case 'stale': return { ...base, step: 'failed', reason: typeof record.reason === 'string' ? record.reason : 'stale' };
     default: break;
   }
+  if (job !== null && (job.jobId !== bundleJobId(record.bundleId) || job.origin?.type !== PAGE_BUNDLE_ORIGIN
+    || job.origin.bundleId !== record.bundleId)) {
+    fail('bundle-job-mismatch', 'the job record does not belong to this bundle');
+  }
   const state = typeof job?.state === 'string' ? job.state : null;
   if (state !== null && LIVE_JOB_STATES.includes(state)) {
-    const confirmed = Array.isArray(job.history) ? job.history.find((entry) => entry?.to === 'live-confirmed')?.at : null;
-    return { ...base, step: 'live', at: typeof confirmed === 'string' ? confirmed : null };
+    // A job past live-confirmed whose stored proof does not hold is not Live.
+    if (job.liveKind !== 'new-page-live') return { ...base, step: 'failed', reason: 'live-unproven' };
+    return { ...base, step: 'live', at: typeof job.liveConfirmedAt === 'string' ? job.liveConfirmedAt : null };
   }
   if (state !== null && FAILED_JOB_STATES.includes(state)) return { ...base, step: 'failed', reason: job.failure?.code ?? state };
   return { ...base, step: 'publishing' };

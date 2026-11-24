@@ -2701,6 +2701,19 @@ async function loadPipelineAdapter(options) {
   };
 }
 
+/**
+ * The commands a paired device reaches over Iroh. lookupJob is required: a
+ * device follows its page bundle through the bundle's own job record
+ * (readPageBundle), and without it that answer could never move past
+ * Publishing. Missing it stops startup instead.
+ */
+export function createDeviceCommands({ config, projectRoot, verifier, proposalReview = null, lookupJob, publication = null,
+  noteStatus = null, noteLinks = null, approvals = null, bundleDesk = null }) {
+  if (typeof lookupJob !== 'function') throw new TypeError('device commands need lookupJob to read job records');
+  return createOwnerCommands({ config, projectRoot, devicePrincipalAdapter: verifier, proposalReview, lookupJob,
+    publication, noteStatus, noteLinks, approvals, bundleDesk });
+}
+
 export async function recoverOwnerAlphaJobs({
   config: configInput,
   context,
@@ -2937,7 +2950,7 @@ export async function runOwnerAlphaServer({
       secretKey.fill(0);
       const nodeId = endpoint.id().toString();
       const verifier = createDevicePrincipalAdapter({ registry, audience: irohAudience(nodeId), requireChannelBinding: true });
-      const commands = createOwnerCommands({ config, projectRoot, devicePrincipalAdapter: verifier, proposalReview,
+      const commands = createDeviceCommands({ config, projectRoot, verifier, proposalReview, lookupJob,
         publication: ownerPublication, noteStatus: devices.noteStatus, noteLinks: devices.links, approvals, bundleDesk });
       iroh = startIrohCarrier({ endpoint, commands, verifier, pairing: devices.pairing, relay: config.iroh.relay });
       devices.store.setRevokeListener((key) => { if (key.irohNodeId) iroh.closePeer(key.irohNodeId); });

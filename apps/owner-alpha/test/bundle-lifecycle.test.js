@@ -11,6 +11,7 @@ import { createNoteStatus } from '../src/note-status.js';
 import { createSaveHandler, getOwnerAlphaJob } from '../src/pipeline.js';
 import { gitIn } from '../src/signed-publish.js';
 import { defineStoreContext, loadDurableJob, validateOwnerAlphaConfig } from '../src/index.js';
+import { createDeviceCommands } from '../src/server.js';
 
 // A pushed page bundle follows the same after-push lifecycle as an edit: one
 // durable job from its push through deployment, a live check for each new page
@@ -180,4 +181,59 @@ test('pushed bundle evidence: refuses a publisher answer for another commit or b
     result: { branch: 'main', commit: 'a'.repeat(40) } })).rejects.toMatchObject({ code: 'publisher-receipt-mismatch' });
   await expect(pushedBundleEvidence({ config: f.config, record: f.record, git: gitIn(f.root),
     result: { branch: 'other', commit: f.commit } })).rejects.toMatchObject({ code: 'publisher-receipt-mismatch' });
+});
+
+// The device's progress view (readPageBundle over Iroh) reads the bundle's own
+// job record. In the author-flow rehearsal the Iroh commands were built without
+// lookupJob, so the answer stayed at Publishing after the job confirmed Live.
+function deviceView(f, { lookupJob, noteStatus = null, record = f.record }) {
+  const phone = { method: 'device-key', keyId: 'phone', id: f.config.owner.identity,
+    actor: { kind: 'owner-device', id: f.config.owner.identity, label: 'Phone' }, grants: ['publish'] };
+  const verifier = { ownerId: f.config.owner.identity, isVerified: () => true, consumeRequest: () => true, hasGrant: (p, grant) => p.grants.includes(grant) };
+  const sent = { ...record, submitter: { keyId: 'phone' } };
+  const bundleDesk = { staging: {}, load: async (id) => { if (id !== sent.bundleId) throw new OwnerAlphaError('bundle-not-found', 'no'); return sent; } };
+  const commands = createDeviceCommands({ config: f.config, projectRoot: f.root, verifier, lookupJob, noteStatus, bundleDesk });
+  return () => commands.readPageBundle({ bundleId: sent.bundleId }, phone);
+}
+
+test('device progress: the Iroh commands cannot be built without the job lookup', async () => {
+  const config = validateOwnerAlphaConfig(JSON.parse(await readFile(EXAMPLE, 'utf8')));
+  expect(() => createDeviceCommands({ config, verifier: {}, lookupJob: undefined })).toThrow(/lookupJob/u);
+});
+
+test('device progress: Publishing until the job exists, then Live from the job record with its confirmed time', async () => {
+  const f = await fixture();
+  const jobId = bundleJobId(f.record.bundleId);
+  const { pipeline } = handler(f, { jobId });
+  const read = deviceView(f, { lookupJob: pipeline.getJob });
+  expect(await read()).toMatchObject({ step: 'publishing', at: null });
+  expect((await pipeline.trackBundle(f.evidence)).state).toBe('completed');
+  const confirmedAt = (await loadDurableJob(f.context, jobId)).history.find(({ to }) => to === 'live-confirmed').at;
+  expect(await read()).toEqual({ bundleId: f.record.bundleId, step: 'live', at: confirmedAt, reason: null,
+    pages: [{ path: NOTE, address: '/posts/Tabletop-in-one-hour', url: PAGE_URL }] });
+});
+
+test('device progress: a failed deployment reads failed; a job for another bundle is refused', async () => {
+  const f = await fixture();
+  const { pipeline } = handler(f, { jobId: bundleJobId(f.record.bundleId), dependencies: {
+    monitorDeploymentRun: async ({ applicationSha }) => ({ ...deployed(applicationSha),
+      run: { ...deployed(applicationSha).run, conclusion: 'failure' }, environment: { state: 'failure' } }) } });
+  await pipeline.trackBundle(f.evidence);
+  expect(await deviceView(f, { lookupJob: pipeline.getJob })()).toMatchObject({ step: 'failed' });
+  const g = await fixture();
+  const { pipeline: other } = handler(g, { jobId: bundleJobId(g.record.bundleId) });
+  await other.trackBundle(g.evidence);
+  const wrongJob = async () => other.getJob(bundleJobId(g.record.bundleId));
+  await expect(deviceView(f, { lookupJob: wrongJob })()).rejects.toMatchObject({ code: 'bundle-job-mismatch' });
+});
+
+test('device progress: an unreadable job record is a refusal, never Live from the note status', async () => {
+  const f = await fixture();
+  const { pipeline } = handler(f, { jobId: bundleJobId(f.record.bundleId) });
+  await pipeline.trackBundle(f.evidence);
+  // The note status really is Live for this commit; it must not stand in for the job.
+  const noteStatus = createNoteStatus({ config: f.config, context: f.context });
+  expect((await noteStatus.status(NOTE)).live?.commit).toBe(f.commit);
+  const unreadable = async () => { throw new OwnerAlphaError('unsafe-artifact', 'state.json must be one regular file'); };
+  await expect(deviceView(f, { lookupJob: unreadable, noteStatus })()).rejects.toMatchObject({ code: 'bundle-progress-unavailable' });
 });
