@@ -27,6 +27,10 @@ import { SITE_FRAME_CSP, SITE_REVIEW_REASONS, siteReviewFrame } from './site-rev
 import { createOwnerCommands, OwnerCommandPrecondition } from './core/commands.js';
 import { createApprovalRelay, publisherSigningFromSocket } from './core/approvals.js';
 import { createJobApprovals, pendingStarterFile } from './core/job-approvals.js';
+import { openBundleDesk } from './core/bundle-desk.js';
+import { BUNDLE_FRAME_CSP, BUNDLE_IMAGE_HEADERS, bundleFramePage, bundleListPage, bundleShellPage, sniffedImageType } from './bundle-review-page.js';
+import { parsePageBundle } from '../../../packages/proposal/src/page-bundle.js';
+import { bundleGit } from './core/page-bundle.js';
 import { ownerRequest } from './publisher/owner-control.js';
 import { createBootstrapPrincipalAdapter, createDevicePrincipalAdapter } from './core/principal.js';
 import { assertOutsideVault, loadDeviceKeyRegistry } from './core/device-key-files.js';
@@ -1898,6 +1902,7 @@ export function createOwnerAlphaHandler({
   const commands = createOwnerCommands({
     config, projectRoot, principalAdapter, createEditSession, editSessions, handoffs, directEdits,
     saveEdit, lookupJob, createJobId, proposalReview, publication: bindPublication(ownerPublication),
+    bundleDesk: devices?.bundleDesk ?? null,
   });
   // Each consumed bootstrap capability becomes one device session with its own
   // cookie and CSRF token, so one captured device secret is not every device's
@@ -2164,6 +2169,50 @@ export function createOwnerAlphaHandler({
       } catch {
         // Do not project arbitrary dependency codes/messages or private references.
         return errorResponse(409, action === 'prepare' ? 'publication-prepare-failed' : 'publication-publish-refused');
+      }
+    }
+
+    // Route C for new pages and images (core/bundle-desk.js).
+    const bundleMatch = /^\/owner\/bundles(?:\/(bundle-[0-9a-f-]{36})(?:\/(page|image|approve|decline)(?:\/(\d))?)?)?$/u.exec(url.pathname);
+    if (bundleMatch && devices?.bundleDesk) {
+      const denied = commandGate(commands, 'review', principal);
+      if (denied) return denied;
+      const desk = devices.bundleDesk;
+      const [, bundleId, part, index] = bundleMatch;
+      try {
+        if (bundleId === undefined) {
+          if (request.method !== 'GET') return response(null, 405, { Allow: 'GET' });
+          return html(bundleListPage({ records: await desk.list() }));
+        }
+        if (part === 'approve' || part === 'decline') {
+          if (request.method !== 'POST' || index !== undefined) return response(null, 405, { Allow: 'POST' });
+          const body = await readBoundedJson(request, 4096, (text) => Object.fromEntries(new URLSearchParams(text)), 'application/x-www-form-urlencoded');
+          if (!sameSecret(body.csrf ?? '', csrfToken)) return errorResponse(403, 'invalid-csrf');
+          await commands[part === 'approve' ? 'approveBundle' : 'declineBundle']({ bundleId }, principal);
+          return response(null, 303, { Location: `/owner/bundles/${bundleId}` });
+        }
+        if (request.method !== 'GET') return response(null, 405, { Allow: 'GET' });
+        const record = await desk.load(bundleId);
+        if (part === undefined) return html(bundleShellPage({ record, csrfToken }), 200, { 'Content-Security-Policy': REVIEW_SHELL_CSP });
+        if (index === undefined) return errorResponse(404, 'bundle-not-found');
+        const bundle = parsePageBundle(record.bundleText);
+        if (part === 'image') {
+          const image = record.images[Number(index)];
+          if (!image) return errorResponse(404, 'bundle-not-found');
+          const { bytes } = await desk.readImage(bundleId, image.path);
+          const type = sniffedImageType(bytes);
+          if (type === null || type !== image.mediaType) return errorResponse(415, 'asset-type-refused');
+          return response(bytes, 200, { ...BUNDLE_IMAGE_HEADERS, 'Content-Type': type });
+        }
+        const addition = record.publicAdditions[Number(index)];
+        const note = addition && bundle.files.find((file) => file.path === addition.path && file.kind === 'create');
+        if (!note) return errorResponse(404, 'bundle-not-found');
+        const images = new Map();
+        for (const image of record.images) images.set(image.path, await desk.readImage(bundleId, image.path));
+        return frameResponse(bundleFramePage({ path: note.path, text: note.text, address: addition.address, images }), 200, BUNDLE_FRAME_CSP);
+      } catch (error) {
+        if (error?.status) return errorResponse(error.status, 'invalid-request-body');
+        return errorResponse(error?.code === 'bundle-not-found' ? 404 : 409, error instanceof OwnerAlphaError ? error.code : 'bundle-failed');
       }
     }
 
@@ -2791,7 +2840,16 @@ export async function runOwnerAlphaServer({
     ? publisherSigningFromSocket({ socketPath: config.publisher.socketPath, ownerRequest }) : null);
   const starterFile = devices === null ? null : pendingStarterFile(config.iroh.stateDirectory);
   if (starterFile !== null && pendingStarter !== null) await starterFile.save(pendingStarter);
+  // New notes and images: bundles wait here for review or for the signature.
+  const bundleGitRunner = bundleGit(config.repository.checkout);
+  const bundleDesk = devices === null ? null : await openBundleDesk({ config, git: bundleGitRunner,
+    directory: path.join(config.iroh.stateDirectory, 'bundles'),
+    branchHead: async () => (await bundleGitRunner(['rev-parse', '--verify', `refs/heads/${config.repository.branch}^{commit}`])).toString('utf8').trim() });
+  if (devices !== null) devices.bundleDesk = bundleDesk;
   const jobApprovals = devices === null ? null : createJobApprovals({ config, context: storeContext, pipeline: recoveringPipeline,
+    bundles: bundleDesk,
+    publishBundle: config.publisher ? ({ commit, record }) => ownerRequest({ socketPath: config.publisher.socketPath,
+      op: 'publish-bundle', commit, record }) : null,
     log: (line) => console.error(`Owner alpha: ${line}`), starter: starterFile,
     afterStarter: () => rebuildSite({ config, projectRoot }),
     publishStarter: config.publisher ? ({ commit, record }) => ownerRequest({ socketPath: config.publisher.socketPath,
@@ -2839,7 +2897,7 @@ export async function runOwnerAlphaServer({
       const nodeId = endpoint.id().toString();
       const verifier = createDevicePrincipalAdapter({ registry, audience: irohAudience(nodeId), requireChannelBinding: true });
       const commands = createOwnerCommands({ config, projectRoot, devicePrincipalAdapter: verifier, proposalReview,
-        publication: ownerPublication, noteStatus: devices.noteStatus, noteLinks: devices.links, approvals });
+        publication: ownerPublication, noteStatus: devices.noteStatus, noteLinks: devices.links, approvals, bundleDesk });
       iroh = startIrohCarrier({ endpoint, commands, verifier, pairing: devices.pairing, relay: config.iroh.relay });
       devices.store.setRevokeListener((key) => { if (key.irohNodeId) iroh.closePeer(key.irohNodeId); });
       devices.pairing.attachNode({ nodeId, ticket: iroh.ticket });
