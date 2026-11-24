@@ -14,7 +14,7 @@ import { exifTiff, jpeg } from '../../../packages/media-check/test/fixtures.js';
 import { checkAsset, hasLocation } from '../../../packages/media-check/src/index.js';
 import { createController } from '../../obsidian-cyberbaser/src/core/controller.js';
 import { memoryBackend } from '../../obsidian-cyberbaser/src/core/device-store.js';
-import { notePublicStatus, prepareImages } from '../../obsidian-cyberbaser/src/core/new-page.js';
+import { embeddedImages, notePublicStatus, prepareImages } from '../../obsidian-cyberbaser/src/core/new-page.js';
 import * as signing from '../../obsidian-cyberbaser/src/core/signing.js';
 import { createTapGate } from '../../obsidian-cyberbaser/src/core/tap.js';
 import { createApprovalRelay } from '../src/core/approvals.js';
@@ -171,6 +171,35 @@ test('a new post with a cover photo: cleaned on the device, signed, checked by t
   expect(checkAsset('topic/posts/cover.jpg', new Uint8Array(cover))).toMatchObject({ ok: true });
   expect(gitSync(remote, 'show', `${remoteHead}:${notePath}`)).toBe(text.trimEnd());
   expect(gitSync(world.checkout, 'rev-parse', 'main')).toBe(remoteHead);
+});
+
+test('a post whose cover is only a property (the New post form): sent, signed, checked, pushed', async () => {
+  const { controller, desk, remote } = world;
+  const before = gitSync(remote, 'rev-parse', 'main');
+  const notePath = 'topic/field/cover-only.md';
+  const coverPath = 'topic/field/cover-only-cover.png';
+  const text = '---\ntitle: Cover only\ncover: topic/field/cover-only-cover.png\ndraft: false\n---\n\nNo image in the text.\n';
+
+  // The plugin finds the cover from the property alone, and sends it.
+  const { local, remote: remoteImages } = embeddedImages({ path: notePath, text, resolve: () => null, exists: (p) => p === coverPath });
+  expect(local).toEqual([coverPath]);
+  const { png } = await import('../../../packages/media-check/test/fixtures.js');
+  const images = prepareImages([{ path: coverPath, bytes: png() }]);
+  const status = notePublicStatus({ path: notePath, text, publishYml: PUBLISH_YML });
+  const sent = await controller.publishNewPage({ path: notePath }, text, { status, images, remote: remoteImages });
+  expect(sent).toMatchObject({ kind: 'publishing', address: '/topic/field/cover-only' });
+
+  // The device agrees with the node on the one new public page and the image.
+  const requestId = await waitingRequest();
+  const prepared = await controller.readApproval(requestId, { publishYml: PUBLISH_YML });
+  expect(prepared.summary.newPages).toEqual([{ path: notePath, address: '/topic/field/cover-only' }]);
+  expect(prepared.summary.newImages).toBe(1);
+  await controller.approve(prepared, finger());
+  await settle(async () => (await desk.load(sent.bundleId)).state === 'published', 'the cover-only post to publish');
+
+  const remoteHead = gitSync(remote, 'rev-parse', 'main');
+  expect(gitSync(remote, 'rev-parse', `${remoteHead}^`)).toBe(before);
+  expect(gitSync(remote, 'diff-tree', '-r', '--name-only', '--no-commit-id', before, remoteHead).split('\n').sort()).toEqual([coverPath, notePath]);
 });
 
 test('the device refuses when the node lies about what goes public', async () => {

@@ -118,7 +118,8 @@ class SendModal extends Modal {
     const newPage = local?.published && !reply?.live ? local : draft?.status ?? null;
     if (newPage) {
       const { local: paths, remote } = embeddedImages({ path: file.path, text,
-        resolve: (target, from) => this.plugin.app.metadataCache.getFirstLinkpathDest(target, from)?.path ?? null });
+        resolve: (target, from) => this.plugin.app.metadataCache.getFirstLinkpathDest(target, from)?.path ?? null,
+        exists: (path) => typeof this.plugin.app.vault.getAbstractFileByPath(path)?.extension === 'string' });
       const images = prepareImages(await Promise.all(paths.map(async (path) => ({ path,
         bytes: new Uint8Array(await this.plugin.app.vault.adapter.readBinary(path)) }))));
       const list = contentEl.createEl('ul', { cls: 'cyberbaser-images' });

@@ -16,12 +16,15 @@
 //   3. path matches an allow glob  -> published.
 //   4. otherwise                   -> not published.
 //   5. non-markdown assets         -> published only if a published page
-//                                     references them. Never by path.
+//                                     references them (body links and embeds,
+//                                     or a property naming the image by its
+//                                     vault path: property-refs.js). Never by path.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import yaml from 'js-yaml';
 import { extractRefs } from './links.js';
+import { propertyImageRefs } from './property-refs.js';
 import { CONFIG_FILENAME, RULES, classifyPage, globToRegExp, parseFrontmatter, resolveConfig } from './page-rules.js';
 
 export { CONFIG_FILENAME, RULES, globToRegExp, parseFrontmatter, resolveConfig };
@@ -95,6 +98,24 @@ function resolveWiki(target, fromPath, index) {
     if (hits.length) return hits.slice().sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b))[0];
   }
   return null;
+}
+
+/**
+ * The non-Markdown files one note references, resolved against the vault's
+ * paths the way the selector does: body embeds, markdown images and links,
+ * HTML src, and images named by a property. For callers that check one
+ * change rather than select a whole vault (the publisher's bundle rules).
+ */
+export function noteAssetTargets(notePath, content, paths) {
+  const index = buildIndex(Object.fromEntries([...paths].map((p) => [normalize(p), null])));
+  const from = normalize(notePath);
+  const text = typeof content === 'string' ? content : '';
+  const refs = extractRefs(text);
+  const out = new Set();
+  for (const ref of refs.embeds) { const t = resolveWiki(ref.target, from, index); if (t && !isMarkdown(t)) out.add(t); }
+  for (const ref of [...refs.mdImages, ...refs.mdLinks, ...refs.htmlSrcs]) { const t = resolveHref(ref.target, from, index); if (t && !isMarkdown(t)) out.add(t); }
+  for (const ref of propertyImageRefs(text)) if (index.byPath.has(ref.target) && !isMarkdown(ref.target)) out.add(ref.target);
+  return [...out].sort();
 }
 
 // ------------------------------------------------------------------- selector
@@ -192,6 +213,11 @@ export function selectFiles(fileMap, config, opts = {}) {
         continue;
       }
       noteRef(target, ref, p);
+    }
+
+    // Images named by a property (`cover: posts/x.png`), exact vault path only.
+    for (const ref of propertyImageRefs(content)) {
+      if (index.byPath.has(ref.target) && !isMarkdown(ref.target)) noteRef(ref.target, ref, p);
     }
 
     for (const ref of refs.wikilinks) {

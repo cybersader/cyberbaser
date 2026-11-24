@@ -12,6 +12,7 @@
 import { classifyPage, publicAddress, resolveConfigText } from '../../../../packages/publish/src/page-rules.js';
 import { checkAsset, imageEmbeds, MediaError, stripLocation } from '../../../../packages/media-check/src/index.js';
 import { findFrontmatterInText } from '../../../../packages/correction/src/frontmatter.js';
+import { propertyImages } from '../../../../packages/publish/src/property-refs.js';
 import yaml from 'js-yaml';
 
 export const MAX_IMAGES = 4;
@@ -34,11 +35,14 @@ export function notePublicStatus({ path, text, publishYml }) {
 }
 
 /**
- * The vault images a note embeds. resolve(target, fromPath) -> vault path or
- * null (Obsidian's link resolution); remote images are reported so the owner
- * can fix them before anything is sent.
+ * The vault images a note shows: those it embeds, and those a property names
+ * by their path from the vault root (`cover: posts/x-cover.png`, the same rule
+ * the selector and the node use; packages/publish/src/property-refs.js).
+ * resolve(target, fromPath) -> vault path or null (Obsidian's link
+ * resolution); exists(path) -> whether the vault has that file. Remote images
+ * in the text are reported so the owner can fix them before anything is sent.
  */
-export function embeddedImages({ path, text, resolve }) {
+export function embeddedImages({ path, text, resolve, exists = () => false }) {
   const local = [];
   const remote = [];
   for (const embed of imageEmbeds(text)) {
@@ -47,6 +51,7 @@ export function embeddedImages({ path, text, resolve }) {
     const resolved = resolve(target, path);
     if (typeof resolved === 'string' && !/\.md$/iu.test(resolved) && !local.includes(resolved)) local.push(resolved);
   }
+  for (const image of propertyImages(text, exists)) if (!local.includes(image)) local.push(image);
   return { local, remote };
 }
 

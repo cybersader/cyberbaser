@@ -24,6 +24,21 @@ test('embedded images: vault images resolved, remote ones reported', () => {
     remote: ['![a](https://example.com/x.png)'] });
 });
 
+test('a cover named only in properties is sent, by its exact vault path, once', () => {
+  const vault = new Set(['from-the-field/x-cover.png', 'from-the-field/x.md']);
+  const exists = (path) => vault.has(path);
+  const resolve = () => null;
+  const text = '---\ntitle: X\ncover: from-the-field/x-cover.png\nlink: https://example.com/a.png\n---\nNo embeds.\n';
+  expect(embeddedImages({ path: 'from-the-field/x.md', text, resolve, exists })).toEqual({ local: ['from-the-field/x-cover.png'], remote: [] });
+  // Embedded and named: listed once.
+  const both = `${text}![[x-cover.png]]\n`;
+  expect(embeddedImages({ path: 'from-the-field/x.md', text: both, resolve: () => 'from-the-field/x-cover.png', exists }).local)
+    .toEqual(['from-the-field/x-cover.png']);
+  // Not a vault path, or no such file: not sent.
+  expect(embeddedImages({ path: 'from-the-field/x.md', text: '---\ncover: x-cover.png\n---\n', resolve, exists }).local).toEqual([]);
+  expect(embeddedImages({ path: 'from-the-field/x.md', text, resolve }).local).toEqual([]);
+});
+
 test('GPS is stripped on the device before sending; refused images are flagged before anything is sent', () => {
   const photo = jpeg({ exif: exifTiff() });
   const [cleaned, plain, vector, renamed, pngGps] = prepareImages([

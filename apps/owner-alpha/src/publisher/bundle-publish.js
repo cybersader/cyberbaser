@@ -6,9 +6,11 @@
 // a safe path that is not hidden and not publish.yml, no case collision with a
 // path or folder already at the base, and, for an image, a real PNG, JPEG,
 // WebP or GIF that matches its name, ends where its structure ends, and no
-// longer records where it was taken. Nothing is deleted; at most one note is
-// edited, two are added and four images are added.
-import { caseKey, lintPath } from '../../../../packages/publish/src/index.js';
+// longer records where it was taken, and that a note in the same commit shows
+// it (in its text, or named by its vault path in a property such as `cover:`;
+// noteAssetTargets, the selector's own rule). Nothing is deleted; at most one
+// note is edited, two are added and four images are added.
+import { caseKey, lintPath, noteAssetTargets } from '../../../../packages/publish/src/index.js';
 import { checkAsset } from '../../../../packages/media-check/src/index.js';
 import { checkCommit } from '../../../../packages/signed-intent/src/index.js';
 import { OwnerAlphaError } from '../errors.js';
@@ -17,7 +19,7 @@ const APPROVAL_MISMATCH = 'The change does not match what your device approved, 
 
 export const BUNDLE_PUBLISH_CODES = Object.freeze(['create-path-refused', 'selection-config-change-refused',
   'create-path-case-collision', 'asset-type-refused', 'asset-type-mismatch', 'asset-too-large', 'image-has-location',
-  'bundle-file-count', 'capture-base-moved']);
+  'bundle-file-count', 'capture-base-moved', 'asset-unreferenced']);
 
 const RAW = /^:(\d{6}) (\d{6}) ([0-9a-f]{40}) ([0-9a-f]{40}) ([ADMT])$/u;
 const refuse = (code, path = null) => Object.freeze({ ok: false, code, ...(path === null ? {} : { path }) });
@@ -42,6 +44,8 @@ export async function checkBundleCommit(git, base, commit) {
     }
   }
   const counts = { A: 0, M: 0, images: 0 };
+  const notes = [];
+  const images = [];
   for (let i = 0; i < diff.length; i += 2) {
     const match = RAW.exec(diff[i]);
     const path = diff[i + 1];
@@ -52,6 +56,7 @@ export async function checkBundleCommit(git, base, commit) {
     if (status === 'M') {
       if (!/\.md$/u.test(path)) return refuse('create-path-refused', path);
       counts.M += 1;
+      notes.push({ path, oid: newId });
       continue;
     }
     if (status !== 'A' || newMode !== '100644') return refuse('bundle-file-count', path);
@@ -62,14 +67,30 @@ export async function checkBundleCommit(git, base, commit) {
       const holder = keys.get(caseKey(prefix));
       if (holder !== undefined && holder !== prefix) return refuse('create-path-case-collision', path);
     }
-    if (/\.md$/u.test(path)) { counts.A += 1; continue; }
+    if (/\.md$/u.test(path)) { counts.A += 1; notes.push({ path, oid: newId }); continue; }
     let bytes;
     try { bytes = await git(['cat-file', 'blob', newId]); } catch { return refuse('asset-type-refused', path); }
     const verdict = checkAsset(path, new Uint8Array(bytes));
     if (!verdict.ok) return refuse(verdict.code, path);
     counts.images += 1;
+    images.push(path);
   }
   if (counts.M > 1 || counts.A > 2 || counts.images > 4 || counts.M + counts.A === 0) return refuse('bundle-file-count');
+  if (images.length > 0) {
+    let paths;
+    const shown = new Set();
+    try {
+      paths = (await git(['ls-tree', '-r', '-z', '--name-only', '--full-tree', commit])).toString('utf8').split('\0').filter(Boolean);
+      for (const note of notes) {
+        const text = new TextDecoder('utf-8').decode(await git(['cat-file', 'blob', note.oid]));
+        for (const target of noteAssetTargets(note.path, text, paths)) shown.add(target);
+      }
+    } catch {
+      return refuse('create-path-refused');
+    }
+    const lonely = images.find((image) => !shown.has(image));
+    if (lonely !== undefined) return refuse('asset-unreferenced', lonely);
+  }
   return Object.freeze({ ok: true });
 }
 

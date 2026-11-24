@@ -99,6 +99,18 @@ describe('every node refusal', () => {
     expect(await codeOf(create('topic/p.md', '# no image\n', [{ path: 'topic/lonely.png', bytes: COVER }]))).toBe('asset-unreferenced');
   });
 
+  test('a cover named only in properties is shown by the page, by its vault path', async () => {
+    const assets = [{ path: 'topic/sub/post-cover.png', bytes: COVER }];
+    const checked = await create('topic/sub/post.md', note('No embeds.\n', 'title: Post\ncover: topic/sub/post-cover.png\n'), assets);
+    expect(checked.images.map((image) => image.path)).toEqual(['topic/sub/post-cover.png']);
+    const commit = await buildBundleCommit({ git: vault.git, checked, message: 'Add post\n',
+      author: { name: 'Owner', email: 'owner@example.invalid' }, time: 1_800_000_000 });
+    expect(await checkBundleCommit(vault.git, vault.head, commit)).toEqual({ ok: true });
+    // A note-relative property value is not a reference.
+    expect(await codeOf(create('topic/sub/post2.md', note('x\n', 'title: Post\ncover: post2-cover.png\n'),
+      [{ path: 'topic/sub/post2-cover.png', bytes: COVER }]))).toBe('asset-unreferenced');
+  });
+
   test('remote-image-refused: http(s), protocol-relative and data: images', async () => {
     for (const body of ['![x](https://example.com/a.png)\n', '![x](//example.com/a.png)\n', '<img src="data:image/png;base64,AAAA">\n']) {
       expect(await codeOf(create('topic/p.md', body))).toBe('remote-image-refused');
@@ -157,5 +169,13 @@ describe('the publisher re-checks a bundle commit on its own', () => {
       .toBe('image-has-location');
     expect((await checkBundleCommit(vault.git, vault.head, await commitWith({ 'topic/p.md': '#\n', 'topic/p.svg': SVG }))).code).toBe('asset-type-refused');
     expect((await checkBundleCommit(vault.git, vault.head, await commitWith({ 'topic/p.md': '#\n', 'topic/p.jpg': png() }))).code).toBe('asset-type-mismatch');
+  });
+
+  test('asset-unreferenced: an image no note in the commit shows, in its text or its properties', async () => {
+    const lonely = await checkBundleCommit(vault.git, vault.head, await commitWith({ 'topic/p.md': '#\n', 'topic/p.png': png() }));
+    expect(lonely).toEqual({ ok: false, code: 'asset-unreferenced', path: 'topic/p.png' });
+    expect(await checkBundleCommit(vault.git, vault.head, await commitWith({ 'topic/p.md': '#\n![[p.png]]\n', 'topic/p.png': png() }))).toEqual({ ok: true });
+    expect(await checkBundleCommit(vault.git, vault.head, await commitWith({ 'topic/p.md': '---\ncover: topic/p.png\n---\n#\n', 'topic/p.png': png() })))
+      .toEqual({ ok: true });
   });
 });
