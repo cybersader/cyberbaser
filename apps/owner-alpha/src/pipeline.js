@@ -6,7 +6,7 @@ import { applyAcceptedOperation } from './apply.js';
 import { createJsonArtifactOnce, readJsonArtifact, replaceJsonArtifactAtomic } from './artifacts.js';
 import { rm } from 'node:fs/promises';
 import { runPreApplyChecks } from './checks.js';
-import { computePolicyRevision, validateOwnerAlphaConfig } from './config.js';
+import { computePolicyRevision, isPrivateSite, validateOwnerAlphaConfig } from './config.js';
 import {
   discoverDeploymentRun,
   monitorDeploymentRun,
@@ -34,6 +34,7 @@ import { applyEditorOperation, deriveEditorOperation } from './operation.js';
 import { requestPublication } from './publisher/client.js';
 import {
   DEFAULT_OWNER_ALPHA_PROJECT_ROOT,
+  ensureOwnerSite,
   rebuildOwnerSite,
 } from './site.js';
 import { assertCheckoutReady, createEditSession, defaultGitRunner } from './source.js';
@@ -847,6 +848,7 @@ async function executeLocked(input, config, context, dependencies) {
             const discovery = await dependencies.discoverDeploymentRun({
               config,
               applicationSha: committed.commit,
+              projectRoot: context.projectRoot,
               signal: input.signal,
             }, input.deploymentDependencies);
             runBinding = await saveRecord(
@@ -875,6 +877,7 @@ async function executeLocked(input, config, context, dependencies) {
             deployment = await dependencies.monitorDeploymentRun({
               config,
               applicationSha: committed.commit,
+              projectRoot: context.projectRoot,
               boundRun: runBinding.binding ?? runBinding,
               signal: input.signal,
             }, input.deploymentDependencies);
@@ -1167,7 +1170,11 @@ export async function defaultLocalRebuild({
       'local rebuild checkout HEAD must equal the confirmed application commit',
     );
   }
-  const rebuilt = await rebuildOwnerSite({ config, projectRoot });
+  // A private site was just built from this commit as its "deployment":
+  // reuse that build when it is still current instead of building twice.
+  const rebuilt = isPrivateSite(config)
+    ? await ensureOwnerSite({ config, projectRoot })
+    : await rebuildOwnerSite({ config, projectRoot });
   if (rebuilt.manifest.source.head !== commit) {
     fail(
       'local-rebuild-manifest-mismatch',

@@ -831,7 +831,9 @@ export default class CyberbaserPlugin extends Plugin {
       const doc = globalThis.activeDocument ?? document;
       const fragment = doc.createDocumentFragment();
       const line = doc.createElement('div');
-      line.textContent = `"${item.title}" is live on ${this.siteLabel(item) ?? 'your site'}.`;
+      line.textContent = item.site === 'private'
+        ? `"${item.title}" is live on your private site.`
+        : `"${item.title}" is live on ${this.siteLabel(item) ?? 'your site'}.`;
       fragment.append(line);
       if (url) {
         const row = doc.createElement('div');

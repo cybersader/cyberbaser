@@ -410,8 +410,46 @@ function workflowProvider(value) {
   if (!isPlainObject(value) || !Object.hasOwn(value, 'provider')) {
     fail('missing-config-key', '$.workflow is missing required keys', { location: '$.workflow', keys: ['provider'] });
   }
-  if (value.provider === 'github-actions' || value.provider === 'forgejo-actions') return value.provider;
+  if (value.provider === 'github-actions' || value.provider === 'forgejo-actions' || value.provider === PRIVATE_SITE_PROVIDER) return value.provider;
   fail('unsupported-deployment-provider', 'unsupported deployment observation provider');
+}
+
+// Private-only publication: no public website and no deployment to watch.
+// After the publisher pushes, the node rebuilds its own private site from that
+// exact commit and checks the page there ("Live on your private site"). The
+// repository is still a GitHub repository; nothing touches GitHub Pages.
+export const PRIVATE_SITE_PROVIDER = 'private-site';
+
+/** The forge the repository lives on, for a workflow provider. */
+function forgeProvider(provider) {
+  return provider === PRIVATE_SITE_PROVIDER ? 'github-actions' : provider;
+}
+
+/** True when this config publishes only to the node's own private site. */
+export function isPrivateSite(config) {
+  return config?.workflow?.provider === PRIVATE_SITE_PROVIDER;
+}
+
+function validatePrivateSiteWorkflow(value, repository) {
+  const input = objectAt(value, '$.workflow', ['provider', 'branch']);
+  if (input.provider !== PRIVATE_SITE_PROVIDER) fail('invalid-config', '$.workflow.provider must be exactly "private-site"');
+  const branch = branchName(input.branch, '$.workflow.branch');
+  if (branch !== repository.branch) {
+    fail('workflow-branch-mismatch', '$.workflow.branch must exactly match $.repository.branch');
+  }
+  return { provider: PRIVATE_SITE_PROVIDER, branch };
+}
+
+// The address the pages would have on a public site. With a private site it is
+// an identity only (page addresses are derived from it, then served by the
+// node); it is never fetched or deployed to.
+function validatePrivateSiteLive(value) {
+  const input = objectAt(value, '$.live', ['baseUrl']);
+  const url = exactHttpsUrl(input.baseUrl, '$.live.baseUrl');
+  if (!url.pathname.endsWith('/') || url.search) {
+    fail('invalid-config-url', '$.live.baseUrl must be a canonical credential-free HTTPS URL ending in /');
+  }
+  return { baseUrl: url.toString() };
 }
 
 function isStrictlyWithin(root, candidate) {
@@ -818,11 +856,12 @@ export function retargetGithubRepository(raw, fullName) {
   const identity = typeof fullName === 'string' ? githubIdentityFromRemote(`https://github.com/${fullName}.git`) : null;
   if (identity === null || identity.slug !== fullName) fail('invalid-repository', 'repository must be one exact owner/name');
   const current = validateOwnerAlphaConfig(raw);
-  if (current.workflow.provider !== 'github-actions') fail('invalid-config', 'only a GitHub repository can be picked this way');
+  const privateSite = current.workflow.provider === PRIVATE_SITE_PROVIDER;
+  if (current.workflow.provider !== 'github-actions' && !privateSite) fail('invalid-config', 'only a GitHub repository can be picked this way');
   const pagesHost = `${identity.owner.toLowerCase()}.github.io`;
   const next = structuredClone(raw);
   next.repository.remote.url = `https://github.com/${identity.slug}.git`;
-  next.workflow.repository = identity.slug;
+  if (!privateSite) next.workflow.repository = identity.slug;
   next.owner.identity = identity.owner;
   next.live.baseUrl = `https://${pagesHost}${identity.repository.toLowerCase() === pagesHost ? '/' : `/${identity.repository}/`}`;
   if (Array.isArray(next.repository.aliases)) {
@@ -925,7 +964,8 @@ export function validateOwnerAlphaConfig(value) {
   if (input.schemaVersion !== CONFIG_SCHEMA_VERSION) {
     fail('unsupported-config-version', `schemaVersion must be ${CONFIG_SCHEMA_VERSION}`);
   }
-  const provider = workflowProvider(input.workflow);
+  const publication = workflowProvider(input.workflow);
+  const provider = forgeProvider(publication);
   const repositoryWithIdentity = validateRepository(input.repository, provider);
   const repository = {
     checkout: repositoryWithIdentity.checkout,
@@ -958,12 +998,14 @@ export function validateOwnerAlphaConfig(value) {
     proposalReview,
     repository,
     owner: validateOwner(input.owner, repositoryWithIdentity, provider),
-    live: provider === 'github-actions'
-      ? validateGithubLive(input.live, repositoryWithIdentity)
-      : validateForgejoLive(input.live),
-    workflow: provider === 'github-actions'
-      ? validateGithubWorkflow(input.workflow, repositoryWithIdentity)
-      : validateForgejoWorkflow(input.workflow, repositoryWithIdentity),
+    live: publication === PRIVATE_SITE_PROVIDER ? validatePrivateSiteLive(input.live)
+      : provider === 'github-actions'
+        ? validateGithubLive(input.live, repositoryWithIdentity)
+        : validateForgejoLive(input.live),
+    workflow: publication === PRIVATE_SITE_PROVIDER ? validatePrivateSiteWorkflow(input.workflow, repositoryWithIdentity)
+      : provider === 'github-actions'
+        ? validateGithubWorkflow(input.workflow, repositoryWithIdentity)
+        : validateForgejoWorkflow(input.workflow, repositoryWithIdentity),
     workspace: validateWorkspace(input.workspace),
     paths: validatePaths(input.paths),
     limits: validateLimits(input.limits),

@@ -28,6 +28,7 @@ BindPaths=/var/lib/cyberbaser-shared/workspace:/opt/cyberbaser/.workspace
 ReadWritePaths=/var/lib/cyberbaser-publisher /var/lib/cyberbaser-shared/mirror
 InaccessiblePaths=-/var/lib/cyberbaser
 @HARDENING@
+RestrictNamespaces=yes
 
 [Install]
 WantedBy=multi-user.target

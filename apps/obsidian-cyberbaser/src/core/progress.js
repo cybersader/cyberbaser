@@ -24,7 +24,7 @@ export function viewSteps(item, { canSign = false, site = null } = {}) {
     { key: 'checking', label: 'Checking your post', detail: item.step === 'queued' ? "Will send when you're back online" : null },
     { key: 'waiting', label: 'Waiting for your approval', detail: waitingDetail },
     { key: 'publishing', label: 'Publishing', detail: 'Usually under a minute' },
-    { key: 'live', label: `Live on ${site ?? 'your site'}`, detail: null },
+    { key: 'live', label: item.site === 'private' ? 'Live on your private site' : `Live on ${site ?? 'your site'}`, detail: null },
   ];
   const current = item.step === 'review' ? 'waiting' : item.step;
   if (current === 'queued') return steps.map((step, i) => ({ ...step, state: i === 0 ? 'queued' : 'todo' }));
@@ -189,7 +189,9 @@ export function createPublishTracker({ readProgress, withdraw, send, isUnreachab
         }
         if (!progress || typeof progress.step !== 'string') continue;
         set(item, { step: progress.step, reason: progress.reason ?? null, at: progress.at ?? null,
-          pages: Array.isArray(progress.pages) ? progress.pages : item.pages });
+          pages: Array.isArray(progress.pages) ? progress.pages : item.pages,
+          // 'private': the node's own private site, with its private link.
+          site: progress.site === 'private' ? 'private' : null });
       }
     },
 

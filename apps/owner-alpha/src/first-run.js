@@ -258,6 +258,25 @@ export async function detectWebsite(root, fullName) {
 }
 
 /**
+ * The site address the vault declares for its renderer (`.cyberbaser/site.yml`
+ * site.baseUrl, `https://host/path/` or `host[/path]`), as one canonical https
+ * URL ending in "/", or null. Only used as the private site's page identity.
+ */
+export function declaredSiteUrl(text) {
+  if (typeof text !== 'string') return null;
+  let parsed;
+  try { parsed = yaml.load(text, { schema: yaml.CORE_SCHEMA }); } catch { return null; }
+  const declared = plainObject(parsed) && plainObject(parsed.site) ? parsed.site.baseUrl : undefined;
+  if (typeof declared !== 'string' || declared.trim() === '' || declared.length > 512) return null;
+  const value = declared.trim();
+  let url;
+  try { url = new URL(/^https?:\/\//iu.test(value) ? value.replace(/^http:/iu, 'https:') : `https://${value}`); } catch { return null; }
+  if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.port || !url.hostname.includes('.')) return null;
+  if (!url.pathname.endsWith('/')) url.pathname = `${url.pathname}/`;
+  return url.toString();
+}
+
+/**
  * Makes the node's private copy of the notes and reports what it found. Runs
  * in the background; every phase is saved, so a restart picks it up again.
  *
@@ -317,7 +336,8 @@ export function createNotesPreparer({ state, directory, checkout = path.join(dir
       const inspected = inspectPublishYml(await readSmall(path.join(checkout, 'publish.yml'), 256 * 1024));
       const detected = await detectWebsite(checkout, fullName);
       const folders = await topFolders(checkout);
-      await phase({ phase: 'building', count, branch, ...inspected, folders, detected });
+      const siteUrl = declaredSiteUrl(await readSmall(path.join(checkout, '.cyberbaser', 'site.yml'), 64 * 1024));
+      await phase({ phase: 'building', count, branch, ...inspected, folders, detected, siteUrl });
       let site = 'unavailable';
       if (typeof buildSite === 'function') {
         try { site = (await buildSite({ checkout, repository: fullName }))?.state ?? 'unavailable'; } catch { site = 'failed'; }
@@ -420,6 +440,10 @@ export function ownerConfigFromSetup(setup, layout) {
   const pagesHost = `${owner.toLowerCase()}.github.io`;
   const branch = setup.notes.branch || 'main';
   const detected = setup.notes.detected?.workflow ?? null;
+  // Private only: no public website and no deployment to watch. The node
+  // builds and serves the site itself; "Live" is its own private site.
+  const privateSite = setup.website?.source === 'private';
+  const pagesUrl = `https://${pagesHost}${name.toLowerCase() === pagesHost ? '/' : `/${name}/`}`;
   const config = {
     schemaVersion: CONFIG_SCHEMA_VERSION,
     listen: layout.listen,
@@ -427,8 +451,8 @@ export function ownerConfigFromSetup(setup, layout) {
     suggestions: { form: { enabled: false }, forge: { enabled: false } },
     repository: { checkout: layout.checkout, remote: { name: 'origin', url: githubRemoteUrl(setup.repository) }, branch },
     owner: { identity: owner, allowedTrustRoutes: ['auto-merge', 'quick-review'] },
-    live: { baseUrl: `https://${pagesHost}${name.toLowerCase() === pagesHost ? '/' : `/${name}/`}` },
-    workflow: {
+    live: { baseUrl: privateSite ? (setup.notes.siteUrl ?? pagesUrl) : pagesUrl },
+    workflow: privateSite ? { provider: 'private-site', branch } : {
       provider: 'github-actions', repository: setup.repository,
       name: detected?.name ?? 'Publish site',
       path: detected?.path?.endsWith('.yml') ? detected.path : '.github/workflows/publish-site.yml',
@@ -444,8 +468,10 @@ export function ownerConfigFromSetup(setup, layout) {
     publisher: { socketPath: layout.publisherSocket, ...(layout.mirror ? { mirror: layout.mirror } : {}) },
     iroh: { enabled: true, stateDirectory: layout.irohStateDirectory, ...(layout.relay ? { relay: layout.relay } : {}) },
     forgeAccess: { provider: 'github-app', clientId: layout.clientId, stateDirectory: layout.forgeStateDirectory },
+    // The site's own renderer, installed by the installer (--renderer).
+    ...(layout.renderer ? { renderer: layout.renderer } : {}),
   };
-  return { config: validateOwnerAlphaConfig(config), workflowDetected: detected !== null };
+  return { config: validateOwnerAlphaConfig(config), workflowDetected: privateSite || detected !== null, privateSite };
 }
 
 // -------------------------------------------------------------------- pages
@@ -538,7 +564,8 @@ function enrolBlock(e, enrolPort, state) {
 </section>`;
 }
 
-function stepBody({ e, state, csrfToken, relay, dev, pairCommand, enrolPort = null }) {
+function stepBody({ e, state, csrfToken, relay, dev, pairCommand, enrolPort = null, privateDefault = false, readerAddress = null }) {
+  const showPublic = state.website?.source === 'show-public';
   const step = state.step;
   if (step === 'welcome') {
     return `<h1>Set up Cyberbaser</h1>
@@ -563,6 +590,12 @@ ${forge}
 ${notesLines(e, state)}
 ${publishYmlBlock(e, state)}
 <div class="setup-actions setup-continue"${ready ? '' : ' hidden'}>${actionButton(e, 'continue', 'Continue', '', ready ? '' : ' disabled')}</div>`;
+  }
+  if (step === 'website' && privateDefault && !showPublic) {
+    return `<h1>Your website</h1>
+<p class="setup-lede">Keep your site private. Cyberbaser builds it on this machine and shows it only here, at <span class="setup-url">${e(readerAddress ?? 'this machine')}</span>. Nothing goes on the web.</p>
+<p class="setup-aside">After you approve a change on your phone, it is saved to GitHub and shows as Live on your private site once this machine has rebuilt it.</p>
+<div class="setup-actions">${actionButton(e, 'private', 'Keep it private')}${actionButton(e, 'show-public', 'Use a public website instead', 'quiet')}</div>`;
   }
   if (step === 'website') {
     const detected = state.notes.detected;
@@ -605,7 +638,7 @@ ${paired && reachable ? '<details class="setup-more"><summary>Pair another</summ
   }
   const summary = [
     ['Notes', state.repository],
-    ['Website', state.website.url ?? 'Not set yet'],
+    ['Website', state.website.source === 'private' ? 'Private, on this machine only' : state.website.url ?? 'Not set yet'],
     ['Phone', state.phone === 'paired' ? 'Paired' : 'Not paired yet'],
     ['Agent', state.agent === 'paired' ? 'Paired' : 'None yet'],
     ...(state.notes.publishYml === 'awaiting-approval' ? [['publish.yml', 'Waiting for your approval on your phone']] : []),
@@ -617,7 +650,8 @@ ${paired && reachable ? '<details class="setup-more"><summary>Pair another</summ
 <div class="setup-actions"><a class="setup-link-button" href="/owner/review">Open Proposals</a><a class="setup-link-button quiet" href="/owner/devices">Devices</a></div>`;
 }
 
-export function setupPage({ state, csrfToken, relay = null, dev = null, pairCommand = 'cyberbaser pair', tools, enrolPort = null }) {
+export function setupPage({ state, csrfToken, relay = null, dev = null, pairCommand = 'cyberbaser pair', tools, enrolPort = null,
+  privateDefault = false, readerAddress = null }) {
   const e = tools.escapeHtml;
   const index = SETUP_STEPS.indexOf(state.step);
   const back = index > 0 && state.step !== 'done';
@@ -631,7 +665,7 @@ export function setupPage({ state, csrfToken, relay = null, dev = null, pairComm
     body: `<main class="setup-shell" id="setup" data-csrf="${e(csrfToken)}" data-step="${e(state.step)}" data-notes-phase="${e(state.notes.phase)}">
 <header class="setup-top">${back ? actionButton(e, 'back', 'Back', 'setup-back') : '<span class="setup-mark">Cyberbaser</span>'}${progressHtml(state.step)}</header>
 <section class="setup-step" aria-live="polite">
-${stepBody({ e, state, csrfToken, relay, dev, pairCommand, enrolPort })}
+${stepBody({ e, state, csrfToken, relay, dev, pairCommand, enrolPort, privateDefault, readerAddress })}
 <p class="setup-status" id="setup-status" role="status"></p>
 </section>
 </main>`,
@@ -670,6 +704,10 @@ export function createFirstRunHandler({
   publicRoot = fileURLToPath(new URL('../public/', import.meta.url)), onComplete = () => {}, createToken,
   // The publisher's own enrolment page (publisher/owner-control.js), or null.
   enrolPort = null,
+  // 'private-site': the website step offers the private site first (installer --site private).
+  publication = null,
+  // Where the private site is served (http://HOST:READERPORT/), shown on the website step.
+  readerAddress = null,
 }) {
   const tools = ownerHttpTools();
   const { html, json, errorResponse, response, readBoundedJson, sameSecret, exactToken, requestCookie, cookieHeader, staticResponse } = tools;
@@ -760,6 +798,10 @@ export function createFirstRunHandler({
         return 'ok';
       }
       case 'website:skip': await go('phone', { website: { url: null, source: 'skipped' } }); return 'ok';
+      case 'website:private': await go('phone', { website: { url: null, source: 'private' } }); return 'ok';
+      case 'website:show-public':
+        await state.update((now) => ({ ...now, website: { url: null, source: 'show-public' } }));
+        return 'ok';
       case 'phone:skip': await go('agent', { phone: 'later' }); return 'ok';
       case 'agent:skip':
       case 'agent:continue':
@@ -832,7 +874,8 @@ export function createFirstRunHandler({
       const dev = ['phone', 'agent'].includes(current.step) ? await devices() : null;
       const frame = enrolPort !== null && current.step === 'phone'
         ? { 'Content-Security-Policy': `${tools.ownerCsp}; frame-src http://127.0.0.1:${enrolPort}` } : {};
-      return html(request.method === 'HEAD' ? null : setupPage({ state: current, csrfToken, relay, dev, pairCommand, tools, enrolPort }), 200, frame);
+      return html(request.method === 'HEAD' ? null : setupPage({ state: current, csrfToken, relay, dev, pairCommand, tools, enrolPort,
+        privateDefault: publication === 'private-site', readerAddress }), 200, frame);
     }
     if (url.pathname === '/setup/state') {
       if (request.method !== 'GET') return response(null, 405, { Allow: 'GET' });
@@ -888,6 +931,7 @@ export async function runFirstRun({
   pairCommand, serve = Bun.serve, createToken, clock, checkout = undefined, mirror = null,
   // The publisher's enrolment page port (port + 2 in the installed layout), or null.
   enrolPort = null,
+  publication = null, readerAddress = null,
 }) {
   const state = await openSetupState(stateDirectory);
   const tools = ownerHttpTools();
@@ -902,7 +946,7 @@ export async function runFirstRun({
   let finish;
   const completed = new Promise((resolve) => { finish = resolve; });
   const handler = createFirstRunHandler({ listen: { host: '127.0.0.1', port }, state, links, relay, notes, starter, reach, pairCommand,
-    createToken, onComplete: (result) => finish(result), enrolPort });
+    createToken, onComplete: (result) => finish(result), enrolPort, publication, readerAddress });
   // A restart while the notes were being copied picks the copy up again.
   const resumed = state.read();
   if (resumed.repository && ['cloning', 'building'].includes(resumed.notes.phase)) notes.start(resumed.repository);

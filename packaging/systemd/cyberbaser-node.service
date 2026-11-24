@@ -28,6 +28,9 @@ BindPaths=/var/lib/cyberbaser-shared/workspace:/opt/cyberbaser/.workspace
 ReadWritePaths=/var/lib/cyberbaser /var/lib/cyberbaser-shared
 InaccessiblePaths=-/var/lib/cyberbaser-publisher
 @HARDENING@
+# Only user and network namespaces: a configured renderer builds in a fresh
+# network namespace with no network (/usr/bin/unshare --user --net).
+RestrictNamespaces=user net
 
 [Install]
 WantedBy=multi-user.target

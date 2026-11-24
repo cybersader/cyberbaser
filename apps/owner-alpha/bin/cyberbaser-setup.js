@@ -9,7 +9,9 @@
 //   bun bin/cyberbaser-setup.js <state-dir> <port> <publisher-socket> <layout.json> [--exit-at-done]
 //
 // layout.json (written by the installer): { listen, reviewSocket, irohStateDirectory,
-// forgeStateDirectory, clientId, configFile, checkout, mirror, relay? }. Without
+// forgeStateDirectory, clientId, configFile, checkout, mirror, relay?, publication?,
+// renderer? }. publication "private-site" makes the private site the website
+// step's first choice; renderer is the site's own renderer (installer --renderer). Without
 // `checkout` the notes copy is <state-dir>/notes; without `mirror` the node
 // clones from GitHub itself (development only).
 import { readFile } from 'node:fs/promises';
@@ -68,7 +70,10 @@ if (import.meta.main) {
   };
   // The publisher serves its own first-device code on port + 2 (packaging layout).
   const setup = await runFirstRun({ stateDirectory: path.resolve(stateDirectory), port: Number(portText), publisherSocket, reach,
-    checkout, mirror: layout.mirror ?? null, enrolPort: layout.enrollPort ?? Number(portText) + 2 });
+    checkout, mirror: layout.mirror ?? null, enrolPort: layout.enrollPort ?? Number(portText) + 2,
+    // Installer --site private: the website step offers the private site first.
+    publication: layout.publication === 'private-site' ? 'private-site' : null,
+    readerAddress: `http://${layout.listen?.host ?? '127.0.0.1'}:${(layout.listen?.port ?? Number(portText)) + 1}/` });
   process.stdout.write(`Cyberbaser setup: ${setup.setupLink()}\n`);
   const console = createInterface({ input: process.stdin, terminal: false });
   console.on('line', (line) => {

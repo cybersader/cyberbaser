@@ -48,6 +48,9 @@ export const LAYOUT = Object.freeze({
   config: '/var/lib/cyberbaser/config/owner-alpha.json',
   layoutFile: '/var/lib/cyberbaser/layout.json',
   publisherConfig: '/var/lib/cyberbaser-publisher/owner-alpha.json',
+  // The site's own renderer (install --renderer), copied here and owned by the
+  // node: outside every checkout and the program, not writable by anyone else.
+  renderers: '/var/lib/cyberbaser/renderers',
   unitDir: '/etc/systemd/system',
 });
 
@@ -78,7 +81,8 @@ function which(name) {
 }
 
 function parse(args, known) {
-  const options = { yes: false, dryRun: false, purge: false, seed: null, port: DEFAULT_PORT, clientId: null, githubOrigin: null, relay: null };
+  const options = { yes: false, dryRun: false, purge: false, seed: null, port: DEFAULT_PORT, clientId: null, githubOrigin: null, relay: null,
+    renderer: null, rendererName: null, rendererCommit: null, rendererFingerprint: null, site: null };
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
     if (arg === '--yes' && known.includes(arg)) options.yes = true;
@@ -89,6 +93,13 @@ function parse(args, known) {
     else if (arg === '--github-client-id' && known.includes(arg) && /^[A-Za-z0-9._-]{8,64}$/u.test(args[i + 1] ?? '')) options.clientId = args[++i];
     // GitHub Enterprise, or a stand-in GitHub for tests: the web and API origin.
     else if (arg === '--github-origin' && known.includes(arg) && /^https?:\/\/[A-Za-z0-9.:[\]-]+$/u.test(args[i + 1] ?? '')) options.githubOrigin = args[++i];
+    else if (arg === '--renderer' && known.includes(arg) && args[i + 1]) options.renderer = path.resolve(args[++i]);
+    else if (arg === '--renderer-name' && known.includes(arg) && /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/u.test(args[i + 1] ?? '')) options.rendererName = args[++i];
+    else if (arg === '--renderer-quartz-commit' && known.includes(arg) && /^[0-9a-f]{40}$/u.test(args[i + 1] ?? '')) options.rendererCommit = args[++i];
+    // A comma-separated list, or @<file> with one entry per line.
+    else if (arg === '--renderer-fingerprint' && known.includes(arg) && args[i + 1]) options.rendererFingerprint = args[++i];
+    // private: the website is the node's own private site, no public deployment.
+    else if (arg === '--site' && known.includes(arg) && ['private', 'public'].includes(args[i + 1] ?? '')) options.site = args[++i];
     else if (arg === '--iroh-relay' && known.includes(arg) && /^(none|n0|https:\/\/\S+|http:\/\/127\.0\.0\.1:\d{1,5}\/)$/u.test(args[i + 1] ?? '')) options.relay = args[++i];
     else throw new Error(`unknown option: ${arg}`);
   }
@@ -222,10 +233,10 @@ async function installProgram(programPath, seed) {
   }
 }
 
-async function installState(ids, { port, clientId, relay }) {
+async function installState(ids, { port, clientId, relay, renderer = null, publication = null }) {
   // The node's checks expect its directories in its own (primary) group.
   await ensureDirectory(LAYOUT.nodeHome, { owner: ids.node, group: ids.share, mode: 0o700 });
-  for (const name of ['home', 'cache', 'config', 'iroh', 'setup']) {
+  for (const name of ['home', 'cache', 'config', 'iroh', 'setup', 'renderers']) {
     await ensureDirectory(path.join(LAYOUT.nodeHome, name), { owner: ids.node, group: ids.share, mode: 0o700 });
   }
   // The program and renderer files belong to root; Git refuses to read a
@@ -265,6 +276,10 @@ async function installState(ids, { port, clientId, relay }) {
     mirror: LAYOUT.mirror,
     clientId,
     ...(relay ? { relay } : {}),
+    // private-site: setup offers the node's own private site first (--site private).
+    ...(publication ? { publication } : {}),
+    // The site's own renderer, copied by install --renderer.
+    ...(renderer ? { renderer } : {}),
   };
   // Rewritten on each install (it holds no secret), so an update brings new fields.
   await writeOwned(LAYOUT.layoutFile, `${JSON.stringify(layout, null, 2)}\n`, { owner: ids.node, group: ids.share, mode: 0o600 });
@@ -308,6 +323,8 @@ function plan(options) {
   return [
     `create system accounts "${ACCOUNTS.node}" (node and intake) and "${ACCOUNTS.publisher}" (publisher), and the group "${ACCOUNTS.group}"`,
     `install the program and its files in ${LAYOUT.appRoot}${options.seed ? ' with the verified renderer bundle' : ''}`,
+    ...(options.renderer ? [`copy the renderer ${options.renderer} to ${LAYOUT.renderers}/${options.rendererName ?? '<name>'}, owned by "${ACCOUNTS.node}"`] : []),
+    ...(options.site === 'private' ? ['set up a private site: the node builds and serves it, nothing is deployed to the web'] : []),
     `create owner-only state in ${LAYOUT.nodeHome} and ${LAYOUT.publisherHome}, and the shared job store, notes copy and publisher mirror in ${LAYOUT.shared}`,
     `install the services ${UNITS.join(', ')} in ${LAYOUT.unitDir}, then enable and start them`,
   ];
@@ -315,7 +332,10 @@ function plan(options) {
 
 export async function install(args, { programPath, compiled }) {
   let options;
-  try { options = parse(args, ['--yes', '--dry-run', '--quartz-seed', '--port', '--github-client-id', '--github-origin', '--iroh-relay']); }
+  try {
+    options = parse(args, ['--yes', '--dry-run', '--quartz-seed', '--port', '--github-client-id', '--github-origin', '--iroh-relay',
+      '--renderer', '--renderer-name', '--renderer-quartz-commit', '--renderer-fingerprint', '--site']);
+  }
   catch (error) { process.stderr.write(`${error.message}\n`); return 2; }
   if (options.dryRun) {
     say('cyberbaser install would:');
@@ -326,7 +346,10 @@ export async function install(args, { programPath, compiled }) {
   if (process.getuid() !== 0) return elevate('install', args, programPath);
   if (!exists('/run/systemd/system')) { process.stderr.write('This machine does not run systemd; use the container image instead.\n'); return 1; }
   const missing = ['systemctl', 'journalctl', 'useradd', 'groupadd', 'usermod', 'git', 'flock', 'rsync', 'bash', 'tar',
-    ...(options.seed ? ['zstd'] : [])].filter((name) => which(name) === null);
+    ...(options.seed ? ['zstd'] : []),
+    // A renderer's build runs offline in its own network namespace, and the
+    // Quartz renderers apply their patches with patch(1).
+    ...(options.renderer ? ['unshare', 'patch'] : [])].filter((name) => which(name) === null);
   if (missing.length > 0) { process.stderr.write(`Missing programs: ${missing.join(', ')}. Install them and try again.\n`); return 1; }
   if (options.seed !== null && !exists(options.seed)) { process.stderr.write(`No renderer bundle at ${options.seed}.\n`); return 1; }
 
@@ -341,18 +364,44 @@ export async function install(args, { programPath, compiled }) {
     return 1;
   }
   const githubOrigin = options.githubOrigin ?? record?.github?.origin ?? null;
+  const publication = options.site === 'private' ? 'private-site' : options.site === 'public' ? null : record?.publication ?? null;
+  let rendererRequest = null;
+  if (options.renderer !== null) {
+    const { QUARTZ_SEED } = await import('../quartz-seed.js');
+    const { parseFingerprint, inspectRendererSource } = await import('../renderer-install.js');
+    try {
+      if (!options.rendererName) throw new Error('--renderer needs --renderer-name <name>');
+      if (options.rendererCommit !== QUARTZ_SEED.commit) throw new Error(`--renderer-quartz-commit must be the pinned Quartz commit ${QUARTZ_SEED.commit}`);
+      const fingerprint = parseFingerprint(options.rendererFingerprint ?? '');
+      inspectRendererSource(options.renderer, { fingerprint, quartzCommit: options.rendererCommit });
+      rendererRequest = { source: options.renderer, name: options.rendererName, quartzCommit: options.rendererCommit, fingerprint };
+    } catch (error) {
+      process.stderr.write(`The renderer was not installed, so nothing was changed: ${error.message}\n`);
+      return 1;
+    }
+  }
   const relay = options.relay ?? record?.irohRelay ?? null;
   const updating = record?.state === 'installed';
   const since = new Date().toISOString().replace('T', ' ').slice(0, 19);
   if (updating) systemctl('stop', ...UNITS);
   const ids = ensureAccounts();
   const seedNote = await installProgram(programPath, options.seed);
-  await installState(ids, { port: options.port, clientId, relay });
+  let renderer = record?.renderer ?? null;
+  if (rendererRequest !== null) {
+    await ensureDirectory(LAYOUT.nodeHome, { owner: ids.node, group: ids.share, mode: 0o700 });
+    await ensureDirectory(LAYOUT.renderers, { owner: ids.node, group: ids.share, mode: 0o700 });
+    const { installRenderer } = await import('../renderer-install.js');
+    renderer = await installRenderer({ ...rendererRequest, parent: LAYOUT.renderers, owner: ids.node, group: ids.share });
+    say(`Renderer "${renderer.name}" copied to ${renderer.directory}.`);
+    if (exists(LAYOUT.config)) say('Setup already finished: the node config keeps its renderer section; edit it to switch renderers.');
+  }
+  await installState(ids, { port: options.port, clientId, relay, renderer, publication });
   const units = await unitTexts();
   for (const [name, text] of Object.entries(units)) await writeOwned(path.join(LAYOUT.unitDir, name), text);
   await writeRecord({ version: 1, state: 'installed', accounts: { node: ACCOUNTS.node, publisher: ACCOUNTS.publisher },
     group: ACCOUNTS.group, appRoot: LAYOUT.appRoot, port: options.port,
-    github: { clientId, ...(githubOrigin ? { origin: githubOrigin } : {}) }, ...(relay ? { irohRelay: relay } : {}), installedAt: record?.installedAt ?? new Date().toISOString(),
+    github: { clientId, ...(githubOrigin ? { origin: githubOrigin } : {}) }, ...(relay ? { irohRelay: relay } : {}),
+    ...(publication ? { publication } : {}), ...(renderer ? { renderer } : {}), installedAt: record?.installedAt ?? new Date().toISOString(),
     updatedAt: new Date().toISOString() });
   systemctl('daemon-reload');
   printEnrollment(ids, options.port);

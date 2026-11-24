@@ -38,9 +38,17 @@ export function pageLiveUrl(config, address) {
  * job is this bundle's and carries its verified new-page proof (liveKind); its
  * time is the job's live-confirmed time. No commits, branches or repository names.
  */
-export function bundleProgress({ config, record, job = null }) {
-  const pages = (record.publicAdditions ?? []).map(({ path, address }) => ({ path, address, url: pageLiveUrl(config, address) }));
-  const base = { bundleId: record.bundleId, pages, reason: null, at: null };
+export function bundleProgress({ config, record, job = null, privateBase = null }) {
+  // A private-only site: the link is the node's own reader, and the device
+  // says "Live on your private site" (site: 'private').
+  const privateSite = config?.workflow?.provider === 'private-site';
+  const urlFor = (address) => {
+    const url = pageLiveUrl(config, address);
+    if (!privateSite) return url;
+    try { return url && privateBase ? new URL(url.slice(config.live.baseUrl.length), privateBase).toString() : null; } catch { return null; }
+  };
+  const pages = (record.publicAdditions ?? []).map(({ path, address }) => ({ path, address, url: urlFor(address) }));
+  const base = { bundleId: record.bundleId, pages, reason: null, at: null, ...(privateSite ? { site: 'private' } : {}) };
   switch (record.state) {
     case 'review': return { ...base, step: 'review' };
     case 'signing': return { ...base, step: 'waiting' };

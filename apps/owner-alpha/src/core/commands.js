@@ -314,7 +314,11 @@ export function createOwnerCommands({
           }
         }
       }
-      return bundleProgress({ config, record, job: job ?? null });
+      let privateBase = null;
+      if (config.workflow?.provider === 'private-site') {
+        try { privateBase = await (await import('../deployment/private-site.js')).privateReaderBase(config); } catch { privateBase = null; }
+      }
+      return bundleProgress({ config, record, job: job ?? null, privateBase });
     }, { preserveCode: true }),
 
     // The device takes back what it sent, before it is signed. The waiting

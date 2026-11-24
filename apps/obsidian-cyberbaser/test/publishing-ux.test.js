@@ -292,3 +292,21 @@ test('a refusal while following a post is shown, a lost connection is not, and C
   await tracker.poll();
   expect(item.step).toBe('live');
 });
+
+test('a private-only site: the checklist and its link say "your private site"', async () => {
+  const replies = [{ step: 'publishing', pages: [] },
+    { step: 'live', site: 'private', at: '2026-11-24T12:00:00Z', pages: [{ path: 'a.md', address: '/a', url: 'http://127.0.0.1:4318/a' }] }];
+  const events = [];
+  const tracker = createPublishTracker({ readProgress: async () => replies.shift(), withdraw: async () => {},
+    send: async () => ({ bundleId: 'bundle-1', step: 'publishing' }), onEvent: (event) => events.push(event.type) });
+  const { item, done } = tracker.publish({ path: 'a.md', title: 'A' });
+  await done;
+  await tracker.poll();
+  await tracker.poll();
+  expect(item.step).toBe('live');
+  expect(item.site).toBe('private');
+  expect(item.pages[0].url).toBe('http://127.0.0.1:4318/a');
+  expect(events).toContain('live');
+  expect(viewSteps(item, { site: 'Cyberchief' }).at(-1).label).toBe('Live on your private site');
+  expect(viewSteps({ ...item, site: null }, { site: 'Cyberchief' }).at(-1).label).toBe('Live on Cyberchief');
+});

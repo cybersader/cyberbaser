@@ -1,5 +1,9 @@
 import { createHash } from 'node:crypto';
 import { fail, OwnerAlphaError } from './errors.js';
+import { validatePrivateNetworkHttpOrigin } from './network.js';
+import {
+  PRIVATE_SITE_PROVIDER, confirmPrivateSiteAsset, confirmPrivateSitePage,
+} from './deployment/private-site.js';
 
 export const LIVE_HTML_MAX_BYTES = 4 * 1024 * 1024;
 
@@ -30,7 +34,19 @@ function validateInputs({ config, pageUrl, targetUrl, url, oldWitness, oldText, 
   // A self-hosted Forgejo publication may sit on a non-default port. GitHub
   // Pages never does, so the port remains forbidden for that provider.
   const allowPort = config?.workflow?.provider === 'forgejo-actions';
+  // A private site is checked on the node's own reader: plain HTTP on one
+  // private numeric IPv4 address and port, never a public host.
+  const privateSite = config?.workflow?.provider === PRIVATE_SITE_PROVIDER;
   for (const candidate of [base, target]) {
+    if (privateSite) {
+      try { validatePrivateNetworkHttpOrigin(candidate.origin, 'private reader origin'); } catch {
+        fail('invalid-live-url', 'private site URLs must use the node reader on a private address');
+      }
+      if (candidate.protocol !== 'http:' || candidate.username || candidate.password || candidate.hash) {
+        fail('invalid-live-url', 'private site URLs must use the node reader without credentials or fragments');
+      }
+      continue;
+    }
     if (candidate.protocol !== 'https:'
       || candidate.username
       || candidate.password
@@ -363,6 +379,13 @@ async function retryOrTimeout(deadline, attempts, lastObservation) {
 }
 
 export async function confirmLivePage(input = {}, dependencyOverrides = {}) {
+  if (input?.config?.workflow?.provider === PRIVATE_SITE_PROVIDER && !input.privateReader) {
+    return confirmPrivateSitePage(input, dependencyOverrides, (shadow, deps) => confirmLivePage({ ...shadow, privateReader: true }, deps));
+  }
+  return confirmPublicLivePage(input, dependencyOverrides);
+}
+
+async function confirmPublicLivePage(input = {}, dependencyOverrides = {}) {
   const expected = validateInputs(input);
   const dependencies = mergeDependencies({ limits: expected.limits }, dependencyOverrides);
   const timeoutMs = input.timeoutMs ?? expected.limits.networkTimeoutMs;
@@ -460,7 +483,14 @@ export const NEW_PAGE_LIVE_KIND = 'new-page-live';
 const SHA256_HEX = /^[0-9a-f]{64}$/u;
 export const witnessDigest = (witness) => `sha256:${createHash('sha256').update(witness, 'utf8').digest('hex')}`;
 
-async function confirmLiveAsset({ config, url, byteLength, sha256, signal, timeoutMs }, dependencyOverrides) {
+async function confirmLiveAsset(input, dependencyOverrides) {
+  if (input?.config?.workflow?.provider === PRIVATE_SITE_PROVIDER && !input.privateReader) {
+    return confirmPrivateSiteAsset(input, dependencyOverrides, (shadow, deps) => confirmLiveAsset({ ...shadow, privateReader: true }, deps));
+  }
+  return confirmPublicLiveAsset(input, dependencyOverrides);
+}
+
+async function confirmPublicLiveAsset({ config, url, byteLength, sha256, signal, timeoutMs }, dependencyOverrides) {
   const expected = validateInputs({ config, pageUrl: url, stableWitness: 'asset' });
   const dependencies = mergeDependencies({ limits: expected.limits }, dependencyOverrides);
   const deadline = createDeadline(timeoutMs ?? expected.limits.networkTimeoutMs, signal, dependencies);
@@ -520,7 +550,9 @@ export async function confirmNewPagesLive({ config, pages, images = [], signal, 
     }
     confirmedImages.push(await confirmLiveAsset({ config, url: image.url, byteLength: image.byteLength, sha256: image.sha256, signal, timeoutMs }, dependencyOverrides));
   }
-  return Object.freeze({ kind: NEW_PAGE_LIVE_KIND, pages: confirmedPages, images: confirmedImages });
+  const privateSite = config?.workflow?.provider === PRIVATE_SITE_PROVIDER;
+  return Object.freeze({ kind: NEW_PAGE_LIVE_KIND, ...(privateSite ? { evidence: 'private-site-live', site: 'private' } : {}),
+    pages: confirmedPages, images: confirmedImages });
 }
 
 /** The stored new-page result proves every page and image of the bundle at the deployed commit. */
@@ -562,6 +594,10 @@ export function hasExactSuccessfulDeployment(commit, discovery, deployment) {
   if (bound.provider === 'github-actions') {
     return run.runId === bound.runId && Number.isSafeInteger(bound.runAttempt) && run.runAttempt === bound.runAttempt
       && run.status === 'completed' && run.conclusion === 'success' && deployment.environment?.state === 'success';
+  }
+  if (bound.provider === PRIVATE_SITE_PROVIDER) {
+    return run.id === bound.runId && run.status === 'success' && deployment.publication?.state === 'success'
+      && deployment.publication.site === 'private';
   }
   return bound.provider === 'forgejo-actions' && run.id === bound.runId
     && run.status === 'success' && deployment.publication?.state === 'success';
