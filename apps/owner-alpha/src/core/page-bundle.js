@@ -12,7 +12,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { bundleCandidates, validatePageBundle } from '../../../../packages/proposal/src/page-bundle.js';
-import { caseKey, lintPath, publicAddress, readAddressStyle, selectTree, slugKey } from '../../../../packages/publish/src/index.js';
+import { caseKey, fileSlug, lintPath, publicAddress, readAddressStyle, selectTree, slugKey } from '../../../../packages/publish/src/index.js';
 import { checkAsset, remoteImageEmbeds } from '../../../../packages/media-check/src/index.js';
 import { fail } from '../errors.js';
 
@@ -280,12 +280,27 @@ export async function checkPageBundle({ bundle: input, git, head, readAsset, max
   const addressStyle = readAddressStyle(siteYml);
   if (!addressStyle.ok) fail('address-style-unknown', 'this vault names an address style Cyberbaser does not know');
   const addressOf = (source) => publicAddress(source, after.report.slugs[source] ?? null, addressStyle.style);
+  // Every file's address, against the whole base tree and the rest of the
+  // bundle, published or not: notes by their page address (a folder note has
+  // its folder's address), other files by their own path. Names that differ
+  // only in case, accent encoding or "&" vs "and" share an address in
+  // lowercase-hyphen. Hidden paths are not on any site.
+  const fileAddress = (source) => (isMarkdown(source) ? addressOf(source) : (() => {
+    const slug = fileSlug(source, addressStyle.style);
+    return slug === null ? null : `/${slug}`;
+  })());
   const existing = new Map();
-  for (const source of after.report.published.pages) if (!created.has(source)) existing.set(addressOf(source), source);
-  for (const source of created) {
-    if (!isMarkdown(source) || !afterSet.has(source)) continue;
-    const address = addressOf(source);
-    if (address === null) fail('create-path-refused', 'this name has no web address; use some letters or digits', { path: source });
+  for (const [source, entry] of tree) {
+    if (entry.type !== 'blob' || created.has(source) || source.split('/').some((segment) => segment.startsWith('.'))) continue;
+    const address = fileAddress(source);
+    if (address !== null && !existing.has(address)) existing.set(address, source);
+  }
+  for (const source of [...created].sort()) {
+    const address = fileAddress(source);
+    if (address === null) {
+      if (isMarkdown(source) && afterSet.has(source)) fail('create-path-refused', 'this name has no web address; use some letters or digits', { path: source });
+      continue;
+    }
     if (existing.has(address)) fail('create-address-collision', 'another page already uses this address', { path: source, existing: existing.get(address) });
     existing.set(address, source);
   }

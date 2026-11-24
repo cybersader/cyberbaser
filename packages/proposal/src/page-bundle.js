@@ -100,6 +100,28 @@ function normalizeFile(value) {
   return { path, kind: 'create-asset', mediaType: value.mediaType, candidate };
 }
 
+// Folder notes, by the rule of packages/publish/src/addresses.js
+// (isFolderNotePath, lowercase-hyphen): a note named "index", or named like
+// its folder when both are compared as address segments. Kept here so this
+// contract stays free of other packages; a test pins it to addresses.js.
+const addressSegment = (name) => String(name).normalize('NFC').normalize('NFKD').replace(/\p{M}+/gu, '').toLowerCase()
+  .replace(/&/gu, ' and ').replace(/%/gu, ' percent ').replace(/['‘’`]/gu, '')
+  .replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/gu, '');
+
+/** Is this note path a folder note ("X/index.md" or "X/X.md")? */
+export function isFolderNoteFile(notePath) {
+  const parts = notePath.split('/');
+  const file = parts.pop();
+  if (!/\.md$/iu.test(file)) return false;
+  const stem = addressSegment(file.slice(0, -3));
+  if (stem === 'index') return true;
+  return parts.length > 0 && stem !== '' && stem === addressSegment(parts.at(-1));
+}
+
+/** The folder a note is filed in: its own folder, or for a folder note the folder around it. */
+const containerOf = (notePath) => (isFolderNoteFile(notePath) ? dirOf(dirOf(notePath)) : dirOf(notePath));
+const isFolderNoteOf = (notePath, folder) => isFolderNoteFile(notePath) && dirOf(notePath) === folder;
+
 function normalizeFiles(values) {
   if (!Array.isArray(values) || values.length === 0) fail('bundle-file-count', 'a bundle needs at least one file');
   const files = [];
@@ -118,13 +140,15 @@ function normalizeFiles(values) {
       if (paths.has(segments.slice(0, i).join('/'))) fail('create-parent-is-file', 'a path in the bundle is the parent of another');
     }
   }
-  // Two new notes only as a note plus its new folder's index.md.
+  // Two new notes only as a note plus the new folder note of the folder it
+  // sits in, in either form: "a/x.md" + "a/index.md", or a note that is its
+  // own folder's note ("Topic/Post/Post.md") + "Topic/Topic.md" (or
+  // "Topic/index.md").
   const creates = files.filter((file) => file.kind === 'create');
   if (creates.length === 2) {
-    const index = creates.find((file) => file.path.endsWith('/index.md') || file.path === 'index.md');
-    const note = creates.find((file) => file !== index);
-    if (!index || !note || dirOf(index.path) !== dirOf(note.path)) {
-      fail('bundle-file-count', 'a second new note must be the index.md of the first note\'s folder');
+    const [a, b] = creates.map((file) => file.path);
+    if (!(isFolderNoteOf(a, containerOf(b)) || isFolderNoteOf(b, containerOf(a)))) {
+      fail('bundle-file-count', 'a second new note must be the folder note of the first note\'s folder');
     }
   }
   const total = files.reduce((sum, file) => sum + file.candidate.byteLength, 0);

@@ -119,16 +119,27 @@ export async function loadSitePage({ siteRoot, sourcePath, revision, baseText, r
   if (before === null) return { reason: 'unavailable' };
   if (before.head !== revision) return { reason: 'changed' };
   if (addressStyle === null) return { reason: 'unavailable' };
-  const slug = sitePageSlug(sourcePath, baseText, addressStyle);
-  if (slug === null) return { reason: 'unavailable' };
-  const [page, sidecar] = await Promise.all([
-    readContained(siteRoot, `${slug}.html`, LIMITS.page),
-    readContained(siteRoot, `${slug}.provenance.json`, LIMITS.provenance),
-  ]);
-  if (page === null || sidecar === null) return { reason: 'unavailable' };
-  let provenance;
-  try { provenance = JSON.parse(sidecar.toString('utf8')); } catch { return { reason: 'unavailable' }; }
-  if (!validProvenance(provenance, sourcePath, Buffer.from(baseText, 'utf8'))) return { reason: 'unavailable' };
+  const own = sitePageSlug(sourcePath, baseText, addressStyle);
+  if (own === null) return { reason: 'unavailable' };
+  // A lowercase-hyphen folder note is drawn either as its folder's page
+  // ("<folder>/index") or as a page ("<folder>"), by the other files of the
+  // build; the provenance below decides which built page renders this note.
+  const slugs = addressStyle === 'lowercase-hyphen' && !own.endsWith('index') ? [own, `${own}/index`] : [own];
+  let found = null;
+  for (const slug of slugs) {
+    const [page, sidecar] = await Promise.all([
+      readContained(siteRoot, `${slug}.html`, LIMITS.page),
+      readContained(siteRoot, `${slug}.provenance.json`, LIMITS.provenance),
+    ]);
+    if (page === null || sidecar === null) continue;
+    let provenance;
+    try { provenance = JSON.parse(sidecar.toString('utf8')); } catch { continue; }
+    if (!validProvenance(provenance, sourcePath, Buffer.from(baseText, 'utf8'))) continue;
+    found = { slug, page, provenance };
+    break;
+  }
+  if (found === null) return { reason: 'unavailable' };
+  const { slug, page, provenance } = found;
   // The page and its provenance came from one published build.
   const after = await readManifest(siteRoot, rendererName);
   if (after === null || after.digest !== before.digest) return { reason: 'unavailable' };

@@ -20,10 +20,10 @@
 // renderer addresses pages differently: the preview answers
 // { refused: 'address-mismatch' } so the bundle is refused rather than signed
 // for an address the site will not have.
-import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { project as projectContent, verifyProjection } from '@cyberbaser/projection';
-import { addressFor, parseFrontmatter, readAddressStyle, select } from '@cyberbaser/publish';
+import { addressFor, parseFrontmatter, readAddressStyle, renderSlug, select } from '@cyberbaser/publish';
 
 const parseSlug = (text) => parseFrontmatter(text).data?.slug;
 import { createConfiguredRenderer, rendererIdentity } from './renderer-slot.js';
@@ -40,6 +40,17 @@ const IMAGE_LIMITS = Object.freeze({ image: 5 * 1024 * 1024, images: 20 * 1024 *
 function safeRelative(value) {
   return typeof value === 'string' && value !== '' && !value.startsWith('/') && !value.includes('\\') && !/\p{Cc}/u.test(value)
     && value.split('/').every((part) => part !== '' && part !== '.' && part !== '..');
+}
+
+/** Every file under a directory, as "/"-separated paths relative to it. */
+async function listFiles(root, prefix = '') {
+  const out = [];
+  for (const entry of await readdir(path.join(root, ...prefix.split('/').filter(Boolean)), { withFileTypes: true })) {
+    const relative = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
+    if (entry.isDirectory()) out.push(...await listFiles(root, relative));
+    else if (entry.isFile()) out.push(relative);
+  }
+  return out;
 }
 
 async function exists(target) {
@@ -110,7 +121,13 @@ export function createBundlePreview({ config, projectRoot, render = null, depend
       const siteYml = await readFile(path.join(checkout.root, '.cyberbaser', 'site.yml'), 'utf8').catch(() => null);
       const style = readAddressStyle(siteYml);
       if (!style.ok) return skip('address-style-unknown');
-      const slug = sitePageSlug(note.path, note.text, style.style);
+      // Where the renderer draws the note: a folder note may be its folder's
+      // page ("<folder>/index") or a page ("<folder>"), depending on the other
+      // files of this same build (renderSlug, the Cyberchief FolderNotes rule).
+      // An explicit slug: moves the page and is used as written.
+      const slug = typeof parseSlug(note.text) === 'string'
+        ? sitePageSlug(note.path, note.text, style.style)
+        : renderSlug(note.path, await listFiles(content), style.style);
       if (slug === null) return skip('no-slug');
       // The address everyone was shown must be the one this computes, and the built page must be there.
       const expected = addressFor(note.path, typeof parseSlug(note.text) === 'string' ? parseSlug(note.text) : null, style.style);

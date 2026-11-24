@@ -47,6 +47,31 @@ describe('page bundle contract', () => {
     expect(code(() => createPageBundle(input({ creates: [], assets: many.slice(0, 1) })))).toBe('bundle-file-count');
   });
 
+  test('two new notes: a note plus its folder note, in either form (index.md or same-name)', () => {
+    const two = (a, b) => createPageBundle(input({ creates: [{ path: a, text: 'x' }, { path: b, text: 'y' }], assets: [] }));
+    // A post that is its own folder's note, plus its new topic's folder note.
+    expect(two('Topic/Post/Post.md', 'Topic/Topic.md').files.length).toBe(2);
+    expect(two('Topic/Post/Post.md', 'Topic/index.md').files.length).toBe(2);
+    // Names compare as addresses: case, accents and & vs and do not matter.
+    expect(two('Risk & governance/New page/New page.md', 'Risk & governance/risk and governance.md').files.length).toBe(2);
+    // A KB page in a new sub-folder.
+    expect(two('Knowledge base/Risk/New/Page/Page.md', 'Knowledge base/Risk/New/New.md').files.length).toBe(2);
+    // Not the folder note of the note's own folder, or not a folder note at all.
+    expect(code(() => two('Topic/Post/Post.md', 'Other/Other.md'))).toBe('bundle-file-count');
+    expect(two('Topic/Post/Other.md', 'Topic/Post/Post.md').files.length).toBe(2);
+    expect(code(() => two('Topic/Post/Post.md', 'Topic/Notes.md'))).toBe('bundle-file-count');
+    expect(code(() => two('A/Post/Post.md', 'A/Post/index.md'))).toBe('bundle-file-count');
+  });
+
+  test('the folder-note rule here is the one in packages/publish addresses.js', async () => {
+    const { isFolderNotePath } = await import('../../publish/src/addresses.js');
+    const { isFolderNoteFile } = await import('../src/page-bundle.js');
+    const cases = JSON.parse(await Bun.file(new URL('../../publish/test/fixtures/cyberchief-address-rule.cases.json', import.meta.url)).text()).cases;
+    for (const { path } of cases.filter((c) => /\.md$/u.test(c.path))) {
+      expect([path, isFolderNoteFile(path)]).toEqual([path, isFolderNotePath(path, 'lowercase-hyphen')]);
+    }
+  });
+
   test('sizes: one image over 5 MiB, a bundle over 12 MiB', () => {
     const big = (n) => ({ path: `topic/sub/big${n}.png`, mediaType: 'image/png', bytes: Buffer.alloc(PAGE_BUNDLE_LIMITS.maxAssetBytes) });
     expect(code(() => createPageBundle(input({ assets: [{ ...big(0), bytes: Buffer.alloc(PAGE_BUNDLE_LIMITS.maxAssetBytes + 1) }] })))).toBe('asset-too-large');
