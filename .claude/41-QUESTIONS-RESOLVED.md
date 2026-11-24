@@ -4,6 +4,11 @@
 
 ## Log
 
+### Every publish carries the owner's own signature, checked by the publisher (2026-11-23, owner decision)
+- **Asked** (question dialog): "The publisher's wall stops a compromised app from stealing your GitHub key, but not from asking the publisher to push a change you never approved. Should every publish carry your own signature from your device, checked by the publisher itself?" **Answer:** "Yes, publisher checks your signature (Recommended)". That option read: approving a publish is signed by the owner's phone or computer device key, or a passkey, and the publisher refuses anything without it, so even a fully compromised app cannot publish; it costs one extra confirmation on the owner's device and build work.
+- **Consequence:** the publisher keeps its own record of the owner's signing keys, which the node cannot change, and verifies a signature over the exact push intent before every push.
+
+
 ### Packaging should reach Windows and Mac, and clients may be a browser app (2026-11-23, owner direction)
 While the Linux-first one-app work started, the owner added: "Needs to work on Windows ideally too, or even Mac if we can make it really simple. The GPUI or even Tauri plus Rust, maybe those are some routes to go"; "Ideally, you can do this with a from the browser as a progressive web app too or something"; and "Good first principles system design, though. Good security. Those are the things I care about. Malleability." Linux and the home-server container remain first (earlier decision); the packaging is to be designed so Windows and Mac follow without rework, with a desktop shell evaluated (Tauri favoured for reusing the web UI). A browser app (PWA) is a client, reaching the node over Iroh in the page, alongside the Obsidian plugin and agents; the node still runs on an always-on machine and alone holds publishing authority.
 
