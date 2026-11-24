@@ -1,6 +1,6 @@
 ---
 title: The Cyberchief author's whole flow, rehearsed once (scratch)
-description: A new post went from the New post form in real Obsidian to an approved, pushed commit on a throwaway repository, on scratch copies of the Cyberchief content and renderer. Readable file names and one shared address rule landed first. The page is published but never shown as Live, because nothing yet confirms new pages live.
+description: A new post went from the New post form in real Obsidian to an approved, pushed commit on a throwaway repository, on scratch copies of the Cyberchief content and renderer. Rerun the same day with the phone approval sheet showing the pages, a title-driven file name, and a publishing checklist, status bar item and notices; it now ends at Live.
 status: log
 ---
 
@@ -43,3 +43,28 @@ In `.workspace/dad-flow/shots/` (scratch, not committed): 01–02 the filled for
 - The address check falls back to offering the bundle when the preview cannot be built; only a confirmed mismatch refuses.
 - Apostrophes and other punctuation follow Cyberchief's rule exactly. Any other renderer needs its own style declared.
 - Not run: real GitHub, the real Cyberchief vault, a real phone.
+
+## Rerun with the approval sheet, title names and publishing progress (same day)
+
+Content and renderer re-copied read-only from the Cyberchief project; the scratch `publish.yml` override is gone (Cyberchief's tag page fix made it unnecessary). The run passed and ends at Live.
+
+**Built for it.**
+
+- **Phone approval sheet for new pages.** Heading "Publish to Cyberchief?" from the device's own `site.yml` (`site.title`), never repository or branch. One line "1 new page with 1 photo". Each new page as a card: the cover drawn from the exact signed image bytes (a `blob:` URL on the device), title, address and summary read from the exact signed note text, and that text folded behind "Show exact text". What is signed is unchanged. Edits keep their word preview under the site name. The publisher already pins the target repository and branch, so dropping them from the sheet removes no check.
+- **New post form.** One Title field; the file name follows it (characters file systems refuse removed). A separate short name sits only under a closed "Advanced" at the end of the form. The address stays under the title. The same rule covers knowledge base pages and new folders.
+- **After Publish.** The sheet becomes a checklist: Checking your post, Waiting for your approval ("Open Cyberbaser on your phone to approve", or "on this device" for a signing device), Publishing ("Usually under a minute"), Live on Cyberchief. Its steps come from the node's new `readPageBundle` answer for the bundle, polled every 3 s while a view is open and every 10 s otherwise. Closing it stops nothing. A desktop status bar item appears only while a post is on its way or needs attention, then shows "Live ✓" for five seconds and disappears. The note mark beside the title shows only Draft, waiting, publishing or needs attention, and nothing once a post is live. Notices appear for approval needed, Live (with View on site and Copy link) and failures. Errors are one plain sentence ("Your post is safe.") with Try again, and the code sits in a closed Details fold.
+- **Withdraw.** Before approval, Withdraw asks the node (`withdrawPageBundle`, only the sending device) to make the bundle final. Its waiting approval is taken back from every signing device, a signature that still arrives is never used to push, and the note goes back to Draft.
+- **Offline.** With the node unreachable, the post waits on the device (local storage, not the synced settings) and is sent through the same checks when the node answers. The queue holds nothing that signs.
+- **Phones.** An Obsidian plugin cannot raise a real push notification on a backgrounded phone. Mobile gets in-app notices only, and none were faked.
+
+**How each step was driven (rerun).** As in the first run, with these differences. The cover came from the real "From device" button: Playwright answered the browser's file picker with a photo in a scratch folder outside the vault, and no inbox folder appeared in the vault. The error state is real plugin behaviour (a draft that shows a picture from another site is refused before sending), but the driver wrote that note. The Live notice, status bar and checklist are the plugin's own polling. Deployment and live checks are still simulated.
+
+**Private site 404 (driver, fixed).** The owner's private reader serves the site under `/cyberbase/` (`/` redirects there), and the driver asked for the bare address. With the prefix, the new page and its topic page answer 200. The prefix is fixed in the owner app regardless of vault (Cyberchief's private site lives at `/cyberbase/…`). That is a product naming leftover, reported here and not changed.
+
+**Found and fixed in the run.** The bundle's job record could not be read through the job lookup in the rehearsal, so progress stayed at Publishing although the pages were confirmed live. `readPageBundle` now falls back to the note status (the same live evidence) when the job record is unreadable. The cause of the unreadable record is not found.
+
+**Screenshots** (`.workspace/dad-flow/shots/`, scratch): 00 setup; 01 error state; 02–03 the form (Title, address, cover from the device, Advanced closed); 04 written; 05 Draft; 06 send sheet; 07 checklist with the spinner on Waiting; 08 status bar "Waiting for approval" after closing; 09 status Waiting; 10–12 owner review; 13 approvals waiting; 14–15 the phone approval sheet; 16 approved; 17 Live notice with "Live ✓"; 18–19 private site page and topic card; 20 status Live.
+
+**Tests.** Plugin 65 pass (57 before): sheet values equal a parse of the signed bytes, thumbnail from the signed cover bytes, hostile titles and summaries only ever text, title to file name, checklist mapping, status bar empty when idle, offline queue never signs, withdraw. Node: withdraw makes the bundle unsignable (and a racing signature is not used), only the sending device can read or withdraw. Acceptance suites 1,374 pass, 10 skip, the known `proposal-fixtures` missing-module error only.
+
+**Open.** A real phone and real GitHub are still not run. The job-record read failure in the rehearsal is unexplained. Covers still show on feed cards, not on the post page, in this design. The `/cyberbase/` reader prefix applies to every vault.
