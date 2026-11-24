@@ -10,6 +10,7 @@ import { createDeviceStore, indexedDbBackend } from './core/device-store.js';
 import { codeFromLink, PAIR_LINK_ACTION } from './core/pairing-code.js';
 import { createSigningStore, ENROL_LINK_ACTION, signingDatabase } from './core/signing.js';
 import { describeStatus, needsMark, STATUS, statusFor, textDigests } from './core/status.js';
+import { ModelProblemsModal, NewPostModal, readSiteModel } from './new-post.js';
 
 const GRANT_WORDS = Object.freeze({ propose: 'send changes for review', publish: 'publish', publication: 'see what is live' });
 
@@ -405,6 +406,11 @@ class CyberbaserSettingTab extends PluginSettingTab {
         await this.plugin.saveSettings();
         this.plugin.refreshStatus(true);
       }));
+    new Setting(containerEl)
+      .setName('Your author note')
+      .setDesc('New posts written on this device name this note as their author, for example authors/the-chief.md. Kept on this device only.')
+      .addText((text) => text.setPlaceholder('authors/your-name.md').setValue(this.plugin.authorNote() ?? '')
+        .onChange((value) => this.plugin.setAuthorNote(value)));
     containerEl.createEl('p', { cls: 'setting-item-description',
       text: 'The pairing key and the approval key stay in this app on this device. They are never written to vault files, so they do not sync.' });
   }
@@ -441,6 +447,7 @@ export default class CyberbaserPlugin extends Plugin {
       if (!checking) new StatusModal(this, view).open();
       return true;
     } });
+    this.addCommand({ id: 'new-post', name: 'New post', callback: () => this.openNewPost() });
     this.addCommand({ id: 'approvals', name: 'Approvals waiting', callback: () => new ApprovalsModal(this).open() });
     this.addCommand({ id: 'enrol', name: 'Set up this device to approve publishing', callback: () => new EnrolModal(this).open() });
     // The note's "…" menu: status and send, on demand.
@@ -473,7 +480,13 @@ export default class CyberbaserPlugin extends Plugin {
     this.registerEvent(this.app.workspace.on('active-leaf-change', () => this.refreshStatus(false)));
     const local = debounce(() => this.refreshStatus(false), 800, true);
     this.registerEvent(this.app.workspace.on('editor-change', local));
-    this.app.workspace.onLayoutReady(() => this.refreshStatus(true));
+    this.app.workspace.onLayoutReady(() => {
+      this.refreshStatus(true);
+      // A quiet New post button, only in vaults that describe their site.
+      this.app.vault.adapter.exists('.cyberbaser/model.yml').then((found) => {
+        if (found) this.addRibbonIcon('file-plus', 'New post', () => this.openNewPost());
+      }, () => {});
+    });
   }
 
   onunload() {
@@ -484,6 +497,25 @@ export default class CyberbaserPlugin extends Plugin {
   // for itself what a new page makes public. Null when there is none.
   async readPublishYml() {
     try { return await this.app.vault.adapter.read('publish.yml'); } catch { return null; }
+  }
+
+  async openNewPost() {
+    const result = await readSiteModel(this.app);
+    if (result === null) { new Notice('This vault does not describe its site yet (.cyberbaser/model.yml).'); return; }
+    if (!result.ok) { new ModelProblemsModal(this.app, result.errors).open(); return; }
+    new NewPostModal(this, result.model).open();
+  }
+
+  // Which author note this device writes as. Device-local: never in data.json, which syncs.
+  authorNote() {
+    const value = this.app.loadLocalStorage?.('cyberbaser-author-note');
+    return typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
+  }
+
+  setAuthorNote(value) {
+    const path = String(value ?? '').trim();
+    const normalized = path === '' ? null : path.endsWith('.md') ? path : `${path}.md`;
+    this.app.saveLocalStorage?.('cyberbaser-author-note', normalized);
   }
 
   async saveSettings() {

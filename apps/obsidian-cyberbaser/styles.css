@@ -33,3 +33,26 @@
 .cyberbaser-approval .cyberbaser-approval-actions button { flex: 1 1 10em; }
 .cyberbaser-approval .cyberbaser-footnote { color: var(--text-faint); font-size: var(--font-ui-smaller); margin-bottom: 0; }
 .cyberbaser-approval .cyberbaser-words-preview del + ins { margin-inline-start: 0.3em; }
+
+/* New post form: Obsidian's own Setting rows, a little tighter. */
+.cyberbaser-new-post .cyberbaser-form { display: flex; flex-direction: column; }
+.cyberbaser-new-post .cyberbaser-form-row { padding: var(--size-4-2) 0; }
+.cyberbaser-new-post .cyberbaser-form-row .setting-item-control { min-width: 0; }
+.cyberbaser-new-post .cyberbaser-form-row input[type="text"],
+.cyberbaser-new-post .cyberbaser-form-row input[type="url"],
+.cyberbaser-new-post .cyberbaser-form-row select { width: min(18rem, 100%); }
+.cyberbaser-new-post .cyberbaser-form-wide { flex-wrap: wrap; }
+.cyberbaser-new-post .cyberbaser-form-wide .setting-item-control { flex: 1 1 100%; justify-content: flex-start; flex-wrap: wrap; margin-top: var(--size-4-2); }
+.cyberbaser-new-post .cyberbaser-form-wide textarea { width: 100%; resize: vertical; }
+.cyberbaser-new-post .cyberbaser-title-input { font-weight: var(--font-semibold); }
+.cyberbaser-new-post .cyberbaser-field-error { color: var(--text-error); font-size: var(--font-ui-smaller); margin-top: var(--size-4-1); }
+.cyberbaser-new-post .cyberbaser-new-folder { margin: 0 0 var(--size-4-2) var(--size-4-4); padding-left: var(--size-4-3); border-left: 2px solid var(--background-modifier-border); }
+.cyberbaser-new-post .cyberbaser-tags { display: flex; flex-wrap: wrap; gap: var(--size-4-1); flex: 1 1 100%; }
+.cyberbaser-new-post .cyberbaser-tags:empty { display: none; }
+.cyberbaser-new-post .cyberbaser-tag { display: inline-flex; align-items: center; gap: var(--size-2-1); padding: var(--size-2-1) var(--size-4-2); border-radius: var(--tag-radius, 2em); background: var(--tag-background, var(--background-modifier-hover)); color: var(--tag-color, var(--text-accent)); font-size: var(--font-ui-smaller); }
+.cyberbaser-new-post .cyberbaser-tag-remove { display: inline-flex; cursor: var(--cursor); color: var(--text-faint); }
+.cyberbaser-new-post .cyberbaser-tag-remove svg { width: var(--icon-xs); height: var(--icon-xs); }
+.cyberbaser-new-post .cyberbaser-image-name { color: var(--text-normal); font-size: var(--font-ui-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 14rem; }
+.cyberbaser-new-post .cyberbaser-hidden-input { display: none; }
+.cyberbaser-new-post .cyberbaser-actions { justify-content: flex-end; margin-top: var(--size-4-4); }
+.cyberbaser-modal .cyberbaser-model-errors li { margin-bottom: var(--size-4-1); }
