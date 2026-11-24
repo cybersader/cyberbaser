@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { NodeError } from '../src/core/client.js';
 import { createController, messageFor } from '../src/core/controller.js';
-import { draftPublishPlan, withDraftOff } from '../src/core/new-page.js';
+import { draftPublishPlan, withDraftOff, withFirstPublishDates } from '../src/core/new-page.js';
 
 const PUBLISH_YML = 'allow:\n  - "topic/**"\n';
 const NOTE = '---\ntitle: "A: b"\ndate: 2026-11-24\ndraft: true   # until it is ready\nfeatured: false\n---\r\n\nBody with draft: true in it.\n';
@@ -16,6 +16,19 @@ test('Draft off changes only that one value; every other byte stays', () => {
   expect(withDraftOff('no frontmatter, draft: true\n')).toBeNull();
   expect(withDraftOff('---\ndraft: true\ndraft: true\n---\n')).toBeNull();
   expect(withDraftOff('---\nnested:\n  draft: true\n---\n')).toBeNull();
+});
+
+test('first-publish date: only the empty date line gets the date; every other byte stays', () => {
+  const note = '---\ntitle: "A: b"\ndate:\ndraft: true\n---\n\ndate: in the body stays\n';
+  expect(withFirstPublishDates(note, { date: '2026-11-24' })).toBe(note.replace('date:\ndraft', 'date: 2026-11-24\ndraft'));
+  expect(withFirstPublishDates('---\ndate:   # set on publish\n---\n', { date: '2026-11-24' })).toBe('---\ndate: 2026-11-24 # set on publish\n---\n');
+  // Already dated, not plain, missing, or not a date: unchanged.
+  for (const text of ['---\ndate: 2026-01-02\n---\n', '---\ndate: ""\n---\n', '---\ntitle: x\n---\n', '---\ndate:\ndate:\n---\n',
+    '---\nnested:\n  date:\n---\n', 'no frontmatter\ndate:\n']) {
+    expect(withFirstPublishDates(text, { date: '2026-11-24' })).toBe(text);
+  }
+  expect(withFirstPublishDates('---\ndate:\n---\n', { date: '2026-11-24\nx: 1' })).toBe('---\ndate:\n---\n');
+  expect(withFirstPublishDates('---\ndate:\n---\n', {})).toBe('---\ndate:\n---\n');
 });
 
 test('a draft publishes only where publish.yml would put it, and never with sample set', () => {
@@ -45,6 +58,24 @@ test('Publish to your site: Draft off is inside the bytes sent (and signed), and
   expect(calls[0][0]).toBe('submitPageBundle');
   expect(calls[0][1].main.text).toBe(withDraftOff(NOTE));
   expect(written).toEqual([withDraftOff(NOTE)]);
+});
+
+test('Publish fills the first-publish date inside the signed bytes, with Draft off; nothing else changes', async () => {
+  const { calls, controller } = node({ bundleId: 'b2', state: 'signing', publicAdditions: [{ path: 'topic/n.md', address: '/topic/n' }] });
+  const note = '---\ntitle: New\ndate:\ndraft: true\n---\n\nText.\n';
+  const written = [];
+  await controller.publishDraft({ path: 'topic/n.md' }, note, { publishYml: PUBLISH_YML, stamps: { date: '2026-11-24' }, writeBack: async (text) => written.push(text) });
+  const sent = '---\ntitle: New\ndate: 2026-11-24\ndraft: false\n---\n\nText.\n';
+  expect(calls[0][1].main.text).toBe(sent);
+  expect(written).toEqual([sent]);
+  // A note that is not a draft (Publish new page) gets its date the same way.
+  const second = node({ bundleId: 'b3', state: 'signing', publicAdditions: [] });
+  const later = [];
+  const open = '---\ntitle: New\ndate:\ndraft: false\n---\n';
+  await second.controller.publishNewPage({ path: 'topic/m.md' }, open, { status: { published: true, draft: false, address: '/topic/m' },
+    stamps: { date: '2026-11-24' }, writeBack: async (text) => later.push(text) });
+  expect(second.calls[0][1].main.text).toBe(open.replace('date:', 'date: 2026-11-24'));
+  expect(later).toEqual([open.replace('date:', 'date: 2026-11-24')]);
 });
 
 test('if the node refuses, the vault note stays a draft', async () => {

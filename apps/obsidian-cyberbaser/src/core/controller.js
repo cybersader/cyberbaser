@@ -4,7 +4,7 @@ import {
   parseEnrolCode, prepareApproval,
 } from './signing.js';
 import { statusFor, textDigests } from './status.js';
-import { draftPublishPlan, newPageProblem, notePublicStatus, withDraftOff } from './new-page.js';
+import { draftPublishPlan, newPageProblem, notePublicStatus, withDraftOff, withFirstPublishDates } from './new-page.js';
 import { fromBase64, hex, sha256, toBase64 } from './wire.js';
 import { createTapGate, TapRequired } from './tap.js';
 
@@ -293,9 +293,12 @@ export function createController({ client, store, signingStore = null, tapGate =
      * images: prepareImages(...) output (already cleaned of location);
      * status: notePublicStatus(...) for this note; remote: remote embeds.
      * Images go in chunks first; then one bundle. Nothing publishes until
-     * the owner signs on a signing device.
+     * the owner signs on a signing device. stamps: first-publish dates to
+     * fill in ({ date: 'YYYY-MM-DD' }); when one applies, the filled text is
+     * what is sent and signed, and writeBack gets it once the node accepts.
      */
-    async publishNewPage(file, text, { status, images = [], remote = [] }) {
+    async publishNewPage(file, original, { status, images = [], remote = [], stamps = {}, writeBack = async () => {} }) {
+      const text = withFirstPublishDates(original, stamps);
       const current = await loaded();
       if (current === null) throw new NodeError('refused', 'not-paired');
       const problem = newPageProblem({ status, images, remote });
@@ -311,6 +314,7 @@ export function createController({ client, store, signingStore = null, tapGate =
       }
       const receipt = await client.request(current, 'submitPageBundle', { main: { path: file.path, text }, assets: sent });
       if (receipt?.unchanged === true) return { kind: 'unchanged', text: 'Your site already has this text.' };
+      if (text !== original) await writeBack(text);
       if (typeof receipt?.bundleId === 'string') waiting.set(file.path, receipt.bundleId);
       const address = Array.isArray(receipt?.publicAdditions) ? receipt.publicAdditions.find((entry) => entry.path === file.path)?.address : null;
       return receipt?.state === 'signing'
@@ -325,8 +329,8 @@ export function createController({ client, store, signingStore = null, tapGate =
      * vault note is updated only after the node accepts it (writeBack gets
      * the published text). Same image rules as publishNewPage.
      */
-    async publishDraft(file, text, { publishYml, images = [], remote = [], writeBack = async () => {} }) {
-      const plan = draftPublishPlan({ path: file.path, text, publishYml });
+    async publishDraft(file, text, { publishYml, images = [], remote = [], stamps = {}, writeBack = async () => {} }) {
+      const plan = draftPublishPlan({ path: file.path, text, publishYml, stamps });
       if (plan === null) {
         const local = notePublicStatus({ path: file.path, text, publishYml });
         throw new NodeError('refused', local.marker === 'draft' && withDraftOff(text) === null ? 'draft-not-plain' : 'create-outside-publication');

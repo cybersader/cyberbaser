@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { creatableTypes, FIELD_TYPES, fillLocation, matchLocation, parseSiteModel, typeNamed } from '../src/core/site-model.js';
+import { creatableTypes, FIELD_TYPES, fillLocation, firstPublishFields, matchLocation, parseSiteModel, typeNamed } from '../src/core/site-model.js';
 
 const CYBERCHIEF = readFileSync(new URL('./fixtures/cyberchief-model.yml', import.meta.url), 'utf8');
 
@@ -30,7 +30,10 @@ test('the Cyberchief model parses as written, in its own order', () => {
   expect(post.fields.map((field) => field.name)).toEqual(['title', 'topic', 'description', 'date', 'tags', 'cover', 'youtube',
     'featured', 'author', 'draft', 'sample']);
   expect(post.fields.find((field) => field.name === 'topic')).toMatchObject({ type: 'choice-from-folder', root: '.', ofType: 'topic', maxDepth: 1 });
-  expect(typeNamed(model, 'kb-page').fields.find((field) => field.name === 'folder')).toMatchObject({ root: 'kb', allowNew: true, maxDepth: 2 });
+  expect(typeNamed(model, 'kb-page').fields.find((field) => field.name === 'folder')).toMatchObject({ root: 'kb', allowNew: true, allowRoot: true, maxDepth: 2 });
+  expect(model.version).toBe(1);
+  expect(post.fields.find((field) => field.name === 'date').default).toBe('first-publish');
+  expect(model.taxonomy.allowPlainTags).toBe(true);
   expect(post.fields.find((field) => field.name === 'draft').default).toBe(true);
   expect(post.fields.find((field) => field.name === 'sample').hidden).toBe(true);
   expect(model.site.defaultAuthor).toBe('authors/the-chief.md');
@@ -52,6 +55,53 @@ test('locations: match and fill the vault patterns', () => {
   expect(matchLocation(topic.location, 'authors/index.md')).toBeNull();
   expect(fillLocation(typeNamed(model, 'post').location, { topic: 'from-the-field', slug: 'a-b' })).toBe('from-the-field/a-b.md');
   expect(fillLocation(typeNamed(model, 'kb-page').location, { folder: 'x/y', slug: 'z' })).toBe('kb/x/y/z.md');
+  // kb/[<folder...>/]<slug>.md: the folder may be left out.
+  const kbPage = typeNamed(model, 'kb-page');
+  expect(fillLocation(kbPage.location, { folder: '', slug: 'z' })).toBe('kb/z.md');
+  expect(matchLocation(kbPage.location, 'kb/z.md')).toEqual({ folder: '', slug: 'z' });
+  expect(matchLocation(kbPage.location, 'kb/a/b/z.md')).toEqual({ folder: 'a/b', slug: 'z' });
+  expect(matchLocation(kbPage.location, 'z.md')).toBeNull();
+  expect(matchLocation(kbPage.location, 'kb/.md')).toBeNull();
+});
+
+test('version 1: date defaults, the optional folder part and allow_root must agree', () => {
+  const v1 = (pattern, folder, date = '') => `version: 1
+types:
+  page:
+    label: Page
+    location: { field: folder, pattern: "${pattern}" }
+    fields:
+      title: { type: text, label: Title }
+      folder: ${folder}
+${date}
+  folder:
+    label: Folder
+    location: { pattern: "kb/<folder...>/index.md" }
+    fields:
+      title: { type: text, label: Title }
+`;
+  const ok = '{ type: choice-from-folder, label: Folder, root: kb, of_type: folder, allow_root: true, max_depth: 2 }';
+  expect(parseSiteModel(v1('kb/[<folder...>/]<slug>.md', ok)).ok).toBe(true);
+  expect(parseSiteModel(v1('kb/[<folder...>/]<slug>.md', ok, '      date: { type: date, label: Date, default: today }')).ok).toBe(true);
+  expect(errorsOf(v1('kb/[<folder...>/]<slug>.md', ok, '      date: { type: date, label: Date, default: "on first publish" }')))
+    .toContain('a date default should be today');
+  expect(errorsOf(v1('kb/<folder...>/<slug>.md', ok))).toContain('allows the top level (allow_root), so its pattern should write it as [<folder...>/]');
+  expect(errorsOf(v1('kb/[<folder...>/]<slug>.md', ok.replace('allow_root: true, ', '')))).toContain('add allow_root: true');
+  expect(errorsOf(v1('kb/[<folder...>/]<slug>.md', ok.replace('allow_root: true', 'allow_root: maybe')))).toContain('"allow_root" should be true or false');
+  expect(errorsOf(v1('kb/[folder/]<slug>.md', ok))).toContain('has a part in [ ]');
+  expect(errorsOf(v1('kb/[<folder...>/]<slug>.md', ok).replace('types:', 'taxonomy: { tags: { allow_plain: often } }\ntypes:')))
+    .toContain('"taxonomy.tags.allow_plain" should be true or false');
+  // Version 0 models keep reading as before (their date default is free text).
+  expect(parseSiteModel(v1('kb/[<folder...>/]<slug>.md', ok, '      date: { type: date, label: Date, default: "on first publish" }').replace('version: 1', 'version: 0')).ok)
+    .toBe(true);
+});
+
+test('first-publish fields: which dates Publish fills, by where the note is', () => {
+  const { model } = parseSiteModel(CYBERCHIEF);
+  expect(firstPublishFields(model, 'from-the-field/a-post.md')).toEqual(['date']);
+  expect(firstPublishFields(model, 'kb/a.md')).toEqual([]);
+  expect(firstPublishFields(model, 'authors/x.md')).toEqual([]);
+  expect(firstPublishFields(null, 'from-the-field/a-post.md')).toEqual([]);
 });
 
 test('an unknown field type is an error that names the field', () => {

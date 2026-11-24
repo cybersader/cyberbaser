@@ -9,7 +9,7 @@
 // or end the block. The written block is parsed back and compared before
 // anything is created.
 import yaml from 'js-yaml';
-import { fillLocation, matchLocation, typeNamed } from './site-model.js';
+import { fillLocation, matchLocation, patternSegments, typeNamed } from './site-model.js';
 
 export const IMAGE_EXTENSIONS = Object.freeze(['png', 'jpg', 'jpeg', 'webp', 'gif']);
 const TAG_GROUP_VALUE = /^[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)+$/u;
@@ -22,10 +22,23 @@ const dirname = (path) => (path.includes('/') ? path.slice(0, path.lastIndexOf('
 const join = (...parts) => parts.filter((part) => part && part !== '.').join('/');
 const oneLine = (value) => String(value ?? '').replace(/\s+/gu, ' ').trim();
 
-/** File-name slug from a title: lower-case words joined by hyphens, like the vault's own files. */
+/**
+ * File or folder name from a title (the site model's rule): lower-case, words
+ * joined by hyphens, punctuation dropped, "&" read as "and". Words are split
+ * by spaces, hyphens, dashes, slashes and underscores; any other punctuation
+ * is dropped, so "Don't panic" is dont-panic and "Risk & governance" is
+ * risk-and-governance.
+ */
 export function fileSlug(title) {
   return oneLine(title).normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
-    .replace(/&/gu, ' and ').replace(/[^a-z0-9]+/gu, '-').replace(/^-+|-+$/gu, '').slice(0, 80).replace(/-+$/u, '');
+    .replace(/&/gu, ' and ').replace(/[\s\p{Pd}/\\_]+/gu, ' ').replace(/[^a-z0-9 ]+/gu, '')
+    .trim().replace(/ +/gu, '-').slice(0, 80).replace(/-+$/u, '');
+}
+
+/** The name a note or folder gets: the author's own (cleaned) when given, else from the title. */
+function chosenSlug(values) {
+  const own = oneLine(values?.slug);
+  return own === '' ? fileSlug(values?.title) : fileSlug(own);
 }
 
 export function todayString(date = new Date()) {
@@ -58,6 +71,10 @@ export function frontmatterText(entries) {
       lines.push(`${key}:`);
       for (const item of value) lines.push(`  - ${scalar(item)}`);
       expected[key] = value.map(String);
+    } else if (kind === 'date' && value === null) {
+      // Filled in later (default: first-publish): an empty value, read as null.
+      lines.push(`${key}:`);
+      expected[key] = null;
     } else if (kind === 'date') {
       if (!DATE.test(value)) throw new Error(`date "${value}" is not YYYY-MM-DD`);
       lines.push(`${key}: ${value}`);
@@ -75,23 +92,34 @@ export function frontmatterText(entries) {
   return text;
 }
 
-/** A tag as the author typed it, cleaned; { tag } or { error }. */
-export function normalizeTag(input, shape = null) {
+/**
+ * A tag as the author typed it, cleaned; { tag } or { error }. With shape
+ * group/value, plain tags (one word, like strategy) are accepted only when the
+ * model allows them (taxonomy.tags.allow_plain).
+ */
+export function normalizeTag(input, shape = null, { allowPlain = false } = {}) {
   const tag = oneLine(input).replace(/^#/u, '').toLowerCase().replace(/\s+/gu, '-');
   if (tag === '') return { error: 'Type a tag first.' };
-  if (shape === 'group/value') {
+  if (shape === 'group/value' && !allowPlain) {
     if (!TAG_GROUP_VALUE.test(tag)) return { error: 'Tags here are a group and a value, like audience/executives.' };
-  } else if (!TAG_ANY.test(tag)) return { error: 'Use letters, digits and hyphens in tags.' };
+  } else if (!TAG_ANY.test(tag)) {
+    return { error: shape === 'group/value' ? 'Use a word like strategy, or a group and a value like audience/executives.' : 'Use letters, digits and hyphens in tags.' };
+  }
   return { tag };
+}
+
+/** The tag rules of a model, as normalizeTag's second and third arguments. */
+export function tagRules(model) {
+  return [model?.taxonomy?.tagShape ?? null, { allowPlain: model?.taxonomy?.allowPlainTags === true }];
 }
 
 /** Tags to suggest: the model's suggested ones plus those already in the vault, in the model's shape. */
 export function tagSuggestions(model, existing = []) {
-  const shape = model.taxonomy?.tagShape ?? null;
+  const rules = tagRules(model);
   const out = new Set(model.taxonomy?.suggestedTags ?? []);
   for (const tags of existing) {
     for (const raw of Array.isArray(tags) ? tags : [tags]) {
-      const result = normalizeTag(String(raw ?? ''), shape);
+      const result = normalizeTag(String(raw ?? ''), ...rules);
       if (result.tag) out.add(result.tag);
     }
   }
@@ -105,6 +133,19 @@ export function tagSuggestions(model, existing = []) {
  * Returns [{ value, path, label, depth }]; value is relative to the root.
  */
 export function folderOptions(model, field, paths, titleOf = () => null) {
+  const options = folderChoices(model, field, paths, titleOf);
+  // allow_root: the picker's own folder comes first, as "Knowledge base (top level)".
+  return field.allowRoot ? [{ value: '', path: field.root, depth: 0, label: rootLabel(model, field, titleOf) }, ...options] : options;
+}
+
+/** "Knowledge base (top level)": the root folder note's title, else its name. */
+export function rootLabel(model, field, titleOf = () => null) {
+  if (field.root === '.') return 'Top level';
+  const title = oneLine(titleOf(`${field.root}/${model.taxonomy?.folderNote ?? 'index.md'}`));
+  return `${title || field.root} (top level)`;
+}
+
+function folderChoices(model, field, paths, titleOf) {
   const folderType = typeNamed(model, field.ofType);
   const note = model.taxonomy?.folderNote ?? 'index.md';
   const root = field.root === '.' ? '' : field.root;
@@ -127,10 +168,12 @@ export function folderOptions(model, field, paths, titleOf = () => null) {
   return options;
 }
 
-/** Where a new sub-folder may go: the root (when allowed) and folders that leave room for one more level. */
-export function newFolderParents(field, options) {
-  const parents = options.filter((option) => option.depth < field.maxDepth).map(({ value, label }) => ({ value, label }));
-  return [{ value: '', label: field.root === '.' ? 'Top level' : `${field.root} (top level)` }, ...parents];
+/** Where a new sub-folder may go: the root and folders that leave room for one more level. */
+export function newFolderParents(field, options, model = null, titleOf = () => null) {
+  const parents = options.filter((option) => option.depth > 0 && option.depth < field.maxDepth).map(({ value, label }) => ({ value, label }));
+  const root = options.find((option) => option.depth === 0)?.label
+    ?? (model ? rootLabel(model, field, titleOf) : field.root === '.' ? 'Top level' : `${field.root} (top level)`);
+  return [{ value: '', label: root }, ...parents];
 }
 
 function propertyEntries(type, values, context, errors, prefix = '') {
@@ -176,13 +219,14 @@ function propertyEntries(type, values, context, errors, prefix = '') {
       case 'date': {
         const text = oneLine(value);
         if (text !== '' && !DATE.test(text)) { errors[key] = `${field.label} is a date like 2026-11-24.`; break; }
-        entries.push([field.name, text || context.today, 'date']);
+        // default: first-publish leaves it empty; Publish fills it in the change you approve.
+        entries.push([field.name, text || (field.default === 'first-publish' ? null : context.today), 'date']);
         break;
       }
       case 'tags': {
         const tags = [];
         for (const raw of Array.isArray(value) ? value : []) {
-          const result = normalizeTag(raw, context.model.taxonomy?.tagShape ?? null);
+          const result = normalizeTag(raw, ...tagRules(context.model));
           if (result.error) { errors[key] = `"${raw}": ${result.error}`; break; }
           if (!tags.includes(result.tag)) tags.push(result.tag);
         }
@@ -230,8 +274,12 @@ export function planNewNote({ model, typeName, values = {}, paths = [], today, a
   const exists = (path) => lower.has(path.toLowerCase()) || folderPrefixes.has(path.toLowerCase());
   const errors = {};
   const steps = [];
-  const slug = fileSlug(values.title);
-  if (oneLine(values.title) !== '' && slug === '') errors.title = 'Use some letters or digits in the title.';
+  const slug = chosenSlug(values);
+  const ownSlug = oneLine(values.slug) !== '';
+  // Problems with the name go to the field that made it.
+  const nameKey = ownSlug ? 'slug' : 'title';
+  if (ownSlug && slug === '') errors.slug = 'Use some letters or digits in the file name.';
+  else if (oneLine(values.title) !== '' && slug === '') errors.title = 'Use some letters or digits in the title.';
 
   // Where the note lives.
   const placeholders = { slug };
@@ -244,18 +292,19 @@ export function planNewNote({ model, typeName, values = {}, paths = [], today, a
       if (!folderField.allowNew) errors[folderField.name] = `Pick an existing ${folderField.label.toLowerCase()}.`;
       const folderType = typeNamed(model, folderField.ofType);
       const parent = String(answer.new.parent ?? '');
-      const name = fileSlug(answer.new.values?.title);
+      const name = chosenSlug(answer.new.values);
+      const folderNameKey = oneLine(answer.new.values?.slug) !== '' ? 'slug' : 'title';
       const folderErrors = {};
-      if (parent !== '' && !newFolderParents(folderField, options).some((option) => option.value === parent)) {
+      if (parent !== '' && !newFolderParents(folderField, options, model, titleOf).some((option) => option.value === parent)) {
         folderErrors.parent = 'Pick where the new folder goes.';
       }
       const value = join(parent, name);
       const folderPath = join(root, value);
       const notePath = join(folderPath, model.taxonomy?.folderNote ?? 'index.md');
-      if (name === '' && oneLine(answer.new.values?.title) !== '') folderErrors.title = 'Use some letters or digits in the folder name.';
-      else if (name !== '' && exists(folderPath)) folderErrors.title = 'A folder with this name is already there. Pick it from the list instead.';
+      if (name === '' && (folderNameKey === 'slug' || oneLine(answer.new.values?.title) !== '')) folderErrors[folderNameKey] = 'Use some letters or digits in the folder name.';
+      else if (name !== '' && exists(folderPath)) folderErrors[folderNameKey] = 'A folder with this name is already there. Pick it from the list instead.';
       const entries = propertyEntries(folderType, answer.new.values ?? {}, { model, today, authorNote, exists, images: [], folder: folderPath, slug: name }, folderErrors);
-      if (name !== '' && !folderErrors.title && !matchLocation(folderType.location, notePath)) folderErrors.parent = `A ${folderType.label.toLowerCase()} cannot go there.`;
+      if (name !== '' && !folderErrors[folderNameKey] && !matchLocation(folderType.location, notePath)) folderErrors.parent = `A ${folderType.label.toLowerCase()} cannot go there.`;
       for (const [key, message] of Object.entries(folderErrors)) errors[`${folderField.name}.new.${key}`] = message;
       if (Object.keys(folderErrors).length === 0) {
         steps.push({ kind: 'folder', path: folderPath });
@@ -269,9 +318,14 @@ export function planNewNote({ model, typeName, values = {}, paths = [], today, a
     }
   }
 
-  const notePath = slug && Object.values(placeholders).every(Boolean) ? fillLocation(type.location, placeholders) : null;
-  if (notePath && !matchLocation(type.location, notePath)) errors.title = `A ${type.label.toLowerCase()} cannot be called that.`;
-  else if (notePath && exists(notePath)) errors.title = 'There is already a note with this title there. Change the title.';
+  // An optional folder part ([<folder...>/]) may be empty: the note goes in the root.
+  const optional = new Set(patternSegments(type.location.pattern).filter((segment) => segment.optional).map((segment) => segment.name));
+  const filled = Object.entries(placeholders).every(([name, value]) => (typeof value === 'string' && value !== '') || (value === '' && optional.has(name)));
+  const notePath = slug && filled ? fillLocation(type.location, placeholders) : null;
+  if (notePath && !matchLocation(type.location, notePath)) errors[nameKey] = `A ${type.label.toLowerCase()} cannot be called that.`;
+  else if (notePath && exists(notePath)) {
+    errors[nameKey] = ownSlug ? 'There is already a note with this file name there. Change it.' : 'There is already a note with this title there. Change the title.';
+  }
   const images = [];
   const entries = propertyEntries(type, values, { model, today, authorNote, exists, images, folder: notePath ? dirname(notePath) : '', slug }, errors);
   if (Object.keys(errors).length > 0) return { ok: false, errors };

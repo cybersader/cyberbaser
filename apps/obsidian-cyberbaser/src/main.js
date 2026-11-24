@@ -6,6 +6,8 @@ import { lazyCarrier } from './carrier.js';
 import { createNodeClient } from './core/client.js';
 import { createController, DEFAULT_SETTINGS, messageFor, publicSettings } from './core/controller.js';
 import { draftPublishPlan, embeddedImages, notePublicStatus, prepareImages } from './core/new-page.js';
+import { todayString } from './core/new-note.js';
+import { firstPublishFields } from './core/site-model.js';
 import { createDeviceStore, indexedDbBackend } from './core/device-store.js';
 import { codeFromLink, PAIR_LINK_ACTION } from './core/pairing-code.js';
 import { createSigningStore, ENROL_LINK_ACTION, signingDatabase } from './core/signing.js';
@@ -113,8 +115,11 @@ class SendModal extends Modal {
     const publishYml = await this.plugin.readPublishYml();
     const text = this.view.editor.getValue();
     const local = publishYml === null ? null : notePublicStatus({ path: file.path, text, publishYml });
+    // First-publish dates (site model `default: first-publish`) are filled in
+    // inside the change you approve, like Draft off.
+    const stamps = await this.plugin.firstPublishStamps(file.path);
     // A draft: Publish turns Draft off inside the change you approve.
-    const draft = local?.draft && !reply?.live ? draftPublishPlan({ path: file.path, text, publishYml }) : null;
+    const draft = local?.draft && !reply?.live ? draftPublishPlan({ path: file.path, text, publishYml, stamps }) : null;
     const newPage = local?.published && !reply?.live ? local : draft?.status ?? null;
     if (newPage) {
       const { local: paths, remote } = embeddedImages({ path: file.path, text,
@@ -136,10 +141,12 @@ class SendModal extends Modal {
         const publish = actions.createEl('button', { text: 'Publish to your site', cls: 'mod-cta' });
         // The note in the vault turns Draft off only once your node has the change.
         const writeBack = (next) => this.plugin.app.vault.process(file, (current) => (current === text ? next : current));
-        publish.addEventListener('click', () => run(publish, (f) => this.plugin.controller.publishDraft(f, text, { publishYml, images, remote, writeBack })));
+        publish.addEventListener('click', () => run(publish, (f) => this.plugin.controller.publishDraft(f, text, { publishYml, images, remote, stamps, writeBack })));
       } else {
         const create = actions.createEl('button', { text: 'Publish new page', cls: 'mod-cta' });
-        create.addEventListener('click', () => run(create, (f, value) => this.plugin.controller.publishNewPage(f, value, { status: local, images, remote })));
+        const writeBack = (next) => this.plugin.app.vault.process(file, (current) => (current === text ? next : current));
+        create.addEventListener('click', () => run(create, (f, value) => this.plugin.controller.publishNewPage(f, value, { status: local, images, remote,
+          stamps, writeBack: value === text ? writeBack : async () => {} })));
       }
     } else if (local?.draft) {
       contentEl.createEl('p', { cls: 'cyberbaser-muted', text: 'Draft: turn Draft off in its properties to publish it.' });
@@ -498,6 +505,15 @@ export default class CyberbaserPlugin extends Plugin {
   // for itself what a new page makes public. Null when there is none.
   async readPublishYml() {
     try { return await this.app.vault.adapter.read('publish.yml'); } catch { return null; }
+  }
+
+  // { date: today } for each date the site model fills on first publish, for
+  // the note at this path; {} when the vault has no (valid) model.
+  async firstPublishStamps(path) {
+    const result = await readSiteModel(this.app);
+    if (!result?.ok) return {};
+    const today = todayString();
+    return Object.fromEntries(firstPublishFields(result.model, path).map((name) => [name, today]));
   }
 
   async openNewPost() {

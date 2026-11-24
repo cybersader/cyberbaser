@@ -2,8 +2,8 @@
 // they are writing, fills in plain fields, and gets a note to write in. They
 // never see the properties block; the model file stays the site builder's.
 import { AbstractInputSuggest, FuzzySuggestModal, Modal, Notice, Setting, TFile, setIcon } from 'obsidian';
-import { applyPlan, folderOptions, IMAGE_EXTENSIONS, newFolderParents, normalizeTag, planNewNote, tagSuggestions, todayString } from './core/new-note.js';
-import { creatableTypes, MODEL_PATH, parseSiteModel, typeNamed } from './core/site-model.js';
+import { applyPlan, fileSlug, folderOptions, IMAGE_EXTENSIONS, newFolderParents, normalizeTag, planNewNote, tagRules, tagSuggestions, todayString } from './core/new-note.js';
+import { creatableTypes, MODEL_PATH, parseSiteModel, patternSegments, typeNamed } from './core/site-model.js';
 
 const NEW_FOLDER = '\u0000new';
 
@@ -27,18 +27,18 @@ class ImageSuggestModal extends FuzzySuggestModal {
 }
 
 class TagSuggest extends AbstractInputSuggest {
-  constructor(app, inputEl, tagsFor, onPick, shape) {
+  constructor(app, inputEl, tagsFor, onPick, rules) {
     super(app, inputEl);
     this.tagInput = inputEl;
     this.tagsFor = tagsFor;
     this.onPick = onPick;
-    this.shape = shape;
+    this.rules = rules;
   }
 
   getSuggestions(query) {
     const q = query.trim().toLowerCase().replace(/^#/u, '');
     const found = this.tagsFor().filter((tag) => tag.includes(q)).slice(0, 30);
-    const typed = normalizeTag(q, this.shape).tag;
+    const typed = normalizeTag(q, ...this.rules).tag;
     return typed && !found.includes(typed) ? [...found, typed] : found;
   }
 
@@ -90,7 +90,7 @@ export class NewPostModal extends Modal {
       new Setting(contentEl).setName('What are you writing?').addDropdown((dropdown) => {
         for (const candidate of this.types) dropdown.addOption(candidate.name, candidate.label);
         dropdown.setValue(this.typeName).onChange((value) => {
-          const keep = { title: this.values.title, description: this.values.description };
+          const keep = { title: this.values.title, description: this.values.description, ...(this.values.slug !== undefined ? { slug: this.values.slug } : {}) };
           this.typeName = value;
           this.values = keep;
           this.errors = {};
@@ -99,7 +99,9 @@ export class NewPostModal extends Modal {
       });
     }
     const form = contentEl.createDiv({ cls: 'cyberbaser-form' });
-    for (const field of type.fields) this.renderField(form, field, this.values, '');
+    const last = patternSegments(type.location.pattern).at(-1);
+    const nameLabel = last?.name === 'slug' ? 'File name' : 'Folder name';
+    for (const field of type.fields) this.renderField(form, field, this.values, '', { nameLabel });
     if (this.errors.type) form.createDiv({ cls: 'cyberbaser-field-error', text: this.errors.type });
     const actions = contentEl.createDiv({ cls: 'cyberbaser-actions' });
     const create = actions.createEl('button', { text: 'Create', cls: 'mod-cta' });
@@ -107,7 +109,7 @@ export class NewPostModal extends Modal {
     create.addEventListener('click', () => this.create(create));
   }
 
-  renderField(container, field, values, prefix, { only = null, labelPrefix = '' } = {}) {
+  renderField(container, field, values, prefix, { only = null, labelPrefix = '', nameLabel = null } = {}) {
     if (field.hidden || field.type === 'date' || field.type === 'author-reference') return;
     if (only && !only(field)) return;
     const key = `${prefix}${field.name}`;
@@ -136,8 +138,13 @@ export class NewPostModal extends Modal {
           text.setValue(values[field.name] ?? '').onChange((value) => { values[field.name] = value; touched(); });
           if (field.type === 'url') { text.inputEl.inputMode = 'url'; text.setPlaceholder(field.required ? 'Paste a link' : 'Paste a link (optional)'); }
           if (field.type === 'number') text.inputEl.inputMode = 'numeric';
-          if (field.name === 'title') text.inputEl.addClass('cyberbaser-title-input');
+          if (field.name === 'title') {
+            text.inputEl.addClass('cyberbaser-title-input');
+            // The name row below follows the title until the author edits it.
+            text.inputEl.addEventListener('input', () => this.followTitle(values, key));
+          }
         });
+        if (field.name === 'title' && nameLabel) this.renderName(container, values, key, nameLabel);
         break;
       case 'long-text':
         setting.settingEl.addClass('cyberbaser-form-wide');
@@ -172,16 +179,55 @@ export class NewPostModal extends Modal {
     showError();
   }
 
+  // The name in the vault (file or folder), made from the title by the site
+  // model's rule and editable before Create. values.slug is set only once the
+  // author edits it; until then it follows the title.
+  renderName(container, values, titleKey, label) {
+    const prefix = titleKey.slice(0, -'title'.length);
+    const key = `${prefix}slug`;
+    const setting = new Setting(container).setName(label);
+    setting.settingEl.addClass('cyberbaser-form-row', 'cyberbaser-name-row');
+    setting.settingEl.dataset.field = key;
+    setting.setDesc(label === 'File name' ? 'Made from the title. Change it if you like.' : 'Made from the folder title. Change it if you like.');
+    setting.addText((text) => {
+      text.inputEl.addClass('cyberbaser-name-input');
+      text.inputEl.spellcheck = false;
+      text.inputEl.autocapitalize = 'off';
+      text.setValue(values.slug ?? fileSlug(values.title)).onChange((value) => {
+        values.slug = value;
+        if (this.errors[key]) { delete this.errors[key]; setting.settingEl.removeClass('cyberbaser-has-error'); setting.descEl.querySelector('.cyberbaser-field-error')?.remove(); }
+      });
+      // Show the cleaned name once the author leaves the field.
+      text.inputEl.addEventListener('blur', () => {
+        if (values.slug === undefined) return;
+        const cleaned = fileSlug(values.slug);
+        if (cleaned === '' && String(values.slug).trim() === '') { delete values.slug; text.setValue(fileSlug(values.title)); return; }
+        if (cleaned !== '') { values.slug = cleaned; text.setValue(cleaned); }
+      });
+    });
+    const error = this.errors[key];
+    if (error) { setting.settingEl.addClass('cyberbaser-has-error'); setting.descEl.createDiv({ cls: 'cyberbaser-field-error', text: error }); }
+  }
+
+  followTitle(values, titleKey) {
+    if (values.slug !== undefined) return;
+    const key = `${titleKey.slice(0, -'title'.length)}slug`;
+    const input = this.contentEl.querySelector(`[data-field="${key}"] input`);
+    if (input) input.value = fileSlug(values.title);
+  }
+
   renderFolder(container, setting, field, values, touched) {
     const options = folderOptions(this.model, field, this.vaultPaths(), (path) => this.titleOf(path));
     const answer = values[field.name];
-    const current = answer?.new ? NEW_FOLDER : answer?.existing ?? '';
+    // allow_root: the top level is a real choice (value ''); "Pick" needs another sentinel.
+    const PICK = '\u0000pick';
+    const current = answer?.new ? NEW_FOLDER : answer?.existing ?? PICK;
     setting.addDropdown((dropdown) => {
-      dropdown.addOption('', `Pick a ${field.label.toLowerCase()}`);
+      dropdown.addOption(PICK, `Pick a ${field.label.toLowerCase()}`);
       for (const option of options) dropdown.addOption(option.value, option.label);
       if (field.allowNew) dropdown.addOption(NEW_FOLDER, 'New sub-folder…');
       dropdown.setValue(current).onChange((value) => {
-        values[field.name] = value === NEW_FOLDER ? { new: { parent: '', values: {} } } : value ? { existing: value } : undefined;
+        values[field.name] = value === NEW_FOLDER ? { new: { parent: '', values: {} } } : value !== PICK ? { existing: value } : undefined;
         touched();
         if (value === NEW_FOLDER || answer?.new) this.render();
       });
@@ -190,7 +236,7 @@ export class NewPostModal extends Modal {
     // The new folder's own note: its name and the fields its type requires.
     const box = container.createDiv({ cls: 'cyberbaser-new-folder' });
     const folderType = typeNamed(this.model, field.ofType);
-    const parents = newFolderParents(field, options);
+    const parents = newFolderParents(field, options, this.model, (path) => this.titleOf(path));
     if (parents.length > 1) {
       const parent = new Setting(box).setName('Inside').addDropdown((dropdown) => {
         for (const option of parents) dropdown.addOption(option.value, option.label);
@@ -201,13 +247,14 @@ export class NewPostModal extends Modal {
       if (error) parent.descEl.createDiv({ cls: 'cyberbaser-field-error', text: error });
     }
     for (const folderField of folderType.fields) {
-      this.renderField(box, folderField, answer.new.values, `${field.name}.new.`, { only: (candidate) => candidate.required, labelPrefix: 'Folder' });
+      this.renderField(box, folderField, answer.new.values, `${field.name}.new.`, { only: (candidate) => candidate.required, labelPrefix: 'Folder', nameLabel: 'Folder name' });
     }
   }
 
   renderTags(setting, field, values, touched) {
     values[field.name] ??= [];
-    const shape = this.model.taxonomy?.tagShape ?? null;
+    const rules = tagRules(this.model);
+    const [shape, { allowPlain }] = rules;
     const chips = setting.controlEl.createDiv({ cls: 'cyberbaser-tags' });
     const suggestions = tagSuggestions(this.model, this.vaultTags());
     const draw = () => {
@@ -220,16 +267,16 @@ export class NewPostModal extends Modal {
       }
     };
     const add = (raw) => {
-      const result = normalizeTag(raw, shape);
+      const result = normalizeTag(raw, ...rules);
       if (result.error) { new Notice(result.error); return; }
       if (!values[field.name].includes(result.tag)) values[field.name].push(result.tag);
       touched();
       draw();
     };
     setting.addText((text) => {
-      text.setPlaceholder(shape === 'group/value' ? 'Add a tag, like audience/executives' : 'Add a tag');
+      text.setPlaceholder(shape === 'group/value' ? (allowPlain ? 'Add a tag, like strategy or audience/executives' : 'Add a tag, like audience/executives') : 'Add a tag');
       // The list always ends with what was typed, so Enter adds a new tag too.
-      new TagSuggest(this.app, text.inputEl, () => suggestions.filter((tag) => !values[field.name].includes(tag)), add, shape);
+      new TagSuggest(this.app, text.inputEl, () => suggestions.filter((tag) => !values[field.name].includes(tag)), add, rules);
     });
     setting.settingEl.addClass('cyberbaser-form-wide');
     draw();

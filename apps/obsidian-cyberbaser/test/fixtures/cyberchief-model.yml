@@ -10,7 +10,7 @@
 # Cyberbaser may reshape it once its format research picks a format; it will
 # say so before editing this file.
 
-version: 0
+version: 1
 site:
   title: Cyberchief
   home: index.md
@@ -24,9 +24,18 @@ site:
 #   image                a vault path to an image file (no remote images)
 #   choice               one of a fixed list (`options:`)
 #   choice-from-folder   one sub-folder of `root:`; stored as the note's location, not a property
-#   tags                 list of `group/value` strings
+#   tags                 list of tags; `group/value` tags become filters, plain tags are labels
 #   author-reference     a link to a note in authors/, e.g. "[[authors/the-chief]]"
 #   number               a whole number
+#
+# Defaults:
+#   today                the creation date, set by the writing tool
+#   first-publish        set by the writing tool inside the signed publish change
+#
+# Names: a new note's file name (slug) and a new folder's name come from its
+# title: lower-case, words joined by hyphens, punctuation dropped,
+# e.g. "Risk & governance" -> risk-and-governance. The author can edit the
+# slug before Create.
 
 # What is public is decided only by publish.yml at the vault root.
 
@@ -43,10 +52,10 @@ types:
       title:       { type: text, label: Title, required: true }
       topic:       { type: choice-from-folder, label: Topic, required: true, root: ".", of_type: topic }
       description: { type: long-text, label: Summary, required: true }
-      date:        { type: date, label: Date, required: true, default: "on first publish" }
+      date:        { type: date, label: Date, required: true, default: first-publish }
       tags:        { type: tags, label: Tags, required: false }
       cover:       { type: image, label: Cover photo, required: false }
-      youtube:     { type: url, label: YouTube link, required: false, hint: "A YouTube video link or ID. The video only loads when a reader presses play." }
+      youtube:     { type: url, label: YouTube link, required: false, hint: "A YouTube video link. The video only loads when a reader presses play." }
       featured:    { type: checkbox, label: Feature on home, required: false, default: false }
       author:      { type: author-reference, label: Author, required: false, default: "from the paired device, else site.default_author" }
       draft:       { type: checkbox, label: Draft, required: false, default: true }
@@ -74,10 +83,10 @@ types:
     # One home folder anywhere under kb/ (at most two levels deep), or kb/ itself.
     location:
       field: folder
-      pattern: "kb/<folder...>/<slug>.md"
+      pattern: "kb/[<folder...>/]<slug>.md"
     fields:
       title:       { type: text, label: Title, required: true }
-      folder:      { type: choice-from-folder, label: Folder, required: true, root: kb, of_type: kb-folder, allow_new: true, max_depth: 2 }
+      folder:      { type: choice-from-folder, label: Folder, required: true, root: kb, of_type: kb-folder, allow_root: true, allow_new: true, max_depth: 2 }
       description: { type: long-text, label: Summary, required: true }
       tags:        { type: tags, label: Tags, required: false }
       draft:       { type: checkbox, label: Draft, required: false, default: true }
@@ -125,8 +134,9 @@ taxonomy:
     folder_note: index.md
     folder_tag: derived          # the folder path, e.g. kb/threats-and-response/ransomware; never typed by authors
   tags:
-    shape: "group/value"
-    open: true                   # any new group/value tag is accepted and shown automatically
+    shape: "group/value"         # preferred; these become filters on the site
+    allow_plain: true            # plain tags (e.g. strategy) are allowed as simple labels
+    open: true                   # any new tag is accepted and shown automatically
     suggested:
       audience: [executives, security-leaders, practitioners, board]
       level: [primer, deep-dive]

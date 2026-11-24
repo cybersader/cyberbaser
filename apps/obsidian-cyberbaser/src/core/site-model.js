@@ -1,20 +1,22 @@
 // The vault's site model (.cyberbaser/model.yml): what kinds of notes the
 // site has, their fields, and which folders hold them. Pure, no Obsidian.
 //
-// The format is the vault's own (version 0, written by the site builder).
-// This reads it as written and does not add to it. Errors are plain
+// The format is the vault's own (versions 0 and 1, written by the site
+// builder). This reads it as written and does not add to it. Errors are plain
 // sentences that name the type and field, because the person reading them is
 // the site builder fixing one file. The model never decides what is public:
 // publish.yml does.
 import yaml from 'js-yaml';
 
 export const MODEL_PATH = '.cyberbaser/model.yml';
-export const SUPPORTED_VERSIONS = Object.freeze([0]);
+export const SUPPORTED_VERSIONS = Object.freeze([0, 1]);
+// Date defaults (version 1): the creation date, or the date of the first publish.
+export const DATE_DEFAULTS = Object.freeze(['today', 'first-publish']);
 export const FIELD_TYPES = Object.freeze(['text', 'long-text', 'date', 'checkbox', 'url', 'image', 'choice',
   'choice-from-folder', 'tags', 'author-reference', 'number']);
 
 const COMMON_KEYS = ['type', 'label', 'required', 'default', 'hint', 'hidden'];
-const EXTRA_KEYS = Object.freeze({ choice: ['options'], 'choice-from-folder': ['root', 'of_type', 'allow_new', 'max_depth'] });
+const EXTRA_KEYS = Object.freeze({ choice: ['options'], 'choice-from-folder': ['root', 'of_type', 'allow_root', 'allow_new', 'max_depth'] });
 const TYPE_KEYS = ['label', 'layout', 'location', 'fields'];
 const TOP_KEYS = ['version', 'site', 'types', 'taxonomy'];
 const PLACEHOLDER = /^<([a-z][a-z0-9_-]*)(\.\.\.)?>$/u;
@@ -24,13 +26,20 @@ const isMap = (value) => value !== null && typeof value === 'object' && !Array.i
 const isText = (value) => typeof value === 'string' && value.trim() !== '';
 const list = (words) => words.join(', ');
 
-/** Split a location pattern into segments: { literal } or { name, many }. */
+// `[<folder...>/]` in a pattern is a folder part that may be left out
+// (version 1: `kb/[<folder...>/]<slug>.md` also allows kb/<slug>.md).
+const OPTIONAL = /\[(<[a-z][a-z0-9_-]*(?:\.\.\.)?>)\/\]/gu;
+const OPTIONAL_MARK = '\u0000?';
+
+/** Split a location pattern into segments: { literal } or { name, many, md, optional }. */
 export function patternSegments(pattern) {
-  return String(pattern).split('/').map((part) => {
+  return String(pattern).replace(OPTIONAL, `${OPTIONAL_MARK}$1/`).split('/').map((raw) => {
+    const optional = raw.startsWith(OPTIONAL_MARK);
+    const part = optional ? raw.slice(OPTIONAL_MARK.length) : raw;
     const stem = part.endsWith('.md') ? part.slice(0, -3) : part;
     const match = PLACEHOLDER.exec(stem);
     if (!match) return { literal: part };
-    return { name: match[1], many: match[2] === '...', md: part.endsWith('.md') };
+    return { name: match[1], many: match[2] === '...', md: part.endsWith('.md'), optional };
   });
 }
 
@@ -42,15 +51,18 @@ export function matchLocation(location, path) {
   let source = '';
   const names = [];
   for (const [index, segment] of segments.entries()) {
-    if (index > 0) source += '/';
-    if (segment.literal !== undefined) { source += segment.literal.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'); continue; }
-    names.push(segment.name);
-    source += segment.many ? '([^/]+(?:/[^/]+)*)' : '([^/]+)';
-    if (segment.md) source += '\\.md';
+    let piece;
+    if (segment.literal !== undefined) piece = segment.literal.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+    else {
+      names.push(segment.name);
+      piece = `${segment.many ? '([^/]+(?:/[^/]+)*)' : '([^/]+)'}${segment.md ? '\\.md' : ''}`;
+    }
+    const last = index === segments.length - 1;
+    source += segment.optional ? `(?:${piece}/)?` : `${piece}${last ? '' : '/'}`;
   }
   const match = new RegExp(`^${source}$`, 'u').exec(path);
   if (!match) return null;
-  const values = Object.fromEntries(names.map((name, i) => [name, match[i + 1]]));
+  const values = Object.fromEntries(names.map((name, i) => [name, match[i + 1] ?? '']));
   const excludes = location.excludes ?? [];
   if (Object.values(values).some((value) => value.split('/').some((part) => excludes.includes(part)))) return null;
   return values;
@@ -65,7 +77,7 @@ export function fillLocation(location, values) {
   }).filter((part) => part !== '' && part !== '.').join('/');
 }
 
-function readField(typeName, fieldName, raw, errors) {
+function readField(typeName, fieldName, raw, errors, version) {
   const where = `Field "${fieldName}" in type "${typeName}"`;
   if (!NAME.test(fieldName)) errors.push(`${where}: field names use lower-case letters, digits, - and _.`);
   if (!isMap(raw)) { errors.push(`${where} should be a set of settings, for example { type: text, label: Title }.`); return null; }
@@ -86,6 +98,9 @@ function readField(typeName, fieldName, raw, errors) {
   if (raw.type === 'checkbox' && raw.default !== undefined && typeof raw.default !== 'boolean') {
     errors.push(`${where}: a checkbox default should be true or false.`);
   }
+  if (version >= 1 && raw.type === 'date' && raw.default !== undefined && !DATE_DEFAULTS.includes(raw.default)) {
+    errors.push(`${where}: a date default should be today (when the note is made) or first-publish (when it is first published).`);
+  }
   if (raw.type === 'choice') {
     if (!Array.isArray(raw.options) || raw.options.length === 0 || !raw.options.every((option) => isText(String(option ?? '')))) {
       errors.push(`${where} is a choice, so it needs "options", a list like [one, two].`);
@@ -96,7 +111,9 @@ function readField(typeName, fieldName, raw, errors) {
   if (raw.type === 'choice-from-folder') {
     if (!isText(raw.root)) errors.push(`${where} picks a folder, so it needs "root", the folder to pick inside ("." for the vault itself).`);
     if (!isText(raw.of_type)) errors.push(`${where} picks a folder, so it needs "of_type", the type of that folder's index note.`);
-    if (raw.allow_new !== undefined && typeof raw.allow_new !== 'boolean') errors.push(`${where}: "allow_new" should be true or false.`);
+    for (const key of ['allow_new', 'allow_root']) {
+      if (raw[key] !== undefined && typeof raw[key] !== 'boolean') errors.push(`${where}: "${key}" should be true or false.`);
+    }
     if (raw.max_depth !== undefined && !(Number.isSafeInteger(raw.max_depth) && raw.max_depth >= 1)) {
       errors.push(`${where}: "max_depth" should be a whole number, 1 or more.`);
     }
@@ -108,7 +125,7 @@ function readField(typeName, fieldName, raw, errors) {
     ...(raw.type === 'choice' && Array.isArray(raw.options) ? { options: Object.freeze(raw.options.map(String)) } : {}),
     ...(raw.type === 'choice-from-folder' ? {
       root: String(raw.root ?? '.').replace(/^\.\/|\/+$/gu, '') || '.', ofType: String(raw.of_type ?? ''),
-      allowNew: raw.allow_new === true, maxDepth: Number.isSafeInteger(raw.max_depth) ? raw.max_depth : 1,
+      allowNew: raw.allow_new === true, allowRoot: raw.allow_root === true, maxDepth: Number.isSafeInteger(raw.max_depth) ? raw.max_depth : 1,
     } : {}),
   });
 }
@@ -134,6 +151,12 @@ function readLocation(typeName, raw, errors) {
   const segments = patternSegments(raw.pattern);
   if (segments.some((segment) => segment.literal !== undefined && /[<>]/u.test(segment.literal))) {
     errors.push(`${where}: "${raw.pattern}" has a part in < > that is not a name like <slug> or <folder...>.`);
+  }
+  if (segments.some((segment) => segment.literal !== undefined && /[[\]]/u.test(segment.literal))) {
+    errors.push(`${where}: "${raw.pattern}" has a part in [ ] that is not an optional folder like [<folder...>/].`);
+  }
+  if (segments.some((segment) => segment.optional && segment.md)) {
+    errors.push(`${where}: only a folder part can be optional, not the note's file name.`);
   }
   if (raw.excludes !== undefined && !(Array.isArray(raw.excludes) && raw.excludes.every(isText))) {
     errors.push(`${where}: "excludes" should be a list of folder names.`);
@@ -172,6 +195,11 @@ function checkType(type, types, errors) {
       const many = segments[index].many;
       if (many !== (field.maxDepth > 1)) {
         errors.push(`${where}: <${field.name}${many ? '...' : ''}> and max_depth ${field.maxDepth} disagree. Use <${field.name}...> for folders more than one level deep, <${field.name}> for one level.`);
+      }
+      if (segments[index].optional !== field.allowRoot) {
+        errors.push(field.allowRoot
+          ? `${where}: the field "${field.name}" allows the top level (allow_root), so its pattern should write it as [<${field.name}${many ? '...' : ''}>/].`
+          : `${where}: [<${field.name}${many ? '...' : ''}>/] means the folder may be left out; add allow_root: true to the field "${field.name}", or drop the [ ].`);
       }
     }
   }
@@ -228,7 +256,7 @@ export function parseSiteModel(text) {
     if (!isText(value.label)) errors.push(`Type "${name}" needs a label, the name the author sees.`);
     if (value.layout !== undefined && !isText(value.layout)) errors.push(`Type "${name}": "layout" should name one of the renderer's layouts.`);
     if (!isMap(value.fields)) { errors.push(`Type "${name}" needs "fields".`); continue; }
-    const fields = Object.entries(value.fields).map(([fieldName, field]) => readField(name, fieldName, field, errors)).filter(Boolean);
+    const fields = Object.entries(value.fields).map(([fieldName, field]) => readField(name, fieldName, field, errors, raw.version)).filter(Boolean);
     types.push({ name, label: String(value.label ?? name), ...(isText(value.layout) ? { layout: value.layout } : {}),
       location: readLocation(name, value.location, errors), fields: Object.freeze(fields) });
   }
@@ -248,7 +276,7 @@ export function parseSiteModel(text) {
 }
 
 function readTaxonomy(raw, errors) {
-  if (raw === undefined) return Object.freeze({ folderNote: 'index.md', tagShape: null, suggestedTags: Object.freeze([]), tagLabels: Object.freeze({}) });
+  if (raw === undefined) return Object.freeze({ folderNote: 'index.md', tagShape: null, allowPlainTags: false, suggestedTags: Object.freeze([]), tagLabels: Object.freeze({}) });
   if (!isMap(raw)) { errors.push('"taxonomy" should be a set of settings.'); return null; }
   const folders = raw.folders ?? {};
   const tags = raw.tags ?? {};
@@ -268,12 +296,41 @@ function readTaxonomy(raw, errors) {
     }
   }
   const shape = isMap(tags) && isText(tags.shape) ? tags.shape : null;
-  return Object.freeze({ folderNote: isText(folderNote) ? folderNote : 'index.md', tagShape: shape, suggestedTags: Object.freeze(suggested),
+  if (isMap(tags) && tags.allow_plain !== undefined && typeof tags.allow_plain !== 'boolean') {
+    errors.push('"taxonomy.tags.allow_plain" should be true or false.');
+  }
+  return Object.freeze({ folderNote: isText(folderNote) ? folderNote : 'index.md', tagShape: shape,
+    allowPlainTags: isMap(tags) && tags.allow_plain === true, suggestedTags: Object.freeze(suggested),
     tagLabels: Object.freeze(isMap(tags) && isMap(tags.labels) ? { ...tags.labels } : {}) });
 }
 
 export function typeNamed(model, name) {
   return model.types.find((type) => type.name === name) ?? null;
+}
+
+/**
+ * The date fields to fill on first publish for a note at this path: those
+ * with `default: first-publish` in every type whose location fits the path.
+ * Returns field names, in model order, without repeats.
+ */
+export function firstPublishFields(model, path) {
+  const names = [];
+  for (const type of model?.types ?? []) {
+    const values = matchLocation(type.location, path);
+    if (!values) continue;
+    // The folder it sits in must be a folder of the right type (kb/x.md is not a post in a topic "kb").
+    const folderField = type.location.field ? type.fields.find((field) => field.name === type.location.field) : null;
+    const folder = folderField ? values[folderField.name] : '';
+    if (folderField && folder !== '') {
+      const folderType = typeNamed(model, folderField.ofType);
+      const note = [folderField.root, folder, model.taxonomy?.folderNote ?? 'index.md'].filter((part) => part && part !== '.').join('/');
+      if (!matchLocation(folderType?.location, note)) continue;
+    }
+    for (const field of type.fields) {
+      if (field.type === 'date' && field.default === 'first-publish' && !names.includes(field.name)) names.push(field.name);
+    }
+  }
+  return names;
 }
 
 /** The types an author can start from the form, in model order. */

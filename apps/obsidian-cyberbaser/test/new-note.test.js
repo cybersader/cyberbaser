@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import yaml from 'js-yaml';
 import { findFrontmatterInText } from '../../../packages/correction/src/frontmatter.js';
-import { applyPlan, fileSlug, folderOptions, frontmatterText, newFolderParents, normalizeTag, planNewNote, tagSuggestions } from '../src/core/new-note.js';
+import { applyPlan, fileSlug, folderOptions, frontmatterText, newFolderParents, normalizeTag, planNewNote, tagRules, tagSuggestions } from '../src/core/new-note.js';
 import { parseSiteModel, typeNamed } from '../src/core/site-model.js';
 import { notePublicStatus } from '../src/core/new-page.js';
 
@@ -39,6 +39,36 @@ test('file names come from the title, like the vault\'s own', () => {
   expect(fileSlug('Café  déjà vu ---\nnext')).toBe('cafe-deja-vu-next');
   expect(fileSlug('../../etc/passwd')).toBe('etc-passwd');
   expect(fileSlug('!!!')).toBe('');
+  // The model's rule: punctuation dropped (not turned into a hyphen), & read as and.
+  expect(fileSlug('Risk & governance')).toBe('risk-and-governance');
+  expect(fileSlug("Don't panic: a CISO's first week")).toBe('dont-panic-a-cisos-first-week');
+  expect(fileSlug('Zero-trust, step by step (part 1)')).toBe('zero-trust-step-by-step-part-1');
+  expect(fileSlug('Before/after — the 90-day plan')).toBe('before-after-the-90-day-plan');
+});
+
+test('the name can be edited before Create; it is cleaned by the same rule', () => {
+  const values = (extra) => ({ ...POST, cover: null, ...extra });
+  const plan = (extra) => planNewNote({ model, typeName: 'post', values: values(extra), paths: PATHS, today: '2026-11-24', titleOf });
+  expect(plan({}).notePath).toBe('leadership-and-strategy/questions-to-ask-a-new-ciso-the-first-90-days.md');
+  expect(plan({ slug: 'new-ciso-questions' }).notePath).toBe('leadership-and-strategy/new-ciso-questions.md');
+  expect(plan({ slug: '  New CISO: Questions! ' }).notePath).toBe('leadership-and-strategy/new-ciso-questions.md');
+  expect(plan({ slug: '   ' }).notePath).toBe('leadership-and-strategy/questions-to-ask-a-new-ciso-the-first-90-days.md');
+  expect(plan({ slug: '../../etc' }).notePath).toBe('leadership-and-strategy/etc.md');
+  expect(plan({ slug: '!!!' }).errors).toEqual({ slug: 'Use some letters or digits in the file name.' });
+  expect(plan({ slug: 'a-security-strategy-that-fits-on-one-page' }).errors).toEqual({ slug: 'There is already a note with this file name there. Change it.' });
+  // The title stays the title.
+  expect(plan({ slug: 'short' }).steps.at(-1).text).toContain('title: "Questions to ask a new CISO: the first 90 days"');
+  // A new folder's name too.
+  const kb = planNewNote({ model, typeName: 'kb-page', paths: PATHS, titleOf, values: { title: 'Tabletop basics', description: 'd',
+    folder: { new: { parent: 'risk-and-governance', values: { title: 'Exercises & drills', slug: 'drills', description: 'd' } } } } });
+  expect(kb.steps.map((step) => step.path)).toEqual(['kb/risk-and-governance/drills', 'kb/risk-and-governance/drills/index.md',
+    'kb/risk-and-governance/drills/tabletop-basics.md']);
+  const auto = planNewNote({ model, typeName: 'kb-page', paths: PATHS, titleOf, values: { title: 'X', description: 'd',
+    folder: { new: { parent: '', values: { title: 'Policy & law', description: 'd' } } } } });
+  expect(auto.steps[0].path).toBe('kb/policy-and-law');
+  const taken = planNewNote({ model, typeName: 'kb-page', paths: PATHS, titleOf, values: { title: 'X', description: 'd',
+    folder: { new: { parent: 'risk-and-governance', values: { title: 'Anything', slug: 'Frameworks', description: 'd' } } } } });
+  expect(taken.errors['folder.new.slug']).toContain('already there');
 });
 
 test('properties: model order, quoting where needed, nothing can be injected', () => {
@@ -61,26 +91,62 @@ test('properties: model order, quoting where needed, nothing can be injected', (
   expect(() => frontmatterText([['date', '2026-11-24\nx: 1', 'date']])).toThrow();
 });
 
-test('tags: group/value, suggested from the model and the vault, new ones accepted', () => {
+test('tags: group/value preferred, plain tags allowed by the model, suggested from the model and the vault', () => {
   expect(normalizeTag('#Audience/Board ', 'group/value')).toEqual({ tag: 'audience/board' });
+  // Without allow_plain, a plain tag is refused.
   expect(normalizeTag('strategy', 'group/value').error).toContain('group and a value');
+  // Cyberchief's model (version 1) allows plain tags.
+  expect(tagRules(model)).toEqual(['group/value', { allowPlain: true }]);
+  expect(normalizeTag('Strategy', ...tagRules(model))).toEqual({ tag: 'strategy' });
+  expect(normalizeTag('incident response', ...tagRules(model))).toEqual({ tag: 'incident-response' });
+  expect(normalizeTag('a/b: c', ...tagRules(model)).error).toContain('a word like strategy');
   expect(normalizeTag('a/b: c', 'group/value').error).toBeDefined();
   const suggestions = tagSuggestions(model, [['audience/executives', 'strategy'], 'sector/space', ['kb/risk-and-governance']]);
   expect(suggestions).toContain('audience/board'); // from the model
   expect(suggestions).toContain('sector/space'); // from the vault
   expect(suggestions).toContain('kb/risk-and-governance'); // also filed
-  expect(suggestions).not.toContain('strategy'); // not group/value
+  expect(suggestions).toContain('strategy'); // a plain tag already in the vault
+  const strict = parseSiteModel(readFileSync(new URL('./fixtures/cyberchief-model.yml', import.meta.url), 'utf8')
+    .replace(/\n *allow_plain: true[^\n]*/u, '')).model;
+  expect(tagSuggestions(strict, [['strategy', 'audience/board']])).not.toContain('strategy');
+  expect(planNewNote({ model: strict, typeName: 'post', values: { ...POST, cover: null, tags: ['strategy'] }, paths: PATHS, titleOf }).errors.tags)
+    .toContain('group and a value');
+  const plain = planNewNote({ model, typeName: 'post', values: { ...POST, cover: null, tags: ['strategy', 'audience/board'] }, paths: PATHS, titleOf });
+  expect(plain.steps.at(-1).text).toContain('tags:\n  - strategy\n  - audience/board\n');
 });
 
 test('folder pickers list folders of the right type, labelled by their titles', () => {
   const topics = folderOptions(model, field('post', 'topic'), PATHS, titleOf);
   expect(topics.map((option) => option.value)).toEqual(['from-the-field', 'leadership-and-strategy', 'risk-and-governance']);
   expect(topics.find((option) => option.value === 'leadership-and-strategy').label).toBe('Leadership & strategy');
-  const kb = folderOptions(model, field('kb-page', 'folder'), PATHS, titleOf);
+  const kb = folderOptions(model, field('kb-page', 'folder'), PATHS, (path) => (path === 'kb/index.md' ? 'Knowledge base' : titleOf(path)));
+  // allow_root: the knowledge base itself is the first choice.
   expect(kb.map((option) => [option.value, option.label])).toEqual([
+    ['', 'Knowledge base (top level)'],
     ['risk-and-governance', 'Risk & governance'], ['risk-and-governance/frameworks', 'Risk & governance › Frameworks'],
     ['threats-and-response', 'threats-and-response']]);
-  expect(newFolderParents(field('kb-page', 'folder'), kb).map((option) => option.value)).toEqual(['', 'risk-and-governance', 'threats-and-response']);
+  expect(newFolderParents(field('kb-page', 'folder'), kb).map((option) => [option.value, option.label])).toEqual([
+    ['', 'Knowledge base (top level)'], ['risk-and-governance', 'Risk & governance'], ['threats-and-response', 'threats-and-response']]);
+  // Without a title on kb/index.md, the folder's own name.
+  expect(folderOptions(model, field('kb-page', 'folder'), PATHS, () => null)[0].label).toBe('kb (top level)');
+  // Topics do not allow the top level.
+  expect(topics.some((option) => option.value === '')).toBe(false);
+});
+
+test('a knowledge base page at the top level of kb/', async () => {
+  const vault = memoryVault();
+  const plan = planNewNote({ model, typeName: 'kb-page', values: { title: 'Incident glossary', description: 'Words we use.', folder: { existing: '' } },
+    paths: PATHS, today: '2026-11-24', titleOf });
+  expect(plan.ok).toBe(true);
+  expect(plan.notePath).toBe('kb/incident-glossary.md');
+  expect(plan.steps.map((step) => step.kind)).toEqual(['note']);
+  await applyPlan(plan, vault.io);
+  expect(vault.files.get('kb/incident-glossary.md')).toContain('draft: true');
+  // The fixed glossary page is still taken.
+  expect(planNewNote({ model, typeName: 'kb-page', values: { title: 'Glossary', description: 'x', folder: { existing: '' } }, paths: PATHS, titleOf }).errors.title)
+    .toContain('already a note');
+  // A post still needs a topic.
+  expect(planNewNote({ model, typeName: 'post', values: { ...POST, cover: null, topic: { existing: '' } }, paths: PATHS, titleOf }).errors.topic).toBe('Pick a topic.');
 });
 
 const POST = { title: 'Questions to ask a new CISO: the first 90 days', topic: { existing: 'leadership-and-strategy' },
@@ -96,7 +162,7 @@ test('a post end to end: form answers to a draft note, its photo beside it, and 
   expect(vault.files.get(path)).toBe(`---
 title: "Questions to ask a new CISO: the first 90 days"
 description: What a board or CEO should ask in the first 90 days.
-date: 2026-11-24
+date:
 tags:
   - audience/executives
   - level/primer
@@ -126,7 +192,7 @@ test('missing and wrong answers come back per field, and nothing is written', ()
   expect(plan.ok).toBe(false);
   expect(plan.errors).toMatchObject({ title: 'Add a title.', topic: 'Pick a topic.', description: 'Add a summary.',
     youtube: 'YouTube link should be a web address starting with https://.', cover: 'Pick a PNG, JPEG, WebP or GIF image.' });
-  expect(plan.errors.tags).toContain('group and a value');
+  expect(plan.errors.tags).toBeUndefined(); // plain tags are allowed here
   const taken = planNewNote({ model, typeName: 'post', values: { title: 'A security strategy that fits on one page', topic: { existing: 'leadership-and-strategy' },
     description: 'x' }, paths: PATHS, today: '2026-11-24', titleOf });
   expect(taken.errors.title).toContain('already a note with this title');

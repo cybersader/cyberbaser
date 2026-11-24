@@ -121,15 +121,59 @@ export function withDraftOff(text) {
   return next;
 }
 
+const DATE = /^\d{4}-\d{2}-\d{2}$/u;
+const escapeKey = (key) => key.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+
 /**
- * What Publish does with a draft: its draft-off text and whether that would
- * go public. { text, status } or null when Draft cannot be turned off here.
+ * The note's text with first-publish dates filled in (site model
+ * `default: first-publish`): each named property whose line is still empty
+ * (`date:`) gets the given date, and every other byte stays. stamps:
+ * { date: '2026-11-24' }. A property that already has a value, or has no
+ * single plain empty line, is left as it is. Returns the text unchanged when
+ * nothing applies.
  */
-export function draftPublishPlan({ path, text, publishYml }) {
+export function withFirstPublishDates(text, stamps = {}) {
+  const block = findFrontmatterInText(text);
+  if (block.kind !== 'block') return text;
+  const start = text.indexOf(block.yamlText, block.textRange.start);
+  if (start < 0) return text;
+  const edits = [];
+  for (const [key, value] of Object.entries(stamps)) {
+    if (!/^[A-Za-z][A-Za-z0-9_-]*$/u.test(key) || !DATE.test(String(value))) continue;
+    const matches = [...block.yamlText.matchAll(new RegExp(`^(${escapeKey(key)}:)([ \\t]*(?:#.*)?)$`, 'gmu'))];
+    if (matches.length !== 1) continue;
+    edits.push({ key, value, at: start + matches[0].index, length: matches[0][0].length,
+      replacement: `${matches[0][1]} ${value}${matches[0][2].replace(/^[ \t]*(?=#)/u, ' ')}` });
+  }
+  if (edits.length === 0) return text;
+  let next = text;
+  for (const edit of edits.sort((a, b) => b.at - a.at)) next = `${next.slice(0, edit.at)}${edit.replacement}${next.slice(edit.at + edit.length)}`;
+  // Only those values changed, from empty to the date.
+  let before;
+  let after;
+  try {
+    before = yaml.load(block.yamlText, { schema: yaml.CORE_SCHEMA });
+    after = yaml.load(findFrontmatterInText(next).yamlText, { schema: yaml.CORE_SCHEMA });
+  } catch { return text; }
+  const expected = { ...before };
+  for (const edit of edits) {
+    if (before?.[edit.key] !== null) return text;
+    expected[edit.key] = edit.value;
+  }
+  return JSON.stringify(expected) === JSON.stringify(after) ? next : text;
+}
+
+/**
+ * What Publish does with a draft: its draft-off text (with first-publish
+ * dates filled in, see withFirstPublishDates) and whether that would go
+ * public. { text, status } or null when Draft cannot be turned off here.
+ */
+export function draftPublishPlan({ path, text, publishYml, stamps = {} }) {
   const local = notePublicStatus({ path, text, publishYml });
   if (local.marker !== 'draft') return null;
-  const next = withDraftOff(text);
-  if (next === null) return null;
+  const off = withDraftOff(text);
+  if (off === null) return null;
+  const next = withFirstPublishDates(off, stamps);
   const status = notePublicStatus({ path, text: next, publishYml });
   return status.published ? { text: next, status } : null;
 }
