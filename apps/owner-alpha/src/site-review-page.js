@@ -25,13 +25,15 @@ export const SITE_FRAME_CSP = [
   "form-action 'none'",
   "frame-ancestors 'self'",
   'img-src data:',
+  'font-src data:',
   "style-src 'unsafe-inline'",
   'sandbox',
 ].join('; ');
 
 const MANIFEST = 'owner-alpha-site-manifest.json';
 const LIMITS = Object.freeze({ manifest: 1024 * 1024, page: 4 * 1024 * 1024, provenance: 5 * 1024 * 1024,
-  stylesheet: 2 * 1024 * 1024, image: 2 * 1024 * 1024, images: 8 * 1024 * 1024 });
+  stylesheet: 2 * 1024 * 1024, image: 2 * 1024 * 1024, images: 8 * 1024 * 1024, font: 1024 * 1024, fonts: 4 * 1024 * 1024 });
+const FONT_TYPES = Object.freeze({ '.woff2': 'font/woff2', '.woff': 'font/woff', '.ttf': 'font/ttf', '.otf': 'font/otf' });
 const IMAGE_TYPES = Object.freeze({ '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
   '.webp': 'image/webp', '.avif': 'image/avif', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' });
 const COMMIT_RE = /^[0-9a-f]{40}$/u;
@@ -466,7 +468,10 @@ del{text-decoration:line-through;background:var(--cbr-del-bg);color:var(--cbr-de
 @media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
 `;
 
-const REMOVED = ['script', 'noscript', 'iframe', 'frame', 'frameset', 'object', 'embed', 'applet', 'base', 'portal', 'meta[http-equiv]', 'template'];
+// `data-cyberbaser-review="hide"` lets a renderer mark site furniture (a fixed
+// phone tab bar, for example) that has no place in the review frame.
+const REMOVED = ['script', 'noscript', 'iframe', 'frame', 'frameset', 'object', 'embed', 'applet', 'base', 'portal', 'meta[http-equiv]', 'template',
+  '[data-cyberbaser-review="hide"]'];
 const URL_ATTRIBUTES = new Set(['href', 'src', 'srcset', 'srcdoc', 'action', 'formaction', 'ping', 'poster', 'background', 'data',
   'xlink:href', 'manifest', 'codebase', 'cite', 'longdesc', 'target', 'download', 'lowsrc', 'dynsrc', 'archive', 'usemap']);
 
@@ -500,7 +505,27 @@ export async function prepareSiteFrame({ html, slug, readAsset, colorScheme = 'l
     const relative = siteRelative(slug, href);
     if (relative === null || css.has(href) || !relative.endsWith('.css')) continue;
     const bytes = await readAsset(relative, LIMITS.stylesheet);
-    if (bytes !== null) css.set(href, bytes.toString('utf8').replace(/<\/(style)/giu, '<\\/$1'));
+    if (bytes !== null) css.set(href, { relative, text: bytes.toString('utf8') });
+  }
+  // The site's own fonts, inlined: the frame may load nothing by address.
+  const fonts = new Map(); let fontTotal = 0;
+  for (const [href, sheet] of css) {
+    let text = sheet.text;
+    for (const match of new Set(sheet.text.match(/url\(\s*(['"]?)[^'")]+\1\s*\)/giu) ?? [])) {
+      const reference = match.replace(/^url\(\s*(['"]?)/iu, '').replace(/(['"]?)\s*\)$/u, '');
+      const relative = siteRelative(sheet.relative, reference);
+      const type = relative === null ? undefined : FONT_TYPES[path.extname(relative).toLowerCase()];
+      if (type === undefined) continue;
+      if (!fonts.has(relative)) {
+        const bytes = await readAsset(relative, LIMITS.font);
+        if (bytes === null || fontTotal + bytes.length > LIMITS.fonts) { fonts.set(relative, null); continue; }
+        fontTotal += bytes.length;
+        fonts.set(relative, `data:${type};base64,${bytes.toString('base64')}`);
+      }
+      const uri = fonts.get(relative);
+      if (uri !== null) text = text.split(match).join(`url(${uri})`);
+    }
+    css.set(href, text.replace(/<\/(style)/giu, '<\\/$1'));
   }
   const data = new Map(); let total = 0;
   for (const src of images) {

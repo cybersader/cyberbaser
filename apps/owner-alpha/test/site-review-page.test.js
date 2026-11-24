@@ -192,9 +192,32 @@ describe('making the built page safe for the frame', () => {
     expect(framed).toContain('<span class="cbr-c cbr-n1" id="c1">');
   });
 
+  test('the site’s own fonts are inlined from its stylesheet; other addresses and marked furniture are not', async () => {
+    const html = '<html><head><link rel="stylesheet" href="../index.css"></head><body><article>Text</article>'
+      + '<nav class="tabs" data-cyberbaser-review="hide">Content Knowledge</nav></body></html>';
+    const reads = [];
+    const framed = await prepareSiteFrame({ html, slug: 'posts/one', readAsset: async (relative) => {
+      reads.push(relative);
+      if (relative === 'index.css') {
+        return Buffer.from('@font-face{font-family:A;src:url(./static/fonts/a.woff2)format("woff2")}'
+          + '@font-face{font-family:B;src:url("https://evil.example/b.woff2")}'
+          + '@font-face{font-family:C;src:url(../../outside.woff2)}'
+          + 'body{background:url(./static/bg.png)}');
+      }
+      if (relative === 'static/fonts/a.woff2') return Buffer.from('wOF2fake');
+      return null;
+    } });
+    // Paths resolve inside the built site only; a missing file stays unresolved.
+    expect(reads.sort()).toEqual(['index.css', 'outside.woff2', 'static/fonts/a.woff2']);
+    expect(framed).toContain(`url(data:font/woff2;base64,${Buffer.from('wOF2fake').toString('base64')})`);
+    expect(framed).toContain('url("https://evil.example/b.woff2")');
+    expect(framed).not.toContain('Content Knowledge');
+    expect(framed).toContain('<article>Text</article>');
+  });
+
   test('the site frame policy allows inline styles and data images only, never scripts', () => {
     const directives = SITE_FRAME_CSP.split('; ');
-    for (const directive of ["default-src 'none'", "base-uri 'none'", "form-action 'none'", "frame-ancestors 'self'", 'img-src data:', 'sandbox']) {
+    for (const directive of ["default-src 'none'", "base-uri 'none'", "form-action 'none'", "frame-ancestors 'self'", 'img-src data:', 'font-src data:', 'sandbox']) {
       expect(directives).toContain(directive);
     }
     expect(SITE_FRAME_CSP).not.toMatch(/script-src|connect-src|https?:|'self' |\*/u);
