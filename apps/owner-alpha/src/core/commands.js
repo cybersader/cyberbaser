@@ -302,7 +302,16 @@ export function createOwnerCommands({
       if (record.submitter?.keyId !== principal.keyId) fail('bundle-not-found', 'no such bundle');
       let job = null;
       if (record.state === 'published' && typeof lookupJob === 'function') job = await lookupJob(bundleJobId(bundleId)).catch(() => null);
-      return bundleProgress({ config, record, job });
+      const progress = bundleProgress({ config, record, job });
+      // The job's own record is the answer; when it cannot be read, the note
+      // status (the same live evidence) says whether every new page is live.
+      if (progress.step === 'publishing' && job === null && noteStatus !== null && record.publicAdditions?.length > 0) {
+        const found = await Promise.all(record.publicAdditions.map((entry) => noteStatus.status(entry.path).catch(() => null)));
+        if (found.every((entry) => entry?.live && entry.live.commit === record.commit)) {
+          return { ...progress, step: 'live', at: typeof found[0].live.at === 'string' ? found[0].live.at : null };
+        }
+      }
+      return progress;
     }, { preserveCode: true }),
 
     // The device takes back what it sent, before it is signed. The waiting
