@@ -9,7 +9,7 @@ Asked in question dialogs after the design in `design/signed-publish.mdx`:
 - **First signing device at setup:** scan a code the installer (publisher) shows, so a compromised setup page cannot add its own key.
 - **Recovery:** a written recovery code the publisher accepts once, plus the admin console on the machine.
 - **Unattended publishing:** "Allow a narrow automatic lane later": design so the owner could grant a specific agent a limited, revocable right to publish certain notes unattended; not built now, and nothing publishes without a human signature until it is.
-- **Passkeys:** open. The owner asked for a realistic threat model of letting the browser app request passkey approvals ("I don't see the issue with the browser app code").
+- **Passkeys:** after a realistic threat model (a passkey signs whatever the page hands it; the most realistic attacker is a stranger whose crafted proposal exploits a bug in the node's own pages), the owner chose "Only from pages the node can't change": the publisher's own small page and a pinned release of the browser app that changes only when the owner updates it, plus the Obsidian plugin.
 
 
 ### Every publish carries the owner's own signature, checked by the publisher (2026-11-23, owner decision)
