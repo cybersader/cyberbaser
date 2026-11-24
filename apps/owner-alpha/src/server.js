@@ -2874,7 +2874,7 @@ export async function runOwnerAlphaServer({
   if (devices !== null) devices.bundleDesk = bundleDesk;
   // With a configured renderer, a bundle is built once before it is offered, to
   // confirm its page lands at the address shown (bundle-preview.js).
-  const bundlePreview = config.renderer ? createPreview({ config, projectRoot }) : null;
+  const bundlePreview = config.renderer ? createPreview({ config, projectRoot, dependencies: { log: (line) => console.error(`Owner alpha: ${line}`) } }) : null;
   const bundleCheck = devices === null ? null : bundlePreview;
   const jobApprovals = devices === null ? null : createJobApprovals({ config, context: storeContext, pipeline: recoveringPipeline,
     bundles: bundleDesk,

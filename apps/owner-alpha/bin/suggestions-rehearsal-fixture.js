@@ -265,7 +265,7 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
     rebuildSite: rebuild,
     // New pages on the site design (route C, and the address check before a
     // bundle is offered) read the same disposable checkout through the policy seam.
-    createPreview: (input) => createBundlePreview({ ...input, dependencies: { assertCheckoutReady: ready } }),
+    createPreview: (input) => createBundlePreview({ ...input, dependencies: { ...input.dependencies, assertCheckoutReady: ready } }),
     startSuggestions: (input) => startSuggestionIntake({ ...input, intakeEntry: path.join(PROJECT_ROOT, 'apps/account-free-intake/bin/server.js') }),
     createReviewSource: (input) => createOwnerProposalReviewSource({ ...input, git: reviewGit }),
     createReviewService: (input) => createOwnerProposalReviewService({ ...input,

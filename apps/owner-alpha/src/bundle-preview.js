@@ -20,7 +20,7 @@
 // renderer addresses pages differently: the preview answers
 // { refused: 'address-mismatch' } so the bundle is refused rather than signed
 // for an address the site will not have.
-import { lstat, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { project as projectContent, verifyProjection } from '@cyberbaser/projection';
 import { addressFor, parseFrontmatter, readAddressStyle, select } from '@cyberbaser/publish';
@@ -66,35 +66,38 @@ export function createBundlePreview({ config, projectRoot, render = null, depend
   const ownerOrigin = `http://${config.listen.host}:${config.listen.port}`;
   const cache = new Map();
   const checkCheckout = dependencies.assertCheckoutReady ?? assertCheckoutReady;
+  const log = typeof dependencies.log === 'function' ? dependencies.log : () => {};
 
   async function produce({ bundleId, index, bundle, record, readImage, colorScheme }) {
+    const skip = (reason) => { log(`bundle preview not built: ${reason}`); return null; };
     const addition = record.publicAdditions[index];
     const note = addition && bundle.files.find((file) => file.path === addition.path && file.kind === 'create');
-    if (!note) return null;
+    if (!note) return skip('note');
     const files = bundle.files.filter((file) => file.kind === 'create' || file.kind === 'create-asset');
-    if (!files.every((file) => safeRelative(file.path))) return null;
+    if (!files.every((file) => safeRelative(file.path))) return skip('unsafe-path');
     const base = bundle.source?.revision;
-    if (typeof base !== 'string' || !COMMIT_RE.test(base)) return null;
+    if (typeof base !== 'string' || !COMMIT_RE.test(base)) return skip('no-base');
     // Preview on exactly the base the bundle was made against, never another.
     const checkout = await checkCheckout(config);
-    if (checkout?.head !== base || typeof checkout.root !== 'string' || !path.isAbsolute(checkout.root)) return null;
+    if (checkout?.head !== base || typeof checkout.root !== 'string' || !path.isAbsolute(checkout.root)) return skip('checkout-not-at-base');
     // New files only: a path that exists at the base, published or not, is a refusal.
     for (const file of files) {
-      if (await exists(path.join(checkout.root, ...file.path.split('/')))) return null;
+      if (await exists(path.join(checkout.root, ...file.path.split('/')))) return skip('path-exists');
     }
-    const root = path.join(cacheRoot, bundleId);
+    // Its own directory per build: two previews of one bundle (the check before
+    // signing and the review page) may run at once.
+    await mkdir(cacheRoot, { recursive: true, mode: 0o700 });
+    const root = await mkdtemp(path.join(cacheRoot, `${bundleId}-`));
     const content = path.join(root, 'content');
     const site = path.join(root, 'site');
-    await rm(root, { recursive: true, force: true });
-    await mkdir(root, { recursive: true, mode: 0o700 });
     try {
       // The site build's own public selection, projected byte for byte.
       const selection = await select(checkout.root, { audience: 'public' });
-      if (!Array.isArray(selection?.published) || selection.published.length === 0) return null;
+      if (!Array.isArray(selection?.published) || selection.published.length === 0) return skip('nothing-published');
       const projection = await projectContent(checkout.root, content, { audience: 'public', selectResult: selection,
         lowercase: false, verify: true, writeReport: false });
-      if (projection?.ok !== true) return null;
-      if ((await verifyProjection(checkout.root, content, selection, { lowercase: false }))?.ok !== true) return null;
+      if (projection?.ok !== true) return skip('projection');
+      if ((await verifyProjection(checkout.root, content, selection, { lowercase: false }))?.ok !== true) return skip('projection-verify');
       await verifyBytePreservingProjection(checkout.root, content, selection.published);
       for (const file of files) {
         const target = path.join(content, ...file.path.split('/'));
@@ -103,12 +106,12 @@ export function createBundlePreview({ config, projectRoot, render = null, depend
         await writeFile(target, bytes, { flag: 'wx', mode: 0o600 });
       }
       const result = await build({ contentDir: content, outputDir: site, workspaceDir: path.join(root, 'work'), ownerOrigin });
-      if (result?.renderer !== identity.name || result.revision !== identity.revision) return null;
+      if (result?.renderer !== identity.name || result.revision !== identity.revision) return skip('renderer-identity');
       const siteYml = await readFile(path.join(checkout.root, '.cyberbaser', 'site.yml'), 'utf8').catch(() => null);
       const style = readAddressStyle(siteYml);
-      if (!style.ok) return null;
+      if (!style.ok) return skip('address-style-unknown');
       const slug = sitePageSlug(note.path, note.text, style.style);
-      if (slug === null) return null;
+      if (slug === null) return skip('no-slug');
       // The address everyone was shown must be the one this computes, and the built page must be there.
       const expected = addressFor(note.path, typeof parseSlug(note.text) === 'string' ? parseSlug(note.text) : null, style.style);
       if (expected !== addition.address || !(await exists(path.join(site, ...`${slug}.html`.split('/'))))) {
@@ -127,7 +130,7 @@ export function createBundlePreview({ config, projectRoot, render = null, depend
     // A bundle never changes; its preview is kept for the life of this process.
     const key = `${input.bundleId}/${input.bundle?.source?.revision ?? ''}/${input.index}/${input.colorScheme ?? ''}`;
     if (!cache.has(key)) {
-      const pending = produce(input).catch(() => null);
+      const pending = produce(input).catch((error) => { log(`bundle preview failed: ${error?.code ?? error?.message ?? 'failed'}${error?.details ? `; exit ${error.details.exitCode}; ${String(error.details.stderr ?? '').slice(-1200)} | ${String(error.details.stdout ?? '').slice(-800)}` : ''}`); return null; });
       cache.set(key, pending);
       while (cache.size > CACHE_ENTRIES) cache.delete(cache.keys().next().value);
       if (await pending === null) cache.delete(key);
