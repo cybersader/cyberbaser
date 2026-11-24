@@ -1,0 +1,45 @@
+---
+title: The Cyberchief author's whole flow, rehearsed once (scratch)
+description: A new post went from the New post form in real Obsidian to an approved, pushed commit on a throwaway repository, on scratch copies of the Cyberchief content and renderer. Readable file names and one shared address rule landed first. The page is published but never shown as Live, because nothing yet confirms new pages live.
+status: log
+---
+
+## Outcome
+
+The flow works end to end up to the push. On scratch copies of the Cyberchief content (readable names, site model version 2) and renderer, a desktop Obsidian wrote a new post from the form with a cover photo, published it as a draft, the owner reviewed it on the site's own design at phone width, approved it on a phone with a real tap, and the publisher checked and pushed one commit to a local repository standing in for GitHub. The commit holds exactly the new note (Draft off, today's date filled in) and the cover photo with its location removed.
+
+It stops at "Public, not confirmed yet". Pages that arrive in bundles never get a deployment or live check, so the status cannot reach Live (see Open).
+
+## Built before the run
+
+- **Site model versions 1 and 2 in the form.** `default: first-publish` leaves the date empty at creation and Publish fills today's date inside the signed change, next to Draft off. The knowledge base itself is the first folder choice (`allow_root`, `[<folder...>/]`). Plain tags are accepted and suggested when `taxonomy.tags.allow_plain` is on. Version 2 names files and folders like their titles (`names: title-minus-unsafe`): characters file systems refuse become spaces, the name is editable before Create, Windows-reserved names are refused, and the form shows "On your site at /address".
+- **One address rule for every layer.** `packages/publish/src/addresses.js` turns a vault path into its web address by the vault's style, read from `.cyberbaser/site.yml` (`addresses:` under `site:` or at the top). `quartz` is stock Quartz (the default); `lowercase-hyphen` is the Cyberchief renderer's rule, and all 34 of its test cases pass. The device's "New public page", its approval check, the node's public additions and the review page's page lookup all call it. An unknown style fails closed everywhere.
+- **Address check before signing.** With a configured renderer, the node builds a bundle's page once before offering it to the phone. If the page is not at the address everyone was shown, the bundle is refused (`address-mismatch`) and never offered.
+- **Small fixes found in the flow.** Waiting for approval now clears once the page is pushed. Two previews of one bundle no longer share a build directory. A failed preview build now logs why it fell back. The rehearsal's review pages read the scratch checkout the way its site build does.
+
+## How each step was driven
+
+| Step | Real UI | Driven or stood in |
+|---|---|---|
+| Pair desktop and phone | Devices page, Obsidian pairing modal, Confirm | The pairing code was read from the page and handed to Obsidian as its link |
+| Enrol the phone as signing device | Obsidian enrol modal, real tap | Enrolment link taken from the publisher's own log |
+| New post, Create, write | Form in real Obsidian (OpenClast harness, 1280 wide) | Topic chosen by setting the select; the harness has no Node `Buffer`, so the page got a minimal `Buffer.from` for `vault.createBinary` |
+| Status, Publish to your site | Plugin modals | None |
+| Owner review | Owner app route C in Chromium at 390 | Signed in with a bootstrap link |
+| Approve | Approval sheet in a second Obsidian with mobile emulation, 390 wide, real tap | None |
+| Publisher push | Real owner services, approval gate and mirror | GitHub is a local bare repository reached through a git shim; deployment and live checks are not run for bundles |
+
+Scratch-only change: `publish.yml` in the copy says `exclude_when: [draft]` so the sample posts are public. Without them the Cyberchief renderer's build fails (below).
+
+## Screenshots
+
+In `.workspace/dad-flow/shots/` (scratch, not committed): 01–02 the filled form, 03 the written note, 04 status Draft, 05 the send sheet ("New public page: /threats-and-response/tabletop-in-one-hour, plus 1 image", cover "location removed"), 06–07 Waiting for approval, 08–10 owner review at 390 on the Cyberchief design, 11–13 approvals on the phone, 14 status after the push.
+
+## Open
+
+- **New pages never show Live.** Bundle commits get no deployment or live-page check, so status stays "Public, not confirmed yet". Needs a deployment watch for bundle commits and a live witness for a page that did not exist before.
+- **Cyberchief renderer:** its tag page fails (`PageHero.tsx:68`, reading `label` of undefined) when the only public page using a group tag such as `level/primer` is new. Reported to Cyberchief; worked around in scratch.
+- **Covers are not on the post page** in this design (they show on feed cards), so the owner review shows the cover in its list, not on the page.
+- The address check falls back to offering the bundle when the preview cannot be built; only a confirmed mismatch refuses.
+- Apostrophes and other punctuation follow Cyberchief's rule exactly. Any other renderer needs its own style declared.
+- Not run: real GitHub, the real Cyberchief vault, a real phone.
