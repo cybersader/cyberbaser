@@ -34,7 +34,9 @@ const IDLE_TIMEOUT_MS = 30_000;
 export const IROH_COMMANDS = Object.freeze(['submitProposal', 'submitCapture', 'readNoteStatus',
   'preparePublication', 'publish', 'readPublicationReceipt',
   // Signing device (core/approvals.js): enrol with the publisher, approve publishes.
-  'readSigningChallenge', 'enrollSigningKey', 'listApprovals', 'readApproval', 'submitApproval', 'declineApproval']);
+  'readSigningChallenge', 'enrollSigningKey', 'listApprovals', 'readApproval', 'submitApproval', 'declineApproval',
+  // New notes and images (core/bundle-desk.js).
+  'stageAsset', 'submitPageBundle', 'readApprovalChunk']);
 // After a request verified, a command's own refusal may name one of these
 // fixed reasons so the device can say something useful. Signature, key, grant
 // and binding failures stay the single generic refusal.
@@ -45,7 +47,11 @@ export const IROH_REFUSAL_REASONS = Object.freeze(['proposal-budget-exhausted', 
   'workspace-text-repeated', 'workspace-properties-invalid', 'retired-material', 'publication-draft-not-found',
   'note-needs-linking', 'recovery-in-progress', 'recovery-failed',
   'signing-unavailable', 'enroll-refused', 'approval-not-found', 'approval-expired', 'approval-invalid',
-  'approval-mismatch', 'approval-too-large']);
+  'approval-mismatch', 'approval-too-large',
+  'create-path-refused', 'selection-config-change-refused', 'create-path-exists', 'create-path-case-collision',
+  'create-parent-is-file', 'create-address-collision', 'create-outside-publication', 'capture-base-moved',
+  'asset-type-refused', 'asset-type-mismatch', 'asset-too-large', 'bundle-too-large', 'bundle-file-count', 'asset-unreferenced',
+  'remote-image-refused', 'image-has-location', 'public-set-removal-refused', 'address-changed', 'public-set-change-unlisted']);
 const PAIR_WAIT_MS = 6 * 60_000;
 
 const alpnBytes = (name) => [...Buffer.from(name, 'utf8')];

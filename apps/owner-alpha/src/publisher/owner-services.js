@@ -18,9 +18,13 @@ export async function startOwnerServices({ owners, socketPath, uid, socketGroup 
   const publishStarter = mirror === null || starterCheckout === null ? null
     : ({ commit, record }) => mirror.publishStarter({ checkout: starterCheckout, commit,
       authorize: (target) => gate.authorize(record, target) });
+  // Page bundles go through the mirror like the starter, always signed.
+  const publishBundle = mirror === null || starterCheckout === null || typeof mirror.publishBundle !== 'function' ? null
+    : ({ commit, record }) => mirror.publishBundle({ checkout: starterCheckout, commit,
+      authorize: (target) => gate.authorize(record, target) });
   const opened = [];
   try {
-    opened.push(await startOwnerControl({ socketPath, ownerKeys, uid, socketGroup, publishStarter }));
+    opened.push(await startOwnerControl({ socketPath, ownerKeys, uid, socketGroup, publishStarter, publishBundle }));
     // Nobody can approve yet: open (or keep) the first-device window and say so
     // on the publisher's own log, which the node cannot read.
     const window = await ownerKeys.ensureEnrollment();

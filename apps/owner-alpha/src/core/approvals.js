@@ -29,6 +29,9 @@ export const APPROVAL_KEY_PLACEHOLDER = 'signing-device';
 const REQUEST_ID = /^[A-Za-z0-9_-]{22}$/u;
 const ASKED_BY = /^[^\u0000-\u001f\u007f<>]{1,64}$/u;
 const B64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u;
+// A file side the device reads in chunks rather than inline.
+export const CHUNKED = 'chunked';
+export const APPROVAL_CHUNK_BYTES = 256 * 1024;
 
 const sha256Hex = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
@@ -45,12 +48,20 @@ function bytesOf(value, label) {
 // The files must be exactly the intent's changes, and each side must hash to
 // what the intent says. The device re-checks all of this; the node checks so
 // it never offers a request the device would refuse.
-function checkedFiles(intent, files) {
+function checkedFiles(intent, files, blobs = null) {
   if (!Array.isArray(files) || files.length !== intent.changes.length) fail('approval-invalid', 'files must match the changes');
   let total = 0;
   return files.map((file, index) => {
     const change = intent.changes[index];
     if (!exactKeys(file, ['path', 'before', 'after']) || file.path !== change.path) fail('approval-invalid', 'files must follow the changes');
+    // A new image too large to read in one reply: the device fetches it in
+    // chunks (readChunk) and hashes the whole file itself.
+    if (file.after === CHUNKED) {
+      const bytes = blobs?.get(file.path) ?? null;
+      if (file.before !== null || change.before !== null || change.after === null || bytes === null
+        || sha256Hex(bytes) !== change.after.sha256) fail('approval-invalid', 'a chunked file must be a new file with matching bytes');
+      return { path: file.path, before: null, after: CHUNKED, byteLength: bytes.length };
+    }
     const before = bytesOf(file.before, 'before');
     const after = bytesOf(file.after, 'after');
     for (const [side, bytes] of [['before', before], ['after', after]]) {
@@ -62,6 +73,16 @@ function checkedFiles(intent, files) {
     if (total > APPROVAL_MAX_FILE_BYTES) fail('approval-too-large', 'this change is too large to approve from a phone');
     return { path: file.path, before: file.before, after: file.after };
   });
+}
+
+function checkedAdditions(intent, value) {
+  if (value === null) return null;
+  const added = new Set(intent.changes.filter((change) => change.before === null).map((change) => change.path));
+  if (!Array.isArray(value) || value.length > 4 || value.some((entry) => !exactKeys(entry, ['path', 'address'])
+    || !added.has(entry.path) || typeof entry.address !== 'string' || !/^\/[^\u0000-\u001f\u007f<>]{0,1023}$/u.test(entry.address))) {
+    fail('approval-invalid', 'public additions must name new files and their addresses');
+  }
+  return value.map((entry) => ({ path: entry.path, address: entry.address }));
 }
 
 export function createApprovalRelay({ publisher = null, clock = Date.now, random = randomBytes, maxPending = APPROVAL_MAX_PENDING,
@@ -100,7 +121,7 @@ export function createApprovalRelay({ publisher = null, clock = Date.now, random
      * once a device signs, and rejects with code approval-declined or
      * approval-expired.
      */
-    request({ intent, files, askedBy }) {
+    request({ intent, files, askedBy, publicAdditions = null, blobs = null }) {
       expire();
       const template = validateIntent(intent);
       if (template.kind !== 'publish' || template.keyId !== APPROVAL_KEY_PLACEHOLDER) {
@@ -109,12 +130,14 @@ export function createApprovalRelay({ publisher = null, clock = Date.now, random
       if (typeof askedBy !== 'string' || !ASKED_BY.test(askedBy)) fail('approval-invalid', 'askedBy must be a short plain label');
       if (template.expiresAt <= clock()) fail('approval-expired', 'the intent has already expired');
       if (pending.size >= maxPending) fail('approval-capacity', 'too many approvals are waiting');
-      const checked = checkedFiles(template, files);
+      const checked = checkedFiles(template, files, blobs);
+      const additions = checkedAdditions(template, publicAdditions);
       const requestId = Buffer.from(random(16)).toString('base64url');
       let settle;
       const result = new Promise((resolve, reject) => { settle = { resolve, reject }; });
       result.catch(() => {});
-      pending.set(requestId, { template, files: checked, askedBy, expiresAt: template.expiresAt, settle });
+      pending.set(requestId, { template, files: checked, askedBy, expiresAt: template.expiresAt, settle, additions,
+        blobs: blobs === null ? null : new Map(checked.filter((file) => file.after === CHUNKED).map((file) => [file.path, blobs.get(file.path)])) });
       return Object.freeze({ requestId, result });
     },
 
@@ -128,7 +151,16 @@ export function createApprovalRelay({ publisher = null, clock = Date.now, random
     /** One request in full: the intent and the bytes the device hashes and shows. */
     read({ requestId }) {
       const entry = take(requestId);
-      return { requestId, askedBy: entry.askedBy, intent: entry.template, files: entry.files };
+      return { requestId, askedBy: entry.askedBy, intent: entry.template, files: entry.files,
+        ...(entry.additions === null ? {} : { publicAdditions: entry.additions }) };
+    },
+
+    /** One chunk of a file the device reads in pieces: { data (base64), total }. */
+    readChunk({ requestId, path, offset }) {
+      const entry = take(requestId);
+      const bytes = entry.blobs?.get(path) ?? null;
+      if (bytes === null || !Number.isSafeInteger(offset) || offset < 0 || offset >= bytes.length) fail('approval-not-found', 'no such file part');
+      return { data: bytes.subarray(offset, offset + APPROVAL_CHUNK_BYTES).toString('base64'), total: bytes.length };
     },
 
     /**

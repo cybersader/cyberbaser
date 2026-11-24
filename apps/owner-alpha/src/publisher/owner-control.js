@@ -9,6 +9,7 @@
 //   enroll         {record: {intent, approval}}  first device, by the one-time code
 //   change         {record}                      key-add, key-revoke, recovery-reset
 //   publish-starter {commit, record}             setup's starter publish.yml, signed
+//   publish-bundle  {commit, record}             new notes and images, signed
 // Answers: {"ok":true,"result":...} or {"ok":false,"code":...}.
 import http from 'node:http';
 import { lstat, readFile, unlink } from 'node:fs/promises';
@@ -17,13 +18,14 @@ import { OwnerAlphaError, fail } from '../errors.js';
 import { qrSvg } from '../qr.js';
 import { READ_TIMEOUT_MS, readFrame, restrictSocket, validSocketPath } from './protocol.js';
 import { APPROVAL_PROBLEMS } from './owner-keys.js';
+import { BUNDLE_PUBLISH_CODES } from './bundle-publish.js';
 
-export const OWNER_OPERATIONS = Object.freeze(['status', 'challenge', 'keys', 'enroll', 'change', 'publish-starter']);
+export const OWNER_OPERATIONS = Object.freeze(['status', 'challenge', 'keys', 'enroll', 'change', 'publish-starter', 'publish-bundle']);
 export const MAX_OWNER_REQUEST_BYTES = 16 * 1024;
 export const MAX_OWNER_RESPONSE_BYTES = 64 * 1024;
 const COMMIT = /^[0-9a-f]{40}$/u;
 export const OWNER_CODES = Object.freeze([...Object.keys(APPROVAL_PROBLEMS), 'owner-invalid-request', 'owner-unsupported', 'owner-failed',
-  'starter-refused', 'github-unreachable']);
+  'starter-refused', 'github-unreachable', ...BUNDLE_PUBLISH_CODES]);
 
 export function ownerSocketPath(socketPath) {
   const candidate = `${socketPath}.owners`;
@@ -54,7 +56,8 @@ function failureCode(error) {
  * ownerKeys: createOwnerKeys(...). publishStarter: async ({commit, record})
  * or null when this publisher pushes no starter file.
  */
-export async function startOwnerControl({ socketPath, ownerKeys, uid = process.getuid(), socketGroup = null, publishStarter = null }) {
+export async function startOwnerControl({ socketPath, ownerKeys, uid = process.getuid(), socketGroup = null, publishStarter = null,
+  publishBundle = null }) {
   const address = ownerSocketPath(socketPath);
   try {
     const present = await lstat(address);
@@ -81,6 +84,10 @@ export async function startOwnerControl({ socketPath, ownerKeys, uid = process.g
           case 'keys': result = await ownerKeys.list(); break;
           case 'enroll': result = await ownerKeys.enroll(request.record); break;
           case 'change': result = await ownerKeys.change(request.record); break;
+          case 'publish-bundle':
+            if (publishBundle === null) throw new OwnerAlphaError('owner-unsupported', 'this publisher pushes no page bundles');
+            result = await publishBundle({ commit: request.commit, record: request.record });
+            break;
           default:
             if (publishStarter === null) throw new OwnerAlphaError('owner-unsupported', 'this publisher pushes no starter file');
             result = await publishStarter({ commit: request.commit, record: request.record });
@@ -107,9 +114,9 @@ export async function startOwnerControl({ socketPath, ownerKeys, uid = process.g
 }
 
 /** The node's side: one owner-control request. Never carries a credential. */
-export function ownerRequest({ socketPath, op, record, commit, timeoutMs = op === 'publish-starter' ? 120_000 : 20_000 }) {
+export function ownerRequest({ socketPath, op, record, commit, timeoutMs = op.startsWith('publish-') ? 120_000 : 20_000 }) {
   const frame = op === 'enroll' || op === 'change' ? { v: 1, op, record }
-    : op === 'publish-starter' ? { v: 1, op, commit, record } : { v: 1, op };
+    : op === 'publish-starter' || op === 'publish-bundle' ? { v: 1, op, commit, record } : { v: 1, op };
   const text = JSON.stringify(frame);
   if (!OWNER_OPERATIONS.includes(op) || parseOwnerRequest(text) === null || Buffer.byteLength(text) >= MAX_OWNER_REQUEST_BYTES) {
     return Promise.reject(new OwnerAlphaError('owner-invalid-request', 'invalid owner request'));

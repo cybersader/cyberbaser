@@ -65,6 +65,8 @@ export function createOwnerCommands({
   // Optional: the relay between the publisher and the owner's signing device
   // (core/approvals.js). Only owner devices that may publish reach it.
   approvals = null,
+  // Optional: page bundles (core/bundle-desk.js), new notes and images.
+  bundleDesk = null,
 }) {
   const config = validateOwnerAlphaConfig(configInput);
   if (devicePrincipalAdapter !== null && devicePrincipalAdapter.ownerId !== config.owner.identity) {
@@ -262,6 +264,41 @@ export function createOwnerCommands({
       return receipt === null ? { unchanged: true, deliveryPath } : { ...receipt, deliveryPath };
     }, { preserveCode: true }),
 
+    // One chunk of an image for a page bundle, held in memory until the
+    // bundle that names it arrives (or 15 minutes pass).
+    stageAsset: command('propose', 'proposal-submission-refused', async (input, principal) => {
+      if (bundleDesk === null) fail('proposal-submission-refused', 'this node does not accept new pages');
+      const request = closedInput(input, 'sha256', ['size', 'offset', 'data']);
+      return bundleDesk.staging.stage({ keyId: principal.keyId, ...request });
+    }, { preserveCode: true }),
+
+    // A new page (or an edited one) with its images. An owner device that may
+    // publish sends it straight to its own signature; any other device's
+    // bundle waits for the owner's review. Nothing publishes without the
+    // owner's signature, which the publisher checks.
+    submitPageBundle: command('propose', 'proposal-submission-refused', async (input, principal) => {
+      if (bundleDesk === null) fail('proposal-submission-refused', 'this node does not accept new pages');
+      const owner = isOwnerDevice(principal) && devicePrincipalAdapter?.hasGrant(principal, 'publish') === true;
+      return submitProposal.submitBuilt(async () => null, principal).then(() => bundleDesk.submit(input, principal, owner ? 'owner' : 'propose'));
+    }, { preserveCode: true }),
+
+    listBundles: command('review', 'review-list-failed', async () => {
+      if (bundleDesk === null) return { bundles: [] };
+      const records = await bundleDesk.list();
+      return { bundles: records.map((record) => ({ bundleId: record.bundleId, state: record.state, submitter: record.submitter,
+        receivedAt: record.receivedAt, publicAdditions: record.publicAdditions, images: record.images, reason: record.reason })) };
+    }),
+
+    approveBundle: command('review', 'decision-record-failed', async (input) => {
+      if (bundleDesk === null) fail('bundle-not-found', 'no such bundle');
+      return bundleDesk.approve(closedInput(input, 'bundleId').bundleId);
+    }, { preserveCode: true }),
+
+    declineBundle: command('review', 'decision-record-failed', async (input) => {
+      if (bundleDesk === null) fail('bundle-not-found', 'no such bundle');
+      return bundleDesk.decline(closedInput(input, 'bundleId').bundleId);
+    }, { preserveCode: true }),
+
     // Whether the device's open note is public and which version is live.
     // Owner devices with the publication grant get the full answer (drafts,
     // the publication page, publishing). Any device holding `propose` gets
@@ -401,6 +438,9 @@ export function createOwnerCommands({
     }),
     readApproval: command(signingGrant, 'approval-not-found', async (input) => {
       return approvals.read(closedInput(input, 'requestId'));
+    }),
+    readApprovalChunk: command(signingGrant, 'approval-not-found', async (input) => {
+      return approvals.readChunk(closedInput(input, 'requestId', ['path', 'offset']));
     }),
     submitApproval: command(signingGrant, 'approval-invalid', async (input) => {
       return approvals.submit(closedInput(input, 'requestId', ['intent', 'approval']));

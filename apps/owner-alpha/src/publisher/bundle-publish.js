@@ -10,6 +10,10 @@
 // edited, two are added and four images are added.
 import { caseKey, lintPath } from '../../../../packages/publish/src/index.js';
 import { checkAsset } from '../../../../packages/media-check/src/index.js';
+import { checkCommit } from '../../../../packages/signed-intent/src/index.js';
+import { OwnerAlphaError } from '../errors.js';
+
+const APPROVAL_MISMATCH = 'The change does not match what your device approved, so nothing was published.';
 
 export const BUNDLE_PUBLISH_CODES = Object.freeze(['create-path-refused', 'selection-config-change-refused',
   'create-path-case-collision', 'asset-type-refused', 'asset-type-mismatch', 'asset-too-large', 'image-has-location',
@@ -67,4 +71,25 @@ export async function checkBundleCommit(git, base, commit) {
   }
   if (counts.M > 1 || counts.A > 2 || counts.images > 4 || counts.M + counts.A === 0) return refuse('bundle-file-count');
   return Object.freeze({ ok: true });
+}
+
+/**
+ * Everything the publisher checks before it pushes a bundle, from its own
+ * object store: the one parent is the remote head, the signed intent matches
+ * the commit exactly (checkCommit, enforced whatever the gate's rollout mode),
+ * and the bundle rules above pass. Throws OwnerAlphaError; returns nothing.
+ * admitted: the gate's admitted approval (never null for a bundle).
+ */
+export async function verifyBundleForPush({ git, head, commit, admitted }) {
+  if (admitted === null || admitted === undefined) throw new OwnerAlphaError('owner-approval-missing', 'a page bundle needs the owner\'s signed approval');
+  let raw;
+  try { raw = (await git(['cat-file', 'commit', commit])).toString('utf8'); } catch {
+    throw new OwnerAlphaError('owner-approval-mismatch', APPROVAL_MISMATCH, { reason: 'commit-unreadable' });
+  }
+  const parents = raw.split('\n\n')[0].split('\n').filter((line) => line.startsWith('parent '));
+  if (parents.length !== 1 || parents[0] !== `parent ${head}`) throw new OwnerAlphaError('capture-base-moved', 'your notes changed on GitHub meanwhile');
+  const signed = await checkCommit(git, admitted.intent, commit);
+  if (!signed.ok) throw new OwnerAlphaError('owner-approval-mismatch', APPROVAL_MISMATCH, { reason: signed.code, path: signed.path ?? null });
+  const rules = await checkBundleCommit(git, head, commit);
+  if (!rules.ok) throw new OwnerAlphaError(rules.code, 'the page bundle breaks a publishing rule', { path: rules.path ?? null });
 }

@@ -14,7 +14,7 @@ import { readJsonArtifact } from '../artifacts.js';
 import { listDurableJobs } from '../job-state.js';
 import { attachOwnerApproval, pipelineArtifactPaths } from '../pipeline.js';
 import { describePublish, gitIn, publishIntent } from '../signed-publish.js';
-import { APPROVAL_KEY_PLACEHOLDER } from './approvals.js';
+import { APPROVAL_KEY_PLACEHOLDER, CHUNKED } from './approvals.js';
 
 export const NOT_NOW_MS = 15 * 60_000;
 const STARTER_FILE = 'starter-pending.json';
@@ -52,22 +52,56 @@ async function committedCommit(context, jobId) {
 // published nothing before).
 export function createJobApprovals({ config, context, pipeline, listJobs = listDurableJobs, git = gitIn(config.repository.checkout),
   readCommit = committedCommit, attach = attachOwnerApproval, clock = Date.now, log = () => {},
-  starter = null, publishStarter = null, afterStarter = async () => {} }) {
+  starter = null, publishStarter = null, afterStarter = async () => {},
+  // Page bundles (bundle-desk.js) whose commit waits for the signature, and the
+  // publisher's publish-bundle check that pushes one.
+  bundles = null, publishBundle = null }) {
   const offered = new Map(); // jobId -> requestId
   const quiet = new Map(); // jobId -> time before which it is not offered again ("Not now", or it could not be offered)
   let running = null;
 
-  async function describe(relay, commit) {
+  async function describe(relay, commit, { publicAdditions = null } = {}) {
     const description = await describePublish({ git, commit, remote: config.repository.remote.url, branch: config.repository.branch });
-    const blob = async (revision, path) => (await git(['cat-file', 'blob', `${revision}:${path}`])).toString('base64');
+    const blob = async (revision, path) => git(['cat-file', 'blob', `${revision}:${path}`]);
     const files = [];
+    const blobs = new Map();
     for (const change of description.changes) {
-      files.push({ path: change.path, before: change.before === null ? null : await blob(description.base, change.path),
-        after: change.after === null ? null : await blob(commit, change.path) });
+      const after = change.after === null ? null : await blob(commit, change.path);
+      // New images travel in chunks; text stays inline so the device can show it.
+      const chunked = publicAdditions !== null && change.before === null && after !== null && !/\.md$/iu.test(change.path);
+      if (chunked) blobs.set(change.path, after);
+      files.push({ path: change.path, before: change.before === null ? null : (await blob(description.base, change.path)).toString('base64'),
+        after: after === null ? null : chunked ? CHUNKED : after.toString('base64') });
     }
     const challenge = await relay.challenge();
     const intent = publishIntent({ challenge, keyId: APPROVAL_KEY_PLACEHOLDER, description });
-    return relay.request({ intent, files, askedBy: 'Your node' });
+    return relay.request({ intent, files, askedBy: 'Your node',
+      ...(publicAdditions === null ? {} : { publicAdditions, blobs }) });
+  }
+
+  // A page bundle: the device recomputes the public additions on its own and
+  // signs; the publisher checks the signature, the commit and its bundle rules.
+  async function offerBundle(relay, record) {
+    const key = `bundle:${record.bundleId}`;
+    const { requestId, result } = await describe(relay, record.commit, { publicAdditions: record.publicAdditions });
+    offered.set(key, requestId);
+    result.then(async (signed) => {
+      offered.delete(key);
+      try {
+        await publishBundle({ commit: record.commit, record: signed });
+      } catch (error) {
+        if (['capture-base-moved', 'owner-approval-mismatch'].includes(error?.code) || error?.code?.startsWith?.('create-')) {
+          await bundles.markStale(record.bundleId, error.code);
+        }
+        throw error;
+      }
+      await bundles.markPublished(record.bundleId, record.commit);
+      await git(['merge', '--ff-only', '--quiet', record.commit]).catch((error) => log(`the notes copy did not move to ${record.commit}: ${error?.message ?? 'failed'}`));
+      await Promise.resolve(afterStarter()).catch(() => {});
+    }, (error) => {
+      offered.delete(key);
+      if (error?.code === 'approval-declined') quiet.set(key, clock() + NOT_NOW_MS);
+    }).catch((error) => log(`bundle ${record.bundleId} was approved but not published: ${error?.code ?? 'failed'}`));
   }
 
   async function offer(relay, jobId) {
@@ -109,6 +143,16 @@ export function createJobApprovals({ config, context, pipeline, listJobs = listD
       try { await offerStarter(relay, starterCommit); } catch (error) {
         quiet.set('starter', now + 60_000);
         log(`the starter publish.yml was not offered: ${error?.code ?? error?.message ?? 'failed'}`);
+      }
+    }
+    if (bundles !== null && publishBundle !== null) {
+      for (const record of await bundles.list(['signing'])) {
+        const key = `bundle:${record.bundleId}`;
+        if (offered.has(key) || (quiet.get(key) ?? 0) > now) continue;
+        try { await offerBundle(relay, record); } catch (error) {
+          quiet.set(key, now + 60_000);
+          log(`bundle ${record.bundleId} not offered: ${error?.code ?? error?.message ?? 'failed'}`);
+        }
       }
     }
     const jobs = await listJobs(context, { maxBytes: config.limits.maxArtifactBytes });

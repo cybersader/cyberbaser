@@ -23,6 +23,7 @@ import { OwnerAlphaError, fail } from '../errors.js';
 import { STARTER_COMMIT_MESSAGE, STARTER_PATH, parseStarterPublishYml } from '../starter-publish.js';
 import { validFullName } from './forge-access.js';
 import { makeRunner, snapshotObjects } from './repository.js';
+import { verifyBundleForPush } from './bundle-publish.js';
 
 const OID = /^[0-9a-f]{40}$/u;
 const BRANCH = /^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*$/u;
@@ -209,6 +210,53 @@ export async function createMirror({ directory, uid = process.getuid(), forgeAcc
     }
   }
 
+  // A page bundle (new notes and images): always signed. The commit's one
+  // parent must be the remote head, the signed intent must match it exactly
+  // (checkCommit, unchanged), and the publisher's own bundle rules must pass.
+  async function publishBundle({ checkout, commit, authorize }) {
+    if (typeof checkout !== 'string' || !path.isAbsolute(checkout) || !OID.test(commit ?? '') || typeof authorize !== 'function') {
+      throw new OwnerAlphaError('owner-approval-missing', 'a page bundle needs the owner\'s signed approval');
+    }
+    const fetched = await fetchBound();
+    if (fetched.branch === null || fetched.head === null) throw new OwnerAlphaError('capture-base-moved', 'the repository has no branch to publish to');
+    const authorization = await authorize({ remote: fetched.remoteUrl, branch: fetched.branch });
+    if (authorization?.admitted == null) throw new OwnerAlphaError('owner-approval-missing', 'a page bundle needs the owner\'s signed approval');
+    const scratch = await mkdtemp(path.join(scratchRoot, 'cyberbaser-bundle-'));
+    try {
+      const source = path.join(scratch, 'source');
+      const checked = path.join(scratch, 'checked');
+      const packDir = path.join(checked, 'pack');
+      await mkdir(source, { mode: 0o700 });
+      await mkdir(packDir, { recursive: true, mode: 0o700 });
+      const packs = await snapshotObjects(checkout, source);
+      for (const pack of packs) await run(['index-pack', '--fsck-objects', pack], { objects: source });
+      const prefix = path.join(packDir, 'pack');
+      const packId = await run(['pack-objects', '--quiet', '--revs', '--window=0', '--no-reuse-delta', '--no-reuse-object', prefix],
+        { objects: source, input: `${commit}\n`, encoding: 'utf8' }).catch(() => '');
+      if (!OID.test(packId)) throw new OwnerAlphaError('owner-approval-mismatch', 'the bundle commit could not be read');
+      await run(['index-pack', '--strict', `${prefix}-${packId}.pack`], { objects: checked });
+      await verifyBundleForPush({ git: (args) => run(args, { objects: checked }), head: fetched.head, commit,
+        admitted: authorization.admitted });
+      const bound = await credential();
+      try {
+        await run(['push', '--porcelain', '--no-follow-tags', '--recurse-submodules=no', '--no-verify', '--', bound.remoteUrl,
+          `${commit}:refs/heads/${fetched.branch}`], { objects: checked, credential: bound, encoding: 'utf8' });
+      } catch {
+        throw new OwnerAlphaError('github-unreachable', 'the page was not pushed');
+      } finally {
+        bound.password = null;
+      }
+      await adopt({ commit, branch: fetched.branch, pack: `${prefix}-${packId}.pack` });
+      const receipt = authorization.receipt({ status: 'pushed', commit, remoteRef: commit });
+      return { repository: fetched.repository, branch: fetched.branch, commit, receipt };
+    } catch (error) {
+      if (error instanceof OwnerAlphaError) throw error;
+      throw new OwnerAlphaError('owner-approval-mismatch', 'the page bundle was not published');
+    } finally {
+      await rm(scratch, { recursive: true, force: true });
+    }
+  }
+
   await prepare();
   return Object.freeze({
     directory,
@@ -222,5 +270,6 @@ export async function createMirror({ directory, uid = process.getuid(), forgeAcc
     }),
     adoptPack: (input) => exclusive(() => adopt(input)),
     publishStarter: (input) => exclusive(() => publishStarter(input)),
+    publishBundle: (input) => exclusive(() => publishBundle(input)),
   });
 }
