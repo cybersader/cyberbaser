@@ -144,6 +144,6 @@ test('knowledge base: the top level first, readable folder names, and new folder
   expect(again.errors['folder.new.title']).toContain('already there');
   // Topics: the folder is named by the topic's title; Knowledge base and Authors are not topics.
   expect(planNewNote({ model, typeName: 'topic', values: { title: 'Policy & law', description: 'Rules.' }, paths: PATHS, titleOf, addressStyle: LH }))
-    .toMatchObject({ ok: true, notePath: 'Policy & law/index.md', address: '/policy-and-law/' });
+    .toMatchObject({ ok: true, notePath: 'Policy & law/index.md', address: '/policy-and-law' });
   expect(planNewNote({ model, typeName: 'topic', values: { title: 'Knowledge base', description: 'x' }, paths: PATHS, titleOf }).ok).toBe(false);
 });

@@ -1,0 +1,210 @@
+# Cyberchief site model: DRAFT (2026-11-24), version 3: readable names, folder notes.
+#
+# Describes what this vault contains, for Cyberbaser (forms, checks, allowed
+# properties) and for the cyberchief renderer. It describes content only.
+# How a page looks is decided by the renderer; `layout:` just names which of
+# the renderer's page layouts a type uses.
+#
+# Written by the cyberchief project lead from the site as built
+# (site/components/cc.ts, site/KB-CONVENTIONS.md, the frontmatter in content/).
+# Cyberbaser may reshape it once its format research picks a format; it will
+# say so before editing this file.
+
+version: 3
+site:
+  title: Cyberchief
+  home: index.md
+  default_author: "Authors/The Chief/The Chief.md"
+
+# Field types used below:
+#   text, long-text      plain text (long-text = a sentence or two)
+#   date                 YYYY-MM-DD
+#   checkbox             true / false
+#   url                  a web address
+#   image                a vault path to an image file (no remote images); stored in the
+#                        note's own folder, written as the bare file name ("cover.jpg")
+#   choice               one of a fixed list (`options:`)
+#   choice-from-folder   one sub-folder of `root:`; stored as the note's location, not a property
+#                        (only folders with their own folder note count, never a note's own folder)
+#   tags                 list of tags; `group/value` tags become filters, plain tags are labels
+#   author-reference     a link to an author note, e.g. "[[The Chief]]" (Authors/The Chief/The Chief.md)
+#   number               a whole number
+#
+# Defaults:
+#   today                the creation date, set by the writing tool
+#   first-publish        set by the writing tool inside the signed publish change
+#
+# Names (version 2, folder notes since version 3): file and folder names are
+# readable, like titles, and every note has its own folder of the same name.
+#   folder note = every note except the four root pages (index.md, About.md,
+#             Contact.md, Content.md) lives in a folder named like it:
+#             "<name>/<name>.md". Its images go in that same folder
+#             (Obsidian attachmentFolderPath "./"). Folders that hold other
+#             things (topics, KB folders, the KB itself) also have their own
+#             same-name note instead of index.md. Creating a note = create the
+#             folder, then the same-name note inside it.
+#   name    = the title as typed, minus characters unsafe on Windows, macOS or
+#             Linux (: / \ ? * " < > |) and minus a trailing dot or space.
+#             e.g. title "Risk & governance" -> folder "Risk & governance",
+#             title "NIST CSF 2.0 at a glance" -> "NIST CSF 2.0 at a glance.md".
+#             The author can edit the name before Create.
+#   address = derived by the renderer from the path, never stored: each path
+#             segment is lower-cased, accents stripped, "&" -> "and",
+#             "%" -> "percent", apostrophes dropped, every other run of spaces or
+#             punctuation (dots, emoji, symbols) -> one hyphen, trimmed; the
+#             extension of a known file type is kept lower-case, ".md" dropped;
+#             a FOLDER NOTE has its folder's address: a note (.md) whose
+#             name, minus .md, is "index" or equals its parent folder's name
+#             (compared as addresses: sluggifySegment(file) ==
+#             sluggifySegment(folder), after NFC; so case, accent encoding and
+#             "&" vs "and" do not matter) drops the repeated last segment.
+#             Other files (images) keep their own path. The address never
+#             depends on other files; it has no leading or trailing "/".
+#             e.g. "Leadership & strategy/Questions to ask a new CISO/Questions to ask a new CISO.md"
+#               -> leadership-and-strategy/questions-to-ask-a-new-ciso
+#             "Leadership & strategy/Leadership & strategy.md" -> leadership-and-strategy
+#             ".../Questions to ask a new CISO/cover photo.jpg"
+#               -> leadership-and-strategy/questions-to-ask-a-new-ciso/cover-photo.jpg
+#   collision = two files with the same address (e.g. "X/index.md" beside
+#             "X/X.md", "A/b.md" beside "A/B.md", an old flat "Topic/Post.md"
+#             beside "Topic/Post/Post.md") are refused: the renderer build
+#             fails naming both (Cyberbaser: create-address-collision).
+#             Declared in .cyberbaser/site.yml as `addresses: lowercase-hyphen`.
+#             Test cases: site/address-rule.cases.json (in the renderer repo):
+#             `cases` (slug, address, folderNote), `render`, `collisions`.
+# Location patterns below use names (<name>, <folder>), not addresses.
+names:
+  rule: title-minus-unsafe
+  unsafe_characters: ":/\\?*\"<>|"
+  trim: [trailing-dot, trailing-space, leading-space]
+  address: lowercase-hyphen
+  folder_notes: same-name          # "<name>/<name>.md"; "index.md" also accepted
+  folder_note_match: address       # sluggifySegment(NFC(file stem)) == sluggifySegment(NFC(folder name))
+  images: note-folder              # attachments live in the note's own folder
+  collisions: refuse               # create-address-collision
+
+# What is public is decided only by publish.yml at the vault root.
+
+types:
+
+  post:
+    label: Post
+    layout: post
+    # A post is a folder directly inside one topic folder, with a same-name
+    # note in it; its images (cover, inline pictures) go in that folder.
+    location:
+      field: topic
+      pattern: "<topic>/<name>/<name>.md"
+      images: "<topic>/<name>/"
+    fields:
+      title:       { type: text, label: Title, required: true }
+      topic:       { type: choice-from-folder, label: Topic, required: true, root: ".", of_type: topic }
+      description: { type: long-text, label: Summary, required: true }
+      date:        { type: date, label: Date, required: true, default: first-publish }
+      tags:        { type: tags, label: Tags, required: false }
+      cover:       { type: image, label: Cover photo, required: false }
+      youtube:     { type: url, label: YouTube link, required: false, hint: "A YouTube video link. The video only loads when a reader presses play." }
+      featured:    { type: checkbox, label: Feature on home, required: false, default: false }
+      author:      { type: author-reference, label: Author, required: false, default: "from the paired device, else site.default_author" }
+      draft:       { type: checkbox, label: Draft, required: false, default: true }
+      sample:      { type: checkbox, label: Sample, required: false, default: false, hidden: true }
+
+  topic:
+    label: Topic
+    layout: topic
+    # A top-level folder with a same-name folder note. Posts live inside it,
+    # each in its own folder (which is never a topic).
+    # Folder name = the topic's short label, e.g. "Leadership & strategy".
+    location:
+      pattern: "<name>/<name>.md"
+      also_accepted: "<name>/index.md"
+      excludes: ["Knowledge base", "Authors", "tags", "Attachments"]   # Attachments: legacy image folder name, never a topic
+    fields:
+      title:       { type: text, label: Title, required: true }
+      description: { type: long-text, label: Summary, required: true }
+      start:       { type: text, label: Reader prompt, required: false, hint: "e.g. I'm building or resetting a security program" }
+      short:       { type: text, label: Short label, required: false, hint: "Shown on the filter buttons" }
+      order:       { type: number, label: Order, required: false }
+      icon:        { type: choice, label: Icon, required: false, options: [flag, scale, alert, layers, users, star, building, shield] }
+      cover:       { type: image, label: Cover photo, required: false }
+
+  kb-page:
+    label: Knowledge base page
+    layout: kb-page
+    # One home folder anywhere under "Knowledge base/" (at most two levels deep),
+    # or "Knowledge base/" itself; the page is its own folder inside it, with a
+    # same-name note and its images. Address: /knowledge-base/[<folder...>/]<name>
+    location:
+      field: folder
+      pattern: "Knowledge base/[<folder...>/]<name>/<name>.md"
+      images: "Knowledge base/[<folder...>/]<name>/"
+    fields:
+      title:       { type: text, label: Title, required: true }
+      folder:      { type: choice-from-folder, label: Folder, required: true, root: "Knowledge base", of_type: kb-folder, allow_root: true, allow_new: true, max_depth: 2 }   # a new folder = "<folder>/<folder>.md" too
+      description: { type: long-text, label: Summary, required: true }
+      tags:        { type: tags, label: Tags, required: false }
+      draft:       { type: checkbox, label: Draft, required: false, default: true }
+      sample:      { type: checkbox, label: Sample, required: false, default: false, hidden: true }
+
+  kb-folder:
+    label: Knowledge base folder
+    layout: kb-folder
+    # Shown as a folder once it holds a page (a new folder's note alone
+    # renders as a page until then).
+    location:
+      pattern: "Knowledge base/<folder...>/<folder>/<folder>.md"
+      also_accepted: "Knowledge base/<folder...>/index.md"
+    fields:
+      title:       { type: text, label: Title, required: true }
+      description: { type: long-text, label: Summary, required: true }
+      order:       { type: number, label: Order, required: false }
+
+  author:
+    label: Author
+    layout: author
+    # The note and its photos share one folder: "Authors/The Chief/The Chief.md",
+    # "Authors/The Chief/avatar.png".
+    location:
+      pattern: "Authors/<name>/<name>.md"
+      images: "Authors/<name>/"
+    fields:
+      title:       { type: text, label: Name, required: true }
+      credential:  { type: text, label: Credential, required: false }
+      location:    { type: text, label: Location, required: false }
+      avatar:      { type: image, label: Small photo, required: false }
+      portrait:    { type: image, label: Large photo, required: false }
+      linkedin:    { type: url, label: LinkedIn, required: false }
+      description: { type: long-text, label: Short bio, required: false }
+
+  page:
+    label: Page
+    layout: page
+    # Fixed single pages. Not created from the form.
+    location:
+      paths: [index.md, About.md, Contact.md, Content.md, "Knowledge base/Knowledge base.md", "Knowledge base/Glossary/Glossary.md"]
+    fields:
+      title:       { type: text, label: Title, required: true }
+      description: { type: long-text, label: Summary, required: false }
+
+taxonomy:
+  # Folder Tag Sync model (site/KB-CONVENTIONS.md).
+  model: folders-plus-tags
+  folders:
+    rule: "Every page has exactly one home folder."
+    folder_note: "<folder>/<folder>.md"   # index.md also accepted (never both)
+    folder_tag: derived          # the folder's address, e.g. knowledge-base/threats-and-response/ransomware; never typed by authors
+  tags:
+    shape: "group/value"         # preferred; these become filters on the site
+    allow_plain: true            # plain tags (e.g. strategy) are allowed as simple labels
+    open: true                   # any new tag is accepted and shown automatically
+    suggested:
+      audience: [executives, security-leaders, practitioners, board]
+      level: [primer, deep-dive]
+      sector: [public-sector, finance, healthcare, critical-infrastructure]
+    labels:                      # display labels for suggested groups; others are labelled from their words
+      audience: Audience
+      level: Level
+      sector: Sector
+  also_filed:
+    rule: "A knowledge-base/<folder> tag (the folder's address) lists the page under that folder too. Its home does not change."
+    tag_prefix: "knowledge-base/"

@@ -1,17 +1,22 @@
 // The vault's site model (.cyberbaser/model.yml): what kinds of notes the
 // site has, their fields, and which folders hold them. Pure, no Obsidian.
 //
-// The format is the vault's own (versions 0 to 2, written by the site
+// The format is the vault's own (versions 0 to 3, written by the site
 // builder). This reads it as written and does not add to it. Version 2 adds
 // readable names (`names:`): a new note's file and a new folder are named
-// like their title, and the location placeholder is <name> (<slug> before). Errors are plain
+// like their title, and the location placeholder is <name> (<slug> before).
+// Version 3 adds folder notes: every note lives in a folder of its own name
+// ("<topic>/<name>/<name>.md"), folders have a same-name note instead of
+// index.md (`taxonomy.folders.folder_note: "<folder>/<folder>.md"`), and
+// images go in the note's own folder (`names.images: note-folder`). Errors are plain
 // sentences that name the type and field, because the person reading them is
 // the site builder fixing one file. The model never decides what is public:
 // publish.yml does.
 import yaml from 'js-yaml';
+import { addressSegment, isFolderNotePath } from '../../../../packages/publish/src/addresses.js';
 
 export const MODEL_PATH = '.cyberbaser/model.yml';
-export const SUPPORTED_VERSIONS = Object.freeze([0, 1, 2]);
+export const SUPPORTED_VERSIONS = Object.freeze([0, 1, 2, 3]);
 // The placeholder a new note's own name fills: <name> (readable, version 2) or <slug> (versions 0 and 1).
 export const NAME_PLACEHOLDERS = Object.freeze(['name', 'slug']);
 export const DEFAULT_UNSAFE = ':/\\?*"<>|';
@@ -37,9 +42,24 @@ const list = (words) => words.join(', ');
 const OPTIONAL = /\[(<[a-z][a-z0-9_-]*(?:\.\.\.)?>)\/\]/gu;
 const OPTIONAL_MARK = '\u0000?';
 
-/** Split a location pattern into segments: { literal } or { name, many, md, optional }. */
+// The folder-note form of a model: "<folder>/<folder>.md" (version 3) or a
+// file name like index.md (before).
+export const SAME_NAME_FOLDER_NOTE = '<folder>/<folder>.md';
+
+/** Two names of one folder note: equal as address segments (NFC, case, accents, & vs and). */
+export function sameName(a, b) {
+  const x = addressSegment(a, 'lowercase-hyphen');
+  return x !== '' && x === addressSegment(b, 'lowercase-hyphen');
+}
+
+/**
+ * Split a location pattern into segments: { literal } or { name, many, md,
+ * optional, repeat }. A placeholder used again later is a `repeat`: its value
+ * is the last folder of the first one ("<topic>/<name>/<name>.md": the note is
+ * named like its folder). `<x...>/<x>` names one folder path, written once.
+ */
 export function patternSegments(pattern) {
-  return String(pattern).replace(OPTIONAL, `${OPTIONAL_MARK}$1/`).split('/').map((raw) => {
+  const segments = String(pattern).replace(OPTIONAL, `${OPTIONAL_MARK}$1/`).split('/').map((raw) => {
     const optional = raw.startsWith(OPTIONAL_MARK);
     const part = optional ? raw.slice(OPTIONAL_MARK.length) : raw;
     const stem = part.endsWith('.md') ? part.slice(0, -3) : part;
@@ -47,20 +67,26 @@ export function patternSegments(pattern) {
     if (!match) return { literal: part };
     return { name: match[1], many: match[2] === '...', md: part.endsWith('.md'), optional };
   });
+  const out = [];
+  const seen = new Set();
+  for (const segment of segments) {
+    const previous = out.at(-1);
+    if (segment.name && previous?.name === segment.name && previous.many && !segment.many && !segment.md) continue;
+    out.push(segment.name && seen.has(segment.name) ? { ...segment, repeat: true } : segment);
+    if (segment.name) seen.add(segment.name);
+  }
+  return out;
 }
 
-/** Does a vault path fit a location pattern? Returns the placeholder values, or null. */
-export function matchLocation(location, path) {
-  if (!location) return null;
-  if (Array.isArray(location.paths)) return location.paths.includes(path) ? {} : null;
-  const segments = patternSegments(location.pattern);
+function matchPattern(pattern, path, excludes) {
+  const segments = patternSegments(pattern);
   let source = '';
   const names = [];
   for (const [index, segment] of segments.entries()) {
     let piece;
     if (segment.literal !== undefined) piece = segment.literal.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
     else {
-      names.push(segment.name);
+      names.push(segment);
       piece = `${segment.many ? '([^/]+(?:/[^/]+)*)' : '([^/]+)'}${segment.md ? '\\.md' : ''}`;
     }
     const last = index === segments.length - 1;
@@ -68,19 +94,58 @@ export function matchLocation(location, path) {
   }
   const match = new RegExp(`^${source}$`, 'u').exec(path);
   if (!match) return null;
-  const values = Object.fromEntries(names.map((name, i) => [name, match[i + 1] ?? '']));
-  const excludes = location.excludes ?? [];
+  const values = {};
+  for (const [i, segment] of names.entries()) {
+    const value = match[i + 1] ?? '';
+    if (!segment.repeat) { values[segment.name] = value; continue; }
+    // A repeat names the same folder: the note's name equals its folder's (as addresses).
+    if (!sameName(value, String(values[segment.name] ?? '').split('/').at(-1))) return null;
+  }
   if (Object.values(values).some((value) => value.split('/').some((part) => excludes.includes(part)))) return null;
   return values;
+}
+
+/**
+ * Does a vault path fit a location pattern (or its also_accepted form)?
+ * Returns the placeholder values, or null.
+ */
+export function matchLocation(location, path) {
+  if (!location) return null;
+  if (Array.isArray(location.paths)) return location.paths.includes(path) ? {} : null;
+  const excludes = location.excludes ?? [];
+  for (const pattern of [location.pattern, location.alsoAccepted].filter(Boolean)) {
+    const values = matchPattern(pattern, path, excludes);
+    if (values) return values;
+  }
+  return null;
 }
 
 /** Build a vault path from a location pattern and placeholder values. */
 export function fillLocation(location, values) {
   return patternSegments(location.pattern).map((segment) => {
     if (segment.literal !== undefined) return segment.literal;
-    const value = values[segment.name];
+    const value = segment.repeat ? String(values[segment.name] ?? '').split('/').at(-1) : values[segment.name];
     return segment.md ? `${value}.md` : value;
   }).filter((part) => part !== '' && part !== '.').join('/');
+}
+
+/** The folder note of a folder under this model: "<folder>/<folder>.md" (version 3) or "<folder>/index.md". */
+export function folderNotePath(model, folder) {
+  const clean = String(folder ?? '').replace(/^\.\/|\/+$/gu, '');
+  const form = model?.taxonomy?.folderNote ?? 'index.md';
+  const file = form === SAME_NAME_FOLDER_NOTE ? `${clean.split('/').at(-1)}.md` : form;
+  return clean === '' || clean === '.' ? file : `${clean}/${file}`;
+}
+
+/**
+ * Is this path a folder note under this model? Same-name models accept
+ * "X/X.md" (names compared as addresses) and "X/index.md"; others their
+ * folder_note file name.
+ */
+export function isModelFolderNote(model, path) {
+  const form = model?.taxonomy?.folderNote ?? 'index.md';
+  if (form === SAME_NAME_FOLDER_NOTE) return isFolderNotePath(path, 'lowercase-hyphen');
+  return path.endsWith(`/${form}`) || path === form;
 }
 
 function readField(typeName, fieldName, raw, errors, version) {
@@ -139,8 +204,13 @@ function readField(typeName, fieldName, raw, errors, version) {
 function readLocation(typeName, raw, errors) {
   const where = `The location of type "${typeName}"`;
   if (!isMap(raw)) { errors.push(`Type "${typeName}" needs a location: a "pattern" like "folder/<slug>.md", or a list of "paths".`); return null; }
+  const keys = ['pattern', 'field', 'excludes', 'paths', 'images', 'also_accepted'];
   for (const key of Object.keys(raw)) {
-    if (!['pattern', 'field', 'excludes', 'paths'].includes(key)) errors.push(`${where} has a setting "${key}" it does not use. It can have: pattern, field, excludes, paths.`);
+    if (!keys.includes(key)) errors.push(`${where} has a setting "${key}" it does not use. It can have: ${list(keys)}.`);
+  }
+  if (raw.images !== undefined && !(isText(raw.images) && raw.images.endsWith('/'))) errors.push(`${where}: "images" should be the folder images go in, ending in /.`);
+  if (raw.also_accepted !== undefined && !(isText(raw.also_accepted) && raw.also_accepted.endsWith('.md'))) {
+    errors.push(`${where}: "also_accepted" should be another pattern ending in .md, like "<name>/index.md".`);
   }
   if (raw.paths !== undefined) {
     if (raw.pattern !== undefined) errors.push(`${where} has both "pattern" and "paths". Use one.`);
@@ -169,6 +239,8 @@ function readLocation(typeName, raw, errors) {
   }
   if (raw.field !== undefined && !isText(raw.field)) errors.push(`${where}: "field" should name one of its fields.`);
   return Object.freeze({ pattern: raw.pattern, ...(isText(raw.field) ? { field: raw.field } : {}),
+    ...(isText(raw.also_accepted) ? { alsoAccepted: raw.also_accepted } : {}),
+    ...(isText(raw.images) ? { images: raw.images } : {}),
     excludes: Object.freeze([...(Array.isArray(raw.excludes) ? raw.excludes : [])]) });
 }
 
@@ -288,8 +360,13 @@ export function parseSiteModel(text) {
 function readNames(raw, errors) {
   if (raw === undefined) return null;
   if (!isMap(raw)) { errors.push('"names" should be a set of settings, for example { rule: title-minus-unsafe }.'); return null; }
+  const keys = ['rule', 'unsafe_characters', 'trim', 'address', 'folder_notes', 'folder_note_match', 'images', 'collisions'];
   for (const key of Object.keys(raw)) {
-    if (!['rule', 'unsafe_characters', 'trim', 'address'].includes(key)) errors.push(`"names" has a setting "${key}" Cyberbaser does not read. It can have: rule, unsafe_characters, trim, address.`);
+    if (!keys.includes(key)) errors.push(`"names" has a setting "${key}" Cyberbaser does not read. It can have: ${list(keys)}.`);
+  }
+  // Version 3 folder notes: the only values Cyberbaser implements; anything else fails closed.
+  for (const [key, allowed] of [['folder_notes', 'same-name'], ['folder_note_match', 'address'], ['images', 'note-folder'], ['collisions', 'refuse']]) {
+    if (raw[key] !== undefined && raw[key] !== allowed) errors.push(`"names.${key}" should be ${allowed}; Cyberbaser does not know "${raw[key]}".`);
   }
   if (raw.rule !== 'title-minus-unsafe') errors.push('"names.rule" should be title-minus-unsafe: names are the title minus characters unsafe in file names.');
   if (raw.unsafe_characters !== undefined && typeof raw.unsafe_characters !== 'string') errors.push('"names.unsafe_characters" should be text, like ":/\\?*\"<>|".');
@@ -301,7 +378,10 @@ function readNames(raw, errors) {
     unsafe: typeof raw.unsafe_characters === 'string' ? raw.unsafe_characters : DEFAULT_UNSAFE,
     trim: Object.freeze(Array.isArray(raw.trim) ? raw.trim.filter((value) => TRIMS.includes(value)) : [...TRIMS]),
     // The address style the model expects; .cyberbaser/site.yml is the one that decides.
-    address: typeof raw.address === 'string' ? raw.address : null });
+    address: typeof raw.address === 'string' ? raw.address : null,
+    // Version 3: notes in their own folder, images beside them (written by bare file name).
+    folderNotes: raw.folder_notes === 'same-name' ? 'same-name' : null,
+    images: raw.images === 'note-folder' ? 'note-folder' : null });
 }
 
 function readTaxonomy(raw, errors) {
@@ -310,8 +390,8 @@ function readTaxonomy(raw, errors) {
   const folders = raw.folders ?? {};
   const tags = raw.tags ?? {};
   const folderNote = isMap(folders) && folders.folder_note !== undefined ? folders.folder_note : 'index.md';
-  if (!(isText(folderNote) && folderNote.endsWith('.md') && !folderNote.includes('/'))) {
-    errors.push('"taxonomy.folders.folder_note" should be a note file name like index.md.');
+  if (!(isText(folderNote) && folderNote.endsWith('.md') && (!folderNote.includes('/') || folderNote === SAME_NAME_FOLDER_NOTE))) {
+    errors.push(`"taxonomy.folders.folder_note" should be a note file name like index.md, or ${SAME_NAME_FOLDER_NOTE}.`);
   }
   const suggested = [];
   if (isMap(tags) && tags.suggested !== undefined) {
@@ -352,7 +432,7 @@ export function firstPublishFields(model, path) {
     const folder = folderField ? values[folderField.name] : '';
     if (folderField && folder !== '') {
       const folderType = typeNamed(model, folderField.ofType);
-      const note = [folderField.root, folder, model.taxonomy?.folderNote ?? 'index.md'].filter((part) => part && part !== '.').join('/');
+      const note = folderNotePath(model, [folderField.root, folder].filter((part) => part && part !== '.').join('/'));
       if (!matchLocation(folderType?.location, note)) continue;
     }
     for (const field of type.fields) {

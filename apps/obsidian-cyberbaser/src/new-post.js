@@ -386,6 +386,8 @@ export class NewPostModal extends Modal {
           const file = vault.getAbstractFileByPath(path);
           if (file instanceof TFile) await vault.delete(file);
         },
+        // A bare photo name must not also name a file at the vault root (looked at first).
+        exists: (path) => vault.getAbstractFileByPath(path) !== null,
       });
     } catch (error) {
       button.disabled = false;

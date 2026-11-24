@@ -10,7 +10,7 @@
 // anything is created.
 import yaml from 'js-yaml';
 import { addressFor } from '../../../../packages/publish/src/addresses.js';
-import { DEFAULT_UNSAFE, fillLocation, matchLocation, namePlaceholder, patternSegments, typeNamed } from './site-model.js';
+import { DEFAULT_UNSAFE, fillLocation, folderNotePath, isModelFolderNote, matchLocation, namePlaceholder, patternSegments, SAME_NAME_FOLDER_NOTE, typeNamed } from './site-model.js';
 
 export const IMAGE_EXTENSIONS = Object.freeze(['png', 'jpg', 'jpeg', 'webp', 'gif']);
 const TAG_GROUP_VALUE = /^[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)+$/u;
@@ -171,6 +171,14 @@ export function tagSuggestions(model, existing = []) {
  * most max_depth deep, whose folder note is a note of the field's of_type.
  * paths: every file path in the vault. titleOf(path) -> title or null.
  * Returns [{ value, path, label, depth }]; value is relative to the root.
+ *
+ * Same-name folder notes (site model version 3): a post, a knowledge base page
+ * or an author note is also a folder with a same-name note, and that folder
+ * is never offered. Which is which is the renderer's own rule (Cyberchief
+ * FolderNotes, packages/publish addresses.js renderSlugs): a same-name note
+ * of a top-level folder, or of a folder that holds another note, is that
+ * folder's page; one whose folder holds only itself and its images is a
+ * page. An index.md is always the folder's page.
  */
 export function folderOptions(model, field, paths, titleOf = () => null) {
   const options = folderChoices(model, field, paths, titleOf);
@@ -181,26 +189,37 @@ export function folderOptions(model, field, paths, titleOf = () => null) {
 /** "Knowledge base (top level)": the root folder note's title, else its name. */
 export function rootLabel(model, field, titleOf = () => null) {
   if (field.root === '.') return 'Top level';
-  const title = oneLine(titleOf(`${field.root}/${model.taxonomy?.folderNote ?? 'index.md'}`));
+  const title = oneLine(titleOf(folderNotePath(model, field.root)));
   return `${title || field.root} (top level)`;
+}
+
+/** Does this folder (a vault path) hold a note other than its own folder note, at any depth? */
+function holdsAnotherNote(folder, notePath, paths) {
+  return paths.some((path) => path !== notePath && /\.md$/iu.test(path) && path.startsWith(`${folder}/`));
 }
 
 function folderChoices(model, field, paths, titleOf) {
   const folderType = typeNamed(model, field.ofType);
-  const note = model.taxonomy?.folderNote ?? 'index.md';
+  const sameName = model.taxonomy?.folderNote === SAME_NAME_FOLDER_NOTE;
   const root = field.root === '.' ? '' : field.root;
   const options = [];
+  const notes = new Map();
   for (const path of paths) {
-    if (!path.endsWith(`/${note}`)) continue;
+    if (!path.includes('/') || !isModelFolderNote(model, path)) continue;
     const folder = dirname(path);
     if (root && !folder.startsWith(`${root}/`)) continue;
     const value = root ? folder.slice(root.length + 1) : folder;
     const depth = value.split('/').length;
     if (depth > field.maxDepth || !matchLocation(folderType?.location, path)) continue;
+    // A note's own folder is not a folder to file things in (see above).
+    const indexNote = /^index\.md$/iu.test(path.split('/').at(-1));
+    if (sameName && !indexNote && folder.includes('/') && !holdsAnotherNote(folder, path, paths)) continue;
+    if (notes.has(folder)) continue;
+    notes.set(folder, path);
     options.push({ value, path: folder, depth });
   }
   options.sort((a, b) => a.path.localeCompare(b.path));
-  const label = (folder) => oneLine(titleOf(`${folder}/${note}`)) || folder.split('/').at(-1);
+  const label = (folder) => oneLine(titleOf(notes.get(folder) ?? folderNotePath(model, folder))) || folder.split('/').at(-1);
   for (const option of options) {
     const parts = option.value.split('/');
     option.label = parts.map((_, i) => label(join(root, parts.slice(0, i + 1).join('/')))).join(' › ');
@@ -292,7 +311,7 @@ function propertyEntries(type, values, context, errors, prefix = '') {
         const filename = `${context.slug}${context.model.names ? ' ' : '-'}${field.name}.${extension === 'jpeg' ? 'jpg' : extension}`;
         const target = availablePath(join(context.folder, filename), context.exists);
         context.images.push({ field: field.name, filename, path: target, source: value.source });
-        entries.push([field.name, target]);
+        entries.push([field.name, propertyImageValue(context.model, target, join(context.folder, 'x.md'), context.exists)]);
         break;
       }
       default:
@@ -350,7 +369,7 @@ export function planNewNote({ model, typeName, values = {}, paths = [], today, a
       }
       const value = join(parent, name);
       const folderPath = join(root, value);
-      const notePath = join(folderPath, model.taxonomy?.folderNote ?? 'index.md');
+      const notePath = folderNotePath(model, folderPath);
       if (name === '' && (folderNameKey === 'name' || oneLine(answer.new.values?.title) !== '')) folderErrors[folderNameKey] = 'Use some letters or digits in the folder name.';
       else if (name !== '' && nameProblem(name, 'folder name')) folderErrors[folderNameKey] = nameProblem(name, 'folder name');
       else if (name !== '' && addressStyle !== null && addressFor(`${join(root, name)}/index.md`, null, addressStyle) === null) {
@@ -388,7 +407,22 @@ export function planNewNote({ model, typeName, values = {}, paths = [], today, a
   if (Object.keys(errors).length > 0) return { ok: false, errors, notePath, address };
   for (const image of images) steps.push({ kind: 'image', field: image.field, filename: image.filename, path: image.path, source: image.source });
   steps.push({ kind: 'note', path: notePath, text: `${frontmatterText(entries)}\n`, entries });
-  return { ok: true, notePath, address, steps };
+  return { ok: true, notePath, address, steps, model };
+}
+
+/**
+ * How a property names an image at this vault path, for a note at notePath.
+ * Site models with note-folder images (version 3) write the bare file name
+ * when the image is in the note's own folder ("cover: Post cover.jpg"); that
+ * resolves there by the property-image rule (packages/publish
+ * property-refs.js: the vault root first, then the note's own folder). Any
+ * other place, or any other model, keeps the path from the vault root.
+ */
+export function propertyImageValue(model, imagePath, notePath, exists = () => false) {
+  if (model?.names?.images !== 'note-folder') return imagePath;
+  const file = imagePath.split('/').at(-1);
+  // The bare name must not mean a different file at the vault root (the root is looked at first).
+  return dirname(imagePath) === dirname(notePath) && dirname(imagePath) !== '' && !exists(file) ? file : imagePath;
 }
 
 /** "a/b cover.jpg", or "a/b cover 1.jpg", "a/b cover 2.jpg" … when taken (Obsidian's rule). */
@@ -438,7 +472,9 @@ export async function applyPlan(plan, io) {
       await io.copyImage(image.source, path);
       paths.set(image.field, path);
     }
-    const entries = last.entries.map(([name, value, ...rest]) => (paths.has(name) ? [name, paths.get(name), ...rest] : [name, value, ...rest]));
+    const entries = last.entries.map(([name, value, ...rest]) => (paths.has(name)
+      ? [name, propertyImageValue(plan.model ?? null, paths.get(name), last.path, typeof io.exists === 'function' ? io.exists : () => false), ...rest]
+      : [name, value, ...rest]));
     await io.replaceText(last.path, `${frontmatterText(entries)}\n`);
   } catch (error) {
     try { await io.remove(last.path); } catch { /* the original error matters more */ }
