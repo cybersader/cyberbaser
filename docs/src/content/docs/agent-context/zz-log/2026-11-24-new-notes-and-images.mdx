@@ -1,0 +1,43 @@
+---
+title: New notes and images through the gate (built, synthetic)
+description: Page bundles carry one new or edited note, at most one new folder index and up to four images from a device to a signed publish. Photos are cleaned of location on the device, the device works out new public pages itself, and the publisher re-checks everything. Proven end to end against a throwaway repository; not used on a real vault.
+status: log
+---
+
+## What now works
+
+A note the vault does not have can be published from the Obsidian plugin with its embedded images. The device reads its own `publish.yml`, works out whether the note goes public and at which address, strips GPS and other location data from photos, and refuses drafts, remote images and disallowed images before anything is sent. Images travel in 256 KiB chunks; the node builds a page bundle against the branch head, runs every check, and writes a create-once commit from Git objects (private index, one parent equal to the base, no ref or working tree touched). The owner's device fetches every new byte, hashes it, recomputes the new public pages and refuses if the node's list differs; its approval sheet shows a separate "New public page: /address, plus N images" line. The publisher checks the signature and commit exactly as before (`checkCommit`, unchanged and enforced regardless of rollout mode), then its own bundle rules, then pushes.
+
+Devices and agents that may only propose submit bundles that wait for the owner's review on `/owner/bundles` (route C: simplified rendering, sandboxed frame, images inlined from the bundle's bytes, each image also served alone with its sniffed type, `nosniff` and a `default-src 'none'` sandbox policy). Approve there only moves the bundle to the owner's signature.
+
+Drafts: `draft: true` or `sample: true` keeps a note out of the site (vault-owned `exclude_when`, default `[draft, sample]`), ranked just below `publish: false` and above allow globs and `cb-publish: true`. Drafts are never pushed: the plugin sends a note only when it is not a draft, and the node refuses a created note the public rules do not select.
+
+## Owner answers applied (2026-11-24)
+
+- Photo location: removed by the writing tool on the device; the signed bytes are the cleaned bytes; the node and publisher still refuse `image-has-location`; the core never rewrites bytes.
+- SVG: refused (`asset-type-refused`) while the owner's question stays open.
+- Drafts: excluded by the selector and never pushed.
+
+## Deviations from the design note
+
+1. **Bundles are their own artifact (schema 3, `cyberbaser-page-bundle`), not a widened v2 change set.** Every v2 consumer reads `files[0]` as the one modified file; widening v2 would let an old consumer silently ignore new files. A distinct type makes them fail closed.
+2. **Image bytes do not travel inside the artifact.** The signed-request carrier caps a request at 512 KiB and the queue a proposal at 256 KiB, below the 5 MiB image limit. Images are staged in chunks (`stageAsset`), bound in the bundle by length and SHA-256, stored as loose Git blobs once checked, and read by the device in chunks (`readApprovalChunk`).
+3. **Bundles wait in their own small store on the node, not the proposal queue.** The queue, its review service and the apply pipeline are built around one modified file. The bundle desk holds review and signing states and publishes only through the owner's signature, so no queue or pipeline authority was widened.
+4. **The publisher's bundle path is a new owner-control op, `publish-bundle`, modelled on the signed starter publish.** It always requires an admitted signature.
+5. **A created note must be public.** The design allowed a declared draft; the owner's answer (drafts never pushed) makes `create-outside-publication` cover drafts too.
+6. **Public-set additions come only from created paths.** Removing a draft marker from an already committed note is refused (`public-set-change-unlisted`) rather than offered as a new public page; with drafts never pushed this should not arise.
+7. **Two new notes only as a note plus its folder's `index.md`.** Contract code `bundle-file-count`.
+
+## Evidence
+
+- `packages/media-check`: 16 tests with in-test PNG, JPEG (big and little endian Exif, XMP), WebP and GIF fixtures; decoded with Pillow 12.3 to confirm GPS is gone and orientation kept.
+- `apps/owner-alpha/test/page-bundle.test.js`: every node refusal on a real Git fixture, the create-once commit, the publisher's own rules.
+- `apps/owner-alpha/test/page-bundle-e2e.test.js`: a post with a GPS-tagged cover over 256 KiB goes from the plugin core through the desk, relay, device signature and publisher checks to a throwaway bare repository, which ends with the cleaned bytes; the node lying about the address or the public set is refused by the device; a changed image byte (`content-mismatch`) and an extra file (`unsigned-path-changed`) are refused by the publisher; a propose-only bundle is never offered for signature until the owner approves it.
+- `apps/owner-alpha/test/bundle-review.test.js`: route C through the owner app's own handler.
+
+## Not verified
+
+- The publisher mirror's `publishBundle` against GitHub (or the fake GitHub harness); the end-to-end test calls the same verification function and pushes to a local bare repository.
+- The plugin UI in a real Obsidian (desktop or phone); only the core is tested.
+- The draft rule on the real Cyberbase vault: any committed note with `draft:` or `sample:` set will leave the public site on the next build.
+- Route C rendering is plain (headings and paragraphs), not the site's own page.
