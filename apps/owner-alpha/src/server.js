@@ -17,6 +17,7 @@ import { fail, OwnerAlphaError } from './errors.js';
 import { listDurableJobs, loadDurableJob, validateJobId } from './job-state.js';
 import { ensureOwnerSite } from './site.js';
 import { createEditSession as createSourceEditSession, liveUrlForSlug } from './source.js';
+import { configuredSiteBase, readSiteBase } from './site-base.js';
 import { createUpstream } from './upstream.js';
 import { prepareStore, storeContextFromConfig } from './store.js';
 import { startSuggestionIntake, suggestionFormOrigin, suggestionChallengeOrigin } from './suggestions.js';
@@ -386,7 +387,7 @@ const SAVE_STOPS = Object.freeze(Object.fromEntries(Object.entries(JOB_STOPS).ma
   step: state === 'completed' ? 3 : value.step === 0 ? 0 : value.step < 3 ? 1 : 2,
   copy: state === 'completed' ? 'Saved' : state === 'live-verification-failed' ? 'Updating the site' : 'The save did not finish. Open Details for what happened.',
 }])));
-function jobPage(job, readerOrigin, appearance = null) {
+function jobPage(job, readerHome, appearance = null) {
   const safe = publicJob(job);
   if (safe.origin?.type === 'owner-publication') return publicationJobPage(safe);
   const done = safe.state === 'completed';
@@ -396,8 +397,8 @@ function jobPage(job, readerOrigin, appearance = null) {
   const copy = safe.liveCopy ?? SAVE_STOPS[safe.state]?.copy ?? SAVE_STEPS[active].label;
   const title = job.page?.title || safe.origin?.relativePath?.split('/').at(-1)?.replace(/\.md$/u, '') || 'Your page';
   const slug = job.page?.slug ?? safe.origin?.relativePath?.replace(/\.md$/u, '');
-  const view = slug ? liveUrlForSlug(`${readerOrigin}/cyberbase/`, slug) : `${readerOrigin}/cyberbase/`;
-  const edit = safe.origin?.relativePath && slug ? `/owner/in-place?relativePath=${encodeURIComponent(safe.origin.relativePath)}&slug=${encodeURIComponent(slug)}` : `${readerOrigin}/cyberbase/`;
+  const view = slug ? liveUrlForSlug(readerHome, slug) : readerHome;
+  const edit = safe.origin?.relativePath && slug ? `/owner/in-place?relativePath=${encodeURIComponent(safe.origin.relativePath)}&slug=${encodeURIComponent(slug)}` : readerHome;
   const steps = SAVE_STEPS.map((step, index) => {
     const status = done || index < active ? 'done' : index === active ? (stopped ? 'stopped' : 'current') : 'pending';
     return `<li class="job-step job-step-${status}" data-step="${step.key}" data-status="${status}">${step.label}</li>`;
@@ -420,7 +421,7 @@ function jobPage(job, readerOrigin, appearance = null) {
 <p id="job-technical-stage">${escapeHtml(jobStageCopy(safe.state))}</p><p id="job-recovery" class="status">${escapeHtml(safe.recovery?.instruction ?? '')}</p>
 <p id="job-error" class="error">${safe.failure ? `Stopped (${escapeHtml(safe.failure.code)}).` : ''}</p>
 <p class="job-technical">Job <span id="job-id">${escapeHtml(safe.jobId)}</span> · state <span id="job-state">${escapeHtml(safe.state)}</span> · updated <span id="job-updated">${escapeHtml(safe.updatedAt ?? '')}</span></p></details>
-<p class="job-links">${safe.origin?.type === 'approved-proposal' ? `<a href="/owner/decisions/${encodeURIComponent(safe.origin.queueId)}">Back to the suggestion</a> · ` : ''}<a href="${escapeHtml(readerOrigin)}/cyberbase/">Return to Cyberbase</a></p></main>`,
+<p class="job-links">${safe.origin?.type === 'approved-proposal' ? `<a href="/owner/decisions/${encodeURIComponent(safe.origin.queueId)}">Back to the suggestion</a> · ` : ''}<a href="${escapeHtml(readerHome)}">Return to Cyberbase</a></p></main>`,
   });
 }
 
@@ -952,7 +953,7 @@ function publicationJobPage(safe) {
 <p id="job-recovery">${escapeHtml(safe.recovery?.instruction ?? '')}</p></div></details></main>` });
 }
 
-function publicationLanding(config, csrfToken, readerOrigin) {
+function publicationLanding(config, csrfToken, readerHome) {
   const mapping = config.ownerPublication.mappings[0];
   const title = publicationTitle(mapping.relativePath);
   const publicUrl = liveUrlForSlug(config.live.baseUrl, mapping.slug);
@@ -962,7 +963,7 @@ function publicationLanding(config, csrfToken, readerOrigin) {
 <dl class="publication-destination"><dt>Public address</dt><dd><a href="${escapeHtml(publicUrl)}" rel="noreferrer">${escapeHtml(publicUrl)}</a></dd></dl></section>
 <form id="publication-form" data-action="prepare" data-mapping-id="${escapeHtml(mapping.id)}" data-csrf="${escapeHtml(csrfToken)}">
 <div class="publication-action"><p>Your next step is a private review.</p><button type="submit">Review changes</button></div><p id="publication-status" class="status" role="status"></p></form>
-<p class="publication-local-link"><a href="${escapeHtml(readerOrigin)}/cyberbase/">Browse the local site</a></p></main>` });
+<p class="publication-local-link"><a href="${escapeHtml(readerHome)}">Browse the local site</a></p></main>` });
 }
 
 function publicationBlock(block, text, tracked = null) {
@@ -1574,8 +1575,14 @@ export function createReaderHandler({
   config: configInput,
   projectRoot = PROJECT_ROOT,
   siteRoot,
+  // The base path the site is built for (site-base.js); by default from live.baseUrl.
+  siteBase = null,
 } = {}) {
   const config = validateOwnerAlphaConfig(configInput);
+  const base = siteBase ?? configuredSiteBase(config);
+  if (typeof base !== 'string' || !/^\/(?:[A-Za-z0-9._~-]+\/)*$/u.test(base) || /\/\.{1,2}\//u.test(base)) {
+    throw new TypeError('siteBase must be "/" or "/a/b/"');
+  }
   const expectedHost = `${config.listen.host}:${config.listen.readerPort}`;
   const expectedOrigin = `http://${expectedHost}`;
   const resolvedSiteRoot = siteRoot ?? path.resolve(projectRoot, config.workspace.site);
@@ -1607,16 +1614,16 @@ export function createReaderHandler({
       if (!acceptsHtml) return errorResponse(404, 'not-found');
       const headers = securityHeaders({ csp });
       headers.set('Content-Type', 'text/html; charset=utf-8');
-      return new Response(request.method === 'HEAD' ? null : '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Page not found</title><main><h1>Page not found</h1><p>This page is not available. <a href="/cyberbase/">Go to the site home</a>.</p></main></html>', { status: 404, headers });
+      return new Response(request.method === 'HEAD' ? null : `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Page not found</title><main><h1>Page not found</h1><p>This page is not available. <a href="${escapeHtml(base)}">Go to the site home</a>.</p></main></html>`, { status: 404, headers });
     };
-    if (url.pathname === '/') return response(null, 302, { Location: '/cyberbase/' });
-    if (url.pathname === '/cyberbase') {
+    if (base !== '/' && url.pathname === '/') return response(null, 302, { Location: base });
+    if (base !== '/' && url.pathname === base.slice(0, -1)) {
       if (url.search !== '') return errorResponse(400, 'unexpected-query');
-      return redirect('/cyberbase/');
+      return redirect(base);
     }
-    if (!url.pathname.startsWith('/cyberbase/')) return notFound();
+    if (!url.pathname.startsWith(base)) return notFound();
     if (url.search !== '') return errorResponse(400, 'unexpected-query');
-    const encodedPath = url.pathname.slice('/cyberbase/'.length);
+    const encodedPath = url.pathname.slice(base.length);
     const options = { cleanHtml: true, reader: true, csp };
     const original = await staticResponse(resolvedSiteRoot, encodedPath, request, options);
     if (original.status !== 404) return original;
@@ -1630,7 +1637,7 @@ export function createReaderHandler({
         const canonicalPath = segments.map((segment) => encodeURIComponent(segment)).join('/') + (directory ? '/' : '');
         if (canonicalPath !== encodedPath) {
           const recovered = await staticResponse(resolvedSiteRoot, canonicalPath, request, options);
-          if (recovered.status === 200) return redirect(`/cyberbase/${canonicalPath}`);
+          if (recovered.status === 200) return redirect(`${base}${canonicalPath}`);
         }
       } catch {
         // Unsafe or malformed extra encodings remain a miss, never a redirect.
@@ -1851,6 +1858,8 @@ export function createOwnerAlphaHandler({
   ownerPublication = null,
   createToken = token,
   createJobId = () => `OA-${randomUUID()}`,
+  // The private reader's base path (site-base.js); by default from live.baseUrl.
+  siteBase = null,
   reviewAppearance = null,
   // The owner-private site build whose pages a proposal is shown on. Null
   // shows every proposal on the simplified rendering.
@@ -1987,6 +1996,7 @@ export function createOwnerAlphaHandler({
   const expectedHost = `${config.listen.host}:${config.listen.port}`;
   const expectedOrigin = `http://${expectedHost}`;
   const readerOrigin = `http://${config.listen.host}:${config.listen.readerPort}`;
+  const readerHome = `${readerOrigin}${siteBase ?? configuredSiteBase(config)}`;
   const maximumBodyBytes = Math.min(
     config.limits.maxArtifactBytes,
     config.limits.maxSourceBytes + 16 * 1024,
@@ -2042,7 +2052,7 @@ export function createOwnerAlphaHandler({
       const sessionToken = query ? consumeBootstrap(query.token) : null;
       if (sessionToken === null) return errorResponse(403, 'invalid-bootstrap');
       return response(null, 303, {
-        Location: config.ownerPublication.enabled ? '/owner/publication' : `${readerOrigin}/cyberbase/`,
+        Location: config.ownerPublication.enabled ? '/owner/publication' : readerHome,
         'Set-Cookie': cookieHeader(sessionToken),
       });
     }
@@ -2070,7 +2080,7 @@ export function createOwnerAlphaHandler({
       // same reader page in visitor mode. Fixed reader origin, so no open redirect.
       const query = queryObject(url, ['relativePath', 'slug']);
       if (query && typeof query.slug === 'string' && query.slug.length > 0 && query.slug.length <= 1024 && !query.slug.split('/').some((part) => part === '' || part === '.' || part === '..')) {
-        return response(null, 303, { Location: `${liveUrlForSlug(`${readerOrigin}/cyberbase/`, query.slug)}#edit` });
+        return response(null, 303, { Location: `${liveUrlForSlug(readerHome, query.slug)}#edit` });
       }
     }
     if (deviceSession === null) {
@@ -2089,7 +2099,7 @@ export function createOwnerAlphaHandler({
 
     if (url.pathname === '/') {
       if (request.method !== 'GET' && request.method !== 'HEAD') return response(null, 405, { Allow: 'GET, HEAD' });
-      return response(null, 302, { Location: config.ownerPublication.enabled ? '/owner/publication' : `${readerOrigin}/cyberbase/` });
+      return response(null, 302, { Location: config.ownerPublication.enabled ? '/owner/publication' : readerHome });
     }
 
     const asset = {
@@ -2124,7 +2134,7 @@ export function createOwnerAlphaHandler({
       if (url.pathname === '/owner/publication') {
         if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
         if (url.search) return errorResponse(400, 'invalid-publication-query');
-        return html(request.method === 'HEAD' ? null : publicationLanding(config, csrfToken, readerOrigin));
+        return html(request.method === 'HEAD' ? null : publicationLanding(config, csrfToken, readerHome));
       }
       const current = /^\/owner\/publication\/current\/([0-9a-f]{64})$/u.exec(url.pathname);
       if (current) {
@@ -2484,7 +2494,7 @@ export function createOwnerAlphaHandler({
       if (!query) return errorResponse(400, 'invalid-edit-query');
       try {
         const session = await commands.readPageSource(query, principal);
-        const target = liveUrlForSlug(`${readerOrigin}/cyberbase/`, session.slug);
+        const target = liveUrlForSlug(readerHome, session.slug);
         return response(null, 303, { Location: `${target}#owner-edit` });
       } catch (error) { return errorResponse(400, error?.code ?? 'edit-session-failed'); }
     }
@@ -2495,7 +2505,7 @@ export function createOwnerAlphaHandler({
       if (url.search) return errorResponse(400, 'unexpected-query');
       try {
         const { session, operation, editId, operationCount } = await commands.inspectOwnerDirect({ stageId: staged[1] }, principal);
-        const back = `${liveUrlForSlug(`${readerOrigin}/cyberbase/`, session.slug)}#owner-edit`;
+        const back = `${liveUrlForSlug(readerHome, session.slug)}#owner-edit`;
         const cards = operation.proposal.changeSet.files[0].operations.map((op, index) => {
           const base = Buffer.from(session.source.bytesBase64, 'base64');
           // Escaped text only. No source HTML or reader scripts enter this origin.
@@ -2610,7 +2620,7 @@ export function createOwnerAlphaHandler({
         return json(publicJob(job));
       }
       if (request.method === 'HEAD') return html(null);
-      return html(jobPage(job, readerOrigin, appearance));
+      return html(jobPage(job, readerHome, appearance));
     }
 
     return errorResponse(404, 'not-found');
@@ -2620,6 +2630,7 @@ export function createOwnerAlphaHandler({
     issueBootstrap: { value: issueBootstrap, enumerable: false },
     ownerOrigin: { value: expectedOrigin, enumerable: false },
     readerOrigin: { value: readerOrigin, enumerable: false },
+    readerHome: { value: readerHome, enumerable: false },
   });
   return handler;
 }
@@ -2806,6 +2817,8 @@ export async function runOwnerAlphaServer({
   // clean checkout up to it. Unreachable GitHub is a state, not a failure.
   const upstream = config.publisher?.mirror ? createUpstreamStatus({ config }) : null;
   await upstream?.refresh();
+  // The private reader serves the site at the path it is built for (site-base.js).
+  const siteBase = await readSiteBase(config);
   // Later checks only ask the publisher, so the quiet notice clears when GitHub is back.
   const upstreamTimer = upstream === null ? null : setInterval(() => { upstream.refresh({ sync: false }).catch(() => {}); }, 5 * 60_000);
   upstreamTimer?.unref?.();
@@ -2918,6 +2931,7 @@ export async function runOwnerAlphaServer({
   const ownerFetch = createHandler({
     config,
     projectRoot,
+    siteBase,
     saveEdit: pipeline.saveEdit,
     lookupJob,
     proposalReview,
@@ -2931,7 +2945,7 @@ export async function runOwnerAlphaServer({
     upstream,
     recovering,
   });
-  const readerFetch = createReader({ config, projectRoot });
+  const readerFetch = createReader({ config, projectRoot, siteBase });
   let runtime;
   let signed;
   let iroh;
@@ -2979,6 +2993,7 @@ export async function runOwnerAlphaServer({
       ? null
       : Object.freeze({ formOrigin: suggestions.formOrigin, forge: suggestions.forge }),
     recovery,
+    readerHome: `${runtime.readerOrigin}${siteBase}`,
     iroh: iroh === undefined ? null : Object.freeze({ nodeId: iroh.nodeId, ticket: iroh.ticket }),
     // request({ intent, files, askedBy }) for the publish path; null without Iroh.
     approvals,
@@ -3079,13 +3094,13 @@ if (import.meta.main) {
     // on a deployment check can take 15 minutes offline. Owner acts that would
     // conflict are refused by the runtime until recovery settles. The ready
     // marker (the container health check) still waits for recovery.
-    console.log(`Owner alpha reader: ${runtime.readerOrigin}/cyberbase/`);
+    console.log(`Owner alpha reader: ${runtime.readerHome}`);
     if (runtime.suggestions === null) {
       console.log('Suggestions: off (turn them on under "suggestions" in the owner config)');
     } else {
       console.log(runtime.suggestions.formOrigin === null
         ? 'Suggestions: form off'
-        : `Suggestions: form on for pages served from ${runtime.readerOrigin}/cyberbase/`);
+        : `Suggestions: form on for pages served from ${runtime.readerHome}`);
       console.log(runtime.suggestions.forge === null
         ? 'Suggestions: no forge watched'
         : `Suggestions: watching ${runtime.suggestions.forge} for pull requests`);
