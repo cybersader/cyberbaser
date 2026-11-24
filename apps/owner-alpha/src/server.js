@@ -2697,6 +2697,7 @@ async function loadPipelineAdapter(options) {
     startEdit: typeof created.startEdit === 'function' ? created.startEdit : null,
     resumeJob: typeof created.resumeJob === 'function' ? created.resumeJob : null,
     getJob: typeof created.getJob === 'function' ? created.getJob : null,
+    trackBundle: typeof created.trackBundle === 'function' ? created.trackBundle : null,
   };
 }
 

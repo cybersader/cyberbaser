@@ -11,8 +11,10 @@
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { readJsonArtifact } from '../artifacts.js';
+import { isPlainObject } from '../json.js';
 import { listDurableJobs } from '../job-state.js';
 import { attachOwnerApproval, pipelineArtifactPaths } from '../pipeline.js';
+import { bundleJobId, pushedBundleEvidence } from '../bundle-lifecycle.js';
 import { describePublish, gitIn, publishIntent } from '../signed-publish.js';
 import { APPROVAL_KEY_PLACEHOLDER, CHUNKED } from './approvals.js';
 
@@ -58,8 +60,12 @@ export function createJobApprovals({ config, context, pipeline, listJobs = listD
   // 'address-mismatch' | anything else: run once per bundle before it is
   // offered (the configured renderer's build must have the page at the address
   // shown); a mismatch is refused, never offered.
-  bundles = null, publishBundle = null, checkBundle = null }) {
+  bundles = null, publishBundle = null, checkBundle = null,
+  // After a bundle is pushed: its durable job follows deployment and the live
+  // check like any edit (pipeline.trackBundle). Without it, nothing follows.
+  trackBundle = typeof pipeline?.trackBundle === 'function' ? pipeline.trackBundle : null }) {
   const checks = new Map(); // bundleId -> Promise<verdict>
+  const following = new Set(); // published bundleIds already looked at since start
   const offered = new Map(); // jobId -> requestId
   const quiet = new Map(); // jobId -> time before which it is not offered again ("Not now", or it could not be offered)
   let running = null;
@@ -83,6 +89,21 @@ export function createJobApprovals({ config, context, pipeline, listJobs = listD
       ...(publicAdditions === null ? {} : { publicAdditions, blobs }) });
   }
 
+  // A pushed bundle becomes a durable job: deployment watch, live check for each
+  // new page and image, local rebuild. A failure is logged and left to the job
+  // record; nothing is pushed again.
+  async function follow(record, pushed) {
+    if (trackBundle === null) return;
+    try {
+      const evidence = await pushedBundleEvidence({ config, record, result: pushed, git });
+      if (evidence === null) return;
+      const summary = await trackBundle(evidence);
+      if (summary?.state && summary.state !== 'completed') log(`bundle ${record.bundleId} after its push: ${summary.state}${summary.failure?.code ? ` (${summary.failure.code})` : ''}`);
+    } catch (error) {
+      log(`bundle ${record.bundleId} was pushed but its deployment is not followed: ${error?.code ?? error?.message ?? 'failed'}`);
+    }
+  }
+
   // A page bundle: the device recomputes the public additions on its own and
   // signs; the publisher checks the signature, the commit and its bundle rules.
   async function offerBundle(relay, record) {
@@ -91,17 +112,19 @@ export function createJobApprovals({ config, context, pipeline, listJobs = listD
     offered.set(key, requestId);
     result.then(async (signed) => {
       offered.delete(key);
+      let pushed;
       try {
-        await publishBundle({ commit: record.commit, record: signed });
+        pushed = await publishBundle({ commit: record.commit, record: signed });
       } catch (error) {
         if (['capture-base-moved', 'owner-approval-mismatch'].includes(error?.code) || error?.code?.startsWith?.('create-')) {
           await bundles.markStale(record.bundleId, error.code);
         }
         throw error;
       }
-      await bundles.markPublished(record.bundleId, record.commit);
+      await bundles.markPublished(record.bundleId, record.commit, pushed);
       await git(['merge', '--ff-only', '--quiet', record.commit]).catch((error) => log(`the notes copy did not move to ${record.commit}: ${error?.message ?? 'failed'}`));
       await Promise.resolve(afterStarter()).catch(() => {});
+      await follow(record, pushed);
     }, (error) => {
       offered.delete(key);
       if (error?.code === 'approval-declined') quiet.set(key, clock() + NOT_NOW_MS);
@@ -147,6 +170,15 @@ export function createJobApprovals({ config, context, pipeline, listJobs = listD
       try { await offerStarter(relay, starterCommit); } catch (error) {
         quiet.set('starter', now + 60_000);
         log(`the starter publish.yml was not offered: ${error?.code ?? error?.message ?? 'failed'}`);
+      }
+    }
+    if (bundles !== null && trackBundle !== null) {
+      // A bundle pushed just before a restart: record its job now.
+      for (const record of await bundles.list(['published'])) {
+        if (!isPlainObject(record.pushed) || following.has(record.bundleId)) continue;
+        following.add(record.bundleId);
+        const exists = await readJsonArtifact(context, `jobs/${bundleJobId(record.bundleId)}/state.json`).then(() => true, () => false);
+        if (!exists) follow(record, record.pushed).catch(() => {});
       }
     }
     if (bundles !== null && publishBundle !== null) {

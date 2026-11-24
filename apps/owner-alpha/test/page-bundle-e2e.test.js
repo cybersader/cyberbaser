@@ -79,10 +79,12 @@ beforeAll(async () => {
   // The node: the bundle desk on its checkout, the relay, the offer loop.
   const git = bundleGit(checkout);
   const config = { limits: { maxSourceBytes: 1024 * 1024, maxArtifactBytes: 1024 * 1024 },
-    repository: { remote: { url: REMOTE_URL }, branch: 'main', checkout } };
+    repository: { remote: { url: REMOTE_URL, name: 'origin' }, branch: 'main', checkout },
+    live: { baseUrl: 'https://owner.example/site/' } };
   const desk = await openBundleDesk({ config, git, directory: path.join(vault.root, 'node', 'bundles'),
     branchHead: async () => gitSync(checkout, 'rev-parse', 'main'), author: { name: 'Owner', email: 'owner@example.invalid' } });
   const pushed = [];
+  const tracked = [];
   const refusals = [];
   let tamper = null;
   // The publisher's publish-bundle op, against the throwaway remote.
@@ -98,11 +100,13 @@ beforeAll(async () => {
     }
     gitSync(checkout, 'push', '-q', remote, `${target}:refs/heads/main`);
     pushed.push(target);
-    return { commit: target, receipt: authorization.receipt({ status: 'pushed', commit: target, remoteRef: target }) };
+    return { commit: target, branch: 'main', receipt: authorization.receipt({ status: 'pushed', commit: target, remoteRef: target }) };
   };
   const relay = createApprovalRelay({ publisher: { challenge: () => ownerKeys.challenge() } });
   const offers = createJobApprovals({ config, context: null, pipeline: null, listJobs: async () => [], git: gitIn(checkout),
-    bundles: desk, publishBundle, log: () => {} });
+    bundles: desk, publishBundle, log: () => {},
+    // After the push: the job that follows deployment and the live check (bundle-lifecycle.test.js runs it).
+    trackBundle: async (evidence) => { tracked.push(evidence); return { state: 'completed' }; } });
 
   // The plugin's controller, its node requests answered by the node's own code.
   const ownerPrincipal = { keyId: 'pair-phone', actor: { kind: 'owner-device', id: 'owner', label: 'Phone' } };
@@ -118,7 +122,7 @@ beforeAll(async () => {
   } };
   const controller = createController({ client, store: { load: async () => ({ keyId: 'pair-phone', grants: ['publish', 'propose'] }) },
     signingStore, tapGate: createTapGate((event) => fingerTaps.has(event)) });
-  world = { vault, remote, checkout, head, desk, relay, offers, controller, pushed, refusals, setTamper: (fn) => { tamper = fn; } };
+  world = { vault, remote, checkout, head, desk, relay, offers, controller, pushed, tracked, refusals, setTamper: (fn) => { tamper = fn; } };
 });
 
 afterAll(async () => { await rm(world.vault.root, { recursive: true, force: true }); });
@@ -171,6 +175,16 @@ test('a new post with a cover photo: cleaned on the device, signed, checked by t
   expect(checkAsset('topic/posts/cover.jpg', new Uint8Array(cover))).toMatchObject({ ok: true });
   expect(gitSync(remote, 'show', `${remoteHead}:${notePath}`)).toBe(text.trimEnd());
   expect(gitSync(world.checkout, 'rev-parse', 'main')).toBe(remoteHead);
+
+  // The pushed bundle is handed on to be followed to Live: its page and its image, from the pushed commit.
+  await settle(async () => world.tracked.length === 1, 'the bundle to be followed');
+  const followed = world.tracked[0];
+  expect(followed.session.origin).toMatchObject({ type: 'page-bundle', bundleId: sent.bundleId, commit: remoteHead, base: world.head });
+  expect(followed.session.pages).toMatchObject([{ path: notePath, address: '/topic/posts/first-post',
+    liveUrl: 'https://owner.example/site/topic/posts/first-post', witness: 'First post' }]);
+  expect(followed.session.images).toMatchObject([{ path: 'topic/posts/cover.jpg', url: 'https://owner.example/site/topic/posts/cover.jpg', byteLength: cover.length }]);
+  expect(followed.pushed).toMatchObject({ status: 'pushed', commit: remoteHead, remoteRef: remoteHead, branch: 'main', remote: 'origin' });
+  expect((await desk.load(sent.bundleId)).pushed).toMatchObject({ commit: remoteHead, branch: 'main' });
 });
 
 test('a post whose cover is only a property (the New post form): sent, signed, checked, pushed', async () => {

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { fail, OwnerAlphaError } from './errors.js';
 
 export const LIVE_HTML_MAX_BYTES = 4 * 1024 * 1024;
@@ -446,6 +447,96 @@ export async function confirmLivePage(input = {}, dependencyOverrides = {}) {
   } finally {
     deadline.close();
   }
+}
+
+// ---- New pages (page bundles) -------------------------------------------
+//
+// A bundle adds pages that did not exist before, so there is no old text to
+// see disappear. Each new page must answer 200 HTML at its approved address
+// with its witness (the note's title) visible, and every new image must be
+// served at its address with exactly the committed bytes. Nothing redirects.
+
+export const NEW_PAGE_LIVE_KIND = 'new-page-live';
+const SHA256_HEX = /^[0-9a-f]{64}$/u;
+export const witnessDigest = (witness) => `sha256:${createHash('sha256').update(witness, 'utf8').digest('hex')}`;
+
+async function confirmLiveAsset({ config, url, byteLength, sha256, signal, timeoutMs }, dependencyOverrides) {
+  const expected = validateInputs({ config, pageUrl: url, stableWitness: 'asset' });
+  const dependencies = mergeDependencies({ limits: expected.limits }, dependencyOverrides);
+  const deadline = createDeadline(timeoutMs ?? expected.limits.networkTimeoutMs, signal, dependencies);
+  let attempts = 0;
+  let lastObservation = null;
+  try {
+    while (true) {
+      throwAbort(deadline);
+      attempts += 1;
+      let response;
+      try {
+        response = await dependencies.fetch(expected.target.href, { method: 'GET', headers: { 'Cache-Control': 'no-cache, no-store, max-age=0', Pragma: 'no-cache' },
+          redirect: 'manual', signal: deadline.signal });
+      } catch (error) {
+        throwAbort(deadline, 'live confirmation deadline expired during a request');
+        lastObservation = { fetchError: error?.message ?? 'live fetch failed' };
+        if (await retryOrTimeout(deadline, attempts, lastObservation)) continue;
+      }
+      const finalUrl = exactFinalUrl(response, expected.target);
+      const status = responseStatus(response);
+      if (status === 200) {
+        const bytes = await readBoundedHtml(response, byteLength + 1, deadline);
+        const digest = createHash('sha256').update(bytes).digest('hex');
+        if (bytes.byteLength !== byteLength || digest !== sha256) {
+          fail('live-asset-mismatch', 'a new image is served with different bytes than were published', { url: expected.target.href });
+        }
+        return Object.freeze({ url: expected.target.href, finalUrl, status, byteLength, sha256, attempts });
+      }
+      lastObservation = { status, finalUrl };
+      if (await retryOrTimeout(deadline, attempts, lastObservation)) continue;
+    }
+  } finally {
+    deadline.close();
+  }
+}
+
+/**
+ * pages: [{ pageUrl, witness }], images: [{ url, byteLength, sha256 }].
+ * Returns { kind: 'new-page-live', pages: [{ pageUrl, witnessDigest, ... }], images: [...] }.
+ * Fails closed: a page without its witness or an image with other bytes never confirms.
+ */
+export async function confirmNewPagesLive({ config, pages, images = [], signal, timeoutMs } = {}, dependencyOverrides = {}) {
+  if (!Array.isArray(pages) || !Array.isArray(images) || pages.length + images.length === 0) {
+    fail('invalid-live-witnesses', 'a new-page check needs at least one page or image');
+  }
+  const confirmedPages = [];
+  for (const page of pages) {
+    const result = await confirmLivePage({ config, pageUrl: page?.pageUrl, stableWitness: page?.witness, signal, timeoutMs }, dependencyOverrides);
+    if (result.stableWitnessPresent !== true) fail('live-witness-evidence-missing', 'a new page did not show its witness');
+    confirmedPages.push({ pageUrl: result.pageUrl, finalUrl: result.finalUrl, status: result.status,
+      witnessDigest: witnessDigest(normalizeWitness(page.witness, 'witness')), witnessPresent: true, attempts: result.attempts });
+  }
+  const confirmedImages = [];
+  for (const image of images) {
+    if (typeof image?.url !== 'string' || !Number.isSafeInteger(image.byteLength) || image.byteLength < 1 || !SHA256_HEX.test(image.sha256 ?? '')) {
+      fail('invalid-live-witnesses', 'each new image needs its address, length and SHA-256');
+    }
+    confirmedImages.push(await confirmLiveAsset({ config, url: image.url, byteLength: image.byteLength, sha256: image.sha256, signal, timeoutMs }, dependencyOverrides));
+  }
+  return Object.freeze({ kind: NEW_PAGE_LIVE_KIND, pages: confirmedPages, images: confirmedImages });
+}
+
+/** The stored new-page result proves every page and image of the bundle at the deployed commit. */
+export function hasNewPageLiveProof(live, { commit, pages, images = [] }) {
+  if (live?.kind !== NEW_PAGE_LIVE_KIND || live.applicationSha !== commit || !/^[0-9a-f]{40}$/u.test(commit ?? '')
+    || !Array.isArray(pages) || !Array.isArray(images) || pages.length + images.length === 0 || !Array.isArray(live.pages) || live.pages.length !== pages.length
+    || !Array.isArray(live.images) || live.images.length !== images.length) return false;
+  const pagesMatch = pages.every((page, index) => {
+    const seen = live.pages[index];
+    return seen?.pageUrl === page.liveUrl && seen.witnessPresent === true && seen.witnessDigest === page.witnessDigest;
+  });
+  const imagesMatch = images.every((image, index) => {
+    const seen = live.images[index];
+    return seen?.url === image.url && seen.byteLength === image.byteLength && seen.sha256 === image.sha256;
+  });
+  return pagesMatch && imagesMatch;
 }
 
 export const confirmLive = confirmLivePage;

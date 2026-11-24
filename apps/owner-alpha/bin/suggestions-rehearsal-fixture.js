@@ -244,6 +244,7 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
   const { startSuggestionIntake } = await import('../src/suggestions.js');
   const { createOwnerPublicationRuntime } = await import('../src/owner-publication-runtime.js');
   const { createBundlePreview } = await import('../src/bundle-preview.js');
+  const { witnessDigest } = await import('../src/live-confirm.js');
   // The policy's HTTPS identity is not a destination. Verify both real remote
   // directions before mapping identity for the normal fail-closed policy checks.
   const policyGit = async (cwd, args, options) => {
@@ -290,6 +291,10 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
         discoverDeploymentRun: async ({ applicationSha }) => simulated('discovery', { binding: { provider: 'github-actions', runId: 'local-only', headSha: applicationSha, runAttempt: 1 } }),
         monitorDeploymentRun: async ({ boundRun }) => simulated('deployment', { provider: 'github-actions', run: boundRun, environment: { state: 'success' } }),
         confirmLivePage: async () => simulated('live-confirmation', { oldWitnessAbsent: true, newWitnessUnique: true }),
+        // New pages from a bundle: the same simulation, shaped as the new-page proof.
+        confirmNewPages: async ({ pages, images }) => simulated('live-confirmation', { kind: 'new-page-live',
+          pages: pages.map((page) => ({ pageUrl: page.pageUrl, witnessPresent: true, witnessDigest: witnessDigest(page.witness) })),
+          images: images.map(({ url, byteLength, sha256 }) => ({ url, byteLength, sha256 })) }),
         rebuildLocal: async ({ commit, jobId, sourcePath }) => {
           const built = await rebuild({ config });
           if (built.manifest.source.head !== commit) throw new Error('Local rebuild commit mismatch.');

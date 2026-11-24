@@ -257,10 +257,14 @@ export async function openBundleDesk({ config, git, branchHead, directory, stagi
       return { bundleId, state: 'declined' };
     },
 
-    async markPublished(bundleId, commit) {
+    // pushed: the publisher's answer ({ commit, branch, receipt }), kept so a
+    // restart can still record the bundle's job (job-approvals.js).
+    async markPublished(bundleId, commit, pushed = null) {
       const record = await load(bundleId);
       if (record.state !== 'signing' || record.commit !== commit) fail('bundle-not-reviewable', 'this bundle is not waiting for its signature');
-      await save({ ...record, state: 'published', updatedAt: clock() });
+      const kept = isPlainObject(pushed) && pushed.commit === commit
+        ? { pushed: { commit, branch: pushed.branch, ...(pushed.receipt === undefined ? {} : { receipt: pushed.receipt }) } } : {};
+      await save({ ...record, state: 'published', ...kept, updatedAt: clock() });
     },
 
     async markStale(bundleId, reason) {

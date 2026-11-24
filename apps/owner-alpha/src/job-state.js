@@ -17,7 +17,10 @@ export const JOB_SCHEMA_VERSION = 1;
 export const JOB_ARTIFACT_TYPE = 'owner-alpha-job-state';
 
 const transitions = {
-  accepted: ['preflighting', 'blocked-pre-apply', 'cancelled', 'failed'],
+  // A page bundle is checked, signed and pushed outside the job (bundle-desk.js,
+  // the publisher's publish-bundle); its job begins at the pushed commit and
+  // follows the same deployment and live checks as an edit (pipeline.js).
+  accepted: ['preflighting', 'pushed', 'blocked-pre-apply', 'cancelled', 'failed'],
   preflighting: ['checking', 'blocked-pre-apply', 'cancelled', 'failed'],
   checking: ['rendering', 'blocked-pre-apply', 'cancelled', 'failed'],
   rendering: ['ready-to-apply', 'blocked-pre-apply', 'cancelled', 'failed'],
