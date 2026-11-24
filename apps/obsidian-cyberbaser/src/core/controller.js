@@ -343,6 +343,20 @@ export function createController({ client, store, signingStore = null, tapGate =
       return outcome;
     },
 
+    /** Where a bundle this device sent is now: { step, reason, at, pages: [{ path, address, url }] }. */
+    async bundleProgress(bundleId) {
+      const current = await requirePairing();
+      return client.request(current, 'readPageBundle', { bundleId });
+    },
+
+    /** Take back a bundle before it is signed; the node drops its waiting approval. */
+    async withdraw(bundleId) {
+      const current = await requirePairing();
+      const result = await client.request(current, 'withdrawPageBundle', { bundleId });
+      for (const [path, id] of waiting) if (id === bundleId) waiting.delete(path);
+      return result;
+    },
+
     async publish(file, text, reply) {
       const current = await loaded();
       if (current === null || !this.canPublish(reply)) throw new NodeError('refused');

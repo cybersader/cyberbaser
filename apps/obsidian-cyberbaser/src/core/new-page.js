@@ -129,6 +129,20 @@ export function withDraftOff(text) {
   return next;
 }
 
+const DRAFT_OFF = /^(draft:[ \t]*)(?:false|False|FALSE|no|No|NO|off|Off|OFF)([ \t]*(?:#.*)?)$/gmu;
+
+/** The reverse of withDraftOff, for Withdraw: Draft back on, every other byte kept; null when it can't be done safely. */
+export function withDraftOn(text) {
+  const block = findFrontmatterInText(text);
+  if (block.kind !== 'block') return null;
+  const start = text.indexOf(block.yamlText, block.textRange.start);
+  if (start < 0) return null;
+  const matches = [...block.yamlText.matchAll(DRAFT_OFF)];
+  if (matches.length !== 1) return null;
+  const at = start + matches[0].index;
+  return `${text.slice(0, at)}${matches[0][1]}true${matches[0][2]}${text.slice(at + matches[0][0].length)}`;
+}
+
 const DATE = /^\d{4}-\d{2}-\d{2}$/u;
 const escapeKey = (key) => key.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 

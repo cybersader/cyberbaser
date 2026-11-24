@@ -15,6 +15,9 @@ import { canonicalJson, intentBytes, validateIntent } from '../../../../packages
 import { fromBase64, hex, toBase64, utf8 } from './wire.js';
 import { checkAsset } from '../../../../packages/media-check/src/index.js';
 import { notePublicStatus } from './new-page.js';
+import { parseFrontmatter } from '../../../../packages/publish/src/page-rules.js';
+import { propertyImageRefs } from '../../../../packages/publish/src/property-refs.js';
+import yaml from 'js-yaml';
 
 export const ENROL_LINK_ACTION = 'cyberbaser-enrol';
 export const ED25519_APPROVAL_DOMAIN = 'cyberbaser.publish-approval.ed25519.v1\n';
@@ -178,6 +181,43 @@ function decodeText(bytes) {
 }
 
 const noteTitle = (path) => path.split('/').at(-1).replace(/\.md$/iu, '');
+const oneLine = (value) => value.replace(/\s+/gu, ' ').trim();
+
+/**
+ * The site's own name, from this device's .cyberbaser/site.yml (`site.title`,
+ * or `title` at the top), or null. Read on the device, never from the node.
+ */
+export function siteName(siteYml) {
+  if (typeof siteYml !== 'string') return null;
+  let raw;
+  try { raw = yaml.load(siteYml, { schema: yaml.CORE_SCHEMA }); } catch { return null; }
+  const isMap = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+  const value = [isMap(raw) && isMap(raw.site) ? raw.site.title : undefined, isMap(raw) ? raw.title : undefined]
+    .find((candidate) => typeof candidate === 'string' && oneLine(candidate) !== '');
+  return value === undefined ? null : oneLine(value).slice(0, 80);
+}
+
+/**
+ * What a new page shows on the approval sheet, read from the exact text being
+ * signed: its title and summary (the `title` and `description` properties, as
+ * the selector parses them) and the cover, the first property that names one of
+ * the images in this same change. images: Map(path -> signed bytes). Values are
+ * plain strings; nothing is interpreted as markup.
+ */
+export function pageDetails(path, text, images = new Map()) {
+  const fm = parseFrontmatter(text);
+  const data = fm.error ? {} : fm.data;
+  const pick = (value) => (typeof value === 'string' && oneLine(value) !== '' ? oneLine(value) : null);
+  const coverPath = propertyImageRefs(text).map((ref) => ref.target).find((target) => images.has(target)) ?? null;
+  return { title: pick(data.title) ?? noteTitle(path), description: pick(data.description), cover: coverPath };
+}
+
+/** "1 new page with 1 photo", "2 new pages", "1 photo". */
+export function bundleCountLine(pages, photos) {
+  const part = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  if (pages === 0) return part(photos, 'new photo', 'new photos');
+  return photos === 0 ? part(pages, 'new page', 'new pages') : `${part(pages, 'new page', 'new pages')} with ${part(photos, 'photo', 'photos')}`;
+}
 
 // Whole words and the spaces between them, so a change never shows half a word.
 function words(text) {
@@ -278,6 +318,8 @@ export async function prepareApproval({ request, signing, now, publishYml = null
   if (files.length !== template.changes.length) throw new ApprovalProblem('approval-invalid');
   const shown = [];
   const newPages = [];
+  const imageBytes = new Map();
+  const pageTexts = new Map();
   let newImages = 0;
   for (const [index, change] of template.changes.entries()) {
     const file = files[index];
@@ -308,8 +350,11 @@ export async function prepareApproval({ request, signing, now, publishYml = null
       if (status.rule === 'address-style-unknown') throw new ApprovalProblem('approval-public-unknown');
       if (!status.published) throw new ApprovalProblem('approval-private-note');
       newPages.push({ path: change.path, address: status.address });
+      pageTexts.set(change.path, after);
     } else if (kind === 'added' && change.path !== 'publish.yml') {
-      if (!checkAsset(change.path, sides.after).ok) throw new ApprovalProblem('approval-image-refused');
+      const asset = checkAsset(change.path, sides.after);
+      if (!asset.ok) throw new ApprovalProblem('approval-image-refused');
+      imageBytes.set(change.path, { bytes: sides.after, mediaType: asset.mediaType });
       newImages += 1;
     }
     const binary = kind === 'added' && !markdown && change.path !== 'publish.yml';
@@ -322,6 +367,18 @@ export async function prepareApproval({ request, signing, now, publishYml = null
   const claimed = Array.isArray(request.publicAdditions) ? request.publicAdditions : [];
   const key = (list) => JSON.stringify(list.map((entry) => [entry?.path, entry?.address]).sort());
   if (key(claimed) !== key(newPages)) throw new ApprovalProblem('approval-public-mismatch');
+  // What each new page looks like, from the same signed bytes: title, summary,
+  // cover photo (its exact signed bytes), and the exact text, for "Show exact text".
+  const images = new Map([...imageBytes].map(([path, value]) => [path, value.bytes]));
+  const pages = newPages.map(({ path, address }) => {
+    const text = pageTexts.get(path);
+    const details = pageDetails(path, text, images);
+    const cover = details.cover === null ? null : Object.freeze({ path: details.cover, ...imageBytes.get(details.cover) });
+    return Object.freeze({ path, address, title: details.title, description: details.description, cover, text });
+  });
+  const covers = new Set(pages.map((page) => page.cover?.path).filter(Boolean));
+  const photos = [...imageBytes].filter(([path]) => !covers.has(path))
+    .map(([path, value]) => Object.freeze({ path, ...value }));
   const remote = template.target.remote;
   const repository = /^https:\/\/github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/u.exec(remote)?.[1] ?? remote.replace(/^https:\/\//u, '');
   return Object.freeze({
@@ -335,6 +392,11 @@ export async function prepareApproval({ request, signing, now, publishYml = null
       expiresAt: template.expiresAt,
       // "New public page: /address, plus N images", shown as its own line.
       newPages: Object.freeze(newPages), newImages,
+      // The sheet for page bundles: the site's name (this device's site.yml),
+      // "1 new page with 1 photo", and each page as it will read.
+      site: siteName(siteYml),
+      counts: newPages.length + newImages === 0 ? null : bundleCountLine(newPages.length, newImages),
+      pages: Object.freeze(pages), photos: Object.freeze(photos),
     }),
   });
 }

@@ -33,6 +33,22 @@
 .cyberbaser-approval .cyberbaser-approval-actions button { flex: 1 1 10em; }
 .cyberbaser-approval .cyberbaser-footnote { color: var(--text-faint); font-size: var(--font-ui-smaller); margin-bottom: 0; }
 .cyberbaser-approval .cyberbaser-words-preview del + ins { margin-inline-start: 0.3em; }
+/* New pages: each as it will read, cover first; the exact text folded away. */
+.cyberbaser-approval .cyberbaser-pages { display: flex; flex-direction: column; gap: var(--size-4-3); max-height: 60vh; overflow-y: auto; }
+.cyberbaser-approval .cyberbaser-pages > * { margin-top: 0; }
+.cyberbaser-approval .cyberbaser-page-card { border-radius: var(--radius-m); background: var(--background-secondary); overflow: hidden; min-width: 0; }
+.cyberbaser-approval .cyberbaser-page-cover { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: var(--background-modifier-hover); }
+.cyberbaser-approval .cyberbaser-page-body { display: flex; flex-direction: column; gap: var(--size-2-2); padding: var(--size-4-3) var(--size-4-3) var(--size-4-2); min-width: 0; }
+.cyberbaser-approval .cyberbaser-page-body > * { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.cyberbaser-approval .cyberbaser-page-title { font-size: var(--font-ui-medium); font-weight: var(--font-semibold); line-height: var(--line-height-tight); }
+.cyberbaser-approval .cyberbaser-page-address { color: var(--text-muted); font-size: var(--font-ui-smaller); }
+.cyberbaser-approval .cyberbaser-page-summary { font-size: var(--font-ui-small); line-height: var(--line-height-normal); }
+.cyberbaser-approval .cyberbaser-exact { padding: 0 var(--size-4-3) var(--size-4-3); }
+.cyberbaser-approval .cyberbaser-exact > summary { color: var(--text-muted); font-size: var(--font-ui-smaller); cursor: var(--cursor); }
+.cyberbaser-approval .cyberbaser-exact-text { margin: var(--size-4-2) 0 0; max-height: 40vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--font-ui-smaller); }
+.cyberbaser-approval .cyberbaser-photos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--size-4-2); margin-top: var(--size-4-2); }
+.cyberbaser-approval .cyberbaser-photos > * { margin-top: 0; }
+.cyberbaser-approval .cyberbaser-photo { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: var(--radius-s); }
 
 /* New post form: Obsidian's own Setting rows, a little tighter. */
 .cyberbaser-new-post .cyberbaser-form { display: flex; flex-direction: column; }
@@ -45,9 +61,12 @@
 .cyberbaser-new-post .cyberbaser-form-wide .setting-item-control { flex: 1 1 100%; justify-content: flex-start; flex-wrap: wrap; margin-top: var(--size-4-2); }
 .cyberbaser-new-post .cyberbaser-form-wide textarea { width: 100%; resize: vertical; }
 .cyberbaser-new-post .cyberbaser-title-input { font-weight: var(--font-semibold); }
+.cyberbaser-new-post .cyberbaser-form-wide input.cyberbaser-title-input { width: 100%; }
 .cyberbaser-new-post .cyberbaser-field-error { color: var(--text-error); font-size: var(--font-ui-smaller); margin-top: var(--size-4-1); }
 .cyberbaser-new-post .cyberbaser-address-preview { color: var(--text-muted); font-size: var(--font-ui-smaller); margin-top: var(--size-4-1); overflow-wrap: anywhere; }
 .cyberbaser-new-post .cyberbaser-address-preview:empty { display: none; }
+.cyberbaser-new-post .cyberbaser-advanced { margin-top: var(--size-4-2); }
+.cyberbaser-new-post .cyberbaser-advanced > summary { color: var(--text-muted); font-size: var(--font-ui-small); cursor: var(--cursor); padding: var(--size-4-1) 0; }
 .cyberbaser-new-post .cyberbaser-new-folder { margin: 0 0 var(--size-4-2) var(--size-4-4); padding-left: var(--size-4-3); border-left: 2px solid var(--background-modifier-border); }
 .cyberbaser-new-post .cyberbaser-tags { display: flex; flex-wrap: wrap; gap: var(--size-4-1); flex: 1 1 100%; }
 .cyberbaser-new-post .cyberbaser-tags:empty { display: none; }
@@ -58,3 +77,27 @@
 .cyberbaser-new-post .cyberbaser-hidden-input { display: none; }
 .cyberbaser-new-post .cyberbaser-actions { justify-content: flex-end; margin-top: var(--size-4-4); }
 .cyberbaser-modal .cyberbaser-model-errors li { margin-bottom: var(--size-4-1); }
+
+/* After Publish: a short checklist. Done steps get a check, the current one a small spinner. */
+.cyberbaser-progress-view { display: flex; flex-direction: column; gap: var(--size-4-4); }
+.cyberbaser-progress-view > * { margin-top: 0; }
+.cyberbaser-progress-title { font-weight: var(--font-semibold); margin-bottom: var(--size-4-2); overflow-wrap: anywhere; }
+.cyberbaser-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--size-4-2); }
+.cyberbaser-step { display: flex; align-items: flex-start; gap: var(--size-4-2); margin: 0; min-width: 0; }
+.cyberbaser-step-mark { flex: none; display: inline-flex; align-items: center; justify-content: center; width: var(--icon-m); height: var(--icon-m); margin-top: 1px; color: var(--text-faint); }
+.cyberbaser-step-mark svg { width: var(--icon-s); height: var(--icon-s); }
+.cyberbaser-step.is-todo .cyberbaser-step-mark::before { content: ""; width: 0.6em; height: 0.6em; border-radius: 50%; border: 1.5px solid var(--text-faint); }
+.cyberbaser-step.is-done .cyberbaser-step-mark { color: var(--text-success); }
+.cyberbaser-step.is-failed .cyberbaser-step-mark { color: var(--text-error); }
+.cyberbaser-step.is-queued .cyberbaser-step-mark { color: var(--text-muted); }
+.cyberbaser-step-words { min-width: 0; }
+.cyberbaser-step.is-todo .cyberbaser-step-label { color: var(--text-muted); }
+.cyberbaser-step.is-current .cyberbaser-step-label { font-weight: var(--font-semibold); }
+.cyberbaser-step-detail { color: var(--text-muted); font-size: var(--font-ui-smaller); }
+.cyberbaser-progress-error { color: var(--text-normal); margin: var(--size-4-3) 0 0; }
+.cyberbaser-progress-view .cyberbaser-exact > summary { color: var(--text-muted); font-size: var(--font-ui-smaller); cursor: var(--cursor); }
+.cyberbaser-progress-view .cyberbaser-exact-text { font-size: var(--font-ui-smaller); white-space: pre-wrap; margin: var(--size-4-1) 0 0; }
+.cyberbaser-spinner { display: inline-block; width: 0.85em; height: 0.85em; border-radius: 50%; border: 2px solid var(--background-modifier-border); border-top-color: var(--interactive-accent); animation: cyberbaser-spin 0.9s linear infinite; vertical-align: -0.1em; }
+@keyframes cyberbaser-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .cyberbaser-spinner { animation-duration: 2.4s; } }
+.cyberbaser-notice-actions { display: flex; gap: var(--size-4-2); margin-top: var(--size-4-2); }
