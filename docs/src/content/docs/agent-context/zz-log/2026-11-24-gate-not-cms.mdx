@@ -1,0 +1,32 @@
+---
+title: Cyberbaser is the gate, not a CMS
+description: Prompted by author pictures and a non-technical author on Cyberchief, the owner compared six architectures by who owns each job and chose the gate. Editors, forms, media, accounts and rendering are delegated; page types and profiles stay vault files. Whether to own a neutral meta schema is open.
+status: log
+---
+
+## What prompted it
+
+The owner asked whether Cyberbaser can support modular additions like author pictures, as the Cyberchief site has, and then whether authentication carries profile data and whether authoring has data models for fill-in fields (cover image, profile picture, tags). The Cyberchief project lead separately asked what the owner's father, a non-technical author, would actually do to write and publish.
+
+## What is true today
+
+- Cyberchief's author picture is a site customisation: name and credential are component defaults, photos are copied in by its setup script.
+- Cyberbaser identity is a device key, a pairing label and an access level. GitHub sign-in authorises the publisher to push and creates no person record.
+- The property rule deliberately names no keys, so there is no content model.
+- The writing tool publishes edits to existing notes only (rehearsal, 96 of 96). Creating notes and carrying images are not built.
+- The one-app ships one pinned Quartz renderer; a vault can bring a stylesheet but not components, so Cyberchief's custom site cannot be published through it yet.
+
+## The comparison shown
+
+Six architectures, each as a row of seven jobs (writing screen, fill-in fields, what a post contains, people and photos, approve and publish, storage, site look) coloured by owner: WordPress, Obsidian Publish, a Git-based CMS (Decap, Pages CMS, Keystatic), and three Cyberbaser shapes: A the gate, B gate plus content model, C meta-CMS. Each row carried one sentence on what the father would do.
+
+## Decision
+
+The owner chose A: "Definitely A, and I'm not saying owning forms, I'm really just saying owning a meta schema or I don't know". Recorded in `.claude/41-QUESTIONS-RESOLVED.md`.
+
+## Next
+
+1. Research whether to define a neutral page-type description or adopt an existing format (Git-based CMS configs, Obsidian property types, others), judged by whether Obsidian, a web form tool and the renderer could all read it.
+2. Design new notes and images through the gate, with the owner's signed approval.
+3. Link a paired device to an author note.
+4. Give Cyberchief its own renderer for the one-app.

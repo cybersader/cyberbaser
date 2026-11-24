@@ -4,6 +4,12 @@
 
 ## Log
 
+### Cyberbaser is the gate, not a CMS (2026-11-24, owner decision)
+- **Context:** the owner asked whether Cyberbaser has primitives for author pictures, profiles and fill-in fields (cover, tags) for a non-technical author (Cyberchief), and then: "Is this a meta CMS platform?" They were shown six architectures by who owns each job (WordPress, Obsidian Publish, Git-based CMS, and Cyberbaser as A gate / B gate plus content model / C meta-CMS).
+- **Asked** (question dialog): "Which shape should Cyberbaser take? A = the gate only (Cyberbaser accepts, checks and publishes with your approval; editors, forms, site look and storage are other tools; page types and author profiles are plain vault files). B = gate plus its own field format, forms and profiles. C = a full CMS with its own editor and accounts." **Answer:** "Definitely A, and I'm not saying owning forms, I'm really just saying owning a meta schema or I don't know".
+- **Consequence:** Cyberbaser owns accepting, checking, approving and publishing changes, plus a small link from a device to a person's author note. Editors, forms, media libraries, accounts, rendering, storage and sync are delegated. Page types and profiles live as plain files in the vault. Carrying new notes and images through the gate is Cyberbaser's job and is not built yet (today only edits to existing notes publish).
+- **Still open:** whether Cyberbaser should own a neutral "meta schema" (a description of page types that other tools' formats map to) or adopt an existing format (Git-based CMS configs, Obsidian property types). Research first; no format chosen.
+
 ### Signed publishing: first device, recovery, automatic lane (2026-11-23, owner decisions)
 Asked in question dialogs after the design in `design/signed-publish.mdx`:
 - **First signing device at setup:** scan a code the installer (publisher) shows, so a compromised setup page cannot add its own key.
