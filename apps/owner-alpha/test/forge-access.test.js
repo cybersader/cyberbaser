@@ -54,7 +54,7 @@ describe('github-app device flow', () => {
     expect(started.verificationUri).toBe(`${fake.origin}/login/device`);
     expect(Object.keys(started).sort()).toEqual(['expiresAt', 'userCode', 'verificationUri']);
     const status = await settle(access);
-    expect(status).toEqual({ provider: 'github-app', state: 'pick-repository' });
+    expect(status).toEqual({ provider: 'github-app', state: 'pick-repository', app: { clientId: FAKE_CLIENT_ID, slug: null, createdBy: null, signIn: 'device' } });
     expect((await fake.report()).polls.slice(-4)).toEqual(['authorization_pending', 'slow_down', 'authorization_pending', 'ok']);
   });
 
@@ -189,7 +189,7 @@ describe('github-app refresh, revocation and state', () => {
     expect((await lstat(path.join(directory, 'github-app.json'))).mode & 0o777).toBe(0o600);
     await access.disconnect();
     expect(await readdir(directory)).toEqual([]);
-    expect(await access.status()).toEqual({ provider: 'github-app', state: 'not-connected' });
+    expect(await access.status()).toEqual({ provider: 'github-app', state: 'not-connected', app: { clientId: FAKE_CLIENT_ID, slug: null, createdBy: null, signIn: 'device' } });
   });
 
   test('refuses a state directory others can read', async () => {

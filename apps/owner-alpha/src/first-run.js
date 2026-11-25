@@ -20,7 +20,8 @@ import yaml from 'js-yaml';
 import { CONFIG_SCHEMA_VERSION, validateOwnerAlphaConfig } from './config.js';
 import { OwnerAlphaError, fail } from './errors.js';
 import { forgeRequest } from './publisher/forge-control.js';
-import { validFullName } from './publisher/forge-access.js';
+import { FORGE_PROBLEMS, validFullName } from './publisher/forge-access.js';
+import { CALLBACK_PATHS, validCode, validState as validFlowState } from './publisher/github-app-manifest.js';
 import { handleForgeSetup } from './forge-setup.js';
 import { STARTER_COMMIT_MESSAGE, STARTER_PATH, starterPublishYml, validStarterFolder } from './starter-publish.js';
 import { handleDeviceRoutes, ownerHttpTools, pairFormHtml } from './server.js';
@@ -411,6 +412,8 @@ export function createSetupForgeRelay({ socketPath, provider = 'github-app', sta
     get configuredRepository() { return state.read().repository ?? ''; },
     restartFor: null,
     ask(op, repository) { return request({ socketPath, op, repository }); },
+    // The GitHub App manifest flow: { origin } or { code, state }, never a secret.
+    askWith(op, fields) { return request({ socketPath, op, ...fields }); },
     // Unsigned: accepted only by a publisher without owner services (tests and
     // older installs). The installed publisher needs the signed owner request.
     publishStarter(commit) { return request({ socketPath, op: 'publish-starter', commit }); },
@@ -436,6 +439,7 @@ export function createSetupForgeRelay({ socketPath, provider = 'github-app', sta
  */
 export function ownerConfigFromSetup(setup, layout) {
   if (!setup.repository) fail('setup-incomplete', 'no repository was picked');
+  if (!(setup.forgeApp?.clientId ?? layout.clientId)) fail('setup-incomplete', 'no GitHub App client ID');
   const [owner, name] = setup.repository.split('/');
   const pagesHost = `${owner.toLowerCase()}.github.io`;
   const branch = setup.notes.branch || 'main';
@@ -467,7 +471,8 @@ export function ownerConfigFromSetup(setup, layout) {
     git: { autoCommit: true, autoPush: true, useHooks: true, commitMessagePrefix: 'cyberbaser:' },
     publisher: { socketPath: layout.publisherSocket, ...(layout.mirror ? { mirror: layout.mirror } : {}) },
     iroh: { enabled: true, stateDirectory: layout.irohStateDirectory, ...(layout.relay ? { relay: layout.relay } : {}) },
-    forgeAccess: { provider: 'github-app', clientId: layout.clientId, stateDirectory: layout.forgeStateDirectory },
+    // The app setup created from a manifest, else the one the installer was given.
+    forgeAccess: { provider: 'github-app', clientId: setup.forgeApp?.clientId ?? layout.clientId, stateDirectory: layout.forgeStateDirectory },
     // The site's own renderer, installed by the installer (--renderer).
     ...(layout.renderer ? { renderer: layout.renderer } : {}),
   };
@@ -672,13 +677,39 @@ ${stepBody({ e, state, csrfToken, relay, dev, pairCommand, enrolPort, privateDef
   });
 }
 
-function noticePage(tools, title, text) {
+function noticePage(tools, title, text, back = false) {
   const e = tools.escapeHtml;
+  const link = back ? '<div class="setup-actions"><a class="setup-link-button" href="/setup">Back to setup</a></div>' : '';
   return tools.pageShell({ title, bodyClass: 'devices-page setup-page',
-    body: `<main class="setup-shell"><header class="setup-top"><span class="setup-mark">Cyberbaser</span></header><section class="setup-step"><h1>${e(title)}</h1><p class="setup-lede">${e(text)}</p></section></main>` });
+    body: `<main class="setup-shell"><header class="setup-top"><span class="setup-mark">Cyberbaser</span></header><section class="setup-step"><h1>${e(title)}</h1><p class="setup-lede">${e(text)}</p>${link}</section></main>` });
+}
+
+// The page that posts the manifest to GitHub's new-app page. Its script only
+// submits the form; the button works without it.
+function createAppPage(tools, { action, manifest }) {
+  const e = tools.escapeHtml;
+  return tools.pageShell({ title: 'Create Cyberbaser\'s GitHub App', script: '/owner/assets/github-create.js', bodyClass: 'devices-page setup-page',
+    body: `<main class="setup-shell"><header class="setup-top"><span class="setup-mark">Cyberbaser</span></header><section class="setup-step">
+<h1>Opening GitHub…</h1>
+<p class="setup-lede">GitHub shows Cyberbaser's app with everything filled in. Click <strong>Create GitHub App</strong> there; you come back here by yourself.</p>
+<form id="github-create" method="post" action="${e(action)}"><input type="hidden" name="manifest" value="${e(manifest)}">
+<div class="setup-actions"><button type="submit">Continue to GitHub</button></div></form>
+</section></main>` });
+}
+
+function githubOrigin(value) {
+  let url;
+  try { url = new URL(value); } catch { return null; }
+  return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password ? url : null;
 }
 
 // ------------------------------------------------------------------ handler
+
+const MESSAGE_NO_PUBLISHER = 'GitHub cannot be reached from here because the publisher is not running. Restart Cyberbaser, then open a new setup link.';
+
+function forgeMessage(error) {
+  return FORGE_PROBLEMS[error?.code] ?? (error?.code === 'publisher-unavailable' ? MESSAGE_NO_PUBLISHER : 'Something went wrong talking to GitHub. Try again.');
+}
 
 const PREVIOUS = Object.freeze({ github: 'welcome', notes: 'github', website: 'notes', phone: 'website', agent: 'phone' });
 
@@ -750,7 +781,8 @@ export function createFirstRunHandler({
         let status;
         try { status = await relay.ask('status'); } catch { return 'not-ready'; }
         if (status.state !== 'connected' || status.repository !== current.repository) return 'not-ready';
-        await go('notes');
+        // The app's public client ID goes into the node config (ownerConfigFromSetup).
+        await go('notes', typeof status.app?.clientId === 'string' ? { forgeApp: { clientId: status.app.clientId, slug: status.app.slug ?? null } } : {});
         if (current.notes.phase !== 'ready') notes.start(current.repository);
         return 'ok';
       }
@@ -817,6 +849,56 @@ export function createFirstRunHandler({
     }
   }
 
+  // Back to /setup from a page GitHub sent the browser to.
+  function backToSetup(title, text) {
+    return html(noticePage(tools, title, text, true), 200, { Refresh: '0; url=/setup' });
+  }
+
+  async function githubReturn(request, url) {
+    if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
+    if (state.read().completedAt !== null) return html(noticePage(tools, 'Setup is finished', 'Cyberbaser is already set up.'), 410);
+    if (relay === null) return html(noticePage(tools, 'GitHub cannot be reached', MESSAGE_NO_PUBLISHER, true), 503);
+    const keys = [...url.searchParams.keys()];
+    const refused = (code = 'app-state-invalid', status = 403) => html(noticePage(tools, 'GitHub needs attention',
+      FORGE_PROBLEMS[code] ?? FORGE_PROBLEMS['app-state-invalid'], true), status);
+    if (new Set(keys).size !== keys.length) return refused('app-state-invalid', 400);
+    const value = (name) => url.searchParams.get(name);
+    try {
+      if (url.pathname === CALLBACK_PATHS.installed) {
+        // GitHub adds installation_id and setup_action (and may return our
+        // state). None is trusted: the publisher's open install window decides,
+        // and the installation is checked with the owner's own token later.
+        if (keys.some((key) => !['installation_id', 'setup_action', 'state'].includes(key))) return refused();
+        const next = githubOrigin((await relay.askWith('app-installed', { origin: expectedOrigin }))?.url);
+        if (next === null) return refused('github-unreachable', 502);
+        return response(null, 303, { Location: next.toString() });
+      }
+      if (url.pathname === CALLBACK_PATHS.authorized && keys.includes('error')) {
+        return html(noticePage(tools, 'Sign-in was cancelled', FORGE_PROBLEMS.denied, true), 200);
+      }
+      if (keys.length !== 2 || !validCode(value('code')) || !validFlowState(value('state'))) return refused();
+      if (url.pathname === CALLBACK_PATHS.created) {
+        const created = await relay.askWith('app-created', { code: value('code'), state: value('state') });
+        if (typeof created?.app?.clientId === 'string') {
+          await state.update((now) => ({ ...now, forgeApp: { clientId: created.app.clientId, slug: created.app.slug ?? null } }));
+        }
+        return backToSetup('Cyberbaser\'s GitHub App is ready', 'Next, install it on the repository with your notes.');
+      }
+      await relay.askWith('app-authorized', { code: value('code'), state: value('state') });
+      // One repository the app may publish to: pick it, so the owner only continues.
+      if (!state.read().repository) {
+        try {
+          const listing = await relay.ask('repositories');
+          const usable = listing.repositories.filter((row) => row.problem === null);
+          if (usable.length === 1) await relay.pick(usable[0].fullName);
+        } catch { /* the picker shows the reason */ }
+      }
+      return backToSetup('GitHub is connected', 'Taking you back to setup.');
+    } catch (error) {
+      return html(noticePage(tools, 'GitHub needs attention', forgeMessage(error), true), 409);
+    }
+  }
+
   const handler = async function firstRunFetch(request, server) {
     if (!(request instanceof Request)) return errorResponse(400, 'invalid-request');
     if (request.headers.get('host') !== expectedHost) return errorResponse(421, 'invalid-host');
@@ -850,6 +932,12 @@ export function createFirstRunHandler({
       return response(null, 303, { Location: '/setup', 'Set-Cookie': cookieHeader(sessionToken) });
     }
 
+    // GitHub's returns from the app flow. The owner's session cookie is
+    // SameSite=Strict, so it is not sent on these cross-site arrivals: each is
+    // authorized by the publisher's one-use state instead, and ends on a page
+    // whose own navigation back to /setup carries the cookie again.
+    if (Object.values(CALLBACK_PATHS).includes(url.pathname)) return githubReturn(request, url);
+
     const owner = session(request);
     if (owner === null) {
       if (url.pathname === '/setup' && request.method === 'GET') {
@@ -860,7 +948,8 @@ export function createFirstRunHandler({
     const { csrfToken } = owner;
     if (request.method === 'POST' && request.headers.get('origin') !== expectedOrigin) return errorResponse(403, 'invalid-origin');
 
-    const asset = { '/owner/assets/setup.js': 'setup.js', '/owner/assets/github.js': 'github.js', '/owner/assets/devices.js': 'devices.js' }[url.pathname];
+    const asset = { '/owner/assets/setup.js': 'setup.js', '/owner/assets/github.js': 'github.js', '/owner/assets/devices.js': 'devices.js',
+      '/owner/assets/github-create.js': 'github-create.js' }[url.pathname];
     if (asset) {
       if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
       if (url.search !== '') return errorResponse(400, 'unexpected-query');
@@ -876,6 +965,27 @@ export function createFirstRunHandler({
         ? { 'Content-Security-Policy': `${tools.ownerCsp}; frame-src http://127.0.0.1:${enrolPort}` } : {};
       return html(request.method === 'HEAD' ? null : setupPage({ state: current, csrfToken, relay, dev, pairCommand, tools, enrolPort,
         privateDefault: publication === 'private-site', readerAddress }), 200, frame);
+    }
+    if (['/setup/github/create', '/setup/github/install', '/setup/github/sign-in'].includes(url.pathname)) {
+      if (request.method !== 'GET') return response(null, 405, { Allow: 'GET' });
+      if (url.search !== '') return errorResponse(400, 'unexpected-query');
+      if (state.read().step !== 'github') return response(null, 303, { Location: '/setup' });
+      if (relay === null) return html(noticePage(tools, 'GitHub cannot be reached', MESSAGE_NO_PUBLISHER, true), 503);
+      const op = { '/setup/github/create': 'new-app', '/setup/github/install': 'install-app', '/setup/github/sign-in': 'web-sign-in' }[url.pathname];
+      let result;
+      try { result = await relay.askWith(op, { origin: expectedOrigin }); }
+      catch (error) { return html(noticePage(tools, 'GitHub needs attention', forgeMessage(error), true), 409); }
+      if (op === 'new-app') {
+        const action = githubOrigin(result?.action);
+        if (action === null || typeof result.manifest !== 'string' || result.manifest.length > 8192) {
+          return html(noticePage(tools, 'GitHub needs attention', FORGE_PROBLEMS['app-conversion-failed'], true), 502);
+        }
+        const csp = tools.ownerCsp.replace("form-action 'self'", `form-action 'self' ${action.origin}`);
+        return html(createAppPage(tools, { action: action.toString(), manifest: result.manifest }), 200, { 'Content-Security-Policy': csp });
+      }
+      const target = githubOrigin(result?.url);
+      if (target === null) return html(noticePage(tools, 'GitHub needs attention', FORGE_PROBLEMS['github-unreachable'], true), 502);
+      return response(null, 303, { Location: target.toString() });
     }
     if (url.pathname === '/setup/state') {
       if (request.method !== 'GET') return response(null, 405, { Allow: 'GET' });

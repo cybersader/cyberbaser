@@ -9,8 +9,16 @@
 // repositories with pagination, /repos/:owner/:name for pasted tokens, and Git
 // smart HTTP backed by real bare repositories through `git http-backend`.
 // Controls under /_control report counts and booleans only, never a token.
+//
+// The GitHub App manifest flow, with GitHub's buttons as plain pages a test
+// "clicks" by posting their one form: the new-app page (POST
+// /settings/apps/new?state=, then Create), POST /app-manifests/:code/conversions
+// (answering with a canary private key and webhook secret the publisher must
+// drop), the install page (then Install, back to the app's setup URL), and the
+// authorize page (then Authorize, back to the callback with code and state),
+// whose code is exchanged with the client secret and the PKCE verifier.
 import { spawn } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
 
 const reposRoot = path.resolve(process.argv[2] ?? '.');
@@ -33,7 +41,38 @@ const state = {
   // Every request path that is not Git transport or a control (no query, so no
   // token): proves what the node and publisher asked GitHub for.
   routes: new Set(),
+  apps: new Map(), // client id -> manifest-created app (with its secret)
+  manifestPages: new Map(), // page -> { manifest, state }
+  conversions: new Map(), // code -> client id, one use
+  installPages: new Map(), // page -> { app, state }
+  authorizePages: new Map(), // page -> { app, redirectUri, state, challenge }
+  oauthCodes: new Map(), // code -> { clientId, redirectUri, challenge }
+  installed: false,
+  manifestReport: { created: 0, converted: 0, refusedConversions: 0, installs: 0, authorizations: 0, webExchanges: 0, refusedExchanges: 0,
+    lastManifest: null },
 };
+
+function html(body, status = 200) {
+  return new Response(`<!doctype html><meta charset="utf-8">${body}`, { status, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+}
+const attr = (value) => String(value).replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;');
+const redirect = (location) => new Response(null, { status: 302, headers: { Location: location } });
+
+// What GitHub would check on its new-app page, plus what Cyberbaser promises.
+function manifestProblem(manifest) {
+  if (!manifest || typeof manifest !== 'object') return 'not an object';
+  const loopback = (value) => typeof value === 'string' && value.startsWith('http://127.0.0.1:');
+  if (typeof manifest.url !== 'string' || typeof manifest.hook_attributes?.url !== 'string') return 'url and hook_attributes.url are required';
+  if (manifest.hook_attributes.active !== false) return 'webhook must be off';
+  if (manifest.public !== false) return 'must be private';
+  if (JSON.stringify(manifest.default_permissions) !== JSON.stringify({ contents: 'write', metadata: 'read' })) return 'permissions';
+  if (!Array.isArray(manifest.default_events) || manifest.default_events.length !== 0) return 'events';
+  if (!loopback(manifest.redirect_url) || !loopback(manifest.setup_url) || !Array.isArray(manifest.callback_urls)
+    || manifest.callback_urls.length !== 1 || !loopback(manifest.callback_urls[0])) return 'urls';
+  if (manifest.request_oauth_on_install !== false) return 'install-time OAuth must be off';
+  if (typeof manifest.name !== 'string' || manifest.name.length === 0 || manifest.name.length > 34) return 'name';
+  return null;
+}
 
 function repo(fullName, { isPrivate = true, pushed = '2026-11-20T10:00:00Z', push = true } = {}) {
   const [owner, name] = fullName.split('/');
@@ -60,6 +99,8 @@ function installations() {
         repos: [repo(state.scenario.repository ?? 'cybersader/cyberbase')] },
     ],
   };
+  // Manifest scenarios: nothing is installed until the install page is clicked.
+  if (state.scenario.requireInstall && !state.installed) return [];
   return sets[state.scenario.installations] ?? sets.mixed;
 }
 
@@ -170,8 +211,98 @@ const server = Bun.serve({
     if (route === '/login/device') {
       return new Response('<!doctype html><title>Device activation</title><h1>Device activation</h1><p>Fake GitHub: enter the code.</p>', { headers: { 'Content-Type': 'text/html' } });
     }
+    // ---- the GitHub App manifest flow
+    if (route === '/settings/apps/new' && request.method === 'POST') {
+      const fields = await form(request);
+      let manifest = null;
+      try { manifest = JSON.parse(fields.manifest ?? ''); } catch { manifest = null; }
+      const wrong = manifestProblem(manifest);
+      if (wrong) return html(`<h1>Invalid manifest</h1><p>${attr(wrong)}</p>`, 422);
+      const page = random(12);
+      state.manifestPages.set(page, { manifest, state: url.searchParams.get('state') });
+      state.manifestReport.lastManifest = manifest;
+      return html(`<h1>Create GitHub App for cybersader</h1><form method="post" action="/settings/apps/new/create"><input type="hidden" name="page" value="${page}">`
+        + `<label>GitHub App name <input name="name" value="${attr(manifest.name)}"></label><button>Create GitHub App for cybersader</button></form>`);
+    }
+    if (route === '/settings/apps/new/create' && request.method === 'POST') {
+      const fields = await form(request);
+      const pending = state.manifestPages.get(fields.page);
+      if (!pending) return html('<h1>Expired</h1>', 404);
+      state.manifestPages.delete(fields.page);
+      const clientId = `Iv23li${random(5)}`;
+      const slug = (fields.name || pending.manifest.name).toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(/^-|-$/gu, '');
+      const app = { id: 900000 + state.apps.size + 1, slug, name: fields.name || pending.manifest.name, clientId,
+        clientSecret: `cbsCANARY${random(16)}`, callbackUrls: pending.manifest.callback_urls, setupUrl: pending.manifest.setup_url };
+      state.apps.set(clientId, app);
+      const code = random(20);
+      state.conversions.set(code, clientId);
+      state.manifestReport.created += 1;
+      const back = new URL(pending.manifest.redirect_url);
+      back.searchParams.set('code', code);
+      if (pending.state !== null) back.searchParams.set('state', pending.state);
+      return redirect(back.toString());
+    }
+    const conversion = /^\/app-manifests\/([^/]+)\/conversions$/u.exec(route);
+    if (conversion && request.method === 'POST') {
+      const clientId = state.conversions.get(conversion[1]);
+      if (!clientId) { state.manifestReport.refusedConversions += 1; return json({ message: 'Not Found' }, 404); }
+      state.conversions.delete(conversion[1]);
+      const app = state.apps.get(clientId);
+      state.manifestReport.converted += 1;
+      return json({ id: app.id, slug: app.slug, node_id: `A_${random(6)}`, name: app.name, description: '', external_url: 'https://github.com/cybersader/cyberbaser',
+        html_url: `${url.origin}/apps/${app.slug}`, owner: { login: 'cybersader', id: 4242, type: 'User' },
+        permissions: { contents: 'write', metadata: 'read' }, events: [], client_id: app.clientId, client_secret: app.clientSecret,
+        webhook_secret: `whsCANARY${random(16)}`,
+        pem: `-----BEGIN RSA PRIVATE KEY-----\nFAKEPEMCANARY${random(32)}\n-----END RSA PRIVATE KEY-----\n` }, 201);
+    }
+    const installPage = /^\/apps\/([a-z0-9-]+)\/installations\/new$/u.exec(route);
+    if (installPage && request.method === 'GET') {
+      const app = [...state.apps.values()].find((entry) => entry.slug === installPage[1]);
+      if (!app) return html('<h1>Not Found</h1>', 404);
+      const page = random(12);
+      state.installPages.set(page, { app, state: url.searchParams.get('state') });
+      return html(`<h1>Install ${attr(app.name)}</h1><form method="post" action="/apps/${app.slug}/installations/new/confirm"><input type="hidden" name="page" value="${page}">`
+        + '<label><input type="radio" name="selection" value="selected" checked> Only select repositories</label><button>Install</button></form>');
+    }
+    if (/^\/apps\/[a-z0-9-]+\/installations\/new\/confirm$/u.test(route) && request.method === 'POST') {
+      const fields = await form(request);
+      const pending = state.installPages.get(fields.page);
+      if (!pending) return html('<h1>Expired</h1>', 404);
+      state.installPages.delete(fields.page);
+      state.installed = true;
+      state.manifestReport.installs += 1;
+      const back = new URL(pending.app.setupUrl);
+      back.searchParams.set('installation_id', '11');
+      back.searchParams.set('setup_action', 'install');
+      if (pending.state !== null) back.searchParams.set('state', pending.state);
+      return redirect(back.toString());
+    }
+    if (route === '/login/oauth/authorize' && request.method === 'GET') {
+      const app = state.apps.get(url.searchParams.get('client_id'));
+      const redirectUri = url.searchParams.get('redirect_uri');
+      if (!app || !app.callbackUrls.includes(redirectUri)) return html('<h1>The redirect_uri is not associated with this application.</h1>', 400);
+      if (url.searchParams.get('code_challenge_method') !== 'S256' || !url.searchParams.get('code_challenge')) return html('<h1>PKCE required in this fake</h1>', 400);
+      const page = random(12);
+      state.authorizePages.set(page, { app, redirectUri, state: url.searchParams.get('state'), challenge: url.searchParams.get('code_challenge') });
+      return html(`<h1>Authorize ${attr(app.name)}</h1><form method="post" action="/login/oauth/authorize/confirm"><input type="hidden" name="page" value="${page}"><button>Authorize ${attr(app.name)}</button></form>`);
+    }
+    if (route === '/login/oauth/authorize/confirm' && request.method === 'POST') {
+      const fields = await form(request);
+      const pending = state.authorizePages.get(fields.page);
+      if (!pending) return html('<h1>Expired</h1>', 404);
+      state.authorizePages.delete(fields.page);
+      const code = random(10);
+      state.oauthCodes.set(code, { clientId: pending.app.clientId, redirectUri: pending.redirectUri, challenge: pending.challenge });
+      state.manifestReport.authorizations += 1;
+      const back = new URL(pending.redirectUri);
+      back.searchParams.set('code', code);
+      if (pending.state !== null) back.searchParams.set('state', pending.state);
+      return redirect(back.toString());
+    }
+
     if (route === '/login/device/code' && request.method === 'POST') {
       const fields = await form(request);
+      if (state.apps.has(fields.client_id)) return json({ error: 'device_flow_disabled' }, 400);
       if (fields.client_id !== CLIENT_ID) return json({ error: 'Not Found' }, 404);
       if (state.scenario.deviceFlowDisabled) return json({ error: 'device_flow_disabled' }, 400);
       if (fields.client_secret !== undefined) return json({ error: 'unexpected_client_secret' }, 400);
@@ -183,9 +314,24 @@ const server = Bun.serve({
     }
     if (route === '/login/oauth/access_token' && request.method === 'POST') {
       const fields = await form(request);
-      if (fields.client_id !== CLIENT_ID) return json({ error: 'incorrect_client_credentials' });
-      if (fields.client_secret !== undefined) return json({ error: 'unexpected_client_secret' });
+      const manifestApp = state.apps.get(fields.client_id);
+      if (manifestApp) {
+        if (fields.client_secret !== manifestApp.clientSecret) { state.manifestReport.refusedExchanges += 1; return json({ error: 'incorrect_client_credentials' }); }
+      } else {
+        if (fields.client_id !== CLIENT_ID) return json({ error: 'incorrect_client_credentials' });
+        if (fields.client_secret !== undefined) return json({ error: 'unexpected_client_secret' });
+      }
+      if (fields.code !== undefined && fields.grant_type === undefined) {
+        const entry = state.oauthCodes.get(fields.code);
+        state.oauthCodes.delete(fields.code);
+        const verified = entry && manifestApp && entry.clientId === manifestApp.clientId && entry.redirectUri === fields.redirect_uri
+          && createHash('sha256').update(fields.code_verifier ?? '').digest('base64url') === entry.challenge;
+        if (!verified) { state.manifestReport.refusedExchanges += 1; return json({ error: 'bad_verification_code' }); }
+        state.manifestReport.webExchanges += 1;
+        return json(issue());
+      }
       if (fields.grant_type === 'urn:ietf:params:oauth:grant-type:device_code') {
+        if (manifestApp) return json({ error: 'device_flow_disabled' });
         const device = state.devices.get(fields.device_code);
         if (!device) return json({ error: 'incorrect_device_code' });
         const next = device.polls.length > 1 ? device.polls.shift() : device.polls[0];
@@ -254,7 +400,7 @@ const server = Bun.serve({
     }
     if (route === '/_control/report') {
       return json({ generation: state.generation, refreshes: state.refreshes, pushes: state.pushes, fetches: state.fetches,
-        denied: state.denied, polls: state.pollLog, apiCalls: state.apiCalls, routes: [...state.routes].sort() });
+        denied: state.denied, polls: state.pollLog, apiCalls: state.apiCalls, routes: [...state.routes].sort(), manifest: state.manifestReport });
     }
     return json({ message: 'Not Found' }, 404);
   },

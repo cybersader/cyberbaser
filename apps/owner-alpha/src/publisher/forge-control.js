@@ -7,13 +7,20 @@ import { lstat, unlink } from 'node:fs/promises';
 import net from 'node:net';
 import { OwnerAlphaError, fail } from '../errors.js';
 import { FORGE_PROBLEMS, validFullName } from './forge-access.js';
+import { validCallbackOrigin, validCode, validState } from './github-app-manifest.js';
 import { MAX_FRAME_BYTES, READ_TIMEOUT_MS, readFrame, restrictSocket, validSocketPath } from './protocol.js';
 
 // fetch: the publisher refreshes its mirror of the bound repository and says
 // which branch and commit it holds. publish-starter: the one change a
 // first-run publisher may push (see mirror.js), named by its commit.
+// The GitHub App manifest flow (github-app-manifest.js): new-app, install-app,
+// app-installed and web-sign-in carry the setup page's loopback origin and
+// answer with a GitHub URL (and the manifest); app-created and app-authorized
+// carry GitHub's code and our state back. None carries a secret either way.
 export const FORGE_OPERATIONS = Object.freeze(['status', 'check', 'start', 'cancel', 'repositories', 'select', 'disconnect',
-  'fetch', 'publish-starter']);
+  'fetch', 'publish-starter', 'new-app', 'app-created', 'install-app', 'app-installed', 'web-sign-in', 'app-authorized']);
+const ORIGIN_OPS = Object.freeze(['new-app', 'install-app', 'app-installed', 'web-sign-in']);
+const CODE_OPS = Object.freeze(['app-created', 'app-authorized']);
 const COMMIT = /^[0-9a-f]{40}$/u;
 export const MAX_FORGE_RESPONSE_BYTES = 512 * 1024;
 const FORGE_CODES = Object.freeze([...Object.keys(FORGE_PROBLEMS), 'forge-invalid-request', 'forge-unsupported', 'forge-failed', 'forge-busy']);
@@ -24,10 +31,20 @@ export function forgeSocketPath(socketPath) {
   return candidate;
 }
 
-function requestFrame(op, value) {
-  if (op === 'select') return JSON.stringify({ v: 1, op, repository: value });
-  if (op === 'publish-starter') return JSON.stringify({ v: 1, op, commit: value });
+function requestFrame(op, fields = {}) {
+  if (op === 'select') return JSON.stringify({ v: 1, op, repository: fields.repository });
+  if (op === 'publish-starter') return JSON.stringify({ v: 1, op, commit: fields.commit });
+  if (ORIGIN_OPS.includes(op)) return JSON.stringify({ v: 1, op, origin: fields.origin });
+  if (CODE_OPS.includes(op)) return JSON.stringify({ v: 1, op, code: fields.code, state: fields.state });
   return JSON.stringify({ v: 1, op });
+}
+
+function validFields(op, fields) {
+  if (op === 'select') return validFullName(fields.repository);
+  if (op === 'publish-starter') return COMMIT.test(fields.commit ?? '');
+  if (ORIGIN_OPS.includes(op)) return validCallbackOrigin(fields.origin);
+  if (CODE_OPS.includes(op)) return validCode(fields.code) && validState(fields.state);
+  return true;
 }
 
 // Exact canonical text only: no duplicate members, no extra whitespace or keys.
@@ -35,9 +52,8 @@ function parseForgeRequest(text) {
   let value;
   try { value = JSON.parse(text); } catch { return null; }
   if (!value || typeof value !== 'object' || Array.isArray(value) || !FORGE_OPERATIONS.includes(value.op)) return null;
-  if (value.op === 'select' && !validFullName(value.repository)) return null;
-  if (value.op === 'publish-starter' && !COMMIT.test(value.commit ?? '')) return null;
-  return requestFrame(value.op, value.op === 'publish-starter' ? value.commit : value.repository) === text ? value : null;
+  if (!validFields(value.op, value)) return null;
+  return requestFrame(value.op, value) === text ? value : null;
 }
 
 function failureCode(error) {
@@ -94,6 +110,16 @@ export async function startForgeControl({ socketPath, forgeAccess, uid = process
             break;
           }
           case 'select': result = await forgeAccess.selectRepository(request.repository); break;
+          case 'new-app': case 'app-created': case 'install-app': case 'app-installed': case 'web-sign-in': case 'app-authorized': {
+            if (typeof forgeAccess.newApp !== 'function') throw new OwnerAlphaError('forge-unsupported', 'this provider has no GitHub App flow');
+            if (request.op === 'new-app') result = await forgeAccess.newApp(request.origin);
+            else if (request.op === 'app-created') result = await forgeAccess.appCreated(request.code, request.state);
+            else if (request.op === 'install-app') result = await forgeAccess.installApp(request.origin);
+            else if (request.op === 'app-installed') result = await forgeAccess.appInstalled(request.origin);
+            else if (request.op === 'web-sign-in') result = await forgeAccess.webSignIn(request.origin);
+            else result = await forgeAccess.appAuthorized(request.code, request.state);
+            break;
+          }
           default: await forgeAccess.disconnect(); result = {};
         }
       } catch (error) {
@@ -119,9 +145,10 @@ export async function startForgeControl({ socketPath, forgeAccess, uid = process
 }
 
 /** Ask the publisher one forge question. Never sends or expects a credential. */
-export function forgeRequest({ socketPath, op, repository, commit, timeoutMs = ['fetch', 'publish-starter'].includes(op) ? 120_000 : 20_000 }) {
-  if (!FORGE_OPERATIONS.includes(op) || (op === 'select' && !validFullName(repository))
-    || (op === 'publish-starter' && !COMMIT.test(commit ?? ''))) {
+export function forgeRequest({ socketPath, op, repository, commit, origin, code, state,
+  timeoutMs = ['fetch', 'publish-starter'].includes(op) ? 120_000 : 20_000 }) {
+  const fields = { repository, commit, origin, code, state };
+  if (!FORGE_OPERATIONS.includes(op) || !validFields(op, fields)) {
     return Promise.reject(new OwnerAlphaError('forge-invalid-request', 'invalid forge request'));
   }
   const address = forgeSocketPath(socketPath);
@@ -148,7 +175,7 @@ export function forgeRequest({ socketPath, op, repository, commit, timeoutMs = [
       }
       return invalid();
     }, invalid, { maxBytes: MAX_FORGE_RESPONSE_BYTES });
-    socket.once('connect', () => socket.write(`${requestFrame(op, op === 'publish-starter' ? commit : repository)}\n`));
+    socket.once('connect', () => socket.write(`${requestFrame(op, fields)}\n`));
     socket.once('error', unavailable);
     socket.once('end', unavailable);
     socket.once('close', unavailable);

@@ -20,6 +20,8 @@ import { constants } from 'node:fs';
 import { lstat, mkdir, open, readFile, realpath, rename, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { OwnerAlphaError, fail } from '../errors.js';
+import { INSTALL_WINDOW_TTL_MS, MANIFEST_STATE_TTL_MS, REGISTRATION_FILE, authorizeRequest, buildManifest, createFlowStates,
+  publicApp, reduceConversion, validCallbackOrigin, validCode } from './github-app-manifest.js';
 
 export const FORGE_PROBLEMS = Object.freeze({
   'code-expired': 'The sign-in code expired before it was entered. Start again.',
@@ -36,6 +38,12 @@ export const FORGE_PROBLEMS = Object.freeze({
   'token-invalid': 'That token was refused. Paste a fine-grained token with "Contents: read and write" on the one repository.',
   'github-unreachable': 'GitHub could not be reached. Cyberbaser will try again.',
   'starter-refused': 'That change was not published: it is not exactly the starter publish.yml, or your notes changed on GitHub meanwhile. Try again.',
+  'no-app': 'Cyberbaser has no GitHub App yet. Create it from setup first.',
+  'app-exists': 'Cyberbaser already has its GitHub App. Install it or sign in instead.',
+  'app-state-invalid': 'That GitHub page was opened from an old or different setup page. Start that step again from setup.',
+  'app-conversion-failed': 'GitHub did not finish creating the app. Start again from setup; the code GitHub gives lasts one hour.',
+  'device-flow-only': 'This GitHub App signs in with a code. Use "Connect GitHub".',
+  'web-sign-in-only': 'This GitHub App signs in through GitHub\'s own page. Use "Sign in with GitHub" in setup.',
 });
 
 const GITHUB_API_VERSION = '2022-11-28';
@@ -113,6 +121,20 @@ export function createGithubHttp({ apiBaseUrl = 'https://api.github.com', webBas
     return { status: response.status, body };
   }
   return Object.freeze({
+    webOrigin: web.origin,
+    // One unauthenticated API POST whose raw body the caller handles (and zeroes).
+    async postForBytes(route) {
+      const url = new URL(route, api);
+      if (url.origin !== api.origin) fail('forge-invalid-route', 'GitHub API route left the API origin');
+      let response;
+      try {
+        response = await fetch(url, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(timeoutMs), headers: {
+          Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': GITHUB_API_VERSION, 'User-Agent': 'Cyberbaser' } });
+      } catch { throw problem('github-unreachable'); }
+      let bytes;
+      try { bytes = new Uint8Array(await response.arrayBuffer()); } catch { bytes = new Uint8Array(0); }
+      return { status: response.status, bytes };
+    },
     // OAuth endpoints answer form posts with JSON when asked to.
     login(route, fields) {
       return call(new URL(route, web), {
@@ -178,17 +200,34 @@ function serial() {
 // ---- github-app provider -------------------------------------------------
 
 /**
- * GitHub App user-to-server tokens through the OAuth device flow. Device flow and
- * its refresh need only the public client ID, never a client secret:
+ * GitHub App user-to-server tokens. Two ways in:
+ *   - device flow, for an app registered by hand with "Enable Device Flow" and
+ *     given as `clientId`; it and its refresh need only the public client ID;
+ *   - web flow with PKCE, for the app this publisher created from a manifest
+ *     (github-app-manifest.js). Its client secret stays in this publisher's
+ *     owner-only state and is sent only to GitHub's token endpoint.
+ * With `clientId` null, the manifest-created app (if any) is the app.
  * https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app
  * https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/refreshing-user-access-tokens
  */
 export function createGithubAppAccess({
-  clientId, stateDirectory, remoteUrl, http = createGithubHttp(), uid = process.getuid(),
-  now = () => Date.now(), secondMs = 1000, setTimer = setTimeout, clearTimer = clearTimeout, pushHost = null,
+  clientId = null, stateDirectory, remoteUrl, http = createGithubHttp(), uid = process.getuid(),
+  now = () => Date.now(), secondMs = 1000, setTimer = setTimeout, clearTimer = clearTimeout, pushHost = null, appName = undefined,
 }) {
   const state = createForgeStateFile({ directory: stateDirectory, name: 'github-app.json', uid });
+  const registrations = createForgeStateFile({ directory: stateDirectory, name: REGISTRATION_FILE, uid });
+  const flows = createFlowStates({ now });
+  const webOrigin = http.webOrigin ?? 'https://github.com';
   const exclusive = serial();
+
+  // The app in use: the configured client ID, or the one created here from a
+  // manifest. Its secret is known only for the latter.
+  async function currentApp() {
+    const registration = await registrations.read();
+    const own = registration?.clientId && (clientId === null || registration.clientId === clientId) ? registration : null;
+    if (clientId === null && own === null) return null;
+    return { clientId: clientId ?? own.clientId, clientSecret: own?.clientSecret ?? null, registration: own };
+  }
   let pending = null; // { deviceCode, userCode, verificationUri, expiresAt, intervalS, timer }
   let lastProblem = null;
 
@@ -197,7 +236,7 @@ export function createGithubAppAccess({
     pending = null;
   }
 
-  async function storeTokens(previous, body) {
+  async function storeTokens(previous, body, appClientId) {
     if (typeof body?.access_token !== 'string' || typeof body.refresh_token !== 'string'
       || !Number.isSafeInteger(body.expires_in) || !Number.isSafeInteger(body.refresh_token_expires_in)) {
       // Non-expiring tokens mean the registration has "expire user tokens" off.
@@ -205,7 +244,7 @@ export function createGithubAppAccess({
     }
     const at = now();
     const next = {
-      clientId,
+      clientId: appClientId,
       accessToken: body.access_token,
       accessExpiresAt: at + body.expires_in * 1000,
       refreshToken: body.refresh_token,
@@ -223,18 +262,22 @@ export function createGithubAppAccess({
 
   async function refresh(current) {
     if (current.refreshExpiresAt <= now()) { await forget('sign-in-expired'); throw problem('sign-in-expired'); }
+    const app = await currentApp();
+    if (app === null || app.clientId !== current.clientId) { await forget('revoked'); throw problem('revoked'); }
     const { body } = await http.login('/login/oauth/access_token', {
-      client_id: clientId, grant_type: 'refresh_token', refresh_token: current.refreshToken,
+      client_id: app.clientId, ...(app.clientSecret ? { client_secret: app.clientSecret } : {}),
+      grant_type: 'refresh_token', refresh_token: current.refreshToken,
     });
     if (body?.error === 'bad_refresh_token') { await forget('revoked'); throw problem('revoked'); }
     if (body?.error) throw problem(body.error === 'incorrect_client_credentials' ? 'app-misconfigured' : 'github-unreachable');
     // The old refresh token stops working the moment GitHub answers; persist first.
-    return storeTokens(current, body);
+    return storeTokens(current, body, app.clientId);
   }
 
   async function usable() {
+    const app = await currentApp();
     const current = await state.read();
-    if (current === null || current.clientId !== clientId) return null;
+    if (app === null || current === null || current.clientId !== app.clientId) return null;
     if (current.accessExpiresAt - RENEW_MARGIN_MS <= now()) return refresh(current);
     return current;
   }
@@ -319,7 +362,7 @@ export function createGithubAppAccess({
     let result;
     try {
       result = await http.login('/login/oauth/access_token', {
-        client_id: clientId, device_code: flow.deviceCode, grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+        client_id: flow.clientId, device_code: flow.deviceCode, grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
       });
     } catch {
       if (pending === flow) schedulePoll(flow.intervalS);
@@ -340,7 +383,7 @@ export function createGithubAppAccess({
       return;
     }
     try {
-      await exclusive(async () => { await storeTokens(null, result.body); lastProblem = null; });
+      await exclusive(async () => { await storeTokens(null, result.body, flow.clientId); lastProblem = null; });
     } catch (failure) {
       lastProblem = failure instanceof OwnerAlphaError && FORGE_PROBLEMS[failure.code] ? failure.code : 'app-misconfigured';
     }
@@ -356,9 +399,12 @@ export function createGithubAppAccess({
           return { provider: 'github-app', state: 'waiting-for-code', userCode: pending.userCode,
             verificationUri: pending.verificationUri, expiresAt: new Date(pending.expiresAt).toISOString() };
         }
+        const app = await currentApp();
+        if (app === null) return { provider: 'github-app', state: 'no-app' };
+        const shown = { app: publicApp(app.registration ?? { clientId: app.clientId }) };
         let current = await state.read();
-        if (current === null || current.clientId !== clientId) {
-          return { provider: 'github-app', state: lastProblem ? 'problem' : 'not-connected',
+        if (current === null || current.clientId !== app.clientId) {
+          return { provider: 'github-app', state: lastProblem ? 'problem' : 'not-connected', ...shown,
             ...(lastProblem ? { problem: lastProblem, message: FORGE_PROBLEMS[lastProblem] } : {}) };
         }
         try {
@@ -371,16 +417,16 @@ export function createGithubAppAccess({
         } catch (failure) {
           const code = failure instanceof OwnerAlphaError && FORGE_PROBLEMS[failure.code] ? failure.code : 'github-unreachable';
           const still = await state.read();
-          return { provider: 'github-app', state: 'problem', problem: code, message: FORGE_PROBLEMS[code],
+          return { provider: 'github-app', state: 'problem', problem: code, message: FORGE_PROBLEMS[code], ...shown,
             ...(still?.repository ? { repository: still.repository.fullName } : {}) };
         }
-        if (!current.repository) return { provider: 'github-app', state: 'pick-repository' };
+        if (!current.repository) return { provider: 'github-app', state: 'pick-repository', ...shown };
         // First-run setup runs this provider with no repository yet (remoteUrl
         // null): any picked repository is connected, and pushCredential still
         // refuses, so a setup-time publisher can never push.
         const matches = remoteUrl === null || current.repository.remoteUrl === remoteUrl;
         return {
-          provider: 'github-app', state: matches ? 'connected' : 'problem', repository: current.repository.fullName,
+          provider: 'github-app', state: matches ? 'connected' : 'problem', repository: current.repository.fullName, ...shown,
           renewsAutomatically: true, signInRenewBy: new Date(current.refreshExpiresAt).toISOString(),
           ...(matches ? {} : { problem: 'repository-mismatch', message: FORGE_PROBLEMS['repository-mismatch'] }),
         };
@@ -391,6 +437,10 @@ export function createGithubAppAccess({
       return exclusive(async () => {
         clearPending();
         lastProblem = null;
+        const app = await currentApp();
+        if (app === null) throw problem('no-app');
+        if (app.clientSecret) throw problem('web-sign-in-only');
+        const clientId = app.clientId;
         // offline_access asks for an expiring token with a refresh token even if
         // the registration has expiry off; GitHub Apps accept no other scope.
         const { status, body } = await http.login('/login/device/code', { client_id: clientId, scope: 'offline_access' });
@@ -404,7 +454,7 @@ export function createGithubAppAccess({
         const intervalS = Number.isSafeInteger(body.interval) && body.interval > 0 ? body.interval : 5;
         const expiresIn = Number.isSafeInteger(body.expires_in) && body.expires_in > 0 ? body.expires_in : 900;
         pending = { deviceCode: body.device_code, userCode: body.user_code, verificationUri: verification.toString(),
-          expiresAt: now() + expiresIn * 1000, intervalS, timer: null };
+          expiresAt: now() + expiresIn * 1000, intervalS, timer: null, clientId };
         schedulePoll(intervalS);
         return { userCode: pending.userCode, verificationUri: pending.verificationUri, expiresAt: new Date(pending.expiresAt).toISOString() };
       });
@@ -412,6 +462,89 @@ export function createGithubAppAccess({
 
     cancelSignIn() {
       return exclusive(async () => { clearPending(); lastProblem = null; });
+    },
+
+    // ---- manifest registration and web sign-in (github-app-manifest.js)
+
+    /** The form the setup page posts to GitHub: { action, manifest }. One outstanding at a time. */
+    newApp(origin) {
+      if (!validCallbackOrigin(origin)) return Promise.reject(problem('app-state-invalid'));
+      return exclusive(async () => {
+        if (await currentApp() !== null) throw problem('app-exists');
+        const entry = flows.open('manifest', origin, MANIFEST_STATE_TTL_MS);
+        const action = new URL('/settings/apps/new', webOrigin);
+        action.search = new URLSearchParams({ state: entry.state }).toString();
+        return { action: action.toString(), manifest: JSON.stringify(buildManifest({ origin, ...(appName ? { name: appName } : {}) })) };
+      });
+    },
+
+    /** GitHub came back with a code: convert it, keep the app's id, slug, client ID and secret only. */
+    appCreated(code, returnedState) {
+      return exclusive(async () => {
+        const entry = flows.take('manifest', returnedState);
+        if (entry === null || !validCode(code)) throw problem('app-state-invalid');
+        if (await currentApp() !== null) throw problem('app-exists');
+        const { status, bytes } = await http.postForBytes(`/app-manifests/${encodeURIComponent(code)}/conversions`);
+        if (status !== 201 && status !== 200) { bytes.fill(0); throw problem('app-conversion-failed'); }
+        const kept = reduceConversion(bytes);
+        await registrations.write({ ...kept, createdAt: new Date(now()).toISOString() });
+        lastProblem = null;
+        return { app: publicApp(kept) };
+      });
+    },
+
+    /** GitHub's install page for the created app. Opens the window the setup URL return needs. */
+    installApp(origin) {
+      if (!validCallbackOrigin(origin)) return Promise.reject(problem('app-state-invalid'));
+      return exclusive(async () => {
+        const app = await currentApp();
+        if (app?.registration?.slug == null) throw problem('no-app');
+        const entry = flows.open('install', origin, INSTALL_WINDOW_TTL_MS);
+        const url = new URL(`/apps/${app.registration.slug}/installations/new`, webOrigin);
+        url.search = new URLSearchParams({ state: entry.state }).toString();
+        return { url: url.toString() };
+      });
+    },
+
+    /** Back from installing (GitHub's setup URL): continue to GitHub's authorize page, once per install click. */
+    appInstalled(origin) {
+      return exclusive(async () => {
+        const window = flows.takeWindow('install');
+        if (window === null || window.origin !== origin) throw problem('app-state-invalid');
+        const app = await currentApp();
+        if (!app?.clientSecret) throw problem('no-app');
+        return authorizeRequest({ webOrigin, clientId: app.clientId, origin, flows });
+      });
+    },
+
+    /** "Sign in with GitHub" for an app that is already installed. */
+    webSignIn(origin) {
+      if (!validCallbackOrigin(origin)) return Promise.reject(problem('app-state-invalid'));
+      return exclusive(async () => {
+        const app = await currentApp();
+        if (app === null) throw problem('no-app');
+        if (!app.clientSecret) throw problem('device-flow-only');
+        return authorizeRequest({ webOrigin, clientId: app.clientId, origin, flows });
+      });
+    },
+
+    /** GitHub's authorize page came back: exchange the code (secret + PKCE verifier) for an expiring user token. */
+    appAuthorized(code, returnedState) {
+      return exclusive(async () => {
+        const entry = flows.take('authorize', returnedState);
+        if (entry === null || !validCode(code)) throw problem('app-state-invalid');
+        const app = await currentApp();
+        if (!app?.clientSecret) throw problem('no-app');
+        const { body } = await http.login('/login/oauth/access_token', {
+          client_id: app.clientId, client_secret: app.clientSecret, code, redirect_uri: entry.redirectUri, code_verifier: entry.verifier,
+        });
+        if (body?.error) throw problem(body.error === 'incorrect_client_credentials' ? 'app-misconfigured' : 'denied');
+        clearPending();
+        const previous = await state.read();
+        await storeTokens(previous?.clientId === app.clientId ? previous : null, body, app.clientId);
+        lastProblem = null;
+        return {};
+      });
     },
 
     listRepositories() {
@@ -463,7 +596,7 @@ export function createGithubAppAccess({
       });
     },
 
-    close() { clearPending(); },
+    close() { clearPending(); flows.clear(); },
   });
 }
 

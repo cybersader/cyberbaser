@@ -1,6 +1,8 @@
-// Publishing to GitHub: connect (device code), pick the one repository from a
-// searchable list, see status, disconnect. Every POST carries the CSRF token.
-// The page only ever sees the user code and plain status; never a token.
+// Publishing to GitHub: connect (device code, or in setup GitHub's own create,
+// install and authorize pages), pick the one repository from a searchable
+// list, see status, disconnect. Every POST carries the CSRF token. The page
+// only ever sees the user code, the app's public client ID and plain status;
+// never a token or secret.
 (() => {
   const root = document.getElementById('forge');
   if (!root) return;
@@ -8,6 +10,7 @@
   const panel = document.getElementById('forge-panel');
   let pollTimer = null;
   let tickTimer = null;
+  let lastApp = null;
 
   const el = (tag, attrs = {}, ...children) => {
     const node = document.createElement(tag);
@@ -65,8 +68,43 @@
 
   // ---- states ----------------------------------------------------------
 
+  const linkButton = (label, href, kind = '') => el('a', { class: `forge-link-button${kind ? ` ${kind}` : ''}`, href }, label);
+
+  // No GitHub App yet: setup creates one from a manifest, on GitHub's own page.
+  function noApp() {
+    stopTimers();
+    if (!setupMode) {
+      show(el('div', { class: 'forge-sheet' }, el('h3', {}, 'GitHub is not set up'),
+        el('p', { class: 'pair-hint' }, 'Cyberbaser has no GitHub App yet. It is created during setup.')));
+      return;
+    }
+    const create = linkButton('Create Cyberbaser\'s GitHub App', '/setup/github/create');
+    show(el('div', { class: 'forge-sheet' },
+      el('p', { class: 'pair-hint' }, 'GitHub opens with everything filled in. Click Create there, then Install. The app can update files in the one repository you choose and nothing else.'),
+      el('div', { class: 'pair-row forge-actions' }, create)));
+    create.focus();
+  }
+
+  // The app setup created signs in through GitHub's pages, not a code.
+  function webConnect(problemMessage = null) {
+    stopTimers();
+    if (!setupMode) {
+      show(el('div', { class: 'forge-sheet' }, el('h3', {}, problemMessage ? 'GitHub needs attention' : 'Connect GitHub'),
+        problemMessage ? el('p', { class: 'forge-problem', role: 'alert' }, problemMessage) : null,
+        el('p', { class: 'pair-hint' }, 'This GitHub App signs in through GitHub\'s own page, which opens from setup.')));
+      return;
+    }
+    const install = linkButton('Install on your repository', '/setup/github/install');
+    show(el('div', { class: 'forge-sheet' },
+      problemMessage ? el('p', { class: 'forge-problem', role: 'alert' }, problemMessage) : null,
+      el('p', { class: 'pair-hint' }, 'On GitHub choose "Only select repositories", pick the one with your notes, and click Install. GitHub then asks you to authorize Cyberbaser, and you come back here.'),
+      el('div', { class: 'pair-row forge-actions' }, install, linkButton('Already installed? Sign in', '/setup/github/sign-in', 'quiet'))));
+    install.focus();
+  }
+
   function notConnected(problemMessage = null) {
     stopTimers();
+    if (lastApp?.signIn === 'web') return webConnect(problemMessage);
     const connect = button('Connect GitHub', startSignIn);
     show(el('div', { class: 'forge-sheet' },
       setupMode && !problemMessage ? null : el('h3', {}, problemMessage ? 'GitHub needs attention' : 'Connect GitHub'),
@@ -273,7 +311,8 @@
     // else may clear up, so checking again comes first.
     const gone = ['revoked', 'sign-in-expired'].includes(state.problem) && root.dataset.provider === 'github-app';
     const retry = button('Check again', async () => { retry.disabled = true; render(await call('/owner/github/check').catch((error) => ({ state: 'problem', message: error.message }))); }, gone ? 'quiet' : '');
-    const reconnect = button('Connect again', startSignIn, gone ? '' : 'quiet');
+    const reconnect = lastApp?.signIn === 'web' && setupMode ? linkButton('Connect again', '/setup/github/sign-in', gone ? '' : 'quiet')
+      : button('Connect again', startSignIn, gone ? '' : 'quiet');
     const title = gone ? 'GitHub access was removed' : state.repository ? `Cannot publish to ${state.repository}` : 'GitHub needs attention';
     show(el('div', { class: 'forge-sheet is-problem' },
       el('h3', {}, title),
@@ -285,7 +324,9 @@
   }
 
   function render(state) {
+    if (state.app) lastApp = state.app;
     announce(state);
+    if (state.state === 'no-app') return noApp();
     if (state.state === 'waiting-for-code') return waiting(state);
     if (state.state === 'pick-repository') return picker();
     if (state.state === 'connected' || state.state === 'restart-needed') return connected(state);
