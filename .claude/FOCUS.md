@@ -2,6 +2,8 @@
 
 > Update when direction changes, milestones complete, or priorities shift.
 
+**Private Cyberchief install ready, 2026-11-24:** owner approved a private real install (two private repos, no Pages, no DNS). Installer takes the site's own renderer; "Live" is the node's private site; setup creates the GitHub App from a manifest (owner clicks GitHub's buttons only). Container-rehearsed 66/66 against a stand-in GitHub; not yet run on the real machine or github.com. Record: `41-QUESTIONS-RESOLVED.md`, `agent-context/zz-log/2026-11-24-github-app-manifest.mdx`.
+
 **Author flow rehearsed (scratch), 2026-11-24:** a Cyberchief post went from the New post form (readable names, site model v2, cover photo) through owner review on the site design and a phone approval to one pushed commit with only the note and the cleaned cover; one shared address rule (`.cyberbaser/site.yml` `addresses:`) now feeds device, node and review, with an address check before signing. New pages still never show Live. Record: `agent-context/zz-log/2026-11-24-dad-flow-rehearsal.mdx`.
 
 **New post form, 2026-11-24:** the plugin reads `.cyberbaser/model.yml` and offers a New post form; Publish turns Draft off inside the signed bundle. Harness-verified on a Cyberchief copy; property-named images now count as shown (`2026-11-24-property-images.mdx`). Record: `agent-context/zz-log/2026-11-24-new-post-form.mdx`.

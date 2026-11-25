@@ -36,3 +36,7 @@ One install command, open the setup link, then on the GitHub step:
 - Not tried against real github.com. GitHub's manifest docs state no rule about loopback `redirect_url`s; other projects (Probot) use `localhost` returns, but this has to be confirmed on the first real install. If GitHub refuses `http://127.0.0.1`, the fallback is the same flow with the device-flow checkbox ticked once by hand.
 - The publisher keeps a client secret it did not keep before (device flow needed none). It sits beside the refresh token, which already grants the same access.
 - Uninstalling the app on GitHub leaves the registration; setup offers sign-in again, not a new app.
+
+## Recorded
+
+The owner decisions behind this (private install; no hand-registered app) are in `.claude/41-QUESTIONS-RESOLVED.md`, and `FOCUS.md` carries the current state.

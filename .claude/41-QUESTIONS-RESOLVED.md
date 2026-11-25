@@ -4,6 +4,10 @@
 
 ## Log
 
+### Private real install of Cyberchief; GitHub App created by manifest (2026-11-24, owner decisions)
+- **Private install** (asked in the Cyberchief project lead thread, verified there by reading it): "Your dad's write → approve → Live flow passes every check in test runs. What should happen next?" **Answer:** "Real install, private (Recommended)": two private GitHub repos (`cybersader/cyberchief` vault, `cybersader/cyberchief-site` design), Cyberbaser installed on this machine, phone paired; nothing public, cyberchief.me untouched, samples stay out. Built for it: installer `--renderer` (copied to a node-owned directory) and `workflow.provider: private-site` ("Live" = the node's own private site, evidence `private-site-live`).
+- **No hand-registered GitHub App** (owner, verbatim): "Can you not give me links that like automatically you know try to generate it and I just have to click an authentic button or something? … I'm just a busy person". Setup now creates the app from a manifest (owner clicks Create, Install, Authorize on GitHub's own pages). The publisher exchanges the code, keeps app id, slug, client ID and client secret (0600, publisher only), and discards the private key and webhook secret before anything is saved. Sign-in uses GitHub's web authorize flow with one-use state and PKCE; device flow remains for hand-registered apps. Unconfirmed until the first real run: whether GitHub accepts a `http://127.0.0.1` return address (fallback: tick "Enable Device Flow").
+
 ### Images named in properties are references (2026-11-24, implementation rule)
 - A top-level property naming an existing image by its exact vault path (`cover: posts/x.png`, or `"[[posts/x.png]]"`) references it, for the selector, the plugin, the node and the publisher alike (`packages/publish/src/property-refs.js`). Not model-driven, because the model never decides what is public and the selector runs without one; exact paths only, because that is how renderers read these properties. Log: `zz-log/2026-11-24-property-images.mdx`.
 
