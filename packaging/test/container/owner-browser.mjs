@@ -21,10 +21,10 @@ let cookie = null;
 try { cookie = readFileSync(cookieFile, 'utf8').trim() || null; } catch { cookie = null; }
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function call(route, body, { redirect = 'manual' } = {}) {
+async function call(route, body, { redirect = 'manual', withCookie = true } = {}) {
   const response = await fetch(`${ORIGIN}${route}`, {
     method: body === undefined ? 'GET' : 'POST', redirect, signal: AbortSignal.timeout(180_000),
-    headers: { ...(cookie ? { Cookie: cookie } : {}), ...(body === undefined ? {} : { Origin: ORIGIN, 'Content-Type': 'application/json' }) },
+    headers: { ...(cookie && withCookie ? { Cookie: cookie } : {}), ...(body === undefined ? {} : { Origin: ORIGIN, 'Content-Type': 'application/json' }) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const set = response.headers.get('set-cookie');
@@ -96,6 +96,47 @@ async function setupToPhone(link) {
   done({ ok: true, count: notes.count, multiSelect, starterWaiting });
 }
 
+// GitHub's own pages (the stand-in GitHub): post the page's one form, as the
+// owner clicking its button, and return where GitHub sends the browser.
+async function clickOnGithub(response) {
+  const text = await response.text();
+  const action = /<form method="post" action="([^"]+)"/u.exec(text)?.[1];
+  const page = /name="page" value="([^"]+)"/u.exec(text)?.[1];
+  if (!action || !page) failed('github-page', `${response.status} ${text.slice(0, 200)}`);
+  const clicked = await fetch(new URL(action, response.url), { method: 'POST', redirect: 'manual',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ page }).toString() });
+  if (clicked.status !== 302) failed('github-click', clicked.status);
+  return new URL(clicked.headers.get('location'));
+}
+const unescape = (text) => text.replaceAll('&quot;', '"').replaceAll('&#39;', "'").replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&amp;', '&');
+
+// No GitHub App yet: Create on GitHub, Install on GitHub, Authorize on GitHub.
+// GitHub's returns arrive without the owner's cookie (SameSite=Strict), as a
+// real browser sends them.
+async function manifestFlow() {
+  const page = await call('/setup/github/create');
+  if (page.status !== 200) failed('create-page', page.status);
+  const action = unescape(/<form id="github-create" method="post" action="([^"]+)"/u.exec(page.text)?.[1] ?? '');
+  const manifest = unescape(/name="manifest" value="([^"]+)"/u.exec(page.text)?.[1] ?? '');
+  const formAllowed = (page.headers.get('content-security-policy') ?? '').includes(`form-action 'self' ${new URL(action).origin}`);
+  const githubNew = await fetch(action, { method: 'POST', redirect: 'manual', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ manifest }).toString() });
+  const created = await clickOnGithub(githubNew);
+  if (created.origin !== ORIGIN) failed('created-return', created.origin);
+  const back = await call(created.pathname + created.search, undefined, { withCookie: false });
+  if (back.status !== 200 || back.headers.get('refresh') !== '0; url=/setup') failed('created', `${back.status} ${back.text.slice(0, 200)}`);
+  const replay = await call(created.pathname + created.search, undefined, { withCookie: false });
+  const install = await call('/setup/github/install');
+  if (install.status !== 303) failed('install', install.status);
+  const installed = await clickOnGithub(await fetch(install.location, { redirect: 'manual' }));
+  const toAuthorize = await call(installed.pathname + installed.search, undefined, { withCookie: false });
+  if (toAuthorize.status !== 303) failed('installed', `${toAuthorize.status} ${toAuthorize.text.slice(0, 200)}`);
+  const authorized = await clickOnGithub(await fetch(toAuthorize.location, { redirect: 'manual' }));
+  const connected = await call(authorized.pathname + authorized.search, undefined, { withCookie: false });
+  if (connected.status !== 200) failed('authorized', `${connected.status} ${connected.text.slice(0, 200)}`);
+  return { formAllowed, replayRefused: replay.status === 409, githubClicks: 3 };
+}
+
 // Setup for a private-only site (install --site private) on a repository that
 // already has its publish.yml: GitHub, the repository, the notes copy, then
 // "Keep it private" on the website step.
@@ -104,20 +145,28 @@ async function setupPrivate(link, repository) {
   if (opened.status !== 303) failed('open-link', opened.status);
   const { step, csrf } = await stepper();
   if ((await step('start')).value?.step !== 'github') failed('start', 'not on github');
-  const started = await call('/owner/github/start', { csrf });
-  if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}$/u.test(started.value?.userCode ?? '')) failed('sign-in', started.text);
-  let state;
-  for (let i = 0; i < 90; i++) {
+  let state = (await call('/owner/github/state')).value;
+  let manifest = null;
+  if (state?.state === 'no-app') {
+    manifest = await manifestFlow();
     state = (await call('/owner/github/state')).value;
-    if (state?.state !== 'waiting-for-code') break;
-    await sleep(1000);
+    // The app is on exactly one repository, so setup picked it.
+    if (state?.state !== 'connected' || state.repository !== repository) failed('manifest-connected', JSON.stringify(state));
+  } else {
+    const started = await call('/owner/github/start', { csrf });
+    if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}$/u.test(started.value?.userCode ?? '')) failed('sign-in', started.text);
+    for (let i = 0; i < 90; i++) {
+      state = (await call('/owner/github/state')).value;
+      if (state?.state !== 'waiting-for-code') break;
+      await sleep(1000);
+    }
+    if (state?.state !== 'pick-repository') failed('sign-in', JSON.stringify(state));
+    const listing = (await call('/owner/github/repositories')).value;
+    const row = listing?.repositories?.find((entry) => entry.fullName === repository);
+    if (!row || row.problem !== null || row.private !== true) failed('picker', JSON.stringify(listing));
+    const picked = await call('/owner/github/select', { csrf, repository });
+    if (picked.value?.ok !== true) failed('pick', picked.text);
   }
-  if (state?.state !== 'pick-repository') failed('sign-in', JSON.stringify(state));
-  const listing = (await call('/owner/github/repositories')).value;
-  const row = listing?.repositories?.find((entry) => entry.fullName === repository);
-  if (!row || row.problem !== null || row.private !== true) failed('picker', JSON.stringify(listing));
-  const picked = await call('/owner/github/select', { csrf, repository });
-  if (picked.value?.ok !== true) failed('pick', picked.text);
   if ((await step('continue')).value?.step !== 'notes') failed('continue-notes', 'refused');
   let notes;
   for (let i = 0; i < 300; i++) {
@@ -132,7 +181,7 @@ async function setupPrivate(link, repository) {
   const website = (await call('/setup')).text;
   const privateOffered = website.includes('Keep it private') && website.includes('http://127.0.0.1:4318/');
   if ((await step('private')).value?.step !== 'phone') failed('website', 'refused');
-  done({ ok: true, count: notes.count, publishYmlKept, privateOffered });
+  done({ ok: true, count: notes.count, publishYmlKept, privateOffered, manifest });
 }
 
 async function setupStep(action) {

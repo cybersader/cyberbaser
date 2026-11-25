@@ -1,0 +1,38 @@
+---
+title: Setup creates the owner's GitHub App from a manifest (container-rehearsed)
+description: The owner no longer registers a GitHub App by hand or handles a key file. Setup's GitHub step creates a private app on their account from a manifest; the owner clicks Create, Install and Authorize on GitHub's own pages. The client secret stays with the publisher, the private key is dropped at creation. Rehearsed in the container with no client ID given to install, 66 of 66 checks.
+status: log
+---
+
+## Why
+
+Owner request, about registering the GitHub App by hand: "Can you not give me links that like automatically you know try to generate it and I just have to click an authentic button or something? I know that sounds dumb like I'm being lazy, but I'm just a busy person". Goal: the owner, and later a non-technical user, never fills a GitHub form or handles a key file; they click GitHub's own buttons only.
+
+## The owner's path
+
+One install command, open the setup link, then on the GitHub step:
+
+1. **Create Cyberbaser's GitHub App.** GitHub's new-app page opens with everything filled in; click **Create GitHub App**. GitHub returns to setup by itself.
+2. **Install on your repository.** On GitHub choose **Only select repositories**, the one repository, **Install**, then **Authorize**. Back in setup with that repository picked (setup picks it when the app sits on exactly one usable repository); **Continue**.
+
+`cyberbaser install` no longer needs `--github-client-id`; that flag now selects a hand-registered app with device sign-in, which still works.
+
+## How it works
+
+- **Manifest.** Private app, Contents write plus Metadata read, no webhook (`active: false`), no events, `request_oauth_on_install: false`. Return addresses are on the setup page's own `http://127.0.0.1:<port>`: `redirect_url` `/setup/github/app-created`, `setup_url` `/setup/github/installed`, one callback URL `/setup/github/authorized`. Default name `Cyberbaser <host> <4 hex>` (34 characters at most, editable on GitHub's page). The setup page posts it to `github.com/settings/apps/new?state=<one-use>`; its CSP widens `form-action` to GitHub's origin for that one page only.
+- **Conversion in the publisher.** The node relays GitHub's code and state over the forge control socket; the publisher checks the state (one-use, 20 minutes), calls `POST /app-manifests/{code}/conversions` and keeps the app id, slug, client ID, client secret and owner in `github-app-registration.json` (publisher state, 0600), marked `createdBy: manifest`. The private key and webhook secret are removed from the parsed answer before anything is stored, the received bytes are zeroed, nothing is logged.
+- **Sign-in: web flow with PKCE, not install-time OAuth.** GitHub documents no `state` for install-time authorization and always uses the first callback URL, so its return could not be tied to this setup. Instead the install page opens a 30-minute window; GitHub's return to the setup URL (whose `installation_id` is not trusted) continues to GitHub's authorize page with a fresh one-use state (10 minutes) and an S256 challenge. The publisher exchanges the code with the client secret and verifier for the same expiring user token as the device flow; refresh sends the client secret too. Device flow needs the "Enable Device Flow" checkbox, which a manifest cannot set.
+- **No session cookie on GitHub's returns.** The owner session cookie is `SameSite=Strict`, so a browser arriving from github.com does not send it. The three return paths are accepted only with the publisher's state (or open install window), take exactly the expected query keys, and end on a page that navigates back to `/setup`, where the cookie is sent again.
+- **What the node sees:** URLs, the manifest, the public client ID (written into the node config as before) and plain status. Never the client secret, a token or the key.
+- **Install preselection not used.** GitHub documents `suggested_target_id` and `repository_ids[]` only on `/installations/new/permissions` (OAuth-app migration), and needs repository IDs the publisher does not have before sign-in. The owner picks "Only select repositories"; the publisher still refuses an app installed on more than one repository.
+
+## Evidence
+
+- Container: `packaging/test/container/private-e2e.sh` (installed services, Cyberchief vault and renderer copies, no `--github-client-id`), `RESULT pass=66 fail=0`. The stand-in GitHub gained the new-app page (Create), conversions (answering with a canary private key and webhook secret), the install page and setup-URL return, and the authorize page with PKCE checks. Checks added: install record names no client ID; setup's returns cross three GitHub clicks; a replayed return is refused; the registration is the publisher account's, 0600, `createdBy: manifest`; the node config names the created client ID; GitHub saw one conversion, one install, one web sign-in; no file under the node, shared, publisher, `/etc/cyberbaser`, `/run`, `/tmp` or `/var/tmp` and nothing in the journal holds `BEGIN RSA PRIVATE KEY`, the fake pem bytes or the webhook secret; the client secret is only in the registration file. The rest of the rehearsal (private site, phone pairing and enrolment, New post, Live) passed unchanged.
+- Unit: `apps/owner-alpha/test/github-app-manifest.test.js` (manifest shape and loopback-only origins, default names, one-use and expiring states, conversion keeps four fields and zeroes bytes, refused conversions, create/install/authorize against the fake GitHub, refresh with the secret, device-flow apps unchanged, control-socket refusals, setup pages end to end with no private key on either side, refusal paths for forged, malformed, duplicated, publisher-less and post-setup returns).
+
+## Not done
+
+- Not tried against real github.com. GitHub's manifest docs state no rule about loopback `redirect_url`s; other projects (Probot) use `localhost` returns, but this has to be confirmed on the first real install. If GitHub refuses `http://127.0.0.1`, the fallback is the same flow with the device-flow checkbox ticked once by hand.
+- The publisher keeps a client secret it did not keep before (device flow needed none). It sits beside the refresh token, which already grants the same access.
+- Uninstalling the app on GitHub leaves the registration; setup offers sign-in again, not a new app.

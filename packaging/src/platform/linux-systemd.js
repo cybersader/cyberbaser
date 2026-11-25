@@ -57,8 +57,9 @@ export const LAYOUT = Object.freeze({
 export const UNITS = Object.freeze(['cyberbaser-node.service', 'cyberbaser-publisher.service',
   'cyberbaser-config.path', 'cyberbaser-config-apply.service']);
 const DEFAULT_PORT = 4317;
-// The registered Cyberbaser GitHub App's public client ID. Not registered yet:
-// until it is, install takes --github-client-id.
+// A shared, already registered GitHub App's public client ID (device flow), if
+// any. None: setup creates the owner's own app from a manifest instead, so
+// install needs no client ID. --github-client-id still selects a hand-registered app.
 export const GITHUB_CLIENT_ID = null;
 const ACCOUNTS = DEFAULT_ACCOUNTS;
 
@@ -326,6 +327,8 @@ function plan(options) {
     ...(options.renderer ? [`copy the renderer ${options.renderer} to ${LAYOUT.renderers}/${options.rendererName ?? '<name>'}, owned by "${ACCOUNTS.node}"`] : []),
     ...(options.site === 'private' ? ['set up a private site: the node builds and serves it, nothing is deployed to the web'] : []),
     `create owner-only state in ${LAYOUT.nodeHome} and ${LAYOUT.publisherHome}, and the shared job store, notes copy and publisher mirror in ${LAYOUT.shared}`,
+    options.clientId ? `sign in to GitHub with the app ${options.clientId} (device code)`
+      : 'let setup create your own Cyberbaser GitHub App on github.com (you click Create, then Install)',
     `install the services ${UNITS.join(', ')} in ${LAYOUT.unitDir}, then enable and start them`,
   ];
 }
@@ -358,11 +361,8 @@ export async function install(args, { programPath, compiled }) {
     process.stderr.write(`Found an existing setup this installer did not make, so nothing was changed:\n${found.map((item) => `  - ${item}`).join('\n')}\n`);
     return 1;
   }
+  // Null: setup creates the owner's own GitHub App from a manifest (publisher state).
   const clientId = options.clientId ?? record?.github?.clientId ?? GITHUB_CLIENT_ID;
-  if (clientId === null) {
-    process.stderr.write('The Cyberbaser GitHub App is not registered yet. Run install with --github-client-id <the app client ID>.\n');
-    return 1;
-  }
   const githubOrigin = options.githubOrigin ?? record?.github?.origin ?? null;
   const publication = options.site === 'private' ? 'private-site' : options.site === 'public' ? null : record?.publication ?? null;
   let rendererRequest = null;
@@ -400,7 +400,7 @@ export async function install(args, { programPath, compiled }) {
   for (const [name, text] of Object.entries(units)) await writeOwned(path.join(LAYOUT.unitDir, name), text);
   await writeRecord({ version: 1, state: 'installed', accounts: { node: ACCOUNTS.node, publisher: ACCOUNTS.publisher },
     group: ACCOUNTS.group, appRoot: LAYOUT.appRoot, port: options.port,
-    github: { clientId, ...(githubOrigin ? { origin: githubOrigin } : {}) }, ...(relay ? { irohRelay: relay } : {}),
+    github: { ...(clientId ? { clientId } : {}), ...(githubOrigin ? { origin: githubOrigin } : {}) }, ...(relay ? { irohRelay: relay } : {}),
     ...(publication ? { publication } : {}), ...(renderer ? { renderer } : {}), installedAt: record?.installedAt ?? new Date().toISOString(),
     updatedAt: new Date().toISOString() });
   systemctl('daemon-reload');
@@ -509,7 +509,7 @@ export async function runPublisherService({ appRoot }) {
       projectRoot: appRoot, socketGroup, owners, ...(http ? { forgeOptions: { http } } : {}) });
     return 0;
   }
-  if (!plan.clientId) { process.stderr.write('No GitHub App client ID in the install record\n'); return 1; }
+  // No client ID: setup creates the GitHub App from a manifest; the publisher keeps it.
   await publisherCli.runSetupForgeCli({ socketPath: plan.socketPath, stateDirectory: plan.stateDirectory, clientId: plan.clientId,
     mirror: plan.mirror, checkout: plan.checkout, socketGroup, http, owners });
   return 0;

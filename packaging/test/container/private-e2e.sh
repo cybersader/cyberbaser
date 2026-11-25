@@ -9,6 +9,11 @@
 # site from it and confirms the new page there (private-site-live). Nothing
 # touches GitHub Pages or any deployment API.
 #
+# No GitHub client ID is given to install: setup creates the owner's own GitHub
+# App from a manifest on the stand-in GitHub's pages (Create, Install,
+# Authorize), and the test checks that the app's private key and webhook secret
+# never reach any disk or log, and its client secret stays with the publisher.
+#
 # Mounted by run.sh: /test/renderer (assembled renderer copy), /test/content
 # (Git clone of the vault), /test/post (note.md, cover.jpg).
 set -u
@@ -18,7 +23,6 @@ FAKE_PORT=48080
 RELAY_PORT=48081
 PHONE_PORT=48090
 RELAY="http://127.0.0.1:$RELAY_PORT/"
-CLIENT_ID=Iv23liFAKEcyberbaser
 REPO=cybersader/cyberchief
 QUARTZ=4923affa7722dfc751f1074348e6dad214fe0c08
 FINGERPRINT="build,quartz.config.ts,quartz.layout.ts,package.json,package-lock.json,quartz/components/cyberchief,quartz/styles/custom.scss,quartz/cyberbase,cyberbase-patches,cyberchief-patches,quartz/plugins/cyberchief,quartz/static/fonts,quartz/static/logo,quartz/static/photos,quartz/static/favicon.svg,quartz/static/icon.png"
@@ -28,6 +32,8 @@ NOTE="$TOPIC/$TITLE/$TITLE.md"
 COVER="$TOPIC/$TITLE/$TITLE cover.jpg"
 PAGE_PATH=/threats-and-response/patch-the-edge-first
 TOKEN_RE='gh[ur]_CANARY[0-9a-f]{36}'
+PEM_RE='BEGIN RSA PRIVATE KEY|FAKEPEMCANARY|whsCANARY'
+REGISTRATION=/var/lib/cyberbaser-publisher/forge/github-app-registration.json
 PASS=0; FAIL=0
 pass() { PASS=$((PASS + 1)); echo "PASS $*"; }
 fail() { FAIL=$((FAIL + 1)); echo "FAIL $*"; }
@@ -71,7 +77,7 @@ SAMPLES=$(git -C "$HOSTED" grep -l '^sample: true' main -- '*.md' | sed 's/^main
 systemd-run --quiet --unit=fake-github -p WorkingDirectory=/srv -E FAKE_GITHUB_PORT=$FAKE_PORT -E BUN_BE_BUN=1 -E HOME=/srv \
   -E PATH=/usr/bin:/bin $PROGRAM /src/apps/owner-alpha/test/fake-github.js /srv/gh
 for _ in $(seq 1 60); do curl -fs -o /dev/null "http://127.0.0.1:$FAKE_PORT/_control/report" && break; sleep 0.25; done
-curl -fs -X POST -H 'Content-Type: application/json' -d "{\"polls\":[\"authorization_pending\",\"ok\"],\"installations\":\"exact\",\"repository\":\"$REPO\",\"anonymousRead\":false}" \
+curl -fs -X POST -H 'Content-Type: application/json' -d "{\"polls\":[\"authorization_pending\",\"ok\"],\"installations\":\"exact\",\"repository\":\"$REPO\",\"anonymousRead\":false,\"requireInstall\":true}" \
   "http://127.0.0.1:$FAKE_PORT/_control/scenario" >/dev/null
 refused "the private repository is refused without a token" git -c credential.helper= ls-remote "http://127.0.0.1:$FAKE_PORT/git/$REPO.git"
 systemd-run --quiet --unit=test-relay bash -c "sleep infinity | /src/bin/loopback-relay $RELAY_PORT"
@@ -90,10 +96,10 @@ SHIM
 chmod 0755 /usr/local/bin/git
 
 echo "== install: private site, with the site's own renderer"
-refused "install refuses a renderer without its pinned Quartz commit" $PROGRAM install --github-client-id "$CLIENT_ID" --site private \
+refused "install refuses a renderer without its pinned Quartz commit" $PROGRAM install --site private \
   --renderer /test/renderer --renderer-name cyberchief --renderer-quartz-commit "$(printf 'a%.0s' $(seq 40))" --renderer-fingerprint "$FINGERPRINT"
 check "and changed nothing" test ! -e /etc/cyberbaser/install.json
-$PROGRAM install --quartz-seed "$SEED" --github-client-id "$CLIENT_ID" --github-origin "http://127.0.0.1:$FAKE_PORT" --iroh-relay "$RELAY" \
+$PROGRAM install --quartz-seed "$SEED" --github-origin "http://127.0.0.1:$FAKE_PORT" --iroh-relay "$RELAY" \
   --site private --renderer /test/renderer --renderer-name cyberchief --renderer-quartz-commit "$QUARTZ" --renderer-fingerprint "$FINGERPRINT" \
   | tee /tmp/install.out
 LINK=$(sed -n 's/^Open this to finish setup: //p' /tmp/install.out)
@@ -112,9 +118,18 @@ ENROLL=$(sed -n 's/^  Code: \([0-9A-Z-]*\).*/\1/p' /tmp/install.out | head -1)
 systemctl show -p RestrictNamespaces --value cyberbaser-node.service | tee /tmp/ns.out
 grep -qw user /tmp/ns.out && grep -qw net /tmp/ns.out && ! grep -qw mnt /tmp/ns.out && pass "the node may make only user and network namespaces" || fail "node namespaces"
 
-echo "== setup: GitHub, the private repository, Keep it private"
+grep -q '"clientId"' /etc/cyberbaser/install.json && fail "the install record names a client ID" || pass "install took no GitHub client ID"
+
+echo "== setup: create the GitHub App on GitHub, install it, the private repository, Keep it private"
 browser setup-private "$LINK" "$REPO" /tmp/owner.cookie | tee /tmp/setup.out
 grep -q '"ok":true' /tmp/setup.out && pass "setup ran to the phone step" || fail "setup to the phone step"
+grep -q '"manifest":{"formAllowed":true,"replayRefused":true,"githubClicks":3}' /tmp/setup.out \
+  && pass "the owner clicked only GitHub's Create, Install and Authorize; a replayed return was refused" || fail "manifest flow"
+[ "$(stat -c '%U %a' "$REGISTRATION" 2>/dev/null)" = "cyberbaser-publisher 600" ] && pass "the app registration is the publisher's, owner-only" \
+  || fail "registration $(stat -c '%U %a' "$REGISTRATION" 2>&1)"
+grep -q '"createdBy":"manifest"' "$REGISTRATION" && pass "the publisher records the app as created by manifest" || fail "createdBy"
+APP_CLIENT=$(sed -n 's/.*"clientId":"\(Iv[0-9A-Za-z.]*\)".*/\1/p' "$REGISTRATION")
+[ -n "$APP_CLIENT" ] && pass "the created app's client ID is $APP_CLIENT" || fail "no client ID in the registration"
 grep -q '"publishYmlKept":true' /tmp/setup.out && pass "the vault's own publish.yml is kept, no starter" || fail "publish.yml"
 grep -q '"privateOffered":true' /tmp/setup.out && pass "the website step offers Keep it private with the node's address" || fail "private offer"
 [ "$(hosted_main)" = "$BASE" ] && pass "nothing reached GitHub during setup" || fail "setup pushed"
@@ -135,6 +150,7 @@ browser landed /tmp/owner.cookie | grep -q '"ok":true' && pass "the owner lands 
 grep -q '"provider": "private-site"' "$CONFIG" && pass "the node config publishes to the private site" || fail "config provider"
 grep -q '"baseUrl": "https://cyberchief.me/"' "$CONFIG" && pass "its page identity is the vault's own site address" || fail "config live.baseUrl"
 grep -q '"name": "cyberchief"' "$CONFIG" && pass "and builds with the cyberchief renderer" || fail "config renderer"
+grep -q "\"clientId\": \"$APP_CLIENT\"" "$CONFIG" && pass "the node config names the created app's public client ID" || fail "config client ID"
 ! grep -q 'github-pages\|deploy-pages\|"environment"' "$CONFIG" && pass "with no Pages environment or workflow" || fail "config names Pages"
 check "the publisher switched to normal mode" wait_journal cyberbaser-publisher.service 'owner-alpha publisher ready'
 
@@ -205,6 +221,15 @@ grep -o '"routes":\[[^]]*\]' /tmp/report.json
 grep -o '"routes":\[[^]]*\]' /tmp/report.json | grep -qiE 'pages|actions|deployments|environments|workflows' && fail "a Pages, Actions or deployment API was called" \
   || pass "no Pages, Actions or deployment API was called"
 journalctl --no-pager -o cat | grep -qaE "$TOKEN_RE" && fail "the journal holds the token" || pass "the journal holds no token"
+grep -o '"manifest":{[^}]*' /tmp/report.json | head -1
+grep -q '"converted":1,"refusedConversions":0,"installs":1,"authorizations":1,"webExchanges":1' /tmp/report.json \
+  && pass "GitHub converted one app, saw one install and one web sign-in" || fail "manifest report"
+[ "$(grep -rlsaE "$PEM_RE" /var/lib/cyberbaser-publisher /var/lib/cyberbaser /var/lib/cyberbaser-shared /etc/cyberbaser /run/cyberbaser /run/cyberbaser-publisher /tmp /var/tmp | wc -l)" = 0 ] \
+  && pass "the app's private key and webhook secret are on no disk" || { fail "private key on disk"; grep -rlsaE "$PEM_RE" /var/lib /etc/cyberbaser /tmp /var/tmp | head; }
+journalctl --no-pager -o cat | grep -qaE "$PEM_RE|cbsCANARY" && fail "the journal holds an app secret" || pass "the journal holds no app secret or key"
+[ "$(grep -rlsa cbsCANARY /var/lib/cyberbaser /var/lib/cyberbaser-shared /etc/cyberbaser /tmp /var/tmp | wc -l)" = 0 ] \
+  && pass "the client secret is only in the publisher's state" || fail "client secret outside the publisher"
+[ "$(grep -rlsa cbsCANARY /var/lib/cyberbaser-publisher)" = "$REGISTRATION" ] && pass "and there only in its registration file" || fail "client secret elsewhere in the publisher"
 [ "$(grep -rlsaE "$TOKEN_RE" "$RENDERER" "$SITE" | wc -l)" = 0 ] && pass "the renderer and the private site hold no credential" || fail "credential in renderer/site"
 
 systemd-analyze security cyberbaser-node.service 2>/dev/null | tail -1 | sed 's/^/node unit: /'
