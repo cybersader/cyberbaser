@@ -65,8 +65,8 @@ const ACCOUNTS = DEFAULT_ACCOUNTS;
 
 function say(text) { process.stdout.write(`${text}\n`); }
 
-function run(command, args, { allowFail = false, input } = {}) {
-  const result = spawnSync(command, args, { encoding: 'utf8', input });
+function run(command, args, { allowFail = false, input, cwd, env } = {}) {
+  const result = spawnSync(command, args, { encoding: 'utf8', input, cwd, env });
   if (result.error || (result.status !== 0 && !allowFail)) {
     throw new Error(`${command} ${args.join(' ')} failed: ${(result.stderr || result.error?.message || '').trim().slice(-300)}`);
   }
@@ -245,11 +245,15 @@ async function installState(ids, { port, clientId, relay, renderer = null, publi
   // renderer passes only HOME through, so this lives in the node's own config.
   const gitconfig = path.join(LAYOUT.nodeHome, 'home', '.gitconfig');
   const asNode = (args) => run('setpriv', ['--reuid', String(ids.node), '--regid', String(ids.share), '--clear-groups',
-    '--', 'git', 'config', '--file', gitconfig, ...args], { allowFail: true });
+    '--', 'git', 'config', '--file', gitconfig, ...args], { allowFail: true,
+    // As the node account: its own home and a directory it can read. The
+    // administrator's working directory (often a private home) and HOME are not.
+    cwd: LAYOUT.nodeHome, env: { PATH: '/usr/bin:/bin', HOME: path.join(LAYOUT.nodeHome, 'home') } });
   const safe = (asNode(['--get-all', 'safe.directory']).stdout ?? '').split('\n');
   for (const directory of [LAYOUT.appRoot, path.join(LAYOUT.appRoot, 'vendor', 'quartz'), LAYOUT.mirror]) {
-    if (!safe.includes(directory) && asNode(['--add', 'safe.directory', directory]).status !== 0) {
-      throw new Error('could not write the node account Git settings');
+    const added = safe.includes(directory) ? null : asNode(['--add', 'safe.directory', directory]);
+    if (added && added.status !== 0) {
+      throw new Error(`could not write the node account Git settings: ${(added.stderr || added.error?.message || '').trim().slice(-300)}`);
     }
   }
   await ensureDirectory(LAYOUT.shared, { owner: 0, group: ids.share, mode: 0o750 });
@@ -301,7 +305,7 @@ export function enrollPagePort(port) { return port + 2; }
 // terminal. The node never sees them.
 function printEnrollment(ids, port) {
   const result = spawnSync('setpriv', ['--reuid', String(ids.publisher), '--regid', String(ids.share), '--clear-groups', '--',
-    LAYOUT.program, 'publisher', 'enroll-code'], { stdio: ['ignore', 'inherit', 'inherit'],
+    LAYOUT.program, 'publisher', 'enroll-code'], { stdio: ['ignore', 'inherit', 'inherit'], cwd: LAYOUT.publisherHome,
     env: { PATH: '/usr/bin:/bin', HOME: LAYOUT.publisherHome } });
   if (result.status !== 0) {
     say('The publishing setup code could not be made; run "cyberbaser publisher enroll-code" as administrator.');

@@ -164,7 +164,7 @@ export async function main(argv) {
     if (!account || !group) { process.stderr.write('cyberbaser publisher: not installed on this machine\n'); process.exitCode = 1; return; }
     const { spawnSync } = await import('node:child_process');
     const result = spawnSync('setpriv', ['--reuid', String(account.id), '--regid', String(group.id), '--clear-groups', '--',
-      process.execPath, 'publisher', ...args], { stdio: 'inherit', env: { PATH: '/usr/bin:/bin', HOME: '/var/lib/cyberbaser-publisher' } });
+      process.execPath, 'publisher', ...args], { stdio: 'inherit', cwd: '/var/lib/cyberbaser-publisher', env: { PATH: '/usr/bin:/bin', HOME: '/var/lib/cyberbaser-publisher' } });
     process.exitCode = result.status ?? 1;
     return;
   }
