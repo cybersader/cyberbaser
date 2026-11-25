@@ -83,12 +83,14 @@ function which(name) {
 
 function parse(args, known) {
   const options = { yes: false, dryRun: false, purge: false, seed: null, port: DEFAULT_PORT, clientId: null, githubOrigin: null, relay: null,
-    renderer: null, rendererName: null, rendererCommit: null, rendererFingerprint: null, site: null };
+    renderer: null, rendererName: null, rendererCommit: null, rendererFingerprint: null, site: null, resume: false };
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
     if (arg === '--yes' && known.includes(arg)) options.yes = true;
     else if (arg === '--dry-run' && known.includes(arg)) options.dryRun = true;
     else if (arg === '--purge' && known.includes(arg)) options.purge = true;
+    // Finish an install that stopped before it wrote its record (made by this installer).
+    else if (arg === '--resume' && known.includes(arg)) options.resume = true;
     else if (arg === '--quartz-seed' && known.includes(arg) && args[i + 1]) options.seed = path.resolve(args[++i]);
     else if (arg === '--port' && known.includes(arg) && /^\d{2,5}$/u.test(args[i + 1] ?? '')) options.port = Number(args[++i]);
     else if (arg === '--github-client-id' && known.includes(arg) && /^[A-Za-z0-9._-]{8,64}$/u.test(args[i + 1] ?? '')) options.clientId = args[++i];
@@ -124,6 +126,14 @@ function elevate(mode, args, programPath) {
 
 function exists(target) {
   try { lstatSync(target); return true; } catch { return false; }
+}
+
+/** Accounts left by an earlier run of this installer: system accounts with its homes. */
+function resumable() {
+  const node = userEntry(ACCOUNTS.node);
+  const publisher = userEntry(ACCOUNTS.publisher);
+  const homeOf = (entry) => entry?.fields?.[5];
+  return (!node || homeOf(node) === LAYOUT.nodeHome) && (!publisher || homeOf(publisher) === LAYOUT.publisherHome);
 }
 
 /** What of ours, or of something else, is already on this machine. */
@@ -341,7 +351,7 @@ export async function install(args, { programPath, compiled }) {
   let options;
   try {
     options = parse(args, ['--yes', '--dry-run', '--quartz-seed', '--port', '--github-client-id', '--github-origin', '--iroh-relay',
-      '--renderer', '--renderer-name', '--renderer-quartz-commit', '--renderer-fingerprint', '--site']);
+      '--renderer', '--renderer-name', '--renderer-quartz-commit', '--renderer-fingerprint', '--site', '--resume']);
   }
   catch (error) { process.stderr.write(`${error.message}\n`); return 2; }
   if (options.dryRun) {
@@ -361,7 +371,11 @@ export async function install(args, { programPath, compiled }) {
   if (options.seed !== null && !exists(options.seed)) { process.stderr.write(`No renderer bundle at ${options.seed}.\n`); return 1; }
 
   const { record, found } = survey();
-  if (record === null && found.length > 0) {
+  if (record === null && found.length > 0 && options.resume && !resumable()) {
+    process.stderr.write('Not resuming: the accounts found do not have the homes this installer gives them.\n');
+    return 1;
+  }
+  if (record === null && found.length > 0 && !options.resume) {
     process.stderr.write(`Found an existing setup this installer did not make, so nothing was changed:\n${found.map((item) => `  - ${item}`).join('\n')}\n`);
     return 1;
   }
@@ -386,6 +400,12 @@ export async function install(args, { programPath, compiled }) {
   }
   const relay = options.relay ?? record?.irohRelay ?? null;
   const updating = record?.state === 'installed';
+  // Recorded before the first change, so an install that stops part-way is
+  // recognised as this installer's own on the next run.
+  if (record === null) {
+    await writeRecord({ version: 1, state: 'installing', accounts: { node: ACCOUNTS.node, publisher: ACCOUNTS.publisher },
+      group: ACCOUNTS.group, appRoot: LAYOUT.appRoot, port: options.port, startedAt: new Date().toISOString() });
+  }
   const since = new Date().toISOString().replace('T', ' ').slice(0, 19);
   if (updating) systemctl('stop', ...UNITS);
   const ids = ensureAccounts();
@@ -463,7 +483,7 @@ export async function status() {
     say(found.length === 0 ? 'Cyberbaser is not installed.' : `Not installed by this program, but found: ${found.join(', ')}`);
     return found.length === 0 ? 0 : 1;
   }
-  say(`Cyberbaser ${record.state === 'installed' ? 'installed' : 'removed (data kept)'} in ${record.appRoot}`);
+  say(`Cyberbaser ${record.state === 'installed' ? 'installed' : record.state === 'installing' ? 'partly installed (run install again to finish)' : 'removed (data kept)'} in ${record.appRoot}`);
   say(`Accounts: node "${record.accounts.node}", publisher "${record.accounts.publisher}", group "${record.group}"`);
   for (const unit of UNITS) {
     const state = run('systemctl', ['is-active', unit], { allowFail: true }).stdout.trim() || 'unknown';
