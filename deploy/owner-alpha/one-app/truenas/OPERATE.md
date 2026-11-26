@@ -24,7 +24,7 @@ Use the independent administrative channel to identify the node container by its
 | Iroh, `private-address:<IPv4>` (set to the selected Tailscale address in the private bundle) | One UDP socket at the selected IPv4 and one at `[::1]`, ephemeral ports, with normal relay enabled |
 | Iroh, `relay-only` | One UDP socket on `127.0.0.1` and one on `[::1]`, ephemeral, neither advertised as a direct route |
 | Iroh, `direct` (broader opt-in) | Wildcard IPv4 and IPv6 UDP, ephemeral, with normal relay enabled |
-| Config reconciler / render subprocesses | No network listeners. The reconciler has no network; render subprocesses cannot open or receive sockets. |
+| Config reconciler / render subprocesses | No network listeners. The reconciler has no network; render subprocesses cannot open network sockets, connect to named Unix sockets, or receive new socket descriptors. |
 
 Outbound forge/relay/DNS connections and their transient source ports are not ingress listeners. Iroh ports are OS-selected; do not try to reserve fixed UDP ports. The setup-to-normal handoff can briefly retain previous sockets at the same allowed addresses. Changing the `CYBERBASER_CONTAINER_REACH` value in the node's Compose environment and applying the YAML changes setup and normal reach on restart. To use only LAN plus relay, substitute one private LAN IPv4; to use all local interfaces choose `direct`. Two explicitly selected IPv4 addresses are not available in the pinned binding; the app does not broaden a refused setting to wildcard. TrueNAS's host networking means the `direct` setting also accepts on any other host interface. Check live addresses and listeners before inviting any device.
 
