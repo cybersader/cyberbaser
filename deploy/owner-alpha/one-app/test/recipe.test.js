@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test';
 import { LAYOUT, enrollPagePort } from '../../../../packaging/src/platform/linux-systemd.js';
 import { DEFAULT_ACCOUNTS } from '../../../../packaging/src/accounts.js';
+import { CONTAINER_CONFIG } from '../../../../packaging/src/platform/container-config.js';
+import path from 'node:path';
 
 const dir = new URL('../', import.meta.url);
 const read = (name) => Bun.file(new URL(name, dir)).text();
@@ -42,8 +44,8 @@ test('the opt-in lab has no published ports, writable root or cross-mounted priv
   }
   const access = (role) => Object.fromEntries(role.volumes.map((v) => [v.target, v.read_only ? 'ro' : 'rw']));
   const common = { [`${LAYOUT.appRoot}/.workspace`]: 'rw' };
-  expect(access(node)).toEqual({ ...common, [LAYOUT.nodeHome]: 'rw', [LAYOUT.notes]: 'rw',
+  expect(access(node)).toEqual({ ...common, [LAYOUT.nodeHome]: 'rw', [path.dirname(LAYOUT.config)]: 'rw', [LAYOUT.notes]: 'rw',
     [LAYOUT.mirrorParent]: 'ro', [LAYOUT.publisherRun]: 'ro' });
-  expect(access(publisher)).toEqual({ ...common, [LAYOUT.publisherHome]: 'rw', [LAYOUT.notes]: 'ro',
+  expect(access(publisher)).toEqual({ ...common, [LAYOUT.publisherHome]: 'rw', [path.dirname(CONTAINER_CONFIG)]: 'ro', [LAYOUT.notes]: 'ro',
     [LAYOUT.mirrorParent]: 'rw', [LAYOUT.publisherRun]: 'rw' });
 });

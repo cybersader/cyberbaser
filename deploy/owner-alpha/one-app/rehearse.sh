@@ -1,6 +1,7 @@
 #!/bin/bash
-# One build and one isolated bootstrap rehearsal. Run with heavy-run, a pinned
+# Isolated setup, publication and reader rehearsal. Run with heavy-run, a pinned
 # seed archive, rootless Podman, and the Fedora base image already present.
+# The smoke harness bundles a lab-only helper using owner-alpha's installed Bun dependencies.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 reach=relay-only

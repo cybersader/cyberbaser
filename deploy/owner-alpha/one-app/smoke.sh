@@ -21,6 +21,9 @@ stage=staging
 cleanup() {
   local code=$? failed=0 volume
   trap - EXIT
+  if podman container exists "$pod-node-config-reconcile"; then
+    podman rm -f "$pod-node-config-reconcile" >/dev/null 2>&1 || failed=1
+  fi
   if ((pod_created)); then podman pod rm -f "$pod" >/dev/null 2>&1 || failed=1; fi
   for volume in "${volumes[@]}"; do podman volume rm "$volume" >/dev/null 2>&1 || failed=1; done
   rm -rf -- "$work" || failed=1
@@ -37,15 +40,21 @@ wait_for() { local i; for ((i=0;i<80;i++)); do "$@" >/dev/null 2>&1 && return 0;
 
 node="$pod-node" publisher="$pod-publisher" fixture="$pod-fixture"
 state=/var/lib/cyberbaser pubstate=/var/lib/cyberbaser-publisher shared=/var/lib/cyberbaser-shared
+node_config_dir=$state/config pub_config_dir=/var/lib/cyberbaser-publisher-config
+node_config=$node_config_dir/owner-alpha.json pub_config=$pub_config_dir/owner-alpha.json
 sock=/run/cyberbaser-publisher jobs=/opt/cyberbaser/.workspace notes=$shared/notes
 mirror=$shared/mirror checkout=$notes/notes
 record=/etc/cyberbaser/install.json program=/opt/cyberbaser/bin/cyberbaser
 reg=$pubstate/forge/github-app-registration.json token=$pubstate/forge/github-app.json
-origin=http://127.0.0.1:4317 fake=http://127.0.0.1:48080 enroll=http://127.0.0.1:4319/enroll
+origin=http://127.0.0.1:4317 reader=http://127.0.0.1:4318/lab-notes fake=http://127.0.0.1:48080 enroll=http://127.0.0.1:4319/enroll
 repository=lab-owner/lab-notes hosted=/tmp/forge/lab-owner/lab-notes.git
+site=$jobs/owner-alpha/site/owner-alpha-site-manifest.json
 canaries='gh[ur]_CANARY|cbsCANARY|whsCANARY|FAKEPEMCANARY'
 mkdir -m 0755 "$work/fixture"
+mkdir -m 0700 "$work/supervisor"
 install -m 0644 "$REPO/apps/owner-alpha/test/fake-github.js" "$REPO/packaging/test/container/owner-browser.mjs" "$work/fixture/"
+bun build "$HERE/test/publication.mjs" --target=bun --outfile="$work/fixture/publication.mjs" >/dev/null
+chmod 0644 "$work/fixture/publication.mjs"
 jq --arg fake "$fake" --arg reach "$reach" '. + {github:{origin:$fake},irohRelay:"none",reach:$reach}' "$HERE/install.json" > "$work/install.json"
 chmod 0644 "$work/install.json"
 # Test-only Git transport shim from the native private fixture, applied only
@@ -74,13 +83,14 @@ vol() { printf '%s-%s:%s:%s,nocopy' "$pod" "$1" "$2" "${3:-rw}"; }
 stage='create isolated pod and volumes'
 podman pod create --name "$pod" --network none --share net >/dev/null
 pod_created=1
-for name in node-state publisher-state workspace notes mirror publisher-sockets; do
+for name in node-state node-config publisher-state publisher-config workspace notes mirror publisher-sockets; do
   podman volume create "$pod-$name" >/dev/null
   volumes+=("$pod-$name")
 done
 init_volumes() {
   podman run --rm --pod "$pod" "${base[@]}" --user 0:0 --cap-add CHOWN,DAC_OVERRIDE,FOWNER \
     "${mount_record[@]}" -v "$(vol node-state "$state")" -v "$(vol publisher-state "$pubstate")" \
+    -v "$(vol node-config "$node_config_dir")" -v "$(vol publisher-config "$pub_config_dir")" \
     -v "$(vol workspace "$shared/workspace")" -v "$(vol notes "$notes")" -v "$(vol mirror "$mirror")" \
     -v "$(vol publisher-sockets "$sock")" "$image" init-volumes
 }
@@ -91,10 +101,12 @@ pass 'volume initialization is repeatable before either service starts'
 
 stage='start fake GitHub with one private note'
 podman run -d --pod "$pod" --name "$fixture" "${base[@]}" --user 65531:65530 --workdir /tmp \
-  -e HOME=/tmp -e FAKE_GITHUB_PORT=48080 -v "$work/fixture:/fixture:ro,Z" --entrypoint /usr/bin/bash "$image" -euc '
+  -e HOME=/tmp -e FAKE_GITHUB_PORT=48080 -v "$work/fixture:/fixture:ro,Z" \
+  -v "$(vol notes "$notes" ro)" -v "$(vol publisher-sockets "$sock" ro)" --entrypoint /usr/bin/bash "$image" -euc '
   git init -q -b main /tmp/src
-  mkdir -p /tmp/src/Garden /tmp/forge/lab-owner
+  mkdir -p /tmp/src/{Garden,.cyberbaser} /tmp/forge/lab-owner
   printf "allow:\n  - Garden\n" > /tmp/src/publish.yml
+  printf "site:\n  baseUrl: lab-owner.github.io/lab-notes\n" > /tmp/src/.cyberbaser/site.yml
   printf "# Lab note\n\nThis is a synthetic public-to-the-fixture note.\n" > /tmp/src/Garden/Note.md
   git -C /tmp/src add .
   git -C /tmp/src -c user.name=Synthetic -c user.email=synthetic@example.invalid commit -qm fixture
@@ -110,17 +122,40 @@ dep "$fixture" "${curl_flags[@]}" -f -H 'Content-Type: application/json' \
 refs=$(dep "$fixture" git -C "$hosted" show-ref)
 commit=$(dep "$fixture" git -C "$hosted" rev-parse HEAD)
 
-stage='start the real publisher and node'
-podman run -d --pod "$pod" --name "$publisher" "${base[@]}" --user 65533:65530 -e HOME="$pubstate" \
-  "${mount_record[@]}" -v "$work/git:/usr/local/bin/git:ro,Z" -v "$(vol publisher-state "$pubstate")" \
-  -v "$(vol workspace "$jobs")" -v "$(vol notes "$notes" ro)" -v "$(vol mirror "$mirror")" \
-  -v "$(vol publisher-sockets "$sock")" "$image" service-publisher >/dev/null
+host_reconcile() {
+  (($#)) || set -- podman restart -t 10 "$publisher"
+  bash "$HERE/reconcile-publisher-config.sh" "$work/supervisor" "$image" "$pod-node-config" "$pod-publisher-config" -- "$@" >/dev/null
+}
+create_publisher() {
+  podman run -d --pod "$pod" --name "$publisher" "${base[@]}" --user 65533:65530 -e HOME="$pubstate" \
+    "${mount_record[@]}" -v "$work/git:/usr/local/bin/git:ro,Z" -v "$(vol publisher-state "$pubstate")" \
+    -v "$(vol publisher-config "$pub_config_dir" ro)" -v "$(vol workspace "$jobs")" -v "$(vol notes "$notes" ro)" \
+    -v "$(vol mirror "$mirror")" -v "$(vol publisher-sockets "$sock")" "$image" service-publisher >/dev/null
+}
+create_node() {
+  podman run -d --pod "$pod" --name "$node" "${base[@]}" --user 65532:65530 -e HOME="$state/home" -e XDG_CACHE_HOME="$state/cache" \
+    "${mount_record[@]}" --mount type=tmpfs,destination=/run/cyberbaser,tmpfs-mode=0700,tmpfs-size=1048576,notmpcopyup,U=true \
+    -v "$(vol node-state "$state")" -v "$(vol node-config "$node_config_dir")" -v "$(vol workspace "$jobs")" \
+    -v "$(vol notes "$notes")" -v "$(vol mirror "$mirror" ro)" -v "$(vol publisher-sockets "$sock" ro)" "$image" service-node >/dev/null
+}
 ready_publisher() { dep "$publisher" test -S "$sock/publisher.sock.forge" && dep "$fixture" "${curl_flags[@]}" -f -o /dev/null "$enroll"; }
+normal_publisher() {
+  dep "$publisher" test -S "$sock/publisher.sock" && dep "$publisher" test -S "$sock/publisher.sock.forge" &&
+    [[ $(dep "$fixture" "${curl_flags[@]}" -o /dev/null -w '%{http_code}' "$enroll") == 410 ]] &&
+    podman logs "$publisher" 2>&1 | /usr/bin/grep -Fx 'owner-alpha publisher ready' >/dev/null
+}
+wait_for_normal_publisher() {
+  if ! wait_for normal_publisher; then
+    podman logs "$publisher" 2>&1 | /usr/bin/grep -E '^cyberbaser publisher failed(: [a-z0-9-]+)?$' >&2 || :
+    return 1
+  fi
+}
+stage='reconcile empty config before starting the real publisher and node'
+host_reconcile
+[[ ! -e "$work/supervisor/applied" ]]
+create_publisher
 wait_for ready_publisher
-podman run -d --pod "$pod" --name "$node" "${base[@]}" --user 65532:65530 -e HOME="$state/home" -e XDG_CACHE_HOME="$state/cache" \
-  "${mount_record[@]}" --mount type=tmpfs,destination=/run/cyberbaser,tmpfs-mode=0700,tmpfs-size=1048576,notmpcopyup,U=true \
-  -v "$(vol node-state "$state")" -v "$(vol workspace "$jobs")" -v "$(vol notes "$notes")" \
-  -v "$(vol mirror "$mirror" ro)" -v "$(vol publisher-sockets "$sock" ro)" "$image" service-node >/dev/null
+create_node
 setup_link() { podman logs "$node" 2>&1 | /usr/bin/grep -oE '^Cyberbaser setup: http://127\.0\.0\.1:4317/setup/start\?token=[A-Za-z0-9_-]+$' | cut -d' ' -f3 | tail -n 1; }
 wait_for setup_link
 
@@ -153,8 +188,12 @@ service_status "$publisher" | /usr/bin/grep -Ex 'Umask:\s+0027' >/dev/null
 [[ $(dep "$node" sha256sum "$record") == "$(dep "$publisher" sha256sum "$record")" ]]
 mounts() { podman inspect --format '{{json .Mounts}}' "$1" | jq -c 'map([.Destination,.Type,.RW]) | sort'; }
 expected_mounts() { jq -nc '$ARGS.positional | map(split(":") | [.[0],.[1],(.[2] == "rw")]) | sort' --args "$@"; }
-[[ $(mounts "$node") == "$(expected_mounts "$state:volume:rw" "$jobs:volume:rw" "$notes:volume:rw" "$mirror:volume:ro" "$sock:volume:ro" "$record:bind:ro")" ]]
-[[ $(mounts "$publisher") == "$(expected_mounts "$pubstate:volume:rw" "$jobs:volume:rw" "$notes:volume:ro" "$mirror:volume:rw" "$sock:volume:rw" "$record:bind:ro" '/usr/local/bin/git:bind:ro')" ]]
+assert_mounts() {
+  [[ $(mounts "$node") == "$(expected_mounts "$state:volume:rw" "$node_config_dir:volume:rw" "$jobs:volume:rw" "$notes:volume:rw" "$mirror:volume:ro" "$sock:volume:ro" "$record:bind:ro")" ]]
+  [[ $(mounts "$publisher") == "$(expected_mounts "$pubstate:volume:rw" "$pub_config_dir:volume:ro" "$jobs:volume:rw" "$notes:volume:ro" "$mirror:volume:rw" "$sock:volume:rw" "$record:bind:ro" '/usr/local/bin/git:bind:ro')" ]]
+  [[ $(mounts "$fixture") == "$(expected_mounts '/fixture:bind:ro' "$notes:volume:ro" "$sock:volume:ro")" ]]
+}
+assert_mounts
 metadata() { [[ $(dep "$1" stat -c '%u:%g:%a' "$2") == "$3" ]]; }
 metadata "$node" "$state" 65532:65530:700
 metadata "$node" "$state/renderers" 65532:65530:700
@@ -291,11 +330,51 @@ dep "$fixture" "${curl_flags[@]}" -f "$fake/_control/report" | jq -e '
 dep "$fixture" "${curl_flags[@]}" -f "$fake/_control/report" | jq -e '.pushes == [] and (.denied | all(.receive == false)) and (.fetches | length > 0)' >/dev/null
 pass 'restart kept phone step, exact checkout, owner identity, enrollment window and forge credentials; no push or changed remote ref'
 
-stage='finish setup and verify normal node listeners'
+stage='enroll one signing device through the independent fixture viewer'
+viewer() { timeout 60 podman exec "$fixture" bun /fixture/publication.mjs "$@"; }
+viewer enroll | jq -e '.ok' >/dev/null
+viewer status | jq -e '.ok' >/dev/null
+metadata "$fixture" /tmp/one-app-device.json 65531:65530:600
+publisher_key=$(dep "$publisher" sha256sum "$pubstate/owners/publisher-key.json")
+pass 'the separate viewer enrolled a synthetic key from the real page; its private seed stays on that device'
+
+stage='finish setup and reconcile the config event'
 browser() { dep "$fixture" bun /fixture/owner-browser.mjs "$@" /tmp/new.cookie; }
 browser step skip | jq -e '.ok and .step == "agent"' >/dev/null
 check_listeners agent
 browser step skip | jq -e '.ok and .step == "done"' >/dev/null
+# The harness is the host supervisor here: recognize the first completed
+# atomic write, then invoke the same oneshot a host path unit would call.
+wait_for dep "$node" test -f "$node_config"
+host_reconcile
+wait_for_normal_publisher
+metadata "$node" "$node_config" 65532:65530:600
+metadata "$publisher" "$pub_config" 65533:65530:600
+node_config_hash() { dep "$node" sha256sum "$node_config" | cut -d' ' -f1; }
+pub_config_hash() { dep "$publisher" sha256sum "$pub_config" | cut -d' ' -f1; }
+[[ $(pub_config_hash) == "$(node_config_hash)" && $(<"$work/supervisor/applied") == "$(pub_config_hash)" ]]
+[[ $(dep "$node" "${curl_flags[@]}" -o /dev/null -w '%{http_code}' "$enroll") == 403 ]]
+viewer status | jq -e '.ok' >/dev/null
+pass 'atomic config handoff activated the normal publisher with its enrolled key retained'
+
+stage='reject bad input and ignore repeated config events'
+started_at() { podman inspect --format '{{.State.StartedAt}}' "$publisher"; }
+active_start=$(started_at)
+active_hash=$(pub_config_hash)
+host_reconcile
+[[ $(started_at) == "$active_start" ]]
+dep "$node" bash -euc 'mv -- "$1" "$1.lab-good"; umask 0077; printf "{}\n" > "$1.lab-bad"; mv -- "$1.lab-bad" "$1"' bash "$node_config"
+if host_reconcile; then false; fi
+[[ $(started_at) == "$active_start" && $(pub_config_hash) == "$active_hash" ]]
+dep "$node" rm -- "$node_config"
+if host_reconcile; then false; fi
+[[ $(started_at) == "$active_start" && $(pub_config_hash) == "$active_hash" ]]
+dep "$node" mv -- "$node_config.lab-good" "$node_config"
+host_reconcile
+[[ $(started_at) == "$active_start" && $(pub_config_hash) == "$active_hash" ]]
+pass 'invalid and missing config did not activate or downgrade; repeat events did not restart the publisher'
+
+stage='verify normal node listeners and the pinned stock private site'
 runtime_ready() { dep "$node" test -S /run/cyberbaser/review.sock \
   && dep "$fixture" "${curl_flags[@]}" -o /dev/null "$origin/owner/review"; }
 wait_for_runtime() {
@@ -306,21 +385,138 @@ wait_for_runtime() {
 }
 wait_for_runtime
 browser landed | jq -e '.ok' >/dev/null
-dep "$node" jq -e --arg reach "$reach" '.iroh.reach == $reach and .iroh.relay == "none"' "$state/config/owner-alpha.json" >/dev/null
+dep "$node" jq -e --arg reach "$reach" '.iroh.reach == $reach and .iroh.relay == "none"' "$node_config" >/dev/null
 check_listeners runtime
-podman stop -t 10 "$node" >/dev/null
-[[ $(podman inspect --format '{{.State.ExitCode}}' "$node") == 0 ]]
-podman start "$node" >/dev/null
-wait_for_runtime
-check_listeners restarted-runtime
+quartz_pin=4923affa7722dfc751f1074348e6dad214fe0c08
+site_at() {
+  dep "$node" jq -e --arg head "$1" --arg build "$2" --arg pin "$quartz_pin" \
+    '.source.head == $head and .renderer.name == $build and .renderer.revision == $pin and .site.htmlPages > 0' "$site" >/dev/null
+}
+reader_note() { dep "$fixture" "${curl_flags[@]}" -fL "$reader/Garden/Note" | /usr/bin/grep -F "$1" >/dev/null; }
+wait_for_site() {
+  local i
+  for ((i=0;i<180;i++)); do site_at "$1" "$2" 2>/dev/null && reader_note "$3" 2>/dev/null && return 0; sleep .5; done
+  # Report only a known startup failure identifier; raw logs can hold codes.
+  podman logs "$node" 2>&1 | /usr/bin/grep -E '^(Owner site not ready|Owner alpha startup failed|Cyberbaser could not start after setup): [a-z0-9-]+$' >&2 || :
+  return 1
+}
+prior_note='This is a synthetic public-to-the-fixture note.'
+signed_note='This is the signed synthetic update.'
+wait_for_site "$commit" quartz-cyberbase "$prior_note"
 [[ $(dep "$node" sha256sum "$state/iroh/iroh-node.json") == "$node_key" ]]
-[[ $(dep "$fixture" git -C "$hosted" show-ref) == "$refs" ]]
-dep "$fixture" "${curl_flags[@]}" -f "$fake/_control/report" | jq -e '.pushes == []' >/dev/null
+pass 'stock pinned Quartz built from the copied commit without a network and served its note on P+1'
+
+stage='check unsigned publication refusal from the normal publisher'
+node_helper() {
+  # podman exec does not inherit the running service's umask. Use the node's
+  # real 0007 so the publisher can write its receipt in the shared job store.
+  timeout 90 podman exec -i "$node" bash -euc 'umask 0007; exec bun - "$@"' bash "$@" < "$work/fixture/publication.mjs"
+}
+job=OA-one-app-signed
+node_helper unsigned "$job" > "$work/job" || { jq -r '.code // empty' "$work/job" >&2; false; }
+next_commit=$(jq -er 'select(.state == "awaiting-approval" and .reason == "owner-approval-missing") | .commit | select(test("^[a-f0-9]{40}$"))' "$work/job")
+[[ "$next_commit" != "$commit" && $(dep "$fixture" git -C "$hosted" show-ref) == "$refs" ]]
+dep "$fixture" "${curl_flags[@]}" -f "$fake/_control/report" | jq -e '.pushes == [] and (.denied | all(.receive == false))' >/dev/null
+pass 'the publisher rejected the unsigned job before any fake-forge push or ref update'
+
+stage='sign and publish the exact commit from the fixture viewer'
+timeout 30 podman exec "$fixture" env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0="$checkout" \
+  bun /fixture/publication.mjs sign "$next_commit" "$checkout" "https://github.com/$repository.git" main > "$work/approval"
+# Pass one approved record, not the fixture device seed, across the boundary.
+timeout 30 podman exec -i "$node" bash -euc 'umask 0077; /usr/bin/cat > /tmp/lab-approval' < "$work/approval"
+if ! node_helper submit-signed "$job" > "$work/push"; then
+  jq -r '.code // empty' "$work/push" >&2
+  dep "$fixture" "${curl_flags[@]}" -f "$fake/_control/report" | jq '{pushes: (.pushes | length), deniedReceive: ([.denied[] | select(.receive)] | length)}' >&2
+  false
+fi
+jq -e '.ok' "$work/push" >/dev/null
+dep "$node" rm -- /tmp/lab-approval
+[[ $(dep "$fixture" git -C "$hosted" show-ref) == "$next_commit refs/heads/main" ]]
+
+stage='recover the completed push after node and publisher container recreation'
+no_canary() { local code; if "$@" >/dev/null; then return 1; else code=$?; [[ $code == 1 ]]; fi; }
+check_log() {
+  podman logs "$1" > "$work/log" 2>&1
+  no_canary /usr/bin/grep -aEq "$canaries" "$work/log"
+}
+recreate_services() {
+  local first_node first_publisher
+  first_node=$(podman inspect --format '{{.Id}}' "$node")
+  first_publisher=$(podman inspect --format '{{.Id}}' "$publisher")
+  podman stop -t 10 "$node" "$publisher" >/dev/null
+  [[ $(podman inspect --format '{{.State.ExitCode}}' "$node") == 0 ]]
+  [[ $(podman inspect --format '{{.State.ExitCode}}' "$publisher") == 0 ]]
+  check_log "$node"
+  check_log "$publisher"
+  podman rm "$node" "$publisher" >/dev/null
+  create_publisher
+  wait_for_normal_publisher
+  create_node
+  wait_for_runtime
+  [[ $(podman inspect --format '{{.Id}}' "$node") != "$first_node" ]]
+  [[ $(podman inspect --format '{{.Id}}' "$publisher") != "$first_publisher" ]]
+  assert_mounts
+  viewer status | jq -e '.ok' >/dev/null
+  [[ $(dep "$publisher" sha256sum "$pubstate/owners/publisher-key.json") == "$publisher_key" ]]
+  [[ $(dep "$node" sha256sum "$state/iroh/iroh-node.json") == "$node_key" ]]
+}
+recreate_services
+check_listeners restarted-runtime
+wait_for_site "$next_commit" quartz-cyberbase "$signed_note"
+[[ $(dep "$fixture" git -C "$hosted" show-ref) == "$next_commit refs/heads/main" ]]
+[[ $(dep "$fixture" git -C "$hosted" rev-parse HEAD^) == "$commit" ]]
+[[ $(dep "$fixture" git -C "$hosted" diff --name-only "$commit" "$next_commit") == Garden/Note.md ]]
+[[ $(dep "$node" git -C "$mirror/notes.git" rev-parse refs/heads/main) == "$next_commit" ]]
+# Smart HTTP may first return a 401 auth challenge for an anonymous request.
+# Only the signed job may reach Git receive-pack; its authenticated retry works.
+dep "$fixture" "${curl_flags[@]}" -f "$fake/_control/report" | jq -e '
+  (.pushes | length) == 1 and .pushes[0].kind == "app" and .pushes[0].current
+  and (.denied | all(.receive == false or .hadAuthorization == false))
+' >/dev/null
+pass 'one valid signed job pushed one exact commit, and the stock reader rebuilt from it across recreation'
+
+stage='select the synthetic custom renderer and rebuild privately'
+# Fixture provisioning only: no product update/rollback procedure is implied.
+renderer="$state/renderers/one-app-fixture"
+podman exec -i "$node" bash -euc 'umask 0077; mkdir -m 0700 -- "$1"; /usr/bin/cat > "$1/build"; chmod 0700 "$1/build"' \
+  bash "$renderer" < "$HERE/test/custom-renderer.sh"
+metadata "$node" "$renderer" 65532:65530:700
+metadata "$node" "$renderer/build" 65532:65530:700
+dep "$node" "${curl_flags[@]}" -f "$fake/_control/report" >/dev/null
+podman exec "$node" bash -euc '
+  umask 0077
+  jq --arg dir "$2" --arg pin "$3" ".renderer = {name:\"one-app-fixture\",directory:\$dir,quartzCommit:\$pin,fingerprint:[\"build\"]}" "$1" > "$1.lab-next"
+  mv -- "$1.lab-next" "$1"
+' bash "$node_config" "$renderer" "$quartz_pin"
+active_start=$(started_at)
+if host_reconcile false; then false; fi
+[[ ! -e "$work/supervisor/applied" && $(started_at) == "$active_start" && $(pub_config_hash) == "$(node_config_hash)" ]]
+host_reconcile
+wait_for_normal_publisher
+[[ $(started_at) != "$active_start" && $(<"$work/supervisor/applied") == "$(pub_config_hash)" ]]
+pass 'a failed restart was not acknowledged; retry activated the already-copied config'
+recreate_services
+wait_for_site "$next_commit" one-app-fixture "$signed_note"
+reader_note 'data-renderer="one-app-fixture"'
+pass 'custom renderer built through the configured slot, with fresh network namespace and no access to fake GitHub'
+
+stage='check custom reader and signer persistence through a second recreation'
+manifest_hash=$(dep "$node" sha256sum "$site")
+recreate_services
+wait_for_site "$next_commit" one-app-fixture "$signed_note"
+[[ $(dep "$node" sha256sum "$site") == "$manifest_hash" ]]
+check_listeners recreated-custom-runtime
+[[ $(dep "$node" "${curl_flags[@]}" -o /dev/null -w '%{http_code}' "$enroll") == 403 ]]
+dep "$node" test ! -e /tmp/one-app-device.json
+dep "$publisher" test ! -e /tmp/one-app-device.json
+dep "$fixture" "${curl_flags[@]}" -f "$fake/_control/report" | jq -e '
+  (.pushes | length) == 1 and (.routes | all(test("pages|actions|deployments|environments|workflows"; "i") | not))
+' >/dev/null
+pass 'retained custom site and enrolled device survived recreation without another build, re-enrollment or push'
 
 stage='verify credential confinement and image exclusions'
-no_canary() { local code; if "$@" >/dev/null; then return 1; else code=$?; [[ $code == 1 ]]; fi; }
 no_canary dep "$node" /usr/bin/grep -aErq "$canaries" "$state" "$mirror" "$notes" "$jobs" /run/cyberbaser /tmp "$record"
-no_canary dep "$publisher" /usr/bin/grep -aErq "$canaries" "$sock" /tmp "$record"
+no_canary dep "$publisher" /usr/bin/grep -aErq "$canaries" "$pub_config_dir" "$sock" /tmp "$record"
 no_canary dep "$publisher" /usr/bin/grep -aErq 'whsCANARY|FAKEPEMCANARY' "$pubstate"
 secrets_at=$(dep "$publisher" /usr/bin/grep -aErl 'cbsCANARY|gh[ur]_CANARY' "$pubstate" | sort)
 [[ "$secrets_at" == "$(printf '%s\n' "$reg" "$token" | sort)" ]]

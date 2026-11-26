@@ -31,7 +31,7 @@ RUN --mount=type=bind,from=archives,source=/,target=/mnt/archives,ro \
     chmod 0755 /opt/cyberbaser/bin/cyberbaser /opt/cyberbaser/libexec/* /usr/local/bin/cyberbaser-container-init; \
     chmod 0644 /etc/cyberbaser/install.json; \
     install -d -m 0750 -o root -g cyberbaser-share /var/lib/cyberbaser-shared; \
-    mkdir -p /var/lib/cyberbaser /var/lib/cyberbaser-publisher /run/cyberbaser-publisher /run/cyberbaser; \
+    mkdir -p /var/lib/cyberbaser/config /var/lib/cyberbaser-publisher /var/lib/cyberbaser-publisher-config /run/cyberbaser-publisher /run/cyberbaser; \
     mkdir -p /var/lib/cyberbaser-shared/{workspace,notes,mirror}
 ENV PATH=/opt/cyberbaser/libexec:/usr/local/bin:/usr/bin:/bin \
     CYBERBASER_SHARED_STORE=group \

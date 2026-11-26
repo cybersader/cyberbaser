@@ -59,7 +59,7 @@ Creates the accounts "cyberbaser" (node) and "cyberbaser-publisher" (publisher),
 };
 
 // Used by the installed services and container entrypoint, not listed in help.
-const INTERNAL = Object.freeze(['service-node', 'service-publisher', 'sync-publisher-config', 'validate-reach']);
+const INTERNAL = Object.freeze(['service-node', 'service-publisher', 'sync-publisher-config', 'sync-container-publisher-config', 'validate-reach']);
 
 function out(text) { process.stdout.write(`${text}\n`); }
 
@@ -164,6 +164,18 @@ export async function main(argv) {
     const { runPublisherService } = await import('./platform/linux-systemd.js');
     try { process.exitCode = await runPublisherService({ appRoot: appRoot() }); }
     catch (error) { process.stderr.write(`cyberbaser publisher failed${error?.code ? `: ${error.code}` : ''}\n`); process.exitCode = 1; }
+    return;
+  }
+  if (mode === 'sync-container-publisher-config') {
+    try {
+      if (args.length !== 0 || process.getuid?.() !== 0) throw new Error('not the config oneshot');
+      const { reconcileContainerConfig } = await import('./platform/container-config.js');
+      out(await reconcileContainerConfig());
+    } catch {
+      // Do not log node-controlled config values or contents.
+      process.stderr.write('Container publisher config was not reconciled.\n');
+      process.exitCode = 1;
+    }
     return;
   }
   if (mode === 'sync-publisher-config') {

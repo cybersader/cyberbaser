@@ -24,6 +24,7 @@ import { chmod, chown, mkdir, open, rename, rm, writeFile } from 'node:fs/promis
 import path from 'node:path';
 import { DEFAULT_ACCOUNTS, INSTALL_RECORD, groupEntry, readInstallRecord, userEntry } from '../accounts.js';
 import { resolveReach } from '../../../apps/owner-alpha/src/core/reach.js';
+import { CONTAINER_CONFIG } from './container-config.js';
 
 export const LAYOUT = Object.freeze({
   appRoot: '/opt/cyberbaser',
@@ -531,8 +532,9 @@ export function publisherServiceMode(record = readInstallRecord()) {
   const github = record?.github ?? {};
   // Signed publish: where the owner keys live (never from the config copy) and the first-device page port.
   const signed = { owners: LAYOUT.publisherOwners, enrollPort: enrollPagePort(record?.port ?? DEFAULT_PORT) };
-  if (existsSync(LAYOUT.publisherConfig)) {
-    return { mode: 'publisher', configFile: LAYOUT.publisherConfig, socketPath: LAYOUT.publisherSocket,
+  const configFile = record?.state === 'container' ? CONTAINER_CONFIG : LAYOUT.publisherConfig;
+  if (existsSync(configFile)) {
+    return { mode: 'publisher', configFile, socketPath: LAYOUT.publisherSocket,
       repository: path.join(LAYOUT.publisherHome, 'push.git'), github, ...signed };
   }
   return { mode: 'setup', socketPath: LAYOUT.publisherSocket, stateDirectory: LAYOUT.publisherForge, clientId: github.clientId ?? null,

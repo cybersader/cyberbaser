@@ -36,7 +36,7 @@ reach=$(jq -r '.reach' "$layout")
 "$program" validate-reach "$reach" >/dev/null || fail 'Invalid reach in container install record.'
 
 dir() {
-  local path=$1 uid=$2 mode=$3 kind=${4:-child} metadata
+  local path=$1 uid=$2 mode=$3 kind=${4:-child} mounted_child=${5:-} metadata
   [[ ! -L "$path" ]] || fail "Unexpected directory link: $path"
   if [[ "$kind" == volume ]]; then
     mountpoint -q -- "$path" || fail "Missing named volume: $path"
@@ -46,14 +46,21 @@ dir() {
   [[ -d "$path" ]] || fail "Expected directory: $path"
   metadata=$(stat -c '%u:%g:%a' -- "$path")
   [[ "$metadata" != "$uid:65530:$mode" ]] || return 0
-  [[ "$metadata" =~ ^0:0:(700|755)$ && -z $(find "$path" -mindepth 1 -maxdepth 1 -print -quit) ]] || fail "Unexpected directory metadata or contents: $path"
+  local extras=()
+  if [[ -n "$mounted_child" ]]; then
+    mountpoint -q -- "$mounted_child" || fail "Missing nested volume: $mounted_child"
+    extras=(! -path "$mounted_child")
+  fi
+  [[ "$metadata" =~ ^0:0:(700|755)$ && -z $(find "$path" -mindepth 1 -maxdepth 1 "${extras[@]}" -print -quit) ]] || fail "Unexpected directory metadata or contents: $path"
   chmod -- "$mode" "$path"
   chown -- "$uid:65530" "$path"
 }
 node=/var/lib/cyberbaser
 shared=/var/lib/cyberbaser-shared
-dir "$node" 65532 700 volume
-for child in home cache config iroh setup renderers; do dir "$node/$child" 65532 700; done
+dir "$node" 65532 700 volume "$node/config"
+dir "$node/config" 65532 700 volume
+dir /var/lib/cyberbaser-publisher-config 65533 700 volume
+for child in home cache iroh setup renderers; do dir "$node/$child" 65532 700; done
 dir "$shared/workspace" 65532 770 volume
 dir "$shared/workspace/owner-alpha" 65532 710
 dir "$shared/workspace/owner-alpha/store" 65532 710
