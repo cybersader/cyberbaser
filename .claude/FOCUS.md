@@ -2,6 +2,8 @@
 
 > Update when direction changes, milestones complete, or priorities shift.
 
+**First real install done; always-on decided, 2026-11-26:** Cyberbaser is installed privately on the owner's desktop for `cybersader/cyberchief` (GitHub App created from the manifest and installed on that repository only, private site served at 127.0.0.1:4418, one agent paired; phone not paired yet). Fixed on the way: GitHub's sign-in return now carries `iss` (RFC 9207), which setup refused; KDE's `xdg-open` pre-fetches URLs and spends one-time setup links. Owner decided Cyberbaser must move to an always-on machine (R23); which machine is open. Record: `41-QUESTIONS-RESOLVED.md` R23, `agent-context/zz-log/2026-11-26-first-real-install.mdx`.
+
 **Private Cyberchief install ready, 2026-11-24:** owner approved a private real install (two private repos, no Pages, no DNS). Installer takes the site's own renderer; "Live" is the node's private site; setup creates the GitHub App from a manifest (owner clicks GitHub's buttons only). Container-rehearsed 66/66 against a stand-in GitHub; not yet run on the real machine or github.com. Record: `41-QUESTIONS-RESOLVED.md`, `agent-context/zz-log/2026-11-24-github-app-manifest.mdx`.
 
 **Author flow rehearsed (scratch), 2026-11-24:** a Cyberchief post went from the New post form (readable names, site model v2, cover photo) through owner review on the site design and a phone approval to one pushed commit with only the note and the cleaned cover; one shared address rule (`.cyberbaser/site.yml` `addresses:`) now feeds device, node and review, with an address check before signing. New pages still never show Live. Record: `agent-context/zz-log/2026-11-24-dad-flow-rehearsal.mdx`.

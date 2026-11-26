@@ -1,0 +1,22 @@
+---
+title: First real private install for Cyberchief, and the always-on decision
+description: Cyberbaser was installed for real on the owner's desktop for the private cybersader/cyberchief site. GitHub App created from the manifest on github.com, sign-in fixed for GitHub's issuer parameter, setup finished, private site serving, one agent paired. The owner then decided Cyberbaser must run on an always-on machine.
+status: log
+---
+
+## What happened
+
+- Installed with `install --site private` and the Cyberchief renderer on port 4417 (node), 4418 (private site), 4419 (first-device code). Installer fixes on the way: node-account git config run from the node's home, an `installing` record plus `--resume`, `umask 022` so services can read the install record, setup links valid for an hour with a fresh one written to the log on a stale visit.
+- On github.com the manifest flow worked: the app was created and installed on `cybersader/cyberchief` only. This answers the open question of whether GitHub accepts a manifest redirect to `http://127.0.0.1`: it does.
+- GitHub's sign-in return carried `code`, `state` and `iss=https://github.com/login/oauth` (RFC 9207). Setup accepted exactly two parameters, so every sign-in was refused as "opened from an old or different setup page". Fixed in `first-run.js` (`6adf277`): `iss` is accepted only on the sign-in return and only when it is GitHub's issuer; tests cover a forged issuer and `iss` on other returns.
+- One-time setup links kept arriving used. On this KDE machine `xdg-open` (and links clicked in T3) go through KIO, which fetches the URL before handing it to the browser. Opening Brave directly worked. Follow-up: setup links should not be spent by a GET from a link checker (show a Start button that posts the token, or accept a repeat from the browser that already holds the session).
+- Setup finished: notes copied, Keep it private, phone deferred (its code is an `obsidian://` link and needs Obsidian with the Cyberbaser plugin and the vault on the phone first), one agent paired (`~/.config/cyberbaser/cyberchief-agent.json`). The node serves `Home · Cyberchief` on 127.0.0.1:4418.
+- Setup's "cannot build the private preview" note is misleading: setup passes no `buildSite`, the node builds the site after setup. Wording to fix.
+
+## Decision
+
+Owner, 2026-11-26: "they are going to have to move to an always-on thing. That's just how it goes." Recorded as R23. Which machine hosts it is open.
+
+## Open
+
+Fresh recovery code (the current one passed through an agent session); phone readiness (plugin, vault copy with `publish.yml` and `site.yml`); always-on host and packaging; setup link robustness; preview wording.
