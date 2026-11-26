@@ -15,7 +15,7 @@ CTX="$STAGE/context"
 
 # packResources() lists tracked AND untracked files. Build in a fresh Git index
 # containing only committed release inputs, not the working tree or its caches.
-revision="$(git -C "$REPO" rev-parse --verify "${CYBERBASER_BUILD_REVISION:-HEAD}^{tree}")"
+revision="$(git -C "$REPO" rev-parse --verify "${CYBERBASER_BUILD_REVISION:-HEAD}^{commit}")"
 git -C "$REPO" archive "$revision" -- packaging/build.js packaging/src packaging/systemd \
   apps/owner-alpha apps/account-free-intake packages renderers/quartz-cyberbase \
   deploy/owner-alpha/one-app/{Containerfile,container-init.sh,install.json,render-offline.c} | tar -x -C "$SRC"
@@ -60,7 +60,8 @@ cc -std=c11 -O2 -Wall -Wextra -Werror -fPIE -pie -fstack-protector-strong \
   -Wl,-z,relro,-z,now "$PACK/render-offline.c" -o "$CTX/render-offline"
 # Only the allowlisted build artifacts are sent to the container builder.
 # Neither the snapshot, lab fixture files nor the host checkout enters it.
-podman build --pull=never --force-rm --layers=false -t "$TAG" --iidfile "$STAGE/image-id" -f "$CTX/Containerfile" "$CTX" >&2
+podman build --pull=never --force-rm --layers=false --label "org.opencontainers.image.revision=$revision" \
+  -t "$TAG" --iidfile "$STAGE/image-id" -f "$CTX/Containerfile" "$CTX" >&2
 id=$(<"$STAGE/image-id")
 [[ "$id" =~ ^(sha256:)?[0-9a-f]{64}$ ]]
 printf '%s\n' "$id"
