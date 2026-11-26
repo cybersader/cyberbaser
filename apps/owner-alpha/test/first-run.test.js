@@ -118,17 +118,23 @@ async function harness({ root, relay = 'fake', links = null, clock, reach, git =
   const origin = `http://127.0.0.1:${port}`;
   let cookie = null;
   let csrf = null;
-  async function call(route, body, { headers = {}, server } = {}) {
+  async function call(route, body, { headers = {}, server, method = body === undefined ? 'GET' : 'POST', withOrigin = true } = {}) {
+    const form = body instanceof URLSearchParams;
     const response = await handler(new Request(`${origin}${route}`, {
-      method: body === undefined ? 'GET' : 'POST', redirect: 'manual',
-      headers: { Host: `127.0.0.1:${port}`, Origin: origin, ...(cookie ? { Cookie: cookie } : {}), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...headers },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      method, redirect: 'manual',
+      headers: { Host: `127.0.0.1:${port}`, ...(withOrigin ? { Origin: origin } : {}), ...(cookie ? { Cookie: cookie } : {}),
+        ...(body === undefined || form ? {} : { 'Content-Type': 'application/json' }), ...headers },
+      ...(body === undefined ? {} : { body: form ? body : JSON.stringify(body) }),
     }), server);
     const text = await response.text();
     return { status: response.status, text, headers: response.headers, value: text.startsWith('{') ? JSON.parse(text) : null };
   }
+  const redeem = (token, options) => call('/setup/start', new URLSearchParams({ token }), options);
   async function signIn() {
-    const opened = await call(`/setup/start?token=${setupLinks.issue()}`);
+    const preview = await call(`/setup/start?token=${setupLinks.issue()}`);
+    expect(preview.status).toBe(200);
+    const token = /name="token" value="([A-Za-z0-9_-]{43})"/u.exec(preview.text)[1];
+    const opened = await redeem(token);
     expect(opened.status).toBe(303);
     cookie = opened.headers.get('set-cookie').split(';', 1)[0];
     const page = await call('/setup');
@@ -147,39 +153,129 @@ async function harness({ root, relay = 'fake', links = null, clock, reach, git =
     }
     throw new Error('notes never settled');
   };
-  return { state, handler, call, signIn, step, waitNotes, completions, links: setupLinks, directory, origin, port,
+  return { state, handler, call, redeem, signIn, step, waitNotes, completions, links: setupLinks, directory, origin, port,
     setClock: (fn) => { now = fn; }, get csrf() { return csrf; }, setCookie: (value) => { cookie = value; } };
 }
 
 describe('setup link', () => {
-  test('is single use, short lived, replaced by a newer one, and refused once setup is finished', async () => {
-    const root = await scratch('oa-setup-link-');
-    let now = 1_000_000;
-    const h = await harness({ root, clock: () => now });
-    const first = h.links.issue();
-    const second = h.links.issue();
-    expect((await h.call(`/setup/start?token=${first}`)).status).toBe(403); // replaced
-    const opened = await h.call(`/setup/start?token=${second}`);
+  test('prefetch GET and HEAD do not spend the invitation or start a session; a click does', async () => {
+    const h = await harness({ root: await scratch('oa-setup-link-') });
+    const token = h.links.issue();
+    const route = `/setup/start?token=${token}`;
+    const preview = await h.call(route, undefined, { withOrigin: false });
+    const head = await h.call(route, undefined, { method: 'HEAD', withOrigin: false });
+    for (const passive of [preview, head]) {
+      expect(passive.status).toBe(200);
+      expect(passive.headers.get('cache-control')).toBe('no-store');
+      expect(passive.headers.get('referrer-policy')).toBe('no-referrer');
+      expect(passive.headers.get('content-security-policy')).toContain("form-action 'self'");
+      expect(passive.headers.get('x-frame-options')).toBe('DENY');
+      expect(passive.headers.get('set-cookie')).toBeNull();
+      expect(passive.headers.get('location')).toBeNull();
+    }
+    expect(head.text).toBe('');
+    expect(preview.text).toContain('<form id="setup-start" method="post" action="/setup/start">');
+    expect(preview.text).toContain('>Start setup</button>');
+    expect((await h.call('/owner/assets/setup-start.js')).status).toBe(200);
+    expect((await h.call('/setup')).status).toBe(403);
+    const opened = await h.redeem(/name="token" value="([A-Za-z0-9_-]{43})"/u.exec(preview.text)[1]);
     expect(opened.status).toBe(303);
     expect(opened.headers.get('location')).toBe('/setup');
     expect(opened.headers.get('set-cookie')).toMatch(/HttpOnly; SameSite=Strict$/u);
-    expect((await h.call(`/setup/start?token=${second}`)).status).toBe(403); // used
-    const third = h.links.issue();
-    now += 60 * 60_000;
-    const late = await h.call(`/setup/start?token=${third}`);
-    expect(late.status).toBe(403);
-    expect(late.text).toContain('works once, for an hour');
-    expect((await h.call(`/setup/start?token=${h.links.issue()}&next=x`)).status).toBe(403);
+    const replay = await h.redeem(token);
+    expect(replay.status).toBe(403);
+    expect(replay.headers.get('set-cookie')).toBeNull();
+    expect(replay.text).not.toContain(token);
   });
 
-  test('loopback only: wrong host, other origins and non-loopback peers are refused', async () => {
-    const root = await scratch('oa-setup-host-');
-    const h = await harness({ root });
-    expect((await h.call('/setup', undefined, { headers: { Host: 'evil.example:80' } })).status).toBe(421);
+  test('expiry, stale requests and passive noise do not rotate or spend a fresh invitation', async () => {
+    let now = 1_000_000;
+    const h = await harness({ root: await scratch('oa-setup-stale-'), clock: () => now });
+    const old = h.links.issue();
+    now += 60 * 60_000;
+    const late = await h.redeem(old);
+    expect(late.status).toBe(403);
+    expect(late.headers.get('set-cookie')).toBeNull();
+    expect(late.text).toContain('works once, for an hour');
+    const replaced = h.links.issue();
+    const current = h.links.issue();
+    for (const method of ['GET', 'HEAD']) {
+      expect((await h.call(`/setup/start?token=${old}`, undefined, { method })).status).toBe(200);
+      expect((await h.call(`/setup/start?token=${current}&next=x`, undefined, { method })).status).toBe(403);
+      expect((await h.call('/setup', undefined, { method })).status).toBe(403);
+    }
+    expect((await h.redeem(old)).status).toBe(403);
+    expect((await h.redeem(replaced)).status).toBe(403);
+    expect((await h.redeem(current)).status).toBe(303);
+  });
+
+  test('only one of two consumers can get a session', async () => {
+    const h = await harness({ root: await scratch('oa-setup-race-') });
+    const token = h.links.issue();
+    const replies = await Promise.all([h.redeem(token), h.redeem(token)]);
+    expect(replies.map((reply) => reply.status).sort()).toEqual([303, 403]);
+    expect(replies.filter((reply) => reply.headers.has('set-cookie'))).toHaveLength(1);
+  });
+
+  test('loopback only: wrong host, other origins, missing origin and non-loopback peers are refused', async () => {
+    const h = await harness({ root: await scratch('oa-setup-host-') });
+    const token = h.links.issue();
+    expect((await h.redeem(token, { headers: { Host: 'evil.example:80' } })).status).toBe(421);
+    expect((await h.redeem(token, { headers: { Origin: 'http://evil.example' } })).status).toBe(403);
+    expect((await h.redeem(token, { headers: { Origin: 'null' } })).status).toBe(403);
+    expect((await h.redeem(token, { withOrigin: false })).status).toBe(403);
     const peer = { requestIP: () => ({ address: '192.168.1.20' }) };
-    expect((await h.call(`/setup/start?token=${h.links.issue()}`, undefined, { server: peer })).status).toBe(403);
-    expect((await h.call(`/setup/start?token=${h.links.issue()}`, undefined, { server: { requestIP: () => ({ address: '127.0.0.1' }) } })).status).toBe(303);
+    expect((await h.redeem(token, { server: peer })).status).toBe(403);
+    expect((await h.redeem(token, { server: { requestIP: () => ({ address: '127.0.0.1' }) } })).status).toBe(303);
     expect(() => createFirstRunHandler({ listen: { host: '0.0.0.0', port: 1 }, state: h.state, links: h.links, notes: {} })).toThrow();
+  });
+
+  test('redemption needs a bounded form containing only the exact token', async () => {
+    const h = await harness({ root: await scratch('oa-setup-body-') });
+    const token = h.links.issue();
+    expect((await h.call('/setup/start', { token })).status).toBe(415);
+    expect((await h.call(`/setup/start?token=${token}`, new URLSearchParams({ token }))).status).toBe(400);
+    expect((await h.call('/setup/start', new URLSearchParams({ token, next: 'x' }))).status).toBe(400);
+    expect((await h.call('/setup/start', new URLSearchParams([['token', token], ['token', token]]))).status).toBe(400);
+    expect((await h.redeem(`${token}\n`)).status).toBe(400);
+    expect((await h.redeem('A'.repeat(256))).status).toBe(413);
+    expect((await h.redeem(token, { headers: { 'Content-Length': '257' } })).status).toBe(413);
+    expect((await h.redeem(token)).status).toBe(303);
+  });
+
+  test('setup request paths never print an invitation to process logs', async () => {
+    const root = await scratch('oa-setup-logs-');
+    const child = Bun.spawn([process.execPath, '-e', `
+      import { runFirstRun } from './src/first-run.js';
+      let now = 0;
+      let handle;
+      const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: (request, peer) => handle(request, peer) });
+      try {
+        const setup = await runFirstRun({ stateDirectory: process.env.TEST_SETUP_STATE, port: server.port, clock: () => now,
+          serve: ({ fetch }) => { handle = fetch; return server; },
+        });
+        const old = new URL(setup.setupLink());
+        now += 60 * 60_000;
+        const { origin } = old;
+        const post = (url) => fetch(origin + '/setup/start', { method: 'POST', headers: { origin }, body: url.searchParams, redirect: 'manual' });
+        const check = async (reply, status) => {
+          await reply.text();
+          if (reply.status !== status) throw Error('Unexpected status: ' + reply.status);
+        };
+        await check(await fetch(old, { method: 'HEAD' }), 200);
+        await check(await fetch(old), 200);
+        await check(await fetch(origin + '/setup'), 403);
+        await check(await post(old), 403);
+        const live = new URL(setup.setupLink());
+        await check(await post(old), 403);
+        await check(await post(live), 303);
+        await check(await post(live), 403);
+      } finally { server.stop(true); }
+    `], { cwd: APP, env: { ...process.env, TEST_SETUP_STATE: path.join(root, 'state') }, stdout: 'pipe', stderr: 'pipe' });
+    const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+    expect(stderr).toBe('');
+    expect(stdout).toBe('');
+    expect(code).toBe(0);
   });
 });
 
@@ -355,6 +451,7 @@ describe('setup steps', () => {
     expect((await h.step('back')).value.code).toBe('setup-complete');
     expect(() => h.links.issue()).toThrow();
     expect((await h.call('/setup/start?token=x')).status).toBe(410);
+    expect((await h.redeem('A'.repeat(43))).status).toBe(410);
     expect((await h.call('/owner/github/state')).status).toBe(404);
     const saved = JSON.parse(await readFile(path.join(h.directory, SETUP_STATE_FILE), 'utf8'));
     expect(saved.step).toBe('done');

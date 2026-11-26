@@ -275,16 +275,21 @@ async function setupHarness({ directory, relay }) {
   const origin = `http://127.0.0.1:${port}`;
   let cookie = null;
   async function call(route, { body, withCookie = true } = {}) {
+    const form = body instanceof URLSearchParams;
     const response = await handler(new Request(new URL(route, origin), {
       method: body === undefined ? 'GET' : 'POST', redirect: 'manual',
       headers: { Host: `127.0.0.1:${port}`, Origin: origin, ...(cookie && withCookie ? { Cookie: cookie } : {}),
-        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        ...(body === undefined || form ? {} : { 'Content-Type': 'application/json' }) },
+      ...(body === undefined ? {} : { body: form ? body : JSON.stringify(body) }),
     }));
     const text = await response.text();
     return { status: response.status, text, headers: response.headers, value: text.startsWith('{') ? JSON.parse(text) : null };
   }
-  const opened = await call(`/setup/start?token=${links.issue()}`);
+  const page = await call(`/setup/start?token=${links.issue()}`);
+  expect(page.status).toBe(200);
+  const token = /name="token" value="([A-Za-z0-9_-]{43})"/u.exec(page.text)[1];
+  const opened = await call('/setup/start', { body: new URLSearchParams({ token }) });
+  expect(opened.status).toBe(303);
   cookie = opened.headers.get('set-cookie').split(';', 1)[0];
   const csrf = /data-csrf="([^"]+)"/u.exec((await call('/setup')).text)[1];
   const step = async (action, value = null) => call('/setup/step', { body: { csrf, step: state.read().step, action, value } });

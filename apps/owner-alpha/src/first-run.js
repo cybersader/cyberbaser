@@ -148,9 +148,11 @@ export function createSetupLinks({ createToken, sameSecret, clock = Date.now, tt
     },
     consume(value) {
       const held = outstanding;
-      if (held === null || !sameSecret(value, held.token)) return false;
-      outstanding = null;
-      return clock() < held.expiresAt;
+      if (held !== null && sameSecret(value, held.token) && clock() < held.expiresAt) {
+        outstanding = null;
+        return true;
+      }
+      return false;
     },
   });
 }
@@ -685,6 +687,21 @@ function noticePage(tools, title, text, back = false) {
     body: `<main class="setup-shell"><header class="setup-top"><span class="setup-mark">Cyberbaser</span></header><section class="setup-step"><h1>${e(title)}</h1><p class="setup-lede">${e(text)}</p>${link}</section></main>` });
 }
 
+const SETUP_LINK_UNAVAILABLE = 'Each setup link works once, for an hour. Ask for a fresh setup link and try again.';
+
+function startPage(tools, token) {
+  return tools.pageShell({ title: 'Start setup', script: '/owner/assets/setup-start.js', bodyClass: 'devices-page setup-page',
+    body: `<main class="setup-shell"><header class="setup-top"><span class="setup-mark">Cyberbaser</span></header><section class="setup-step">
+<h1>Set up Cyberbaser</h1>
+<p class="setup-lede">When you’re ready, start setup in this browser.</p>
+<form id="setup-start" method="post" action="/setup/start"><input type="hidden" name="token" value="${tools.escapeHtml(token)}">
+<div class="setup-actions"><button type="submit" disabled>Start setup</button></div>
+</form>
+<noscript><p>Turn on JavaScript to start setup.</p></noscript>
+<p class="setup-status" id="setup-start-status" role="status" data-unavailable="${tools.escapeHtml(SETUP_LINK_UNAVAILABLE)}"></p>
+</section></main>` });
+}
+
 // The page that posts the manifest to GitHub's new-app page. Its script only
 // submits the form; the button works without it.
 function createAppPage(tools, { action, manifest }) {
@@ -735,7 +752,7 @@ function isLoopback(address) {
  */
 export function createFirstRunHandler({
   listen, state, links, relay = null, notes, starter = null, reach = async () => null, pairCommand = 'cyberbaser pair',
-  publicRoot = fileURLToPath(new URL('../public/', import.meta.url)), onComplete = () => {}, onStaleLink = null, createToken,
+  publicRoot = fileURLToPath(new URL('../public/', import.meta.url)), onComplete = () => {}, createToken,
   // The publisher's own enrolment page (publisher/owner-control.js), or null.
   enrolPort = null,
   // 'private-site': the website step offers the private site first (installer --site private).
@@ -916,22 +933,36 @@ export function createFirstRunHandler({
     try { url = new URL(request.url); } catch { return errorResponse(400, 'invalid-url'); }
     if (url.origin !== expectedOrigin) return errorResponse(421, 'invalid-host');
 
-    if (url.pathname === '/owner/assets/owner.css') {
+    if (url.pathname === '/owner/assets/owner.css' || url.pathname === '/owner/assets/setup-start.js') {
       if (url.search !== '') return errorResponse(400, 'unexpected-query');
-      return staticResponse(publicRoot, 'owner.css', request, { directoryIndex: false });
+      return staticResponse(publicRoot, path.posix.basename(url.pathname), request, { directoryIndex: false });
     }
 
     if (url.pathname === '/setup/start') {
-      if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
-      if (state.read().completedAt !== null) {
-        return html(noticePage(tools, 'Setup is finished', 'Cyberbaser is already set up. Use the sign-in link it prints to open it.'), 410);
+      const notice = (title, text, status) => html(request.method === 'HEAD' ? null : noticePage(tools, title, text), status);
+      const finished = () => notice('Setup is finished', 'Cyberbaser is already set up. Use the sign-in link it prints to open it.', 410);
+      const unavailable = () => notice('This setup link can’t be used', SETUP_LINK_UNAVAILABLE, 403);
+      if (state.read().completedAt !== null) return finished();
+      if (request.method !== 'POST') {
+        const keys = [...url.searchParams.keys()];
+        const token = url.searchParams.get('token');
+        if (keys.length !== 1 || keys[0] !== 'token' || !exactToken(token)) return unavailable();
+        return html(request.method === 'HEAD' ? null : startPage(tools, token));
       }
-      const keys = [...url.searchParams.keys()];
-      const consumed = keys.length === 1 && keys[0] === 'token' && links.consume(url.searchParams.get('token'));
-      if (!consumed) {
-        onStaleLink?.();
-        return html(noticePage(tools, 'This setup link has expired', 'Each setup link works once, for an hour. A fresh one has just been written to Cyberbaser\'s log ("cyberbaser status" shows it).'), 403);
-      }
+      if (request.headers.get('origin') !== expectedOrigin) return errorResponse(403, 'invalid-origin');
+      if (url.search !== '') return errorResponse(400, 'unexpected-query');
+      let token;
+      try {
+        token = await readBoundedJson(request, 256, (text) => {
+          // This form sends one base64url value; no escaping or other fields are needed.
+          const value = text.slice('token='.length);
+          if (!text.startsWith('token=') || !exactToken(value)) throw new Error('invalid-token');
+          return value;
+        }, 'application/x-www-form-urlencoded');
+      } catch (error) { return errorResponse(error?.status ?? 400, 'invalid-setup-link-body'); }
+      // The body read can interleave with other requests; the check and consume cannot.
+      if (state.read().completedAt !== null) return finished();
+      if (!links.consume(token)) return unavailable();
       if (sessions.size >= MAX_SETUP_SESSIONS) sessions.delete(sessions.keys().next().value);
       const sessionToken = make();
       const csrfToken = make();
@@ -949,8 +980,7 @@ export function createFirstRunHandler({
     const owner = session(request);
     if (owner === null) {
       if (url.pathname === '/setup' && request.method === 'GET') {
-        onStaleLink?.();
-        return html(noticePage(tools, 'Open your setup link', 'Setup opens from a one-time link. A fresh one has just been written to Cyberbaser\'s log ("cyberbaser status" shows it).'), 403);
+        return html(noticePage(tools, 'Open your setup link', 'Setup opens from a one-time link. If you need a new one, ask for a fresh setup link.'), 403);
       }
       return errorResponse(403, 'invalid-session');
     }
@@ -1051,9 +1081,6 @@ export async function runFirstRun({
   // The publisher's enrolment page port (port + 2 in the installed layout), or null.
   enrolPort = null,
   publication = null, readerAddress = null,
-  // Where a fresh setup link is written when an expired or missing one is used
-  // (the same place as the first one: the service log). At most one per 30 s.
-  announceLink = null,
 }) {
   const state = await openSetupState(stateDirectory);
   const tools = ownerHttpTools();
@@ -1068,14 +1095,7 @@ export async function runFirstRun({
   let finish;
   const completed = new Promise((resolve) => { finish = resolve; });
   const handler = createFirstRunHandler({ listen: { host: '127.0.0.1', port }, state, links, relay, notes, starter, reach, pairCommand,
-    createToken, onComplete: (result) => finish(result), enrolPort, publication, readerAddress,
-    onStaleLink: announceLink === null ? null : () => {
-      const now = (clock ?? Date.now)();
-      if (now - lastAnnounced < 30_000 || state.read().completedAt !== null) return;
-      lastAnnounced = now;
-      try { announceLink(`${origin}/setup/start?token=${links.issue()}`); } catch { /* setup finished */ }
-    } });
-  let lastAnnounced = -Infinity;
+    createToken, onComplete: (result) => finish(result), enrolPort, publication, readerAddress });
   // A restart while the notes were being copied picks the copy up again.
   const resumed = state.read();
   if (resumed.repository && ['cloning', 'building'].includes(resumed.notes.phase)) notes.start(resumed.repository);

@@ -73,8 +73,7 @@ if (import.meta.main) {
     checkout, mirror: layout.mirror ?? null, enrolPort: layout.enrollPort ?? Number(portText) + 2,
     // Installer --site private: the website step offers the private site first.
     publication: layout.publication === 'private-site' ? 'private-site' : null,
-    readerAddress: `http://${layout.listen?.host ?? '127.0.0.1'}:${(layout.listen?.port ?? Number(portText)) + 1}/`,
-    announceLink: (link) => process.stdout.write(`Cyberbaser setup: ${link}\n`) });
+    readerAddress: `http://${layout.listen?.host ?? '127.0.0.1'}:${(layout.listen?.port ?? Number(portText)) + 1}/` });
   process.stdout.write(`Cyberbaser setup: ${setup.setupLink()}\n`);
   const console = createInterface({ input: process.stdin, terminal: false });
   console.on('line', (line) => {

@@ -22,10 +22,12 @@ try { cookie = readFileSync(cookieFile, 'utf8').trim() || null; } catch { cookie
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function call(route, body, { redirect = 'manual', withCookie = true } = {}) {
+  const form = body instanceof URLSearchParams;
   const response = await fetch(`${ORIGIN}${route}`, {
     method: body === undefined ? 'GET' : 'POST', redirect, signal: AbortSignal.timeout(180_000),
-    headers: { ...(cookie && withCookie ? { Cookie: cookie } : {}), ...(body === undefined ? {} : { Origin: ORIGIN, 'Content-Type': 'application/json' }) },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    headers: { ...(cookie && withCookie ? { Cookie: cookie } : {}), ...(body === undefined ? {} : { Origin: ORIGIN }),
+      ...(body === undefined || form ? {} : { 'Content-Type': 'application/json' }) },
+    ...(body === undefined ? {} : { body: form ? body : JSON.stringify(body) }),
   });
   const set = response.headers.get('set-cookie');
   if (set) { cookie = set.split(';', 1)[0]; writeFileSync(cookieFile, cookie, { mode: 0o600 }); }
@@ -54,12 +56,26 @@ async function stepper() {
   return { step, csrf };
 }
 
+async function openSetup(link) {
+  try {
+    const url = new URL(link);
+    if (url.origin !== ORIGIN || url.pathname !== '/setup/start') failed('setup-link', 'unexpected target');
+    const page = await call(url.pathname + url.search, undefined, { withCookie: false });
+    const action = /<form id="setup-start" method="post" action="([^"]+)"/u.exec(page.text)?.[1];
+    const token = /name="token" value="([A-Za-z0-9_-]{43})"/u.exec(page.text)?.[1];
+    if (page.status !== 200 || action !== '/setup/start' || !token || !page.text.includes('>Start setup</button>')) {
+      failed('setup-link', page.status);
+    }
+    const opened = await call(action, new URLSearchParams({ token }), { withCookie: false });
+    if (opened.status !== 303 || opened.location !== '/setup') failed('start-setup', opened.status);
+  } catch { failed('setup-link', 'could not open setup'); }
+}
+
 // Setup up to the phone step: GitHub, the private repository, the notes copy,
 // and the starter publish.yml chosen on screen. The starter is prepared as one
 // commit and waits for the owner's phone; nothing reaches GitHub here.
 async function setupToPhone(link) {
-  const opened = await call(link.slice(ORIGIN.length));
-  if (opened.status !== 303) failed('open-link', opened.status);
+  await openSetup(link);
   const { step, csrf } = await stepper();
   if ((await step('start')).value?.step !== 'github') failed('start', 'not on github');
   const started = await call('/owner/github/start', { csrf });
@@ -141,8 +157,7 @@ async function manifestFlow() {
 // already has its publish.yml: GitHub, the repository, the notes copy, then
 // "Keep it private" on the website step.
 async function setupPrivate(link, repository) {
-  const opened = await call(link.slice(ORIGIN.length));
-  if (opened.status !== 303) failed('open-link', opened.status);
+  await openSetup(link);
   const { step, csrf } = await stepper();
   if ((await step('start')).value?.step !== 'github') failed('start', 'not on github');
   let state = (await call('/owner/github/state')).value;

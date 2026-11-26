@@ -1,0 +1,11 @@
+---
+title: Setup links wait for an explicit click
+description: Opening or previewing a setup link does not spend it or sign in. The Start setup button redeems it with a same-origin POST.
+status: log
+---
+
+The first private install showed that desktop link handlers can fetch a setup URL before handing it to the browser. A setup link now opens a confirmation page; only **Start setup** spends it and starts the existing setup session. The link is still one-use and valid for an hour.
+
+Failed requests do not generate links or write secrets to the service journal. In an attached setup session, enter `l` to explicitly issue a fresh link. On a systemd install still in setup, an administrator can run `sudo systemctl restart cyberbaser-node.service`, then read the new link with `sudo cyberbaser status`. Startup and explicit reissue remain separate from the HTTP request path.
+
+A real headless Chromium click in a disposable local profile sent the expected Origin and no Referer, received the existing session cookie and opened the authenticated welcome page after both GET and HEAD previews. The targeted setup and GitHub manifest suites passed; the opt-in installed-container run was not enabled. No live install was updated.
