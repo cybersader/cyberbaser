@@ -698,6 +698,8 @@ function createAppPage(tools, { action, manifest }) {
 </section></main>` });
 }
 
+const GITHUB_ISSUER = 'https://github.com/login/oauth';
+
 function githubOrigin(value) {
   let url;
   try { url = new URL(value); } catch { return null; }
@@ -877,7 +879,11 @@ export function createFirstRunHandler({
       if (url.pathname === CALLBACK_PATHS.authorized && keys.includes('error')) {
         return html(noticePage(tools, 'Sign-in was cancelled', FORGE_PROBLEMS.denied, true), 200);
       }
-      if (keys.length !== 2 || !validCode(value('code')) || !validFlowState(value('state'))) return refused();
+      // GitHub's sign-in return also names its issuer (RFC 9207, `iss`); when
+      // present it must be GitHub's own, and it is the only extra allowed.
+      const issued = url.pathname === CALLBACK_PATHS.authorized && keys.includes('iss');
+      if (issued && value('iss') !== GITHUB_ISSUER) return refused();
+      if (keys.length !== (issued ? 3 : 2) || !validCode(value('code')) || !validFlowState(value('state'))) return refused();
       if (url.pathname === CALLBACK_PATHS.created) {
         const created = await relay.askWith('app-created', { code: value('code'), state: value('state') });
         if (typeof created?.app?.clientId === 'string') {

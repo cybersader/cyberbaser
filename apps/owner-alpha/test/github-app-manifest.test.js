@@ -360,17 +360,22 @@ describe('setup pages', () => {
     expect((await h.call(`${CALLBACK_PATHS.created}?${good}&code=again`, { withCookie: false })).status).toBe(400);
     expect((await h.call(`${CALLBACK_PATHS.created}?code=..%2F..%2Fx&state=${'C'.repeat(43)}`, { withCookie: false })).status).toBe(403);
     expect((await h.call(`${CALLBACK_PATHS.installed}?installation_id=1&evil=1`, { withCookie: false })).status).toBe(403);
+    // Only GitHub's own issuer may ride along, and only on the sign-in return.
+    expect((await h.call(`${CALLBACK_PATHS.authorized}?${good}&iss=https%3A%2F%2Fevil.example%2Flogin%2Foauth`, { withCookie: false })).status).toBe(403);
+    expect((await h.call(`${CALLBACK_PATHS.created}?${good}&iss=https%3A%2F%2Fgithub.com%2Flogin%2Foauth`, { withCookie: false })).status).toBe(403);
     expect(asked).toEqual([]);
     // Well-formed but unknown to the publisher.
     expect((await h.call(`${CALLBACK_PATHS.created}?${good}`, { withCookie: false })).status).toBe(409);
     expect((await h.call(`${CALLBACK_PATHS.authorized}?${good}`, { withCookie: false })).status).toBe(409);
     expect((await h.call(`${CALLBACK_PATHS.installed}?installation_id=1&setup_action=install`, { withCookie: false })).status).toBe(409);
-    expect(asked.map(([op]) => op)).toEqual(['app-created', 'app-authorized', 'app-installed']);
+    // GitHub's real sign-in return carries iss (RFC 9207).
+    expect((await h.call(`${CALLBACK_PATHS.authorized}?code=abcdef0123456789&iss=https%3A%2F%2Fgithub.com%2Flogin%2Foauth&state=${'C'.repeat(43)}`, { withCookie: false })).status).toBe(409);
+    expect(asked.map(([op]) => op)).toEqual(['app-created', 'app-authorized', 'app-installed', 'app-authorized']);
     expect(asked[2][1]).toEqual({ origin: h.origin });
     // A denied authorization is shown plainly, nothing asked.
     const denied = await h.call(`${CALLBACK_PATHS.authorized}?error=access_denied&state=${'C'.repeat(43)}`, { withCookie: false });
     expect(denied.text).toContain('Sign-in was cancelled');
-    expect(asked).toHaveLength(3);
+    expect(asked).toHaveLength(4);
     // POST is not a GitHub return.
     expect((await h.call(`${CALLBACK_PATHS.created}?${good}`, { body: {} })).status).toBe(405);
     // The create, install and sign-in pages only open on the GitHub step.
@@ -381,6 +386,6 @@ describe('setup pages', () => {
 
     await h.state.update((now) => ({ ...now, step: 'done', completedAt: new Date().toISOString() }));
     expect((await h.call(`${CALLBACK_PATHS.created}?${good}`, { withCookie: false })).status).toBe(410);
-    expect(asked).toHaveLength(3);
+    expect(asked).toHaveLength(4);
   });
 });
