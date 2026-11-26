@@ -1,6 +1,6 @@
 ---
 title: First real private install for Cyberchief, and the always-on decision
-description: Cyberbaser was installed for real on the owner's desktop for the private cybersader/cyberchief site. GitHub App created from the manifest on github.com, sign-in fixed for GitHub's issuer parameter, setup finished, private site serving, one agent paired. The owner then decided Cyberbaser must run on an always-on machine.
+description: Cyberbaser was installed for real on the owner's desktop for the private cybersader/cyberchief site. GitHub App created from the manifest on github.com, sign-in fixed for GitHub's issuer parameter, setup finished, private site serving, one agent paired. The owner then set the deployment shape: local-first as the base, an always-on machine as an option.
 status: log
 ---
 
@@ -15,8 +15,8 @@ status: log
 
 ## Decision
 
-Owner, 2026-11-26: "they are going to have to move to an always-on thing. That's just how it goes." Recorded as R23. Which machine hosts it is open.
+Owner, 2026-11-26, first: "they are going to have to move to an always-on thing." Then, correcting it: "it doesn't have to. Like my goal is for this to be local first compatible." And: containers may run underneath, but nobody installing it should need to know how to run them. Recorded as R23: local-first is the base, always-on is supported, not required.
 
 ## Open
 
-Fresh recovery code (the current one passed through an agent session); phone readiness (plugin, vault copy with `publish.yml` and `site.yml`); always-on host and packaging; setup link robustness; preview wording.
+Fresh recovery code (the current one passed through an agent session); phone readiness (plugin, vault copy with `publish.yml` and `site.yml`); what the phone shows while the node is off (verify proposals wait and send later); optional always-on packaging; setup link robustness; preview wording.
