@@ -9,7 +9,7 @@
 //   bun bin/cyberbaser-setup.js <state-dir> <port> <publisher-socket> <layout.json> [--exit-at-done]
 //
 // layout.json (written by the installer): { listen, reviewSocket, irohStateDirectory,
-// forgeStateDirectory, clientId, configFile, checkout, mirror, relay?, publication?,
+// forgeStateDirectory, clientId, configFile, checkout, mirror, relay?, reach?, publication?,
 // renderer? }. publication "private-site" makes the private site the website
 // step's first choice; renderer is the site's own renderer (installer --renderer). Without
 // `checkout` the notes copy is <state-dir>/notes; without `mirror` the node
@@ -19,8 +19,8 @@ import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { openDeviceStore } from '../src/core/device-store.js';
 import { createPairingManager } from '../src/core/pairing.js';
-import { ownerConfigFromSetup, runFirstRun } from '../src/first-run.js';
-import { bindEndpoint, loadNodeSecret, PAIR_ALPN, startIrohCarrier } from '../src/iroh-carrier.js';
+import { irohConfigFromLayout, ownerConfigFromSetup, runFirstRun } from '../src/first-run.js';
+import { bindIrohNode, loadNodeSecret, PAIR_ALPN, startIrohCarrier } from '../src/iroh-carrier.js';
 
 const writeConfig = async (file, config) => {
   const { open, rename } = await import('node:fs/promises');
@@ -52,6 +52,7 @@ if (import.meta.main) {
     process.exit(1);
   }
   const layout = JSON.parse(await readFile(layoutFile, 'utf8'));
+  const irohConfig = irohConfigFromLayout(layout);
   const checkout = layout.checkout ?? path.join(path.resolve(stateDirectory), 'notes');
   let carrier = null;
   // Pairing during setup uses the node's own Iroh identity, so a phone paired
@@ -61,10 +62,9 @@ if (import.meta.main) {
       parentDirectory: layout.irohStateDirectory });
     const pairing = createPairingManager({ ownerId, store });
     const secretKey = await loadNodeSecret(layout.irohStateDirectory);
-    const endpoint = await bindEndpoint({ secretKey, relay: layout.relay ?? 'n0', bindAddress: null, alpns: [PAIR_ALPN] });
-    secretKey.fill(0);
+    const binding = await bindIrohNode({ secretKey, config: irohConfig, alpns: [PAIR_ALPN] }).finally(() => secretKey.fill(0));
     const refuse = new Proxy({}, { get: () => async () => { throw Object.assign(new Error('setting up'), { code: 'node-setting-up' }); } });
-    carrier = startIrohCarrier({ endpoint, commands: refuse, verifier: { forChannel: () => ({}) }, pairing, relay: layout.relay ?? 'n0' });
+    carrier = startIrohCarrier({ ...binding, commands: refuse, verifier: { forChannel: () => ({}) }, pairing });
     pairing.attachNode({ nodeId: carrier.nodeId, ticket: carrier.ticket });
     return { store, pairing };
   };

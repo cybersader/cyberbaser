@@ -17,7 +17,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import yaml from 'js-yaml';
-import { CONFIG_SCHEMA_VERSION, validateOwnerAlphaConfig } from './config.js';
+import { CONFIG_SCHEMA_VERSION, validateIroh, validateOwnerAlphaConfig } from './config.js';
 import { OwnerAlphaError, fail } from './errors.js';
 import { forgeRequest } from './publisher/forge-control.js';
 import { FORGE_PROBLEMS, validFullName } from './publisher/forge-access.js';
@@ -435,6 +435,14 @@ export function createSetupForgeRelay({ socketPath, provider = 'github-app', sta
 
 // ------------------------------------------------------------ owner config
 
+// The same validated carrier settings for live pairing during setup and the
+// finished node. Old layouts with neither setting keep the default reach.
+export function irohConfigFromLayout(layout) {
+  const options = Object.fromEntries(['relay', 'reach', 'bindAddress']
+    .filter((key) => Object.hasOwn(layout, key)).map((key) => [key, layout[key]]));
+  return validateIroh({ enabled: true, stateDirectory: layout.irohStateDirectory, ...options });
+}
+
 /**
  * The node's configuration from a finished setup. The layout (sockets,
  * directories, listen address) belongs to the installer; the repository,
@@ -473,7 +481,7 @@ export function ownerConfigFromSetup(setup, layout) {
       requireNoNewBrokenLinks: true, requireRenderedWitness: true },
     git: { autoCommit: true, autoPush: true, useHooks: true, commitMessagePrefix: 'cyberbaser:' },
     publisher: { socketPath: layout.publisherSocket, ...(layout.mirror ? { mirror: layout.mirror } : {}) },
-    iroh: { enabled: true, stateDirectory: layout.irohStateDirectory, ...(layout.relay ? { relay: layout.relay } : {}) },
+    iroh: irohConfigFromLayout(layout),
     // The app setup created from a manifest, else the one the installer was given.
     forgeAccess: { provider: 'github-app', clientId: setup.forgeApp?.clientId ?? layout.clientId, stateDirectory: layout.forgeStateDirectory },
     // The site's own renderer, installed by the installer (--renderer).

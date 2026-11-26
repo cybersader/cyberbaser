@@ -7,6 +7,7 @@ import { executeSigned } from './core/commands.js';
 import { readPrivateKeyJson } from './core/device-key-files.js';
 import { decodeBase64, isIrohNodeId, plainData } from './core/device-keys.js';
 import { PAIRING_REFUSAL } from './core/pairing.js';
+import { resolveReach } from './core/reach.js';
 import { canonicalJson } from './json.js';
 import { SIGNED_REQUEST_MAX_BYTES, SIGNED_REQUEST_REFUSAL } from './signed-request-socket.js';
 
@@ -108,14 +109,35 @@ export async function loadNodeSecret(directory) {
   return bytes;
 }
 
-export async function bindEndpoint({ secretKey, relay, bindAddress = null, alpns = [] }) {
+export async function bindEndpoint({ secretKey, relay, bindAddress = null, ipv6BindAddress = null, alpns = [] }) {
   const builder = Endpoint.builder();
   presetMinimal(builder); // no discovery publishing
   builder.secretKey([...secretKey]);
   builder.relayMode(relayMode(relay));
   builder.alpns(alpns.map(alpnBytes));
   if (bindAddress !== null) builder.bindAddr(bindAddress);
+  if (ipv6BindAddress !== null) builder.bindAddr(ipv6BindAddress);
   return builder.bind();
+}
+
+/** Translate the neutral reach policy once for both setup and normal operation. */
+export async function bindIrohNode({ secretKey, config: { reach, relay, bindAddress }, alpns }) {
+  const { mode, ipv4 } = resolveReach(reach);
+  if (reach !== undefined && bindAddress !== undefined) throw new Error('Conflicting Iroh bind settings');
+  const endpoint = await bindEndpoint({ secretKey, relay, alpns,
+    bindAddress: ipv4 === null ? bindAddress : `${ipv4}:0`,
+    // Iroh otherwise independently binds an IPv6 wildcard, even with an
+    // explicit IPv4 bind. Give IPv6 only loopback in restricted modes.
+    ipv6BindAddress: ipv4 === null ? null : '[::1]:0' });
+  const sockets = endpoint.boundSockets();
+  if (ipv4 === null) return { endpoint, relay, directAddresses: relay === 'none' ? sockets : [] };
+  const selected = sockets.filter((socket) => socket.startsWith(`${ipv4}:`));
+  if (selected.length !== 1 || sockets.length > 2
+    || sockets.some((socket) => socket !== selected[0] && !socket.startsWith('[::1]:'))) {
+    await endpoint.close();
+    throw new Error('Iroh did not bind the requested reach policy');
+  }
+  return { endpoint, relay, directAddresses: mode === 'relay-only' ? [] : selected };
 }
 
 function withTimeout(promise, ms) {
@@ -156,7 +178,8 @@ async function writeFrame(send, value) {
 
 // Start the carrier on an already bound endpoint. `verifier` is the device
 // principal adapter for this node's Iroh audience; `pairing` may be null.
-export function startIrohCarrier({ endpoint, commands, verifier, pairing = null, relay }) {
+export function startIrohCarrier({ endpoint, commands, verifier, pairing = null, relay,
+  directAddresses = relay === 'none' ? endpoint.boundSockets() : [] }) {
   const nodeId = endpoint.id().toString();
   const connections = new Map(); // connection -> remote endpoint id
   let closing = null;
@@ -245,7 +268,7 @@ export function startIrohCarrier({ endpoint, commands, verifier, pairing = null,
     }
   })();
 
-  const addr = new EndpointAddr(endpoint.id(), relayUrlFor(relay), relay === 'none' ? endpoint.boundSockets() : []);
+  const addr = new EndpointAddr(endpoint.id(), relayUrlFor(relay), directAddresses);
   const ticket = EndpointTicket.fromAddr(addr).toString();
 
   return Object.freeze({

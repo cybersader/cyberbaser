@@ -19,18 +19,21 @@ record=/etc/cyberbaser/install.json
 layout=$(mktemp /tmp/cyberbaser-layout.XXXXXX)
 trap 'rm -f -- "$layout"' EXIT
 jq -e '
-  select(type == "object" and ((keys - ["version","state","accounts","group","appRoot","port","publication","irohRelay","github"]) == []))
+  select(type == "object" and ((keys - ["version","state","accounts","group","appRoot","port","publication","reach","irohRelay","github"]) == []))
   | select(.version == 1 and .state == "container" and .accounts == {node:"cyberbaser",publisher:"cyberbaser-publisher"}
     and .group == "cyberbaser-share" and .appRoot == "/opt/cyberbaser" and .publication == "private-site")
   | select(.port | type == "number" and . == floor and . >= 1024 and . <= 65533)
   | select((.irohRelay // "n0") | test("^(none|n0|http://127\\.0\\.0\\.1:[0-9]{1,5}/)$"))
   | select((.github // {}) | . == {} or (keys == ["origin"] and (.origin | test("^http://127\\.0\\.0\\.1:[0-9]{1,5}$"))))
+  | select((has("reach") | not) or (.reach | type == "string" and (test("[[:cntrl:]]") | not)))
   | {listen:{host:"127.0.0.1",port:.port}, reviewSocket:"/run/cyberbaser/review.sock",
     irohStateDirectory:"/var/lib/cyberbaser/iroh", forgeStateDirectory:"/var/lib/cyberbaser-publisher/forge",
     configFile:"/var/lib/cyberbaser/config/owner-alpha.json", checkout:"/var/lib/cyberbaser-shared/notes/notes",
     mirror:"/var/lib/cyberbaser-shared/mirror/notes.git", clientId:null, publication,
-    relay:(.irohRelay // "n0")}
+    relay:(.irohRelay // "n0"), reach:(.reach // "direct")}
 ' "$record" > "$layout" || fail 'Invalid container install record.'
+reach=$(jq -r '.reach' "$layout")
+"$program" validate-reach "$reach" >/dev/null || fail 'Invalid reach in container install record.'
 
 dir() {
   local path=$1 uid=$2 mode=$3 kind=${4:-child} metadata
@@ -63,7 +66,12 @@ dir /run/cyberbaser-publisher 65533 710 volume
 file="$node/layout.json"
 [[ ! -L "$file" ]] || fail 'Unexpected setup layout link.'
 if [[ -e "$file" ]]; then
-  [[ -f "$file" && $(stat -c '%u:%g:%a:%h' "$file") == 65532:65530:600:1 ]] && cmp -s "$file" "$layout" || fail 'Setup layout differs from the install record.'
+  [[ -f "$file" && $(stat -c '%u:%g:%a:%h' "$file") == 65532:65530:600:1 ]] || fail 'Unsafe setup layout.'
+  # Records and layouts created before reach existed have the direct default.
+  if ! cmp -s "$file" "$layout"; then
+    [[ "$reach" == direct && $(jq 'select(type == "object" and (has("reach") | not)) | . + {reach:"direct"}' "$file") == "$(<"$layout")" ]] \
+      || fail 'Setup layout differs from the install record.'
+  fi
 else
   (set -o noclobber; /usr/bin/cat "$layout" > "$file")
   chown 65532:65530 "$file"

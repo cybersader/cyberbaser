@@ -23,7 +23,8 @@ const RANGE_BOUNDS = PRIVATE_NETWORK_IPV4_RANGES.map(({ cidr }) => {
 function ipv4Value(value) {
   // Canonical dotted decimal only: no shorthand, hex, octal, integer forms,
   // leading zeros, whitespace, CIDR suffixes, hostnames, or IPv6.
-  if (typeof value !== 'string' || !/^(?:(?:0|[1-9][0-9]{0,2})\.){3}(?:0|[1-9][0-9]{0,2})$/u.test(value)) {
+  if (typeof value !== 'string' || value.trim() !== value
+    || !/^(?:(?:0|[1-9][0-9]{0,2})\.){3}(?:0|[1-9][0-9]{0,2})$/u.test(value)) {
     return null;
   }
   let total = 0;

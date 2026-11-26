@@ -23,6 +23,7 @@ import { constants, existsSync, lstatSync } from 'node:fs';
 import { chmod, chown, mkdir, open, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { DEFAULT_ACCOUNTS, INSTALL_RECORD, groupEntry, readInstallRecord, userEntry } from '../accounts.js';
+import { resolveReach } from '../../../apps/owner-alpha/src/core/reach.js';
 
 export const LAYOUT = Object.freeze({
   appRoot: '/opt/cyberbaser',
@@ -83,7 +84,7 @@ function which(name) {
 
 function parse(args, known) {
   const options = { yes: false, dryRun: false, purge: false, seed: null, port: DEFAULT_PORT, clientId: null, githubOrigin: null, relay: null,
-    renderer: null, rendererName: null, rendererCommit: null, rendererFingerprint: null, site: null, resume: false };
+    reach: null, renderer: null, rendererName: null, rendererCommit: null, rendererFingerprint: null, site: null, resume: false };
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
     if (arg === '--yes' && known.includes(arg)) options.yes = true;
@@ -104,7 +105,11 @@ function parse(args, known) {
     // private: the website is the node's own private site, no public deployment.
     else if (arg === '--site' && known.includes(arg) && ['private', 'public'].includes(args[i + 1] ?? '')) options.site = args[++i];
     else if (arg === '--iroh-relay' && known.includes(arg) && /^(none|n0|https:\/\/\S+|http:\/\/127\.0\.0\.1:\d{1,5}\/)$/u.test(args[i + 1] ?? '')) options.relay = args[++i];
-    else throw new Error(`unknown option: ${arg}`);
+    else if (arg === '--reach' && known.includes(arg)) {
+      if (options.reach !== null) throw new Error('--reach must be given once');
+      options.reach = args[++i] ?? '';
+      resolveReach(options.reach);
+    } else throw new Error(`unknown option: ${arg}`);
   }
   return options;
 }
@@ -244,7 +249,7 @@ async function installProgram(programPath, seed) {
   }
 }
 
-async function installState(ids, { port, clientId, relay, renderer = null, publication = null }) {
+async function installState(ids, { port, clientId, relay, reach, renderer = null, publication = null }) {
   // The node's checks expect its directories in its own (primary) group.
   await ensureDirectory(LAYOUT.nodeHome, { owner: ids.node, group: ids.share, mode: 0o700 });
   for (const name of ['home', 'cache', 'config', 'iroh', 'setup', 'renderers']) {
@@ -291,6 +296,7 @@ async function installState(ids, { port, clientId, relay, renderer = null, publi
     mirror: LAYOUT.mirror,
     clientId,
     ...(relay ? { relay } : {}),
+    reach,
     // private-site: setup offers the node's own private site first (--site private).
     ...(publication ? { publication } : {}),
     // The site's own renderer, copied by install --renderer.
@@ -342,6 +348,7 @@ function plan(options) {
     `install the program and its files in ${LAYOUT.appRoot}${options.seed ? ' with the verified renderer bundle' : ''}`,
     ...(options.renderer ? [`copy the renderer ${options.renderer} to ${LAYOUT.renderers}/${options.rendererName ?? '<name>'}, owned by "${ACCOUNTS.node}"`] : []),
     ...(options.site === 'private' ? ['set up a private site: the node builds and serves it, nothing is deployed to the web'] : []),
+    ...(options.reach !== null ? [`set first-run phone and agent reach to ${options.reach}`] : []),
     `create owner-only state in ${LAYOUT.nodeHome} and ${LAYOUT.publisherHome}, and the shared job store, notes copy and publisher mirror in ${LAYOUT.shared}`,
     options.clientId ? `sign in to GitHub with the app ${options.clientId} (device code)`
       : 'let setup create your own Cyberbaser GitHub App on github.com (you click Create, then Install)',
@@ -353,7 +360,7 @@ export async function install(args, { programPath, compiled }) {
   let options;
   try {
     options = parse(args, ['--yes', '--dry-run', '--quartz-seed', '--port', '--github-client-id', '--github-origin', '--iroh-relay',
-      '--renderer', '--renderer-name', '--renderer-quartz-commit', '--renderer-fingerprint', '--site', '--resume']);
+      '--reach', '--renderer', '--renderer-name', '--renderer-quartz-commit', '--renderer-fingerprint', '--site', '--resume']);
   }
   catch (error) { process.stderr.write(`${error.message}\n`); return 2; }
   // An administrator's private umask (often 077 with sudo or pkexec) must not
@@ -403,13 +410,21 @@ export async function install(args, { programPath, compiled }) {
       return 1;
     }
   }
+  if (options.reach !== null && exists(LAYOUT.config)) {
+    process.stderr.write(`Setup already finished; change iroh.reach in ${LAYOUT.config}, then restart the node. Nothing was changed.\n`);
+    return 1;
+  }
   const relay = options.relay ?? record?.irohRelay ?? null;
+  const reach = options.reach ?? (Object.hasOwn(record ?? {}, 'reach') ? record.reach : 'direct');
+  try { resolveReach(reach); }
+  catch (error) { process.stderr.write(`Invalid install record: ${error.message}\n`); return 1; }
   const updating = record?.state === 'installed';
   // Recorded before the first change, so an install that stops part-way is
   // recognised as this installer's own on the next run.
   if (record === null) {
     await writeRecord({ version: 1, state: 'installing', accounts: { node: ACCOUNTS.node, publisher: ACCOUNTS.publisher },
-      group: ACCOUNTS.group, appRoot: LAYOUT.appRoot, port: options.port, startedAt: new Date().toISOString() });
+      group: ACCOUNTS.group, appRoot: LAYOUT.appRoot, port: options.port, reach, ...(relay ? { irohRelay: relay } : {}),
+      startedAt: new Date().toISOString() });
   }
   const since = new Date().toISOString().replace('T', ' ').slice(0, 19);
   if (updating) systemctl('stop', ...UNITS);
@@ -424,11 +439,11 @@ export async function install(args, { programPath, compiled }) {
     say(`Renderer "${renderer.name}" copied to ${renderer.directory}.`);
     if (exists(LAYOUT.config)) say('Setup already finished: the node config keeps its renderer section; edit it to switch renderers.');
   }
-  await installState(ids, { port: options.port, clientId, relay, renderer, publication });
+  await installState(ids, { port: options.port, clientId, relay, reach, renderer, publication });
   const units = await unitTexts();
   for (const [name, text] of Object.entries(units)) await writeOwned(path.join(LAYOUT.unitDir, name), text);
   await writeRecord({ version: 1, state: 'installed', accounts: { node: ACCOUNTS.node, publisher: ACCOUNTS.publisher },
-    group: ACCOUNTS.group, appRoot: LAYOUT.appRoot, port: options.port,
+    group: ACCOUNTS.group, appRoot: LAYOUT.appRoot, port: options.port, reach,
     github: { ...(clientId ? { clientId } : {}), ...(githubOrigin ? { origin: githubOrigin } : {}) }, ...(relay ? { irohRelay: relay } : {}),
     ...(publication ? { publication } : {}), ...(renderer ? { renderer } : {}), installedAt: record?.installedAt ?? new Date().toISOString(),
     updatedAt: new Date().toISOString() });

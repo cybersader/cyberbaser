@@ -12,6 +12,7 @@ import {
   isPlainObject,
 } from './json.js';
 import { validatePrivateNetworkIpv4Host } from './network.js';
+import { resolveReach } from './core/reach.js';
 import { validSocketPath } from './publisher/protocol.js';
 
 export const CONFIG_SCHEMA_VERSION = 1;
@@ -794,10 +795,10 @@ export function suggestionsEnabled(config) {
 // Off unless present with enabled: true. The relay is configuration: 'n0'
 // (n0's public relay, the explicit default when enabled), 'none' (direct
 // paths only), or one https relay URL the owner runs. Nothing falls back.
-function validateIroh(value) {
+export function validateIroh(value) {
   const keys = isPlainObject(value) ? Object.keys(value) : [];
   const input = objectAt(value, '$.iroh', ['enabled', 'stateDirectory',
-    ...['relay', 'bindAddress'].filter((key) => keys.includes(key))]);
+    ...['relay', 'reach', 'bindAddress'].filter((key) => keys.includes(key))]);
   if (typeof input.enabled !== 'boolean') fail('invalid-config', '$.iroh.enabled must be a boolean');
   const stateDirectory = absoluteCheckout(input.stateDirectory, '$.iroh.stateDirectory');
   const relay = Object.hasOwn(input, 'relay') ? input.relay : 'n0';
@@ -820,7 +821,14 @@ function validateIroh(value) {
     }
     bindAddress = input.bindAddress;
   }
-  return { enabled: input.enabled, stateDirectory, relay, ...(bindAddress === null ? {} : { bindAddress }) };
+  const reach = Object.hasOwn(input, 'reach') ? input.reach : 'direct';
+  if (bindAddress !== null && Object.hasOwn(input, 'reach')) {
+    fail('invalid-config', '$.iroh.reach and legacy $.iroh.bindAddress cannot be used together');
+  }
+  if (typeof reach !== 'string') fail('invalid-config', '$.iroh.reach must be a string');
+  try { resolveReach(reach); }
+  catch (error) { fail('invalid-config', `$.iroh.reach: ${error.message}`); }
+  return { enabled: input.enabled, stateDirectory, relay, ...(bindAddress === null ? { reach } : { bindAddress }) };
 }
 
 // Where the publisher gets its short-lived push credential. Only the provider

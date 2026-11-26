@@ -5,9 +5,11 @@ set -Eeuo pipefail
 umask 0077
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
+[[ $# -le 2 ]] || { printf 'Usage: smoke.sh [image] [reach]\n' >&2; exit 2; }
 image=$(podman image inspect --format '{{.Id}}' "${1:-localhost/cyberbaser-one-app:lab}")
+reach=${2-relay-only}
 platform=$(podman image inspect --format '{{.Os}}/{{.Architecture}}' "$image")
-printf 'Image %s %s\n' "$image" "$platform"
+printf 'Image %s %s, reach %s\n' "$image" "$platform"
 [[ $(podman info --format '{{.Host.Security.Rootless}} {{.Host.Security.SELinuxEnabled}}') == 'true true' ]] || {
   printf 'FAIL rootless Podman with SELinux confinement required.\n' >&2; exit 1;
 }
@@ -44,7 +46,7 @@ repository=lab-owner/lab-notes hosted=/tmp/forge/lab-owner/lab-notes.git
 canaries='gh[ur]_CANARY|cbsCANARY|whsCANARY|FAKEPEMCANARY'
 mkdir -m 0755 "$work/fixture"
 install -m 0644 "$REPO/apps/owner-alpha/test/fake-github.js" "$REPO/packaging/test/container/owner-browser.mjs" "$work/fixture/"
-jq --arg fake "$fake" '. + {github:{origin:$fake},irohRelay:"none"}' "$HERE/install.json" > "$work/install.json"
+jq --arg fake "$fake" --arg reach "$reach" '. + {github:{origin:$fake},irohRelay:"none",reach:$reach}' "$HERE/install.json" > "$work/install.json"
 chmod 0644 "$work/install.json"
 # Test-only Git transport shim from the native private fixture, applied only
 # to the publisher and only to its single synthetic repository's origin.
@@ -183,29 +185,37 @@ dep "$fixture" "${curl_flags[@]}" -f "$enroll" | /usr/bin/grep -E 'Or type this 
 pass 'real setup forge/owner controls; node UID denied enrollment, distinct viewer received a code'
 
 blockers=0
+ipv4=$(dep "$node" "$program" validate-reach "$reach")
 check_listeners() {
-  local phase=$1 protocol flag rows socket_addr wildcard
-  for protocol in tcp udp; do
-    flag=-lnt; [[ "$protocol" == tcp ]] || flag=-lnu
-    rows=$(dep "$node" ss -H "$flag")
-    if [[ "$phase" != welcome && "$protocol" == udp && -z "$rows" ]]; then
-      printf 'FAIL Iroh UDP was not exercised at %s\n' "$phase" >&2; exit 1
-    fi
-    wildcard=0
-    while read -r _ _ _ socket_addr _; do
+  local phase=$1 active=${2:-yes} rows socket_addr users ipv6='[::1]' family count expected pid
+  pid=$(service_status "$node" | /usr/bin/grep -E '^Pid:' | tr -cd '0-9')
+  [[ $pid =~ ^[1-9][0-9]*$ ]]
+  rows=$(dep "$node" ss -H -lnt)
+  while read -r _ _ _ socket_addr _; do
+    [[ -z "$socket_addr" || "$socket_addr" =~ ^(127\.[0-9.]+|\[::1\]):[0-9]+$ ]] || return 1
+  done <<< "$rows"
+  # Count exactly the carrier's UDP sockets, including IPv6, and verify their
+  # owner PID. Never use direct mode as a blanket exception for wildcard UDP.
+  for family in 4 6; do
+    rows=$(dep "$node" ss -H "-$family" -lnup)
+    if [[ "$active" == no ]]; then [[ -z "$rows" ]] || return 1; continue; fi
+    expected=$ipv4
+    [[ "$family" != 6 ]] || expected=$ipv6
+    [[ "$reach" != direct ]] || { expected=0.0.0.0; [[ "$family" != 6 ]] || expected='[::]'; }
+    count=0
+    while read -r _ _ _ socket_addr _ users; do
       [[ -n "$socket_addr" ]] || continue
-      if [[ ! "$socket_addr" =~ ^(127\.[0-9.]+|\[::1\]):[0-9]+$ ]]; then wildcard=$((wildcard+1)); fi
+      [[ "$users" == *"pid=$pid,"* ]] || return 1
+      [[ "${socket_addr%:*}" == "$expected" || ( "$reach" == direct && "${socket_addr%:*}" == '*' ) ]] || return 1
+      count=$((count+1))
     done <<< "$rows"
-    if ((wildcard)); then
-      printf 'BLOCKER %s: %s non-loopback %s listener(s); pod has only lo\n' "$phase" "$wildcard" "$protocol" >&2
-      blockers=1
-    else
-      pass "$phase: no non-loopback $protocol listeners"
-    fi
+    [[ "$count" == 1 ]] || return 1
   done
+  pass "$phase ($reach): all TCP loopback; $([[ "$active" == yes ]] && printf 'exact node UDP binds' || printf 'no UDP yet')"
 }
 stage='check initial setup listeners'
-check_listeners welcome
+[[ $(dep "$node" jq -r '.reach' "$state/layout.json") == "$reach" ]]
+check_listeners welcome no
 
 stage='exercise manifest bootstrap and mirror copy'
 if ! setup_link | timeout 90 podman exec -i "$fixture" bash -euc 'read -r link; bun /fixture/owner-browser.mjs setup-private "$link" "$1" /tmp/owner.cookie' bash "$repository" > "$work/browser" 2>&1; then
@@ -264,6 +274,26 @@ dep "$fixture" "${curl_flags[@]}" -f "$fake/_control/report" | jq -e '
 ' >/dev/null
 dep "$fixture" "${curl_flags[@]}" -f "$fake/_control/report" | jq -e '.pushes == [] and (.denied | all(.receive == false)) and (.fetches | length > 0)' >/dev/null
 pass 'restart kept phone step, exact checkout, owner identity, enrollment window and forge credentials; no push or changed remote ref'
+
+stage='finish setup and verify normal node listeners'
+browser() { dep "$fixture" bun /fixture/owner-browser.mjs "$@" /tmp/new.cookie; }
+browser step skip | jq -e '.ok and .step == "agent"' >/dev/null
+check_listeners agent
+browser step skip | jq -e '.ok and .step == "done"' >/dev/null
+runtime_ready() { dep "$node" test -S /run/cyberbaser/review.sock \
+  && dep "$fixture" "${curl_flags[@]}" -o /dev/null "$origin/owner/review"; }
+wait_for runtime_ready
+browser landed | jq -e '.ok' >/dev/null
+dep "$node" jq -e --arg reach "$reach" '.iroh.reach == $reach and .iroh.relay == "none"' "$state/config/owner-alpha.json" >/dev/null
+check_listeners runtime
+podman stop -t 10 "$node" >/dev/null
+[[ $(podman inspect --format '{{.State.ExitCode}}' "$node") == 0 ]]
+podman start "$node" >/dev/null
+wait_for runtime_ready
+check_listeners restarted-runtime
+[[ $(dep "$node" sha256sum "$state/iroh/iroh-node.json") == "$node_key" ]]
+[[ $(dep "$fixture" git -C "$hosted" show-ref) == "$refs" ]]
+dep "$fixture" "${curl_flags[@]}" -f "$fake/_control/report" | jq -e '.pushes == []' >/dev/null
 
 stage='verify credential confinement and image exclusions'
 no_canary() { local code; if "$@" >/dev/null; then return 1; else code=$?; [[ $code == 1 ]]; fi; }

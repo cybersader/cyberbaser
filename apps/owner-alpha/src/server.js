@@ -40,7 +40,7 @@ import { createBootstrapPrincipalAdapter, createDevicePrincipalAdapter } from '.
 import { assertOutsideVault, loadDeviceKeyRegistry } from './core/device-key-files.js';
 import { openDeviceStore } from './core/device-store.js';
 import { createPairingManager } from './core/pairing.js';
-import { bindEndpoint, CMD_ALPN, irohAudience, loadNodeSecret, PAIR_ALPN, startIrohCarrier } from './iroh-carrier.js';
+import { bindIrohNode, CMD_ALPN, irohAudience, loadNodeSecret, PAIR_ALPN, startIrohCarrier } from './iroh-carrier.js';
 import { qrMatrix, qrPath } from './qr.js';
 import { createNoteStatus } from './note-status.js';
 import { openNoteLinks } from './note-links.js';
@@ -2959,14 +2959,13 @@ export async function runOwnerAlphaServer({
     }
     if (devices !== null) {
       const secretKey = await loadNodeSecret(config.iroh.stateDirectory);
-      const endpoint = await bindEndpoint({ secretKey, relay: config.iroh.relay, bindAddress: config.iroh.bindAddress ?? null,
-        alpns: [CMD_ALPN, PAIR_ALPN] });
-      secretKey.fill(0);
-      const nodeId = endpoint.id().toString();
+      const binding = await bindIrohNode({ secretKey, config: config.iroh, alpns: [CMD_ALPN, PAIR_ALPN] })
+        .finally(() => secretKey.fill(0));
+      const nodeId = binding.endpoint.id().toString();
       const verifier = createDevicePrincipalAdapter({ registry, audience: irohAudience(nodeId), requireChannelBinding: true });
       const commands = createDeviceCommands({ config, projectRoot, verifier, proposalReview, lookupJob,
         publication: ownerPublication, noteStatus: devices.noteStatus, noteLinks: devices.links, approvals, bundleDesk });
-      iroh = startIrohCarrier({ endpoint, commands, verifier, pairing: devices.pairing, relay: config.iroh.relay });
+      iroh = startIrohCarrier({ ...binding, commands, verifier, pairing: devices.pairing });
       devices.store.setRevokeListener((key) => { if (key.irohNodeId) iroh.closePeer(key.irohNodeId); });
       devices.pairing.attachNode({ nodeId, ticket: iroh.ticket });
     }

@@ -5,6 +5,7 @@ import { appRoot, isCompiled } from './runtime.js';
 import path from 'node:path';
 import { accountProblem } from './accounts.js';
 import { platformFor } from './platform/index.js';
+import { REACH_USAGE, resolveReach } from '../../apps/owner-alpha/src/core/reach.js';
 
 export const VERSION = '0.1.0';
 
@@ -45,13 +46,20 @@ Run "cyberbaser <mode> --help" for one mode.`,
   publisher: 'Usage: cyberbaser publisher <config-file> <socket-path> <bare-repository> [--socket-group <group>]\n       cyberbaser publisher save-token <config-file> <owner/name>   (token on standard input)\n       cyberbaser publisher enroll-code | reset-owners   (as administrator: the first-device code, or start over)\nThe only process that holds forge credentials. Installed: runs as the "cyberbaser-publisher" account.',
   intake: 'Usage: cyberbaser intake --config <absolute-config-file>\nThe suggestion intake. The node starts it beside itself; it runs as the node account.',
   pair: 'Usage: cyberbaser pair <code or obsidian:// link> [--state <absolute new file>]\nPairs an agent on this machine with an owner node; confirm the four words on the owner screen.',
-  install: 'Usage: cyberbaser install [--yes] [--dry-run] [--quartz-seed <archive>] [--port <n>] [--github-client-id <id>] [--github-origin <url>] [--iroh-relay none|n0|<https url>|http://127.0.0.1:<port>/]\n         [--site private|public] [--renderer <dir> --renderer-name <name> --renderer-quartz-commit <sha> --renderer-fingerprint <a,b,c | @file>]\nInstalls Cyberbaser as a background service. Asks for the admin password once (pkexec or sudo).\nCreates the accounts "cyberbaser" (node) and "cyberbaser-publisher" (publisher), owner-only state, and the services.\n--github-client-id: a GitHub App you registered by hand (device flow). Without it, setup creates your own app on GitHub.\n--site private: the website is the node\'s own private site; nothing is deployed to the web.\n--renderer: the site\'s own renderer, copied into the node\'s state and owned by the node account.',
+  install: `Usage: cyberbaser install [--yes] [--dry-run] [--quartz-seed <archive>] [--port <n>] [--github-client-id <id>] [--github-origin <url>] [--iroh-relay none|n0|<https url>|http://127.0.0.1:<port>/]
+         [--reach ${REACH_USAGE}] [--site private|public] [--renderer <dir> --renderer-name <name> --renderer-quartz-commit <sha> --renderer-fingerprint <a,b,c | @file>]
+Installs Cyberbaser as a background service. Asks for the admin password once (pkexec or sudo).
+Creates the accounts "cyberbaser" (node) and "cyberbaser-publisher" (publisher), owner-only state, and the services.
+--github-client-id: a GitHub App you registered by hand (device flow). Without it, setup creates your own app on GitHub.
+--reach: phone/agent ingress for first-run setup and the installed node (default: direct).
+--site private: the website is the node's own private site; nothing is deployed to the web.
+--renderer: the site's own renderer, copied into the node's state and owned by the node account.`,
   uninstall: 'Usage: cyberbaser uninstall [--purge] [--yes] [--dry-run]\nStops and removes the services and program files. Keeps your data and accounts unless --purge.',
   status: 'Usage: cyberbaser status\nShows what is installed, which services run, and the local address.',
 };
 
-// Run by the installed services only; not listed in help.
-const INTERNAL = Object.freeze(['service-node', 'service-publisher', 'sync-publisher-config']);
+// Used by the installed services and container entrypoint, not listed in help.
+const INTERNAL = Object.freeze(['service-node', 'service-publisher', 'sync-publisher-config', 'validate-reach']);
 
 function out(text) { process.stdout.write(`${text}\n`); }
 
@@ -136,6 +144,13 @@ export async function main(argv) {
     return;
   }
   if (!INTERNAL.includes(mode) && (args.includes('--help') || args.includes('-h'))) { out(HELP[mode]); return; }
+  if (mode === 'validate-reach') {
+    try {
+      if (args.length !== 1) throw new Error('Expected one reach setting.');
+      out(resolveReach(args[0]).ipv4 ?? '');
+    } catch (error) { process.stderr.write(`${error.message}\n`); process.exitCode = 2; }
+    return;
+  }
   if (mode === 'service-node') {
     // The installed node service: first-run setup until the config exists.
     const { nodeServiceArgs } = await import('./platform/linux-systemd.js');

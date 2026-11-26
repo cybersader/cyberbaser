@@ -12,7 +12,7 @@ const image = await read('Containerfile');
 test('one-app uses the native paths, default ports and distinct service roles', () => {
   expect(install).toEqual({ version: 1, state: 'container', appRoot: LAYOUT.appRoot, port: 4317,
     accounts: { node: DEFAULT_ACCOUNTS.node, publisher: DEFAULT_ACCOUNTS.publisher },
-    group: DEFAULT_ACCOUNTS.group, publication: 'private-site' });
+    group: DEFAULT_ACCOUNTS.group, publication: 'private-site', reach: 'direct' });
   expect(enrollPagePort(install.port)).toBe(4319);
   const { node, publisher } = compose.services;
   expect(node.command).toEqual(['service-node']);
