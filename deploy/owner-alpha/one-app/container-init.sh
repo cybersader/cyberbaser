@@ -1,46 +1,71 @@
 #!/bin/bash
-# One-shot, networkless volume initializer for the one-app image (runs as
-# container root with only CAP_CHOWN and CAP_FOWNER). Same layout and modes as
-# the Linux installer: owner-only private state, a shared job store and notes
-# copy in the share group, the publisher socket directory reachable by the group.
-# Without DAC override, every directory is created first and handed over
-# deepest first, so a parent is never closed before its children are done.
 set -euo pipefail
-LAYOUT=(
-  "/var/lib/cyberbaser cyberbaser:cyberbaser-share 0700"
-  "/var/lib/cyberbaser/home cyberbaser:cyberbaser-share 0700"
-  "/var/lib/cyberbaser/cache cyberbaser:cyberbaser-share 0700"
-  "/var/lib/cyberbaser/config cyberbaser:cyberbaser-share 0700"
-  "/var/lib/cyberbaser/iroh cyberbaser:cyberbaser-share 0700"
-  "/var/lib/cyberbaser/setup cyberbaser:cyberbaser-share 0700"
-  "/var/lib/cyberbaser/run cyberbaser:cyberbaser-share 0700"
-  "/var/lib/cyberbaser-shared/workspace cyberbaser:cyberbaser-share 0770"
-  "/var/lib/cyberbaser-shared/workspace/owner-alpha cyberbaser:cyberbaser-share 0710"
-  "/var/lib/cyberbaser-shared/workspace/owner-alpha/store cyberbaser:cyberbaser-share 0710"
-  "/var/lib/cyberbaser-shared/workspace/owner-alpha/store/jobs cyberbaser:cyberbaser-share 0770"
-  "/var/lib/cyberbaser-shared/notes cyberbaser:cyberbaser-share 0770"
-  "/var/lib/cyberbaser-publisher cyberbaser-publisher:cyberbaser-share 0700"
-  "/run/cyberbaser-publisher cyberbaser-publisher:cyberbaser-share 0710"
-)
-for entry in "${LAYOUT[@]}"; do read -r path _ _ <<<"$entry"; mkdir -p "$path"; done
-# What first-run setup needs (the installer writes the same file on a desktop).
-if [ ! -e /var/lib/cyberbaser/layout.json ]; then
-  cat > /var/lib/cyberbaser/layout.json <<'JSON'
-{
-  "listen": { "host": "127.0.0.1", "port": 4317 },
-  "reviewSocket": "/var/lib/cyberbaser/run/review.sock",
-  "irohStateDirectory": "/var/lib/cyberbaser/iroh",
-  "forgeStateDirectory": "/var/lib/cyberbaser-publisher/forge",
-  "configFile": "/var/lib/cyberbaser/config/owner-alpha.json",
-  "checkout": "/var/lib/cyberbaser-shared/notes/notes"
+program=/opt/cyberbaser/bin/cyberbaser
+case "${1:-}" in
+  service-node) umask 0007; exec "$program" "$@" ;;
+  service-publisher) umask 0027; exec "$program" "$@" ;;
+  init-volumes) ;;
+  *) exec "$program" "$@" ;;
+esac
+
+# Run once while the services are stopped, in an isolated container with
+# CHOWN, DAC_OVERRIDE and FOWNER. Do not repair, follow, or recursively chown
+# unexpected state. Only an empty, root-owned volume root can be initialized.
+fail() { printf '%s\n' "$1" >&2; exit 1; }
+[[ $# == 1 && $EUID == 0 ]] || fail 'Volume initialization requires container root.'
+umask 0077
+record=/etc/cyberbaser/install.json
+[[ -f "$record" && ! -L "$record" && $(stat -c '%u:%g:%a:%h' "$record") == 0:0:644:1 ]] || fail 'Unsafe install record.'
+layout=$(mktemp /tmp/cyberbaser-layout.XXXXXX)
+trap 'rm -f -- "$layout"' EXIT
+jq -e '
+  select(type == "object" and ((keys - ["version","state","accounts","group","appRoot","port","publication","irohRelay","github"]) == []))
+  | select(.version == 1 and .state == "container" and .accounts == {node:"cyberbaser",publisher:"cyberbaser-publisher"}
+    and .group == "cyberbaser-share" and .appRoot == "/opt/cyberbaser" and .publication == "private-site")
+  | select(.port | type == "number" and . == floor and . >= 1024 and . <= 65533)
+  | select((.irohRelay // "n0") | test("^(none|n0|http://127\\.0\\.0\\.1:[0-9]{1,5}/)$"))
+  | select((.github // {}) | . == {} or (keys == ["origin"] and (.origin | test("^http://127\\.0\\.0\\.1:[0-9]{1,5}$"))))
+  | {listen:{host:"127.0.0.1",port:.port}, reviewSocket:"/run/cyberbaser/review.sock",
+    irohStateDirectory:"/var/lib/cyberbaser/iroh", forgeStateDirectory:"/var/lib/cyberbaser-publisher/forge",
+    configFile:"/var/lib/cyberbaser/config/owner-alpha.json", checkout:"/var/lib/cyberbaser-shared/notes/notes",
+    mirror:"/var/lib/cyberbaser-shared/mirror/notes.git", clientId:null, publication,
+    relay:(.irohRelay // "n0")}
+' "$record" > "$layout" || fail 'Invalid container install record.'
+
+dir() {
+  local path=$1 uid=$2 mode=$3 kind=${4:-child} metadata
+  [[ ! -L "$path" ]] || fail "Unexpected directory link: $path"
+  if [[ "$kind" == volume ]]; then
+    mountpoint -q -- "$path" || fail "Missing named volume: $path"
+  elif [[ ! -e "$path" ]]; then
+    mkdir -- "$path"
+  fi
+  [[ -d "$path" ]] || fail "Expected directory: $path"
+  metadata=$(stat -c '%u:%g:%a' -- "$path")
+  [[ "$metadata" != "$uid:65530:$mode" ]] || return 0
+  [[ "$metadata" =~ ^0:0:(700|755)$ && -z $(find "$path" -mindepth 1 -maxdepth 1 -print -quit) ]] || fail "Unexpected directory metadata or contents: $path"
+  chmod -- "$mode" "$path"
+  chown -- "$uid:65530" "$path"
 }
-JSON
-  chmod 0600 /var/lib/cyberbaser/layout.json
-  chown cyberbaser:cyberbaser-share /var/lib/cyberbaser/layout.json
+node=/var/lib/cyberbaser
+shared=/var/lib/cyberbaser-shared
+dir "$node" 65532 700 volume
+for child in home cache config iroh setup renderers; do dir "$node/$child" 65532 700; done
+dir "$shared/workspace" 65532 770 volume
+dir "$shared/workspace/owner-alpha" 65532 710
+dir "$shared/workspace/owner-alpha/store" 65532 710
+dir "$shared/workspace/owner-alpha/store/jobs" 65532 770
+dir "$shared/notes" 65532 770 volume
+dir "$shared/mirror" 65533 750 volume
+dir /var/lib/cyberbaser-publisher 65533 700 volume
+dir /run/cyberbaser-publisher 65533 710 volume
+
+file="$node/layout.json"
+[[ ! -L "$file" ]] || fail 'Unexpected setup layout link.'
+if [[ -e "$file" ]]; then
+  [[ -f "$file" && $(stat -c '%u:%g:%a:%h' "$file") == 65532:65530:600:1 ]] && cmp -s "$file" "$layout" || fail 'Setup layout differs from the install record.'
+else
+  (set -o noclobber; /usr/bin/cat "$layout" > "$file")
+  chown 65532:65530 "$file"
 fi
-for ((i=${#LAYOUT[@]} - 1; i >= 0; i--)); do
-  read -r path owner mode <<<"${LAYOUT[$i]}"
-  chmod "$mode" "$path"
-  chown "$owner" "$path"
-done
-echo "cyberbaser volumes ready"
+printf 'Cyberbaser volumes ready.\n'
