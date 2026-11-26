@@ -1,0 +1,21 @@
+---
+title: Configurable phone and agent reach passes the one-app listener gate
+description: The same reach setting controls first-run pairing and the normal node, with three verified listener policies in the networkless lab.
+status: log
+---
+
+## What changed
+
+The R23 owner decision is now implemented: `cyberbaser install --reach` (or `reach` in the one-app install record) selects how the phone and agent carrier listens. The setup layout carries that choice into pairing and the generated node config (`iroh.reach`). The flag is for first run. An existing node keeps its config across installer updates. Reach changes only the carrier, not HTTP listener or publisher authorization policy.
+
+- `direct` remains the default. Iroh keeps its wildcard UDP sockets, and the chosen relay behavior is unchanged.
+- `relay-only` binds Iroh UDP to `127.0.0.1` and `::1` only and omits direct addresses from pairing tickets. Off-host use needs a working relay.
+- `private-address:<ipv4>` accepts one exact owner-chosen RFC 1918, CGNAT, or loopback host address, never `0.0.0.0` or a public address. Iroh binds to that IPv4 and restricts its IPv6 socket to loopback. Tickets advertise only the selected IPv4 as a direct address. An unassigned address fails without a wildcard fallback. This selects an address, not a VPN or overlay vendor.
+
+The Node Iroh binding opens IPv4 and IPv6 independently. Setting IPv4 alone still leaves an IPv6 wildcard. Setup and normal runtime now use the same adapter to constrain both families. The shared reach parser and provider conformance tests separate the binding contract from Iroh itself. No new carrier provider was added.
+
+## What the lab proved
+
+A rootless, SELinux-confined Podman pod used `--network none`, a throwaway repository and fake GitHub. The same local image passed all three listener policies at welcome, phone, restarted phone, agent, normal node handoff and normal-node restart. Only the Iroh UDP sockets were non-loopback in direct mode; relay-only had zero non-loopback TCP or UDP listeners; the private-address fixture selected `127.0.0.2` and observed no wildcard sockets. The in-process setup handoff can leave the two closed native setup sockets bound briefly or until collection. The gate accounts for those exact previously verified sockets and requires the new node sockets as well; after a cold restart it requires exactly one socket per family.
+
+Setup completed with no paired devices, no push and no changes to the fake remote. The credential and mount isolation, unchanged node identity, and renderer namespace checks also passed. The lab set `irohRelay` to `none`, so this proves binding, not relay connectivity, overlay traffic, an actual phone pairing, or home-server deployment. A working relay or separately validated direct topology and the platform's remote setup and enrolment handoffs still need proof before live use.

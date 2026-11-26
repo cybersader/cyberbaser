@@ -9,7 +9,7 @@ REPO="$(cd "$HERE/../../.." && pwd)"
 image=$(podman image inspect --format '{{.Id}}' "${1:-localhost/cyberbaser-one-app:lab}")
 reach=${2-relay-only}
 platform=$(podman image inspect --format '{{.Os}}/{{.Architecture}}' "$image")
-printf 'Image %s %s, reach %s\n' "$image" "$platform"
+printf 'Image %s %s, reach %s\n' "$image" "$platform" "$reach"
 [[ $(podman info --format '{{.Host.Security.Rootless}} {{.Host.Security.SELinuxEnabled}}') == 'true true' ]] || {
   printf 'FAIL rootless Podman with SELinux confinement required.\n' >&2; exit 1;
 }
@@ -186,13 +186,16 @@ pass 'real setup forge/owner controls; node UID denied enrollment, distinct view
 
 blockers=0
 ipv4=$(dep "$node" "$program" validate-reach "$reach")
+declare -A setup_udp=()
 check_listeners() {
   local phase=$1 active=${2:-yes} rows socket_addr users ipv6='[::1]' family count expected pid
   pid=$(service_status "$node" | /usr/bin/grep -E '^Pid:' | tr -cd '0-9')
   [[ $pid =~ ^[1-9][0-9]*$ ]]
   rows=$(dep "$node" ss -H -lnt)
   while read -r _ _ _ socket_addr _; do
-    [[ -z "$socket_addr" || "$socket_addr" =~ ^(127\.[0-9.]+|\[::1\]):[0-9]+$ ]] || return 1
+    if [[ -n "$socket_addr" && ! "$socket_addr" =~ ^(127\.[0-9.]+|\[::1\]):[0-9]+$ ]]; then
+      printf 'FAIL %s: unexpected TCP listener %s\n' "$phase" "$socket_addr" >&2; return 1
+    fi
   done <<< "$rows"
   # Count exactly the carrier's UDP sockets, including IPv6, and verify their
   # owner PID. Never use direct mode as a blanket exception for wildcard UDP.
@@ -205,11 +208,22 @@ check_listeners() {
     count=0
     while read -r _ _ _ socket_addr _ users; do
       [[ -n "$socket_addr" ]] || continue
-      [[ "$users" == *"pid=$pid,"* ]] || return 1
-      [[ "${socket_addr%:*}" == "$expected" || ( "$reach" == direct && "${socket_addr%:*}" == '*' ) ]] || return 1
+      if [[ "$users" != *"pid=$pid,"* ]]; then
+        printf 'FAIL %s: UDP IPv%s listener %s does not belong to the node\n' "$phase" "$family" "$socket_addr" >&2; return 1
+      fi
+      if [[ "${socket_addr%:*}" != "$expected" && ! ( "$reach" == direct && "${socket_addr%:*}" == '*' ) ]]; then
+        printf 'FAIL %s: UDP IPv%s listener %s not on %s\n' "$phase" "$family" "$socket_addr" "$expected" >&2; return 1
+      fi
+      # The native endpoint can retain its exact closed setup sockets until
+      # the in-process handoff's handles are collected. Check their addresses
+      # above too, but require one new socket per family from the normal node.
+      if [[ "$phase" == runtime && "$socket_addr" == "${setup_udp[$family]}" ]]; then continue; fi
+      if [[ "$phase" == agent ]]; then setup_udp[$family]=$socket_addr; fi
       count=$((count+1))
     done <<< "$rows"
-    [[ "$count" == 1 ]] || return 1
+    if [[ "$count" != 1 ]]; then
+      printf 'FAIL %s: expected one UDP IPv%s socket, got %s\n' "$phase" "$family" "$count" >&2; return 1
+    fi
   done
   pass "$phase ($reach): all TCP loopback; $([[ "$active" == yes ]] && printf 'exact node UDP binds' || printf 'no UDP yet')"
 }
@@ -257,13 +271,15 @@ wait_for fresh_link
 # opens the saved phone step without registering or authorizing another App.
 [[ $(dep "$fixture" bash -euc 'curl -sS --max-time 3 -H "Cookie: $(/usr/bin/cat /tmp/owner.cookie)" -o /dev/null -w "%{http_code}" "$1/setup"' bash "$origin") == 403 ]]
 setup_link | podman exec -i "$fixture" bash -euc '
+  umask 0077
   read -r link
   curl -fsS --max-time 3 "$link" | /usr/bin/grep -F ">Start setup</button>" >/dev/null
   code=$(printf "token=%s" "${link##*token=}" | curl -fsS --max-time 3 -H "Origin: $1" \
-    -H "Content-Type: application/x-www-form-urlencoded" --data-binary @- -c /tmp/new.cookie \
+    -H "Content-Type: application/x-www-form-urlencoded" --data-binary @- -c /tmp/new.jar \
     -o /dev/null -w "%{http_code}" "$1/setup/start")
   [[ "$code" == 303 ]]
-  curl -fsS --max-time 3 -b /tmp/new.cookie "$1/setup" | /usr/bin/grep -F "data-step=\"phone\"" >/dev/null
+  curl -fsS --max-time 3 -b /tmp/new.jar "$1/setup" | /usr/bin/grep -F "data-step=\"phone\"" >/dev/null
+  /usr/bin/grep -E "^#HttpOnly_" /tmp/new.jar | cut -f6,7 | tr "\t" "=" > /tmp/new.cookie
 ' bash "$origin"
 [[ $(dep "$node" sha256sum "$state/iroh/iroh-node.json") == "$node_key" ]]
 check_listeners restarted-phone
@@ -282,14 +298,20 @@ check_listeners agent
 browser step skip | jq -e '.ok and .step == "done"' >/dev/null
 runtime_ready() { dep "$node" test -S /run/cyberbaser/review.sock \
   && dep "$fixture" "${curl_flags[@]}" -o /dev/null "$origin/owner/review"; }
-wait_for runtime_ready
+wait_for_runtime() {
+  if ! wait_for runtime_ready; then
+    podman logs "$node" 2>&1 | /usr/bin/grep -E '^(Cyberbaser could not start after setup|Owner alpha startup failed): [a-z0-9-]+$' >&2 || :
+    return 1
+  fi
+}
+wait_for_runtime
 browser landed | jq -e '.ok' >/dev/null
 dep "$node" jq -e --arg reach "$reach" '.iroh.reach == $reach and .iroh.relay == "none"' "$state/config/owner-alpha.json" >/dev/null
 check_listeners runtime
 podman stop -t 10 "$node" >/dev/null
 [[ $(podman inspect --format '{{.State.ExitCode}}' "$node") == 0 ]]
 podman start "$node" >/dev/null
-wait_for runtime_ready
+wait_for_runtime
 check_listeners restarted-runtime
 [[ $(dep "$node" sha256sum "$state/iroh/iroh-node.json") == "$node_key" ]]
 [[ $(dep "$fixture" git -C "$hosted" show-ref) == "$refs" ]]
