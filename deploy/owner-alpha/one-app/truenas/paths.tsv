@@ -1,0 +1,13 @@
+# Relative to the approved new dataset root. Mode is octal. No recursive changes.
+.	0	0	0700
+node	0	0	0700
+node/state	65532	65530	0700
+node/config	65532	65530	0700
+publisher	0	0	0700
+publisher/state	65533	65530	0700
+publisher/config	65533	65530	0700
+shared	0	0	0700
+shared/workspace	65532	65530	0770
+shared/notes	65532	65530	0770
+shared/mirror	65533	65530	0750
+shared/publisher-sockets	65533	65530	0710

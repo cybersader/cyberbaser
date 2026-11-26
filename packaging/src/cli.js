@@ -3,7 +3,7 @@
 // this file only selects it, checks the account it runs under, and fixes argv.
 import { appRoot, isCompiled } from './runtime.js';
 import path from 'node:path';
-import { accountProblem } from './accounts.js';
+import { accountProblem, readInstallRecord } from './accounts.js';
 import { platformFor } from './platform/index.js';
 import { REACH_USAGE, resolveReach } from '../../apps/owner-alpha/src/core/reach.js';
 
@@ -59,7 +59,7 @@ Creates the accounts "cyberbaser" (node) and "cyberbaser-publisher" (publisher),
 };
 
 // Used by the installed services and container entrypoint, not listed in help.
-const INTERNAL = Object.freeze(['service-node', 'service-publisher', 'sync-publisher-config', 'sync-container-publisher-config', 'validate-reach']);
+const INTERNAL = Object.freeze(['service-node', 'service-publisher', 'sync-publisher-config', 'sync-container-publisher-config', 'watch-container-publisher-config', 'validate-reach']);
 
 function out(text) { process.stdout.write(`${text}\n`); }
 
@@ -154,7 +154,9 @@ export async function main(argv) {
   if (mode === 'service-node') {
     // The installed node service: first-run setup until the config exists.
     const { nodeServiceArgs } = await import('./platform/linux-systemd.js');
-    const next = nodeServiceArgs();
+    const truenas = args.length === 1 && args[0] === '--truenas' && readInstallRecord()?.state === 'container';
+    if (!truenas && args.length !== 0) { process.exitCode = 2; return; }
+    const next = nodeServiceArgs({ truenas });
     return guarded(next.mode, next.args);
   }
   if (mode === 'service-publisher') {
@@ -162,8 +164,48 @@ export async function main(argv) {
     const problem = accountProblem('publisher');
     if (problem !== null) { process.stderr.write(`cyberbaser publisher: ${problem}\n`); process.exitCode = 1; return; }
     const { runPublisherService } = await import('./platform/linux-systemd.js');
-    try { process.exitCode = await runPublisherService({ appRoot: appRoot() }); }
-    catch (error) { process.stderr.write(`cyberbaser publisher failed${error?.code ? `: ${error.code}` : ''}\n`); process.exitCode = 1; }
+    let dispose;
+    try {
+      const controller = new AbortController();
+      if (args.length > 0) {
+        if (args.length !== 1 || args[0] !== '--container-reload' || readInstallRecord()?.state !== 'container') {
+          throw new Error('invalid publisher service mode');
+        }
+        const { watchContainerConfig } = await import('./platform/container-config.js');
+        dispose = watchContainerConfig({ onChange() {
+          process.stdout.write('Publisher config changed; restarting.\n');
+          controller.abort();
+        } });
+      }
+      process.exitCode = await runPublisherService({ appRoot: appRoot(), signal: controller.signal, privateEnrollment: args.length > 0 });
+    } catch (error) { process.stderr.write(`cyberbaser publisher failed${error?.code ? `: ${error.code}` : ''}\n`); process.exitCode = 1; }
+    finally { dispose?.(); }
+    return;
+  }
+  if (mode === 'watch-container-publisher-config') {
+    if (args.length !== 0 || process.getuid?.() !== 0 || readInstallRecord()?.state !== 'container') {
+      process.exitCode = 2;
+      return;
+    }
+    const { reconcileContainerConfig } = await import('./platform/container-config.js');
+    let active = true;
+    let reported = false;
+    const stop = () => { active = false; };
+    process.on('SIGTERM', stop);
+    process.on('SIGINT', stop);
+    try {
+      while (active) {
+        try { await reconcileContainerConfig(); reported = false; }
+        catch {
+          if (!reported) process.stderr.write('Container publisher config was not reconciled.\n');
+          reported = true;
+        }
+        if (active) await Bun.sleep(1000);
+      }
+    } finally {
+      process.off('SIGTERM', stop);
+      process.off('SIGINT', stop);
+    }
     return;
   }
   if (mode === 'sync-container-publisher-config') {

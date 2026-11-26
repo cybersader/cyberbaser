@@ -12,7 +12,10 @@
 // Prints one JSON line. Synthetic data only.
 import { readFileSync, writeFileSync } from 'node:fs';
 
-const ORIGIN = 'http://127.0.0.1:4317';
+const PORT = Number(process.env.ONE_APP_TEST_PORT ?? 4317);
+const ORIGIN = `http://127.0.0.1:${PORT}`;
+const READER = `http://127.0.0.1:${PORT + 1}`;
+const ENROLL = `http://127.0.0.1:${PORT + 2}`;
 const args = process.argv.slice(2);
 const command = args[0];
 const rest = args.slice(1, -1);
@@ -194,7 +197,7 @@ async function setupPrivate(link, repository) {
   const publishYmlKept = notesPage.includes('decides what goes on your website');
   if ((await step('continue')).value?.step !== 'website') failed('continue-website', 'refused');
   const website = (await call('/setup')).text;
-  const privateOffered = website.includes('Keep it private') && website.includes('http://127.0.0.1:4318/');
+  const privateOffered = website.includes('Keep it private') && website.includes(`${READER}/`);
   if ((await step('private')).value?.step !== 'phone') failed('website', 'refused');
   done({ ok: true, count: notes.count, publishYmlKept, privateOffered, manifest });
 }
@@ -207,8 +210,8 @@ async function setupStep(action) {
 
 async function setupPhonePage() {
   const page = await call('/setup');
-  done({ ok: page.status === 200, access: /name="access" value="([a-z]+)" checked/u.exec(page.text)?.[1] ?? null, enrolFrame: page.text.includes('src="http://127.0.0.1:4319/enroll"'),
-    frameAllowed: (page.headers.get('content-security-policy') ?? '').includes('frame-src http://127.0.0.1:4319'),
+  done({ ok: page.status === 200, access: /name="access" value="([a-z]+)" checked/u.exec(page.text)?.[1] ?? null, enrolFrame: page.text.includes(`src="${ENROLL}/enroll"`),
+    frameAllowed: (page.headers.get('content-security-policy') ?? '').includes(`frame-src ${ENROLL}`),
     paired: page.text.includes('is paired'), starterNote: page.text.includes('Approvals waiting') });
 }
 

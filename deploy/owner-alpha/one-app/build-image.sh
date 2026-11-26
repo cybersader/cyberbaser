@@ -15,9 +15,11 @@ CTX="$STAGE/context"
 
 # packResources() lists tracked AND untracked files. Build in a fresh Git index
 # containing only committed release inputs, not the working tree or its caches.
-revision="$(git -C "$REPO" rev-parse HEAD)"
+revision="$(git -C "$REPO" rev-parse --verify "${CYBERBASER_BUILD_REVISION:-HEAD}^{tree}")"
 git -C "$REPO" archive "$revision" -- packaging/build.js packaging/src packaging/systemd \
-  apps/owner-alpha apps/account-free-intake packages renderers/quartz-cyberbase | tar -x -C "$SRC"
+  apps/owner-alpha apps/account-free-intake packages renderers/quartz-cyberbase \
+  deploy/owner-alpha/one-app/{Containerfile,container-init.sh,install.json,render-offline.c} | tar -x -C "$SRC"
+PACK="$SRC/deploy/owner-alpha/one-app"
 GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$SRC" init -q --template=
 GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$SRC" add -f -- packaging apps packages renderers
 cp -- "$SEED" "$CTX/quartz-seed.tar.zst"
@@ -48,9 +50,16 @@ ln -s apps/owner-alpha/node_modules "$SRC/node_modules"
   const packed = capture(["tar", "--quoting-style=literal", "-tf", "packaging/dist/resources.tar"]).split("\n").filter(Boolean).sort();
   if (JSON.stringify(expected) !== JSON.stringify(packed)) throw new Error("Release resource list differs from tracked allowlist");
 ')
-cp -- "$SRC/packaging/dist/resources.tar" "$HERE/Containerfile" "$HERE/install.json" "$HERE/container-init.sh" "$CTX/"
-# Build input is exactly these five files. Neither the snapshot, the lab files
-# nor the host checkout is sent to the container builder.
+cp -- "$SRC/packaging/dist/resources.tar" "$PACK/Containerfile" "$PACK/install.json" "$PACK/container-init.sh" "$CTX/"
+case "${CYBERBASER_IMAGE_FORM:-podman}" in
+  podman) ;;
+  truenas) jq '.port = 4517 | .reach = "relay-only"' "$PACK/install.json" > "$CTX/install.json" ;;
+  *) printf 'Unknown image form.\n' >&2; exit 2 ;;
+esac
+cc -std=c11 -O2 -Wall -Wextra -Werror -fPIE -pie -fstack-protector-strong \
+  -Wl,-z,relro,-z,now "$PACK/render-offline.c" -o "$CTX/render-offline"
+# Only the allowlisted build artifacts are sent to the container builder.
+# Neither the snapshot, lab fixture files nor the host checkout enters it.
 podman build --pull=never --force-rm --layers=false -t "$TAG" --iidfile "$STAGE/image-id" -f "$CTX/Containerfile" "$CTX" >&2
 id=$(<"$STAGE/image-id")
 [[ "$id" =~ ^(sha256:)?[0-9a-f]{64}$ ]]

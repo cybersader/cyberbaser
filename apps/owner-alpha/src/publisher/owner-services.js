@@ -28,7 +28,7 @@ export async function startOwnerServices({ owners, socketPath, uid, socketGroup 
     // Nobody can approve yet: open (or keep) the first-device window and say so
     // on the publisher's own log, which the node cannot read.
     const window = await ownerKeys.ensureEnrollment();
-    if (window?.created) {
+    if (window?.created && !owners.privateEnrollment) {
       log(`No device can publish yet. Set one up with this code (valid for one hour): ${window.code}`);
       log(`  or scan: ${window.uri}`);
     } else if (window !== null) {

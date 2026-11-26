@@ -31,27 +31,34 @@ import { storeContextFromConfig } from '../src/store.js';
 // owners: signed publish (src/publisher/owner-services.js). The owner-key
 // directory is the publisher's own state, given here, never read from the config.
 export async function runPublisherCli({ configFile, socketPath, repository, projectRoot = DEFAULT_OWNER_ALPHA_PROJECT_ROOT, socketGroup = null,
-  forgeOptions = undefined, owners = null }) {
+  forgeOptions = undefined, owners = null, signal = null }) {
+  const lifecycle = publisherLifecycle(signal);
   let publisher;
-  let stopRequested = false;
-  let stopped;
-  const stopping = new Promise((resolve) => { stopped = resolve; });
-  const stop = () => { stopRequested = true; stopped(); };
-  process.once('SIGTERM', stop);
-  process.once('SIGINT', stop);
   try {
     const config = await loadOwnerAlphaConfig(configFile);
     publisher = await startPublisher({ config, context: storeContextFromConfig(config, projectRoot), socketPath, repository, socketGroup,
       owners, ...(forgeOptions === undefined ? {} : { forgeOptions }) });
-    if (!stopRequested) process.stdout.write('owner-alpha publisher ready\n');
-    await stopping;
+    if (!lifecycle.stopped()) process.stdout.write('owner-alpha publisher ready\n');
+    await lifecycle.stopping;
   } finally {
-    try { await publisher?.close(); }
-    finally {
-      process.off('SIGTERM', stop);
-      process.off('SIGINT', stop);
-    }
+    try { await publisher?.close(); } finally { lifecycle.dispose(); }
   }
+}
+
+function publisherLifecycle(signal) {
+  let stopped = false;
+  let resolve;
+  const stopping = new Promise((done) => { resolve = done; });
+  const stop = () => { stopped = true; resolve(); };
+  if (signal?.aborted) stop();
+  signal?.addEventListener('abort', stop, { once: true });
+  process.once('SIGTERM', stop);
+  process.once('SIGINT', stop);
+  return { stopping, stopped: () => stopped, dispose() {
+    signal?.removeEventListener('abort', stop);
+    process.off('SIGTERM', stop);
+    process.off('SIGINT', stop);
+  } };
 }
 
 // The pasted-token fallback. Run as the publisher's account; the token is read
@@ -75,18 +82,24 @@ export async function saveTokenCli({ configFile, repository, input = process.std
 // approval through the owner control socket, and the first device is enrolled
 // here, before the node has any config.
 export async function runSetupForgeCli({ socketPath, stateDirectory, clientId, mirror = null, checkout = null, socketGroup = null,
-  http = undefined, uid = process.getuid(), owners = null }) {
+  http = undefined, uid = process.getuid(), owners = null, signal = null }) {
   const access = createGithubAppAccess({ clientId, stateDirectory, remoteUrl: null, ...(http === undefined ? {} : { http }) });
-  const held = mirror === null ? null : await createMirror({ directory: mirror, uid, forgeAccess: access });
-  const control = await startForgeControl({ socketPath, forgeAccess: access, uid, socketGroup, mirror: held, starterCheckout: checkout,
-    starterSigned: owners !== null && (owners.mode ?? 'enforce') === 'enforce' });
-  const ownerServices = owners === null ? null
-    : await startOwnerServices({ owners, socketPath, uid, socketGroup, mirror: held, starterCheckout: checkout });
-  process.stdout.write('owner-alpha publisher ready for setup\n');
-  await new Promise((resolve) => { process.once('SIGTERM', resolve); process.once('SIGINT', resolve); });
-  access.close();
-  await ownerServices?.close();
-  await control.close();
+  const lifecycle = publisherLifecycle(signal);
+  let control;
+  let ownerServices;
+  try {
+    const held = mirror === null ? null : await createMirror({ directory: mirror, uid, forgeAccess: access });
+    control = await startForgeControl({ socketPath, forgeAccess: access, uid, socketGroup, mirror: held, starterCheckout: checkout,
+      starterSigned: owners !== null && (owners.mode ?? 'enforce') === 'enforce' });
+    ownerServices = owners === null ? null
+      : await startOwnerServices({ owners, socketPath, uid, socketGroup, mirror: held, starterCheckout: checkout });
+    if (!lifecycle.stopped()) process.stdout.write('owner-alpha publisher ready for setup\n');
+    await lifecycle.stopping;
+  } finally {
+    lifecycle.dispose();
+    access.close();
+    try { await ownerServices?.close(); } finally { await control?.close(); }
+  }
 }
 
 // Administrator commands, run as the publisher account. They print the code

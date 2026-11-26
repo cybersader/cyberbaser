@@ -3,9 +3,14 @@
 # the lab into the persistent, node-only renderer slot, never the app image.
 set -euo pipefail
 [[ $# == 2 && "$CYBERBASER_SOURCE_PROVENANCE" == enabled && "$CYBERBASER_EDIT_LINK_MODE" == owner ]]
-[[ -z $(ip -4 route show) && -z $(ip -6 route show) ]]
-# This succeeds in the node's normal namespace; a separate network namespace
-# cannot even reach that same loopback listener.
+if routes=$(ip -4 route show 2>&1); then
+  [[ -z "$routes" && -z $(ip -6 route show) ]]
+else
+  # The Docker launcher denies AF_NETLINK itself.
+  [[ "$routes" == *'Operation not permitted'* ]]
+fi
+# This succeeds in the node's normal process; the offline build must not
+# reach that same loopback listener.
 if curl -fsS --noproxy '*' --max-time 2 http://127.0.0.1:48080/_control/report >/dev/null 2>&1; then exit 1; fi
 bun - "$@" <<'JS'
 import { mkdir, readFile, writeFile } from 'node:fs/promises';

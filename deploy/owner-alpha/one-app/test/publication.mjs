@@ -24,7 +24,8 @@ const out = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
 try {
   switch (command) {
     case 'enroll': {
-      const page = await fetch('http://127.0.0.1:4319/enroll', { signal: AbortSignal.timeout(3000) });
+      const enrollPort = Number(process.env.ONE_APP_TEST_PORT ?? 4317) + 2;
+      const page = await fetch(`http://127.0.0.1:${enrollPort}/enroll`, { signal: AbortSignal.timeout(3000) });
       if (!page.ok) throw new Error('enrollment-page-denied');
       const html = await page.text();
       const code = /Or type this code: <strong[^>]*>([A-Z0-9-]+)<\/strong>/u.exec(html)?.[1];

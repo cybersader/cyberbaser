@@ -2969,7 +2969,11 @@ export async function runOwnerAlphaServer({
     }
     if (devices !== null) {
       const secretKey = await loadNodeSecret(config.iroh.stateDirectory);
-      const binding = await bindIrohNode({ secretKey, config: config.iroh, alpns: [CMD_ALPN, PAIR_ALPN] })
+      // The trusted appliance recipe controls reach on both setup and restart
+      // without rewriting owner policy or changing the publisher's copy.
+      const reachOverride = process.env.CYBERBASER_CONTAINER_REACH;
+      const irohConfig = reachOverride === undefined ? config.iroh : { ...config.iroh, reach: reachOverride };
+      const binding = await bindIrohNode({ secretKey, config: irohConfig, alpns: [CMD_ALPN, PAIR_ALPN] })
         .finally(() => secretKey.fill(0));
       const nodeId = binding.endpoint.id().toString();
       const verifier = createDevicePrincipalAdapter({ registry, audience: irohAudience(nodeId), requireChannelBinding: true });

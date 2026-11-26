@@ -519,10 +519,11 @@ export async function status() {
 }
 
 // Internal: the node service entry. First-run setup until the config exists.
-export function nodeServiceArgs() {
+export function nodeServiceArgs({ truenas = false } = {}) {
   return existsSync(LAYOUT.config)
     ? { mode: 'node', args: [LAYOUT.config] }
-    : { mode: 'setup', args: [LAYOUT.setup, String(readInstallRecord()?.port ?? DEFAULT_PORT), LAYOUT.publisherSocket, LAYOUT.layoutFile] };
+    : { mode: 'setup', args: [LAYOUT.setup, String(readInstallRecord()?.port ?? DEFAULT_PORT), LAYOUT.publisherSocket,
+      truenas ? `${LAYOUT.nodeRun}/layout.json` : LAYOUT.layoutFile] };
 }
 
 // Internal: the installed publisher service. Setup mode (no push, sign-in,
@@ -541,7 +542,7 @@ export function publisherServiceMode(record = readInstallRecord()) {
     mirror: LAYOUT.mirror, checkout: path.join(LAYOUT.notes, 'notes'), github, ...signed };
 }
 
-export async function runPublisherService({ appRoot }) {
+export async function runPublisherService({ appRoot, signal = null, privateEnrollment = false }) {
   const plan = publisherServiceMode();
   const { groupId } = await import('../accounts.js');
   const socketGroup = groupId(ACCOUNTS.group);
@@ -549,15 +550,16 @@ export async function runPublisherService({ appRoot }) {
   const http = plan.github.origin ? createGithubHttp({ apiBaseUrl: plan.github.origin, webBaseUrl: plan.github.origin }) : undefined;
   const publisherCli = await import('../../../apps/owner-alpha/bin/owner-alpha-publisher.js');
   // Signed publish, enforced: the owner-key list is the publisher's own state.
-  const owners = { directory: plan.owners, mode: 'enforce', enrollPort: plan.enrollPort, nodeUid: userEntry(ACCOUNTS.node)?.id ?? null };
+  const owners = { directory: plan.owners, mode: 'enforce', enrollPort: plan.enrollPort,
+    nodeUid: userEntry(ACCOUNTS.node)?.id ?? null, privateEnrollment };
   if (plan.mode === 'publisher') {
     await publisherCli.runPublisherCli({ configFile: plan.configFile, socketPath: plan.socketPath, repository: plan.repository,
-      projectRoot: appRoot, socketGroup, owners, ...(http ? { forgeOptions: { http } } : {}) });
+      projectRoot: appRoot, socketGroup, owners, signal, ...(http ? { forgeOptions: { http } } : {}) });
     return 0;
   }
   // No client ID: setup creates the GitHub App from a manifest; the publisher keeps it.
   await publisherCli.runSetupForgeCli({ socketPath: plan.socketPath, stateDirectory: plan.stateDirectory, clientId: plan.clientId,
-    mirror: plan.mirror, checkout: plan.checkout, socketGroup, http, owners });
+    mirror: plan.mirror, checkout: plan.checkout, socketGroup, http, owners, signal });
   return 0;
 }
 

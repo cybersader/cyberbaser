@@ -4,7 +4,9 @@ program=/opt/cyberbaser/bin/cyberbaser
 case "${1:-}" in
   service-node) umask 0007; exec "$program" "$@" ;;
   service-publisher) umask 0027; exec "$program" "$@" ;;
-  init-volumes) ;;
+  truenas-node|init-volumes) ;;
+  truenas-publisher) umask 0027; exec "$program" service-publisher --container-reload ;;
+  reconcile-config) umask 0077; exec "$program" watch-container-publisher-config ;;
   *) exec "$program" "$@" ;;
 esac
 
@@ -12,13 +14,19 @@ esac
 # CHOWN, DAC_OVERRIDE and FOWNER. Do not repair, follow, or recursively chown
 # unexpected state. Only an empty, root-owned volume root can be initialized.
 fail() { printf '%s\n' "$1" >&2; exit 1; }
-[[ $# == 1 && $EUID == 0 ]] || fail 'Volume initialization requires container root.'
+[[ $# == 1 ]] || fail 'Expected one service mode.'
+if [[ $1 == init-volumes ]]; then
+  [[ $EUID == 0 ]] || fail 'Volume initialization requires container root.'
+else
+  [[ $EUID == 65532 ]] || fail 'TrueNAS node requires its unprivileged UID.'
+  : "${CYBERBASER_CONTAINER_REACH:?choose a TrueNAS reach mode}"
+fi
 umask 0077
 record=/etc/cyberbaser/install.json
 [[ -f "$record" && ! -L "$record" && $(stat -c '%u:%g:%a:%h' "$record") == 0:0:644:1 ]] || fail 'Unsafe install record.'
 layout=$(mktemp /tmp/cyberbaser-layout.XXXXXX)
 trap 'rm -f -- "$layout"' EXIT
-jq -e '
+jq -e --arg reachOverride "${CYBERBASER_CONTAINER_REACH:-}" '
   select(type == "object" and ((keys - ["version","state","accounts","group","appRoot","port","publication","reach","irohRelay","github"]) == []))
   | select(.version == 1 and .state == "container" and .accounts == {node:"cyberbaser",publisher:"cyberbaser-publisher"}
     and .group == "cyberbaser-share" and .appRoot == "/opt/cyberbaser" and .publication == "private-site")
@@ -30,10 +38,29 @@ jq -e '
     irohStateDirectory:"/var/lib/cyberbaser/iroh", forgeStateDirectory:"/var/lib/cyberbaser-publisher/forge",
     configFile:"/var/lib/cyberbaser/config/owner-alpha.json", checkout:"/var/lib/cyberbaser-shared/notes/notes",
     mirror:"/var/lib/cyberbaser-shared/mirror/notes.git", clientId:null, publication,
-    relay:(.irohRelay // "n0"), reach:(.reach // "direct")}
+    relay:(.irohRelay // "n0"), reach:(if $reachOverride != "" then $reachOverride else (.reach // "direct") end)}
 ' "$record" > "$layout" || fail 'Invalid container install record.'
 reach=$(jq -r '.reach' "$layout")
 "$program" validate-reach "$reach" >/dev/null || fail 'Invalid reach in container install record.'
+
+if [[ $1 == truenas-node ]]; then
+  [[ $(jq -r '.listen.port' "$layout") == 4517 ]] || fail 'Unexpected TrueNAS port.'
+  mv -f -- "$layout" /run/cyberbaser/layout.json
+  for child in home cache iroh setup renderers; do
+    dir="/var/lib/cyberbaser/$child"
+    [[ -e "$dir" ]] || mkdir -m 0700 -- "$dir"
+    [[ -d "$dir" && ! -L "$dir" && $(stat -c '%u:%g:%a' "$dir") == 65532:65530:700 ]] || fail 'Unsafe node directory.'
+  done
+  work=/opt/cyberbaser/.workspace/owner-alpha
+  for spec in "$work:710" "$work/store:710" "$work/store/jobs:770"; do
+    dir=${spec%:*}; mode=${spec##*:}
+    [[ -e "$dir" ]] || mkdir -m "$mode" -- "$dir"
+    [[ -d "$dir" && ! -L "$dir" && $(stat -c '%u:%g:%a' "$dir") == "65532:65530:$mode" ]] || fail 'Unsafe job-store directory.'
+  done
+  export CYBERBASER_RENDERER_ISOLATION=socket-filter
+  umask 0007
+  exec "$program" service-node --truenas
+fi
 
 dir() {
   local path=$1 uid=$2 mode=$3 kind=${4:-child} mounted_child=${5:-} metadata

@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { fail } from './errors.js';
 import { validatePrivateNetworkHttpOrigin } from './network.js';
+import { CONTAINER_RENDERER_LAUNCHER, containerRendererIsolation } from './renderer-isolation.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -58,7 +59,7 @@ async function offlineSeedEnvironment() {
     };
   } catch (error) {
     if (error?.code === 'ENOENT') {
-      if (typeof process.env.OWNER_ALPHA_STATE_PROFILE === 'string') {
+      if (containerRendererIsolation() || typeof process.env.OWNER_ALPHA_STATE_PROFILE === 'string') {
         fail('quartz-seed-missing', 'container rendering requires the fixed verified offline Quartz seed');
       }
       return { QUARTZ_OFFLINE: '0' };
@@ -69,7 +70,9 @@ async function offlineSeedEnvironment() {
 
 async function runFixed(command, args, options, code) {
   try {
-    const result = await execFileAsync(command, args, {
+    const isolated = containerRendererIsolation();
+    const result = await execFileAsync(isolated ? CONTAINER_RENDERER_LAUNCHER : command,
+      isolated ? ['/usr/bin/bash', ...args] : args, {
       encoding: 'utf8',
       maxBuffer: MAX_COMMAND_OUTPUT_BYTES,
       ...options,

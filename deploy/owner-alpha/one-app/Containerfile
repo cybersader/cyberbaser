@@ -17,6 +17,7 @@ RUN set -eu; \
 COPY cyberbaser /opt/cyberbaser/bin/cyberbaser
 COPY install.json /etc/cyberbaser/install.json
 COPY container-init.sh /usr/local/bin/cyberbaser-container-init
+COPY render-offline /opt/cyberbaser/libexec/render-offline
 RUN --mount=type=bind,from=archives,source=/,target=/mnt/archives,ro \
     set -eu; \
     tar --no-same-owner -C /opt/cyberbaser -xf /mnt/archives/resources.tar; \

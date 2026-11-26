@@ -27,6 +27,8 @@ export const RENDERER_NAME_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/u;
 export const RENDERER_BUILD_FILE = 'build';
 export const MAX_RENDERER_FINGERPRINT_ENTRIES = 64;
 // The network namespace tool, at a fixed path: never looked up on PATH.
+import { CONTAINER_RENDERER_LAUNCHER, containerRendererIsolation } from './renderer-isolation.js';
+
 export const OFFLINE_LAUNCHER = '/usr/bin/unshare';
 const MAX_COMMAND_OUTPUT_BYTES = 64 * 1024 * 1024;
 
@@ -128,7 +130,7 @@ function buildEnvironment(overrides) {
  * `launcher` is injectable for tests only; it must still run the build with
  * no network.
  */
-export function createConfiguredRenderer(renderer, { launcher = OFFLINE_LAUNCHER } = {}) {
+export function createConfiguredRenderer(renderer, { launcher } = {}) {
   if (renderer === undefined || renderer === null) fail('renderer-not-configured', 'no renderer is configured');
   const identity = rendererIdentity({ renderer });
   return async function renderConfigured({ contentDir, outputDir, workspaceDir, ownerOrigin, suggestions = null }) {
@@ -152,10 +154,11 @@ export function createConfiguredRenderer(renderer, { launcher = OFFLINE_LAUNCHER
       await rm(report, { force: true });
       const reportEnvironment = { CYBERBASER_PROVENANCE_REPORT: report };
       const build = path.join(directory, RENDERER_BUILD_FILE);
-      const args = ['--user', '--map-root-user', '--net', '--', build, content, output];
+      const filtered = launcher === undefined && containerRendererIsolation();
+      const args = filtered ? [build, content, output] : ['--user', '--map-root-user', '--net', '--', build, content, output];
       let result;
       try {
-        result = await execFileAsync(launcher, args, {
+        result = await execFileAsync(launcher ?? (filtered ? CONTAINER_RENDERER_LAUNCHER : OFFLINE_LAUNCHER), args, {
           cwd: workspace,
           encoding: 'utf8',
           maxBuffer: MAX_COMMAND_OUTPUT_BYTES,

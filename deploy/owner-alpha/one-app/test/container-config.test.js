@@ -3,7 +3,7 @@ import { chmod, link, mkdir, mkdtemp, readFile, rename, rm, stat, symlink, write
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ownerConfigFromSetup } from '../../../../apps/owner-alpha/src/first-run.js';
-import { reconcileContainerConfig } from '../../../../packaging/src/platform/container-config.js';
+import { containerConfigGeneration, reconcileContainerConfig } from '../../../../packaging/src/platform/container-config.js';
 import { LAYOUT } from '../../../../packaging/src/platform/linux-systemd.js';
 
 function valid() {
@@ -80,4 +80,23 @@ test('reject symlinked directory, symlinked or hard-linked file, public mode and
   await symlink(displaced, source);
   await expect(sync()).rejects.toThrow();
   await expect(stat(output)).rejects.toThrow();
+}));
+
+test('publisher generation changes on accepted replacement, not rescans or refused inputs', () => isolated(async ({ input, output, sync, put }) => {
+  const generation = () => containerConfigGeneration(output, process.getuid(), process.getgid());
+  expect(generation()).toBeNull();
+  await put(JSON.stringify(valid()));
+  await sync();
+  const first = generation();
+  expect(first).toMatch(/^\d+:\d+:\d+$/u);
+  await sync();
+  expect(generation()).toBe(first);
+  await rm(input);
+  await expect(sync()).rejects.toThrow();
+  expect(generation()).toBe(first);
+  await put(` ${JSON.stringify(valid())}`);
+  await sync();
+  expect(generation()).not.toBe(first);
+  await chmod(output, 0o644);
+  expect(generation).toThrow('unsafe config generation');
 }));

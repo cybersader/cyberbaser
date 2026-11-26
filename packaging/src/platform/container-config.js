@@ -1,7 +1,7 @@
 // The container reconciler sees only two dedicated config volume roots. Their
 // ancestors are fixed directories on the immutable image, not node state.
 import { createHash, randomUUID } from 'node:crypto';
-import { constants } from 'node:fs';
+import { constants, lstatSync } from 'node:fs';
 import { open, rename, unlink } from 'node:fs/promises';
 import { MAX_CONFIG_BYTES, validateOwnerAlphaConfig } from '../../../apps/owner-alpha/src/config.js';
 
@@ -13,6 +13,30 @@ const NODE = 65532;
 const PUBLISHER = 65533;
 const SHARE = 65530;
 const OPEN_PRIVATE = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK;
+
+// A valid atomic replacement changes this identity, unlike repeated scans of
+// identical bytes. Compare from before publisher mode selection to cover a
+// copy that races startup. Ignore a missing destination once running: input
+// removal can never legitimately remove the checked copy.
+export function containerConfigGeneration(file = CONTAINER_CONFIG, uid = PUBLISHER, gid = SHARE) {
+  const st = lstatSync(file, { bigint: true, throwIfNoEntry: false });
+  if (st === undefined) return null;
+  if (!st.isFile() || st.nlink !== 1n || st.uid !== BigInt(uid) || st.gid !== BigInt(gid)
+      || (st.mode & 0o7777n) !== 0o600n || st.size > BigInt(MAX_CONFIG_BYTES)) throw new Error('unsafe config generation');
+  return `${st.dev}:${st.ino}:${st.ctimeNs}`;
+}
+
+export function watchContainerConfig({ onChange, file = CONTAINER_CONFIG, interval = 1000 }) {
+  const baseline = containerConfigGeneration(file);
+  const timer = setInterval(() => {
+    let pending;
+    try { pending = containerConfigGeneration(file); }
+    catch { return; } // No verified new generation. Keep the running one.
+    if (pending !== null && pending !== baseline) { clearInterval(timer); onChange(); }
+  }, interval);
+  timer.unref?.();
+  return () => clearInterval(timer);
+}
 
 async function openDirectory(directory, uid, gid) {
   const handle = await open(directory, OPEN_PRIVATE | constants.O_DIRECTORY);
