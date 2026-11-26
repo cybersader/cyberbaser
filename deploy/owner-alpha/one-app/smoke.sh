@@ -419,21 +419,6 @@ next_commit=$(jq -er 'select(.state == "awaiting-approval" and .reason == "owner
 dep "$fixture" "${curl_flags[@]}" -f "$fake/_control/report" | jq -e '.pushes == [] and (.denied | all(.receive == false))' >/dev/null
 pass 'the publisher rejected the unsigned job before any fake-forge push or ref update'
 
-stage='sign and publish the exact commit from the fixture viewer'
-timeout 30 podman exec "$fixture" env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0="$checkout" \
-  bun /fixture/publication.mjs sign "$next_commit" "$checkout" "https://github.com/$repository.git" main > "$work/approval"
-# Pass one approved record, not the fixture device seed, across the boundary.
-timeout 30 podman exec -i "$node" bash -euc 'umask 0077; /usr/bin/cat > /tmp/lab-approval' < "$work/approval"
-if ! node_helper submit-signed "$job" > "$work/push"; then
-  jq -r '.code // empty' "$work/push" >&2
-  dep "$fixture" "${curl_flags[@]}" -f "$fake/_control/report" | jq '{pushes: (.pushes | length), deniedReceive: ([.denied[] | select(.receive)] | length)}' >&2
-  false
-fi
-jq -e '.ok' "$work/push" >/dev/null
-dep "$node" rm -- /tmp/lab-approval
-[[ $(dep "$fixture" git -C "$hosted" show-ref) == "$next_commit refs/heads/main" ]]
-
-stage='recover the completed push after node and publisher container recreation'
 no_canary() { local code; if "$@" >/dev/null; then return 1; else code=$?; [[ $code == 1 ]]; fi; }
 check_log() {
   podman logs "$1" > "$work/log" 2>&1
@@ -460,6 +445,39 @@ recreate_services() {
   [[ $(dep "$publisher" sha256sum "$pubstate/owners/publisher-key.json") == "$publisher_key" ]]
   [[ $(dep "$node" sha256sum "$state/iroh/iroh-node.json") == "$node_key" ]]
 }
+
+stage='recreate the node and publisher while the job waits for approval'
+job_state=$jobs/owner-alpha/store/jobs/$job/state.json
+pending_job_hash=$(dep "$node" sha256sum "$job_state")
+pending_site_hash=$(dep "$node" sha256sum "$site")
+recreate_services
+check_listeners pending-runtime
+[[ $(dep "$node" sha256sum "$job_state") == "$pending_job_hash" ]]
+dep "$node" jq -e '.state == "awaiting-approval"' "$job_state" >/dev/null
+[[ $(dep "$node" git -C "$checkout" rev-parse HEAD) == "$next_commit" ]]
+[[ $(dep "$node" git -C "$mirror/notes.git" rev-parse refs/heads/main) == "$commit" ]]
+[[ $(dep "$fixture" git -C "$hosted" show-ref) == "$refs" ]]
+[[ $(dep "$node" sha256sum "$site") == "$pending_site_hash" ]]
+wait_for_site "$commit" quartz-cyberbase "$prior_note"
+if reader_note "$signed_note"; then false; fi
+dep "$fixture" "${curl_flags[@]}" -f "$fake/_control/report" | jq -e '.pushes == [] and (.denied | all(.receive == false))' >/dev/null
+pass 'unsigned job and exact local commit survived recreation; the reader stayed on the published revision and no push occurred'
+
+stage='sign and publish the exact commit from the fixture viewer'
+timeout 30 podman exec "$fixture" env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0="$checkout" \
+  bun /fixture/publication.mjs sign "$next_commit" "$checkout" "https://github.com/$repository.git" main > "$work/approval"
+# Pass one approved record, not the fixture device seed, across the boundary.
+timeout 30 podman exec -i "$node" bash -euc 'umask 0077; /usr/bin/cat > /tmp/lab-approval' < "$work/approval"
+if ! node_helper submit-signed "$job" > "$work/push"; then
+  jq -r '.code // empty' "$work/push" >&2
+  dep "$fixture" "${curl_flags[@]}" -f "$fake/_control/report" | jq '{pushes: (.pushes | length), deniedReceive: ([.denied[] | select(.receive)] | length)}' >&2
+  false
+fi
+jq -e '.ok' "$work/push" >/dev/null
+dep "$node" rm -- /tmp/lab-approval
+[[ $(dep "$fixture" git -C "$hosted" show-ref) == "$next_commit refs/heads/main" ]]
+
+stage='recover the completed push after node and publisher container recreation'
 recreate_services
 check_listeners restarted-runtime
 wait_for_site "$next_commit" quartz-cyberbase "$signed_note"

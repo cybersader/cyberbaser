@@ -16,7 +16,7 @@ import { documentProjection, segmentsWithinSpan } from '@cyberbaser/review-proje
 import { fail, OwnerAlphaError } from './errors.js';
 import { listDurableJobs, loadDurableJob, validateJobId } from './job-state.js';
 import { ensureOwnerSite } from './site.js';
-import { createEditSession as createSourceEditSession, liveUrlForSlug } from './source.js';
+import { createEditSession as createSourceEditSession, hasPendingStartupCheckout, liveUrlForSlug } from './source.js';
 import { configuredSiteBase, readSiteBase } from './site-base.js';
 import { createUpstream } from './upstream.js';
 import { prepareStore, storeContextFromConfig } from './store.js';
@@ -2819,9 +2819,6 @@ export async function runOwnerAlphaServer({
   await upstream?.refresh();
   // The private reader serves the site at the path it is built for (site-base.js).
   const siteBase = await readSiteBase(config);
-  // Later checks only ask the publisher, so the quiet notice clears when GitHub is back.
-  const upstreamTimer = upstream === null ? null : setInterval(() => { upstream.refresh({ sync: false }).catch(() => {}); }, 5 * 60_000);
-  upstreamTimer?.unref?.();
   // The site build retains the publication binding the form needs, so the
   // intake starts after it and before anything reads the review socket.
   // A vault that publishes nothing yet (no publish.yml, or setup's starter
@@ -2831,8 +2828,21 @@ export async function runOwnerAlphaServer({
   try {
     await rebuildSite({ config, projectRoot });
   } catch (error) {
-    if (!(error instanceof OwnerAlphaError) || error.code !== 'site-publication-empty') throw error;
-    console.error('Owner alpha: nothing is published yet, so the private preview waits until publish.yml lists notes.');
+    if (!(error instanceof OwnerAlphaError)) throw error;
+    if (error.code === 'site-publication-empty') {
+      console.error('Owner alpha: nothing is published yet, so the private preview waits until publish.yml lists notes.');
+    } else if (error.code === 'checkout-not-at-origin-branch' && config.publisher) {
+      const { matchesPendingPublication } = await import('./pipeline.js');
+      const pending = await hasPendingStartupCheckout(config, (checkout) => matchesPendingPublication({
+        ...checkout, config, context: storeContext, listJobs,
+      })).catch(() => false);
+      if (!pending) throw error;
+      // Leave the published reader untouched. Normal recovery exposes the
+      // pending job again, and its signed publication rebuilds the site.
+      console.error('Owner alpha: a saved change waits for approval; keeping the last published preview.');
+    } else {
+      throw error;
+    }
   }
   const suggestions = await startSuggestions({ config, projectRoot });
   let pipeline;
@@ -2886,9 +2896,9 @@ export async function runOwnerAlphaServer({
   // drafts, views and publish lock.
   const ownerPublication = config.ownerPublication.enabled
     ? createPublication({ config, context: storeContext, readNote: readAuthoringNote, pipeline }) : null;
-  // In memory only: a restart drops waiting approvals, as the publisher's nonces.
   // The publisher's owner-control socket when one is configured; a test or
-  // rehearsal may pass its own. Jobs waiting for approval are offered on demand.
+  // rehearsal may pass its own. Approval offers are in memory only; durable
+  // jobs still waiting for approval are offered on demand after restart.
   const signingPublisher = publisherSigning ?? (config.publisher
     ? publisherSigningFromSocket({ socketPath: config.publisher.socketPath, ownerRequest }) : null);
   const starterFile = devices === null ? null : pendingStarterFile(config.iroh.stateDirectory);
@@ -2976,6 +2986,9 @@ export async function runOwnerAlphaServer({
     await suggestions?.close().catch(() => {});
     throw error;
   }
+  // Later checks only ask the publisher, so the quiet notice clears when GitHub is back.
+  const upstreamTimer = upstream === null ? null : setInterval(() => { upstream.refresh({ sync: false }).catch(() => {}); }, 5 * 60_000);
+  upstreamTimer?.unref?.();
   const recovery = Promise.resolve().then(async () => {
     await recoverDecisions(storeContext);
     return recoverJobs({

@@ -160,6 +160,17 @@ function exactCommit(value, label) {
 }
 
 export async function assertCheckoutReady(configInput, { git = defaultGitRunner } = {}) {
+  return inspectCheckout(configInput, git, null);
+}
+
+// Startup can retain the last site while an exact job waits for approval. Do
+// not give renderers or new Save jobs a way to use the unpushed checkout.
+export async function hasPendingStartupCheckout(configInput, matchesPendingCommit) {
+  const result = await inspectCheckout(configInput, defaultGitRunner, matchesPendingCommit);
+  return result.pendingApproval === true;
+}
+
+async function inspectCheckout(configInput, git, matchesPendingCommit) {
   const config = validateOwnerAlphaConfig(configInput);
   const configuredRoot = config.repository.checkout;
   let checkoutReal;
@@ -230,7 +241,9 @@ export async function assertCheckoutReady(configInput, { git = defaultGitRunner 
     );
   }
   const remoteHead = exactCommit(remoteMatch[1], `${remote.name}/${branch}`);
-  if (head !== remoteHead) {
+  const pendingApproval = head !== remoteHead && matchesPendingCommit !== null
+    && await matchesPendingCommit({ root: checkoutReal, head, remoteHead }) === true;
+  if (head !== remoteHead && !pendingApproval) {
     fail('checkout-not-at-origin-branch', 'checkout HEAD must exactly equal the actual configured remote branch', {
       head,
       remoteHead,
@@ -244,7 +257,7 @@ export async function assertCheckoutReady(configInput, { git = defaultGitRunner 
     });
   }
 
-  return deepFreeze({ root: checkoutReal, origin, branch, head });
+  return deepFreeze({ root: checkoutReal, origin, branch, head, ...(pendingApproval ? { pendingApproval } : {}) });
 }
 
 function parseTrackedEntry(output, relativePath) {

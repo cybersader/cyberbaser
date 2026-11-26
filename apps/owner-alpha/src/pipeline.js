@@ -316,6 +316,36 @@ async function loadRecord(context, relativePath, artifactType, jobId, options) {
   return value === null ? null : artifactResult(value, artifactType, jobId);
 }
 
+// Read-only startup exception. A commit ID binds the entire tree; re-prove
+// the recorded one-file effect against that immutable object and its sole
+// parent rather than trusting the job's status or the checkout's bytes alone.
+export async function matchesPendingPublication({ config, context, listJobs, root, head, remoteHead }) {
+  const options = artifactOptions(config);
+  const policyRevision = computePolicyRevision(config);
+  const jobs = await listJobs(context, options);
+  const git = (checkout, args, opts) => defaultGitRunner(checkout, ['--no-replace-objects', ...args], { encoding: 'buffer', ...opts });
+  let matched = false;
+  for (const job of jobs) {
+    if (job.state !== 'awaiting-approval' || job.policyRevision !== policyRevision) continue;
+    const paths = pipelineArtifactPaths(job.jobId);
+    const committed = await loadRecord(context, paths.committed, 'owner-alpha-committed-effect', job.jobId, options);
+    if (committed?.status !== 'committed' || committed.commit !== head || typeof committed.message !== 'string'
+      || committed.verification?.commit !== head || committed.verification.parentCommit !== remoteHead) continue;
+    const durable = await loadRecord(context, paths.sourceApplied, 'owner-alpha-source-applied-effect', job.jobId, options);
+    if (durable?.checkout !== root || durable.baseCommit !== remoteHead
+      || await optionalArtifact(context, paths.pushed, options) !== null) continue;
+    // Read the object's actual parent, not a synthetic history from local Git grafts.
+    const object = await git(root, ['cat-file', 'commit', head], { encoding: 'utf8' });
+    const parents = object.split('\n\n', 1)[0].split('\n').filter((line) => line.startsWith('parent '));
+    if (parents.length !== 1 || parents[0] !== `parent ${remoteHead}`) continue;
+    await verifyExactCommit({ checkout: root, commit: head, application: deserializeApplication(durable),
+      expectedMessage: committed.message }, { git });
+    if (matched) return false; // One local commit must belong to exactly one pending job.
+    matched = true;
+  }
+  return matched;
+}
+
 async function readStableDeploymentCommit(context, paths, jobId, options) {
   const commit = (await loadRecord(context, paths.committed, 'owner-alpha-committed-effect', jobId, options))?.commit;
   const binding = await loadRecord(context, paths.runBound, 'owner-alpha-run-bound-effect', jobId, options);
