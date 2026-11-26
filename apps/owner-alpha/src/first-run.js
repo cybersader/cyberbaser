@@ -29,7 +29,8 @@ import { handleDeviceRoutes, ownerHttpTools, pairFormHtml } from './server.js';
 const exec = promisify(execFile);
 
 export const SETUP_STEPS = Object.freeze(['welcome', 'github', 'notes', 'website', 'phone', 'agent', 'done']);
-export const SETUP_LINK_TTL_MS = 15 * 60_000;
+// Long enough to finish GitHub's pages and come back; still one use.
+export const SETUP_LINK_TTL_MS = 60 * 60_000;
 export const SETUP_STATE_FILE = 'setup.json';
 const MAX_SETUP_SESSIONS = 8;
 const MAX_STATE_BYTES = 64 * 1024;
@@ -732,7 +733,7 @@ function isLoopback(address) {
  */
 export function createFirstRunHandler({
   listen, state, links, relay = null, notes, starter = null, reach = async () => null, pairCommand = 'cyberbaser pair',
-  publicRoot = fileURLToPath(new URL('../public/', import.meta.url)), onComplete = () => {}, createToken,
+  publicRoot = fileURLToPath(new URL('../public/', import.meta.url)), onComplete = () => {}, onStaleLink = null, createToken,
   // The publisher's own enrolment page (publisher/owner-control.js), or null.
   enrolPort = null,
   // 'private-site': the website step offers the private site first (installer --site private).
@@ -922,7 +923,8 @@ export function createFirstRunHandler({
       const keys = [...url.searchParams.keys()];
       const consumed = keys.length === 1 && keys[0] === 'token' && links.consume(url.searchParams.get('token'));
       if (!consumed) {
-        return html(noticePage(tools, 'This setup link has been used', 'Each setup link works once, for 15 minutes. Restart Cyberbaser to get a new one.'), 403);
+        onStaleLink?.();
+        return html(noticePage(tools, 'This setup link has expired', 'Each setup link works once, for an hour. A fresh one has just been written to Cyberbaser\'s log ("cyberbaser status" shows it).'), 403);
       }
       if (sessions.size >= MAX_SETUP_SESSIONS) sessions.delete(sessions.keys().next().value);
       const sessionToken = make();
@@ -941,7 +943,8 @@ export function createFirstRunHandler({
     const owner = session(request);
     if (owner === null) {
       if (url.pathname === '/setup' && request.method === 'GET') {
-        return html(noticePage(tools, 'Open your setup link', 'Setup opens from the one-time link Cyberbaser prints when it starts.'), 403);
+        onStaleLink?.();
+        return html(noticePage(tools, 'Open your setup link', 'Setup opens from a one-time link. A fresh one has just been written to Cyberbaser\'s log ("cyberbaser status" shows it).'), 403);
       }
       return errorResponse(403, 'invalid-session');
     }
@@ -1042,6 +1045,9 @@ export async function runFirstRun({
   // The publisher's enrolment page port (port + 2 in the installed layout), or null.
   enrolPort = null,
   publication = null, readerAddress = null,
+  // Where a fresh setup link is written when an expired or missing one is used
+  // (the same place as the first one: the service log). At most one per 30 s.
+  announceLink = null,
 }) {
   const state = await openSetupState(stateDirectory);
   const tools = ownerHttpTools();
@@ -1056,7 +1062,14 @@ export async function runFirstRun({
   let finish;
   const completed = new Promise((resolve) => { finish = resolve; });
   const handler = createFirstRunHandler({ listen: { host: '127.0.0.1', port }, state, links, relay, notes, starter, reach, pairCommand,
-    createToken, onComplete: (result) => finish(result), enrolPort, publication, readerAddress });
+    createToken, onComplete: (result) => finish(result), enrolPort, publication, readerAddress,
+    onStaleLink: announceLink === null ? null : () => {
+      const now = (clock ?? Date.now)();
+      if (now - lastAnnounced < 30_000 || state.read().completedAt !== null) return;
+      lastAnnounced = now;
+      try { announceLink(`${origin}/setup/start?token=${links.issue()}`); } catch { /* setup finished */ }
+    } });
+  let lastAnnounced = -Infinity;
   // A restart while the notes were being copied picks the copy up again.
   const resumed = state.read();
   if (resumed.repository && ['cloning', 'building'].includes(resumed.notes.phase)) notes.start(resumed.repository);

@@ -165,10 +165,10 @@ describe('setup link', () => {
     expect(opened.headers.get('set-cookie')).toMatch(/HttpOnly; SameSite=Strict$/u);
     expect((await h.call(`/setup/start?token=${second}`)).status).toBe(403); // used
     const third = h.links.issue();
-    now += 15 * 60_000;
+    now += 60 * 60_000;
     const late = await h.call(`/setup/start?token=${third}`);
     expect(late.status).toBe(403);
-    expect(late.text).toContain('works once, for 15 minutes');
+    expect(late.text).toContain('works once, for an hour');
     expect((await h.call(`/setup/start?token=${h.links.issue()}&next=x`)).status).toBe(403);
   });
 

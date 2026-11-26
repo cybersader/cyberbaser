@@ -20,7 +20,7 @@
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { constants, existsSync, lstatSync } from 'node:fs';
-import { chown, mkdir, open, rename, rm, writeFile } from 'node:fs/promises';
+import { chmod, chown, mkdir, open, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { DEFAULT_ACCOUNTS, INSTALL_RECORD, groupEntry, readInstallRecord, userEntry } from '../accounts.js';
 
@@ -302,6 +302,8 @@ async function installState(ids, { port, clientId, relay, renderer = null, publi
 
 async function writeRecord(record) {
   await mkdir(LAYOUT.recordDir, { recursive: true, mode: 0o755 });
+  // Readable by the services: the node and publisher read the port from it.
+  await chmod(LAYOUT.recordDir, 0o755);
   await writeOwned(LAYOUT.record, `${JSON.stringify(record, null, 2)}\n`);
 }
 
@@ -354,6 +356,9 @@ export async function install(args, { programPath, compiled }) {
       '--renderer', '--renderer-name', '--renderer-quartz-commit', '--renderer-fingerprint', '--site', '--resume']);
   }
   catch (error) { process.stderr.write(`${error.message}\n`); return 2; }
+  // An administrator's private umask (often 077 with sudo or pkexec) must not
+  // make the service directories unreadable to the services themselves.
+  process.umask(0o022);
   if (options.dryRun) {
     say('cyberbaser install would:');
     for (const step of plan(options)) say(`  - ${step}`);
