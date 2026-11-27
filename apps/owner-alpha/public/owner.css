@@ -1506,7 +1506,6 @@ body.save-page :focus-visible { outline: 2px solid var(--sp-acc); outline-offset
   display: inline-flex; align-items: center; border-radius: 0.45rem; background: var(--dev-accent); color: #fff; font-weight: 750; text-decoration: none;
 }
 .setup-link-button:hover { background: #194bb3; }
-.setup-actions.is-waiting { opacity: 0.45; pointer-events: none; }
 .setup-status { min-height: 0; color: var(--dev-danger); line-height: 1.5; }
 .setup-status:empty { display: none; }
 .setup-problem { color: var(--dev-danger); line-height: 1.5; }

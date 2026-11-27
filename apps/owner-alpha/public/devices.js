@@ -9,12 +9,24 @@
   const status = document.getElementById('pair-status');
   let current = null; // { enrollmentId, code, expiresAt }
   let timer = null;
+  const setupMode = root.classList.contains('setup-devices');
+
+  async function readResponse(response) {
+    if (response.ok) return response.json();
+    if (setupMode && response.status === 403) {
+      const value = await response.json().catch(() => null);
+      if (value?.error?.code === 'invalid-session') {
+        stop();
+        root.dispatchEvent(new Event('setup-session-ended', { bubbles: true }));
+      }
+    }
+    throw new Error('refused');
+  }
 
   const post = async (route, body) => {
     const response = await fetch(route, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin', body: JSON.stringify({ ...body, csrf }) });
-    if (!response.ok) throw new Error('refused');
-    return response.json();
+    return readResponse(response);
   };
 
   const el = (tag, attrs = {}, ...children) => {
@@ -138,7 +150,7 @@
     const tick = document.getElementById('pair-timer');
     if (tick) tick.textContent = `Expires in ${minutesLeft(current.expiresAt)}`;
     let state;
-    try { state = await (await fetch('/owner/devices/state', { credentials: 'same-origin' })).json(); } catch { return; }
+    try { state = await readResponse(await fetch('/owner/devices/state', { credentials: 'same-origin' })); } catch { return; }
     const pairing = state.pairings?.find((item) => item.enrollmentId === current?.enrollmentId);
     if (!pairing) { await finish('expired'); return; }
     if (pairing.state === 'awaiting' && pairing.words && !live.querySelector('.pair-words')) showWords(pairing);

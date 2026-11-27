@@ -11,6 +11,9 @@
   let pollTimer = null;
   let tickTimer = null;
   let lastApp = null;
+  let sessionEnded = false;
+  const setupMode = root.dataset.mode === 'setup';
+  const signInHint = 'GitHub may ask you to sign in or use a passkey. Click Authorize to return to Cyberbaser.';
 
   const el = (tag, attrs = {}, ...children) => {
     const node = document.createElement(tag);
@@ -33,6 +36,11 @@
     let response;
     try { response = await fetch(route, init); } catch { throw new Error('This page lost contact with Cyberbaser. Reload to try again.'); }
     const value = await response.json().catch(() => null);
+    if (setupMode && response.status === 403 && value?.error?.code === 'invalid-session') {
+      sessionEnded = true;
+      stopTimers();
+      root.dispatchEvent(new Event('setup-session-ended', { bubbles: true }));
+    }
     if (!response.ok || value?.ok !== true) throw new Error(value?.message ?? 'That did not work. Try again.');
     return value;
   }
@@ -49,7 +57,6 @@
   }
 
   // First-run setup listens for this to know when it may continue.
-  const setupMode = root.dataset.mode === 'setup';
   function announce(state) {
     root.dispatchEvent(new CustomEvent('forge-state', { detail: { state: state.state, repository: state.repository ?? null } }));
   }
@@ -80,7 +87,7 @@
     }
     const create = linkButton('Create Cyberbaser\'s GitHub App', '/setup/github/create');
     show(el('div', { class: 'forge-sheet' },
-      el('p', { class: 'pair-hint' }, 'GitHub opens with everything filled in. Click Create there, then Install. The app can update files in the one repository you choose and nothing else.'),
+      el('p', { class: 'pair-hint' }, 'GitHub may ask you to confirm it’s you with a passkey or password. Then click the green Create GitHub App button.'),
       el('div', { class: 'pair-row forge-actions' }, create)));
     create.focus();
   }
@@ -95,10 +102,13 @@
       return;
     }
     const install = linkButton('Install on your repository', '/setup/github/install');
+    const repository = root.dataset.configured || 'the repository with your notes';
     show(el('div', { class: 'forge-sheet' },
       problemMessage ? el('p', { class: 'forge-problem', role: 'alert' }, problemMessage) : null,
-      el('p', { class: 'pair-hint' }, 'On GitHub choose "Only select repositories", pick the one with your notes, and click Install. GitHub then asks you to authorize Cyberbaser, and you come back here.'),
-      el('div', { class: 'pair-row forge-actions' }, install, linkButton('Already installed? Sign in', '/setup/github/sign-in', 'quiet'))));
+      el('p', { class: 'pair-hint' }, `On GitHub, choose “Only select repositories” and pick ${repository}. Click Install, then click Authorize when GitHub asks.`),
+      el('div', { class: 'pair-row forge-actions' }, install),
+      el('p', { class: 'pair-hint' }, signInHint),
+      el('div', { class: 'pair-row forge-actions' }, linkButton('Already installed? Sign in', '/setup/github/sign-in', 'quiet'))));
     install.focus();
   }
 
@@ -143,7 +153,9 @@
     tickTimer = setInterval(tick, 1000);
     show(el('div', { class: 'forge-sheet' },
       el('h3', {}, 'Enter this code on GitHub'),
-      el('p', { class: 'pair-hint' }, 'Open the GitHub page, type the code, then choose the one repository with your notes when GitHub asks where to install Cyberbaser.'),
+      el('p', { class: 'pair-hint' }, setupMode
+        ? 'GitHub may ask you to sign in. Enter the code, then choose “Only select repositories” and pick the repository with your notes.'
+        : 'Open the GitHub page, type the code, then choose the one repository with your notes when GitHub asks where to install Cyberbaser.'),
       el('div', { class: 'forge-code-row' },
         el('output', { class: 'forge-code', 'aria-label': `Code ${userCode.split('').join(' ')}` }, userCode),
         copy),
@@ -154,7 +166,8 @@
     ));
     const poll = async () => {
       let state;
-      try { state = await call('/owner/github/state'); } catch { pollTimer = setTimeout(poll, 3000); return; }
+      try { state = await call('/owner/github/state'); }
+      catch { if (!sessionEnded) pollTimer = setTimeout(poll, 3000); return; }
       if (state.state === 'waiting-for-code') { pollTimer = setTimeout(poll, 2000); return; }
       render(state);
     };
@@ -247,7 +260,7 @@
       const changes = row.fullName !== root.dataset.configured;
       if (setupMode) use.textContent = 'Use this repository';
       confirmSlot.replaceChildren(el('div', { class: 'forge-confirm' },
-        el('p', {}, setupMode ? `Cyberbaser will keep a private copy of ${row.fullName} on this machine. Nothing is published.` : changes
+        el('p', {}, setupMode ? `Cyberbaser will keep a private copy of ${row.fullName} on the computer running Cyberbaser. Nothing is published.` : changes
           ? `Your site will publish to ${row.fullName}. This changes your publishing settings; Cyberbaser restarts to use it.`
           : `Your site publishes to ${row.fullName}.`),
         el('div', { class: 'pair-row forge-actions' }, use, button('Back', () => { confirmSlot.replaceChildren(); search.focus(); }, 'quiet'))));
@@ -263,8 +276,8 @@
     });
 
     show(el('div', { class: 'forge-sheet forge-picker' },
-      el('h3', {}, 'Pick the repository with your notes'),
-      el('p', { class: 'pair-hint' }, 'Only repositories the Cyberbaser app was installed on are listed.'),
+      el('h3', {}, setupMode && !previous ? 'Connected to GitHub' : 'Pick the repository with your notes'),
+      el('p', { class: 'pair-hint' }, setupMode && !previous ? 'Pick the repository with your notes.' : 'Only repositories the Cyberbaser app was installed on are listed.'),
       el('label', { class: 'visually-hidden', for: 'forge-search' }, 'Search repositories'),
       el('div', { class: 'forge-search-wrap' }, search, count),
       list,
@@ -297,8 +310,8 @@
       el('div', { class: 'forge-status-main' },
         el('span', { class: 'forge-state-dot', 'aria-hidden': 'true' }),
         el('div', { class: 'device-name' },
-          el('strong', {}, setupMode ? state.repository : restart ? `Picked ${state.repository}` : `Publishing to ${state.repository}`),
-          el('span', {}, restart ? state.message : renew))),
+          el('strong', {}, setupMode && !restart ? 'Connected to GitHub' : restart ? `Picked ${state.repository}` : `Publishing to ${state.repository}`),
+          el('span', {}, restart ? state.message : setupMode ? state.repository : renew))),
       el('div', { class: 'pair-row forge-status-actions' },
         root.dataset.provider === 'github-app' ? button('Change repository', () => picker(state), 'quiet') : null,
         setupMode ? null : disconnect),
@@ -311,13 +324,15 @@
     // else may clear up, so checking again comes first.
     const gone = ['revoked', 'sign-in-expired'].includes(state.problem) && root.dataset.provider === 'github-app';
     const retry = button('Check again', async () => { retry.disabled = true; render(await call('/owner/github/check').catch((error) => ({ state: 'problem', message: error.message }))); }, gone ? 'quiet' : '');
-    const reconnect = lastApp?.signIn === 'web' && setupMode ? linkButton('Connect again', '/setup/github/sign-in', gone ? '' : 'quiet')
+    const webSignIn = lastApp?.signIn === 'web' && setupMode;
+    const reconnect = webSignIn ? linkButton('Connect again', '/setup/github/sign-in', gone ? '' : 'quiet')
       : button('Connect again', startSignIn, gone ? '' : 'quiet');
     const title = gone ? 'GitHub access was removed' : state.repository ? `Cannot publish to ${state.repository}` : 'GitHub needs attention';
     show(el('div', { class: 'forge-sheet is-problem' },
       el('h3', {}, title),
       el('p', { class: 'forge-problem', role: 'alert' }, state.message ?? 'Something is wrong with GitHub access.'),
       el('p', { class: 'pair-hint' }, 'Nothing can be published until this is fixed.'),
+      webSignIn ? el('p', { class: 'pair-hint' }, signInHint) : null,
       el('div', { class: 'pair-row forge-actions' }, ...(gone ? [reconnect, retry]
         : [retry, root.dataset.provider === 'github-app' ? reconnect : null])),
     ));

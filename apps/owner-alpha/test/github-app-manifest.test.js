@@ -311,6 +311,7 @@ describe('setup pages', () => {
     const page = await h.call('/setup/github/create');
     expect(page.status).toBe(200);
     expect(page.headers.get('content-security-policy')).toContain(`form-action 'self' ${fake.origin}`);
+    expect(page.text).toContain('with a passkey or password. Then click the green <strong>Create GitHub App</strong> button.');
     const action = /<form id="github-create" method="post" action="([^"]+)"/u.exec(page.text)[1].replaceAll('&amp;', '&');
     const manifest = /name="manifest" value="([^"]+)"/u.exec(page.text)[1].replaceAll('&quot;', '"').replaceAll('&#39;', "'").replaceAll('&amp;', '&');
     expect(JSON.parse(manifest).redirect_url).toBe(`${h.origin}${CALLBACK_PATHS.created}`);
@@ -331,6 +332,7 @@ describe('setup pages', () => {
     const authorized = await clickThrough(await fetch(toAuthorize.headers.get('location'), { redirect: 'manual' }));
     const done = await h.call(authorized.pathname + authorized.search, { withCookie: false });
     expect(done.status).toBe(200);
+    expect(done.text).toContain('<h1>Connected to GitHub</h1>');
     // The one repository the app is on was picked for the owner.
     expect((await h.call('/owner/github/state')).value).toMatchObject({ state: 'connected', repository: 'cybersader/cyberchief' });
     expect((await h.step('continue')).value.step).toBe('notes');

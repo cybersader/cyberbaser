@@ -7,6 +7,22 @@
   const csrf = root.dataset.csrf;
   const step = root.dataset.step;
   const status = document.getElementById('setup-status');
+  let sessionEnded = false;
+  function endSession() {
+    if (sessionEnded) return;
+    sessionEnded = true;
+    const heading = document.createElement('h1');
+    heading.textContent = 'Setup sign-in ended';
+    heading.tabIndex = -1;
+    const message = document.createElement('p');
+    message.className = 'setup-lede';
+    message.textContent = root.dataset.sessionEnded;
+    root.querySelector('.setup-back')?.remove();
+    root.querySelector('.setup-step').replaceChildren(heading, message);
+    heading.focus();
+  }
+  root.addEventListener('setup-session-ended', endSession);
+  const expired = (response, body) => response.status === 403 && body?.error?.code === 'invalid-session';
   const MESSAGES = {
     'not-ready': 'That step is not finished yet.',
     'invalid-url': 'Enter the full address, starting with https://.',
@@ -25,6 +41,7 @@
         body: JSON.stringify({ csrf, step, action, value }),
       });
       outcome = await response.json().catch(() => null);
+      if (expired(response, outcome)) { endSession(); return null; }
     } catch {
       status.textContent = 'This page lost contact with Cyberbaser. Check that it is still running, then try again.';
       if (trigger) trigger.disabled = false;
@@ -104,40 +121,17 @@
   // ---- Your notes: a calm progress line while the copy and build run.
   const phase = root.dataset.notesPhase;
   if (step === 'notes' && ['idle', 'cloning', 'building'].includes(phase)) {
-    let seen = phase;
     const poll = async () => {
+      if (sessionEnded) return;
       try {
-        const now = await (await fetch('/setup/state', { credentials: 'same-origin' })).json();
-        if (now.step !== step || now.notes.phase !== seen) { location.assign('/setup'); return; }
-        seen = now.notes.phase;
+        const response = await fetch('/setup/state', { credentials: 'same-origin' });
+        const now = await response.json();
+        if (expired(response, now)) { endSession(); return; }
+        if (response.ok && (now.step !== step || now.notes.phase !== phase)) { location.assign('/setup'); return; }
       } catch { /* keep waiting */ }
       setTimeout(poll, 1200);
     };
     setTimeout(poll, 1200);
-  }
-
-  // ---- Done: setup hands over to Cyberbaser itself; links work once it answers.
-  const starting = document.getElementById('setup-starting');
-  if (step === 'done' && starting) {
-    const linksRow = starting.nextElementSibling;
-    linksRow?.setAttribute('aria-hidden', 'true');
-    linksRow?.classList.add('is-waiting');
-    let tries = 0;
-    const check = async () => {
-      tries += 1;
-      let up = false;
-      try { up = (await fetch('/owner/devices/state', { credentials: 'same-origin' })).ok; } catch { up = false; }
-      if (up) {
-        starting.textContent = '';
-        starting.hidden = true;
-        linksRow?.removeAttribute('aria-hidden');
-        linksRow?.classList.remove('is-waiting');
-        return;
-      }
-      if (tries === 20) starting.textContent = 'Still starting. This can take a minute the first time.';
-      setTimeout(check, 1500);
-    };
-    check();
   }
 
   if (step !== 'github' && step !== 'phone' && step !== 'agent') root.querySelector('.setup-step h1')?.setAttribute('tabindex', '-1');

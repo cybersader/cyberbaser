@@ -252,20 +252,24 @@ function textareaText(value) {
   return value.startsWith('\n') ? `\n${escaped}` : escaped;
 }
 
-function pageShell({ title, body, script = null, bodyClass = null, stylesheet = '/owner/assets/owner.css' }) {
+function pageShell({ title, body, script = null, bodyClass = null, stylesheet = '/owner/assets/owner.css', inlineStyle = null, inlineScript = null }) {
   const scriptTag = [script].flat().filter(Boolean).map((source) => `<script src="${source}" defer></script>`).join('\n');
   const bodyAttribute = bodyClass === null ? '' : ` class="${escapeHtml(bodyClass)}"`;
+  // Inline sources are trusted code constants, never page data. The caller
+  // must opt in with their exact hashes in the response's CSP.
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
-<link rel="stylesheet" href="${stylesheet}">
+${stylesheet === null ? '' : `<link rel="stylesheet" href="${stylesheet}">`}
+${inlineStyle === null ? '' : `<style>${inlineStyle}</style>`}
 ${scriptTag}
 </head>
 <body${bodyAttribute}>
 ${body}
+${inlineScript === null ? '' : `<script>${inlineScript}</script>`}
 </body>
 </html>
 `;

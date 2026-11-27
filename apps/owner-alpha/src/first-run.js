@@ -25,6 +25,7 @@ import { CALLBACK_PATHS, validCode, validState as validFlowState } from './publi
 import { handleForgeSetup } from './forge-setup.js';
 import { STARTER_COMMIT_MESSAGE, STARTER_PATH, starterPublishYml, validStarterFolder } from './starter-publish.js';
 import { handleDeviceRoutes, ownerHttpTools, pairFormHtml } from './server.js';
+import { READY_SCRIPT, READY_STYLE, readyCsp } from './setup-ready.js';
 
 const exec = promisify(execFile);
 
@@ -348,7 +349,7 @@ export function createNotesPreparer({ state, directory, checkout = path.join(dir
       }
       await phase({ phase: 'ready', site: ['built', 'unavailable', 'failed'].includes(site) ? site : 'failed' });
     } catch {
-      await phase({ phase: 'failed', message: 'Cyberbaser could not copy your notes from GitHub. Check that this machine is online, then try again.' }).catch(() => {});
+      await phase({ phase: 'failed', message: 'Cyberbaser could not copy your notes from GitHub. Check that the computer running Cyberbaser is online, then try again.' }).catch(() => {});
     }
   }
 
@@ -521,7 +522,7 @@ function notesLines(e, state) {
       ? notes.site === 'built' ? line(true, 'Built a private preview of your site')
         : `<li class="is-note"><span class="setup-dot" aria-hidden="true"></span><span>${notes.site === 'failed'
           ? 'The private preview did not build. Proposals still show, in a simpler view.'
-          : 'This machine cannot build the private preview, so proposals show in a simpler view. Everything else works.'}</span></li>`
+          : 'Cyberbaser cannot build the private preview, so proposals show in a simpler view. Everything else works.'}</span></li>`
       : line(false, 'Building a private preview of your site…'));
   }
   return `<ul class="setup-lines" role="status">${items.join('')}</ul>`;
@@ -588,7 +589,7 @@ function stepBody({ e, state, csrfToken, relay, dev, pairCommand, enrolPort = nu
   const step = state.step;
   if (step === 'welcome') {
     return `<h1>Set up Cyberbaser</h1>
-<p class="setup-lede">Cyberbaser keeps a private copy of your notes on this machine. Your phone, your agents and your visitors can suggest changes, and nothing reaches your website until you approve it.</p>
+<p class="setup-lede">Cyberbaser keeps a private copy of your notes on the computer running Cyberbaser. Your phone, your agents and your visitors can suggest changes, and nothing reaches your website until you approve it.</p>
 <p class="setup-aside">About five minutes. Nothing is published while you set up.</p>
 <div class="setup-actions">${actionButton(e, 'start', 'Start')}</div>`;
   }
@@ -605,15 +606,16 @@ ${forge}
     const ready = state.notes.phase === 'ready'
       && (['present', 'invalid', 'awaiting-approval'].includes(state.notes.publishYml) || state.notes.choice !== null);
     return `<h1>Your notes</h1>
-<p class="setup-lede">Cyberbaser is making a private copy of your notes on this machine. It reads from GitHub and changes nothing there.</p>
+<p class="setup-lede">Cyberbaser is making a private copy of your notes on the computer running Cyberbaser. It reads from GitHub and changes nothing there.</p>
 ${notesLines(e, state)}
 ${publishYmlBlock(e, state)}
 <div class="setup-actions setup-continue"${ready ? '' : ' hidden'}>${actionButton(e, 'continue', 'Continue', '', ready ? '' : ' disabled')}</div>`;
   }
   if (step === 'website' && privateDefault && !showPublic) {
     return `<h1>Your website</h1>
-<p class="setup-lede">Keep your site private. Cyberbaser builds it on this machine and shows it only here, at <span class="setup-url">${e(readerAddress ?? 'this machine')}</span>. Nothing goes on the web.</p>
-<p class="setup-aside">After you approve a change on your phone, it is saved to GitHub and shows as Live on your private site once this machine has rebuilt it.</p>
+<p class="setup-lede">Keep your site private. Open it on the computer running Cyberbaser or through your secure connection. Nothing is published to a public website.</p>
+${readerAddress ? `<p class="setup-aside">Address on the computer running Cyberbaser: <span class="setup-url">${e(readerAddress)}</span></p>` : ''}
+<p class="setup-aside">After you approve a change on your phone, it is saved to GitHub and shows as Live after Cyberbaser rebuilds your private site.</p>
 <div class="setup-actions">${actionButton(e, 'private', 'Keep it private')}${actionButton(e, 'show-public', 'Use a public website instead', 'quiet')}</div>`;
   }
   if (step === 'website') {
@@ -657,7 +659,7 @@ ${paired && reachable ? '<details class="setup-more"><summary>Pair another</summ
   }
   const summary = [
     ['Notes', state.repository],
-    ['Website', state.website.source === 'private' ? 'Private, on this machine only' : state.website.url ?? 'Not set yet'],
+    ['Website', state.website.source === 'private' ? 'Private: open it on the computer running Cyberbaser or through your secure connection.' : state.website.url ?? 'Not set yet'],
     ['Phone', state.phone === 'paired' ? 'Paired' : 'Not paired yet'],
     ['Agent', state.agent === 'paired' ? 'Paired' : 'None yet'],
     ...(state.notes.publishYml === 'awaiting-approval' ? [['publish.yml', 'Waiting for your approval on your phone']] : []),
@@ -666,26 +668,30 @@ ${paired && reachable ? '<details class="setup-more"><summary>Pair another</summ
 <p class="setup-lede">Changes your agents and visitors suggest will appear in Proposals. Nothing is published until you approve it.</p>
 <dl class="setup-summary">${summary.map(([term, value]) => `<div><dt>${e(term)}</dt><dd>${e(value)}</dd></div>`).join('')}</dl>
 <p class="setup-aside" id="setup-starting" role="status">Starting Cyberbaser…</p>
-<div class="setup-actions"><a class="setup-link-button" href="/owner/review">Open Proposals</a><a class="setup-link-button quiet" href="/owner/devices">Devices</a></div>`;
+<div class="setup-actions" id="setup-ready-actions" hidden><a class="setup-link-button" href="/owner/review">Open Proposals</a><a class="setup-link-button quiet" href="/owner/devices">Devices</a></div>`;
 }
+
+const SESSION_ENDED = 'Your setup sign-in ended. Ask for a fresh setup link to carry on; your progress is saved.';
 
 export function setupPage({ state, csrfToken, relay = null, dev = null, pairCommand = 'cyberbaser pair', tools, enrolPort = null,
   privateDefault = false, readerAddress = null }) {
   const e = tools.escapeHtml;
   const index = SETUP_STEPS.indexOf(state.step);
-  const back = index > 0 && state.step !== 'done';
-  const scripts = ['/owner/assets/setup.js'];
+  const ready = state.step === 'done';
+  const back = index > 0 && !ready;
+  const scripts = ready ? [] : ['/owner/assets/setup.js'];
   if (state.step === 'github' && relay !== null) scripts.push('/owner/assets/github.js');
   if ((state.step === 'phone' || state.step === 'agent') && dev?.pairing.available()) scripts.push('/owner/assets/devices.js');
   return tools.pageShell({
     title: `${STEP_TITLES[state.step]} · Cyberbaser setup`,
     script: scripts,
+    ...(ready ? { stylesheet: null, inlineStyle: READY_STYLE, inlineScript: READY_SCRIPT } : {}),
     bodyClass: 'devices-page forge-page setup-page',
-    body: `<main class="setup-shell" id="setup" data-csrf="${e(csrfToken)}" data-step="${e(state.step)}" data-notes-phase="${e(state.notes.phase)}">
+    body: `<main class="setup-shell" id="setup" data-step="${e(state.step)}"${ready ? '' : ` data-csrf="${e(csrfToken)}" data-notes-phase="${e(state.notes.phase)}" data-session-ended="${e(SESSION_ENDED)}"`}>
 <header class="setup-top">${back ? actionButton(e, 'back', 'Back', 'setup-back') : '<span class="setup-mark">Cyberbaser</span>'}${progressHtml(state.step)}</header>
 <section class="setup-step" aria-live="polite">
 ${stepBody({ e, state, csrfToken, relay, dev, pairCommand, enrolPort, privateDefault, readerAddress })}
-<p class="setup-status" id="setup-status" role="status"></p>
+${ready ? '' : '<p class="setup-status" id="setup-status" role="status"></p>'}
 </section>
 </main>`,
   });
@@ -720,7 +726,7 @@ function createAppPage(tools, { action, manifest }) {
   return tools.pageShell({ title: 'Create Cyberbaser\'s GitHub App', script: '/owner/assets/github-create.js', bodyClass: 'devices-page setup-page',
     body: `<main class="setup-shell"><header class="setup-top"><span class="setup-mark">Cyberbaser</span></header><section class="setup-step">
 <h1>Opening GitHub…</h1>
-<p class="setup-lede">GitHub shows Cyberbaser's app with everything filled in. Click <strong>Create GitHub App</strong> there; you come back here by yourself.</p>
+<p class="setup-lede">GitHub may ask you to confirm it’s you with a passkey or password. Then click the green <strong>Create GitHub App</strong> button.</p>
 <form id="github-create" method="post" action="${e(action)}"><input type="hidden" name="manifest" value="${e(manifest)}">
 <div class="setup-actions"><button type="submit">Continue to GitHub</button></div></form>
 </section></main>` });
@@ -743,6 +749,9 @@ function forgeMessage(error) {
 }
 
 const PREVIOUS = Object.freeze({ github: 'welcome', notes: 'github', website: 'notes', phone: 'website', agent: 'phone' });
+const GITHUB_HANDOFFS = new Map([
+  ['/setup/github/create', 'new-app'], ['/setup/github/install', 'install-app'], ['/setup/github/sign-in', 'web-sign-in'],
+]);
 
 function validWebsiteUrl(value) {
   if (typeof value !== 'string' || value.length === 0 || value.length > 512) return null;
@@ -763,7 +772,7 @@ function isLoopback(address) {
  */
 export function createFirstRunHandler({
   listen, state, links, relay = null, notes, starter = null, reach = async () => null, pairCommand = 'cyberbaser pair',
-  publicRoot = fileURLToPath(new URL('../public/', import.meta.url)), onComplete = () => {}, createToken,
+  publicRoot = fileURLToPath(new URL('../public/', import.meta.url)), onComplete = () => {}, onReadyPage = () => {}, createToken,
   // The publisher's own enrolment page (publisher/owner-control.js), or null.
   enrolPort = null,
   // 'private-site': the website step offers the private site first (installer --site private).
@@ -778,6 +787,7 @@ export function createFirstRunHandler({
   const expectedHost = `${listen.host}:${listen.port}`;
   const expectedOrigin = `http://${expectedHost}`;
   const sessions = new Map();
+  let completingSession = null;
   let device = null;
 
   async function devices() {
@@ -928,7 +938,7 @@ export function createFirstRunHandler({
           if (usable.length === 1) await relay.pick(usable[0].fullName);
         } catch { /* the picker shows the reason */ }
       }
-      return backToSetup('GitHub is connected', 'Taking you back to setup.');
+      return backToSetup('Connected to GitHub', 'Taking you back to setup.');
     } catch (error) {
       return html(noticePage(tools, 'GitHub needs attention', forgeMessage(error), true), 409);
     }
@@ -989,12 +999,17 @@ export function createFirstRunHandler({
     if (Object.values(CALLBACK_PATHS).includes(url.pathname)) return githubReturn(request, url);
 
     const owner = session(request);
+    const handoff = GITHUB_HANDOFFS.get(url.pathname);
+    // A readiness probe can land on an old keep-alive connection after the
+    // listener has stopped accepting. Close it so the next probe reconnects.
+    const readinessProbe = url.pathname === '/' && request.method === 'HEAD';
     if (owner === null) {
-      if (url.pathname === '/setup' && request.method === 'GET') {
-        return html(noticePage(tools, 'Open your setup link', 'Setup opens from a one-time link. If you need a new one, ask for a fresh setup link.'), 403);
+      if (['GET', 'HEAD'].includes(request.method) && (url.pathname === '/setup' || handoff)) {
+        return html(request.method === 'HEAD' ? null : noticePage(tools, 'Setup sign-in ended', SESSION_ENDED), 403);
       }
-      return errorResponse(403, 'invalid-session');
+      return json({ error: { code: 'invalid-session', message: SESSION_ENDED } }, 403, readinessProbe ? { Connection: 'close' } : {});
     }
+    if (readinessProbe) return response(null, 404, { Connection: 'close' });
     const { csrfToken } = owner;
     if (request.method === 'POST' && request.headers.get('origin') !== expectedOrigin) return errorResponse(403, 'invalid-origin');
 
@@ -1013,19 +1028,22 @@ export function createFirstRunHandler({
       const dev = ['phone', 'agent'].includes(current.step) ? await devices() : null;
       const frame = enrolPort !== null && current.step === 'phone'
         ? { 'Content-Security-Policy': `${tools.ownerCsp}; frame-src http://127.0.0.1:${enrolPort}` } : {};
-      return html(request.method === 'HEAD' ? null : setupPage({ state: current, csrfToken, relay, dev, pairCommand, tools, enrolPort,
-        privateDefault: publication === 'private-site', readerAddress }), 200, frame);
+      const done = current.step === 'done';
+      const page = html(request.method === 'HEAD' ? null : setupPage({ state: current, csrfToken, relay, dev, pairCommand, tools, enrolPort,
+        privateDefault: publication === 'private-site', readerAddress }), 200,
+      done ? { 'Content-Security-Policy': readyCsp(tools.ownerCsp), Connection: 'close' } : frame);
+      if (done && request.method === 'GET' && owner.sessionToken === completingSession) onReadyPage();
+      return page;
     }
-    if (['/setup/github/create', '/setup/github/install', '/setup/github/sign-in'].includes(url.pathname)) {
+    if (handoff) {
       if (request.method !== 'GET') return response(null, 405, { Allow: 'GET' });
       if (url.search !== '') return errorResponse(400, 'unexpected-query');
       if (state.read().step !== 'github') return response(null, 303, { Location: '/setup' });
       if (relay === null) return html(noticePage(tools, 'GitHub cannot be reached', MESSAGE_NO_PUBLISHER, true), 503);
-      const op = { '/setup/github/create': 'new-app', '/setup/github/install': 'install-app', '/setup/github/sign-in': 'web-sign-in' }[url.pathname];
       let result;
-      try { result = await relay.askWith(op, { origin: expectedOrigin }); }
+      try { result = await relay.askWith(handoff, { origin: expectedOrigin }); }
       catch (error) { return html(noticePage(tools, 'GitHub needs attention', forgeMessage(error), true), 409); }
-      if (op === 'new-app') {
+      if (handoff === 'new-app') {
         const action = githubOrigin(result?.action);
         if (action === null || typeof result.manifest !== 'string' || result.manifest.length > 8192) {
           return html(noticePage(tools, 'GitHub needs attention', FORGE_PROBLEMS['app-conversion-failed'], true), 502);
@@ -1062,6 +1080,7 @@ export function createFirstRunHandler({
       const outcome = await act(current, body, ['phone', 'agent'].includes(current.step) ? await devices() : null);
       if (outcome === 'complete') {
         const finished = state.read();
+        completingSession = owner.sessionToken;
         queueMicrotask(() => onComplete({ state: finished, session: { sessionToken: owner.sessionToken, csrfToken } }));
         return json({ ok: true, step: 'done' });
       }
@@ -1103,10 +1122,11 @@ export async function runFirstRun({
     ...(checkout === undefined ? {} : { checkout }),
     ...(viaMirror ? { mirror, refresh: () => relay.ask('fetch') } : {}) });
   const starter = viaMirror ? createStarterPublisher({ checkout: notes.checkout, ...(git ? { git } : {}) }) : null;
-  let finish;
+  let finish, ready;
   const completed = new Promise((resolve) => { finish = resolve; });
+  const readyPage = new Promise((resolve) => { ready = resolve; });
   const handler = createFirstRunHandler({ listen: { host: '127.0.0.1', port }, state, links, relay, notes, starter, reach, pairCommand,
-    createToken, onComplete: (result) => finish(result), enrolPort, publication, readerAddress });
+    createToken, onComplete: finish, onReadyPage: ready, enrolPort, publication, readerAddress });
   // A restart while the notes were being copied picks the copy up again.
   const resumed = state.read();
   if (resumed.repository && ['cloning', 'building'].includes(resumed.notes.phase)) notes.start(resumed.repository);
@@ -1116,6 +1136,7 @@ export async function runFirstRun({
     origin,
     state,
     completed,
+    readyPage,
     notes,
     setupLink: () => `${origin}/setup/start?token=${links.issue()}`,
     stop: (force) => server.stop?.(force),

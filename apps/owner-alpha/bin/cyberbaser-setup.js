@@ -87,9 +87,15 @@ if (import.meta.main) {
   process.stdout.write(`Setup complete. Node config: ${layout.configFile}${workflowDetected ? '' : ' (no Pages workflow found; live checks will not confirm)'}\n`);
   console.close();
   await carrier?.close().catch(() => {});
-  // The setup server goes away before the node takes the same address, so no setup link answers again.
-  setup.stop(true);
-  if (flag === '--exit-at-done') process.exit(0);
+  if (flag === '--exit-at-done') {
+    setup.stop(true);
+    process.exit(0);
+  }
+  // Let the browser fetch the ready document before releasing the port. A
+  // scripted setup or closed tab must not hold up startup indefinitely.
+  await Promise.race([setup.readyPage, new Promise((resolve) => setTimeout(resolve, 5000).unref())]);
+  // Drain the ready document rather than cutting its response mid-flight.
+  await setup.stop(false);
   try {
     await runNodeAfterSetup({ configFile: layout.configFile, session, pendingStarter: state.notes.starterCommit ?? null });
   } catch (error) {

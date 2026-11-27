@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { execFile, spawn, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import {
   createFirstRunHandler, createNotesPreparer, createSetupForgeRelay, createSetupLinks, createStarterPublisher, detectWebsite, inspectPublishYml,
-  openSetupState, ownerConfigFromSetup, SETUP_STATE_FILE, starterPublishYml,
+  openSetupState, ownerConfigFromSetup, runFirstRun, SETUP_STATE_FILE, starterPublishYml,
 } from '../src/first-run.js';
 import { createMemoryEditSessionStore, createOwnerAlphaHandler, ownerHttpTools } from '../src/server.js';
 import { validateOwnerAlphaConfig } from '../src/config.js';
@@ -103,7 +104,8 @@ function fakeReach() {
 }
 
 let nextPort = 47410;
-async function harness({ root, relay = 'fake', links = null, clock, reach, git = localGit, fetchUrlFor, buildSite, state: given, starter: withStarter = false, enrolPort = null } = {}) {
+async function harness({ root, relay = 'fake', links = null, clock, reach, git = localGit, fetchUrlFor, buildSite, state: given, starter: withStarter = false,
+  enrolPort = null, publication = null, readerAddress = null } = {}) {
   const directory = path.join(root, 'state');
   const state = given ?? await openSetupState(directory);
   const tools = ownerHttpTools();
@@ -112,9 +114,11 @@ async function harness({ root, relay = 'fake', links = null, clock, reach, git =
   const notes = createNotesPreparer({ state, directory, git, fetchUrlFor, buildSite });
   const starter = withStarter ? createStarterPublisher({ checkout: notes.checkout, git }) : null;
   const completions = [];
+  const readyPages = [];
   const port = nextPort++;
   const handler = createFirstRunHandler({ listen: { host: '127.0.0.1', port }, state, links: setupLinks,
-    relay: relay === 'fake' ? fakeRelay(state) : relay, notes, starter, reach: reach ?? (async () => null), onComplete: (result) => completions.push(result), enrolPort });
+    relay: relay === 'fake' ? fakeRelay(state) : relay, notes, starter, reach: reach ?? (async () => null),
+    onComplete: (result) => completions.push(result), onReadyPage: () => readyPages.push('ready'), enrolPort, publication, readerAddress });
   const origin = `http://127.0.0.1:${port}`;
   let cookie = null;
   let csrf = null;
@@ -153,8 +157,8 @@ async function harness({ root, relay = 'fake', links = null, clock, reach, git =
     }
     throw new Error('notes never settled');
   };
-  return { state, handler, call, redeem, signIn, step, waitNotes, completions, links: setupLinks, directory, origin, port,
-    setClock: (fn) => { now = fn; }, get csrf() { return csrf; }, setCookie: (value) => { cookie = value; } };
+  return { state, handler, call, redeem, signIn, step, waitNotes, completions, readyPages, links: setupLinks, directory, origin, port,
+    setClock: (fn) => { now = fn; }, get csrf() { return csrf; }, get cookie() { return cookie; }, setCookie: (value) => { cookie = value; } };
 }
 
 describe('setup link', () => {
@@ -280,6 +284,121 @@ describe('setup link', () => {
 });
 
 describe('setup steps', () => {
+  test('missing and expired sign-ins explain how to resume without issuing or rotating a link', async () => {
+    const root = await scratch('oa-setup-ended-');
+    const live = await harness({ root });
+    await live.signIn();
+    await live.step('start');
+    const restarted = await harness({ root });
+    const fresh = restarted.links.issue();
+    const message = 'Your setup sign-in ended. Ask for a fresh setup link to carry on; your progress is saved.';
+    for (const cookie of ['', live.cookie]) {
+      const headers = { Cookie: cookie };
+      for (const route of ['/setup', '/setup/github/create', '/setup/github/install', '/setup/github/sign-in']) {
+        const refused = await restarted.call(route, undefined, { headers });
+        expect(refused.status).toBe(403);
+        expect(refused.text).toContain(message);
+        expect(refused.text).not.toContain(fresh);
+        expect(refused.headers.get('set-cookie')).toBeNull();
+        expect(refused.headers.get('location')).toBeNull();
+      }
+      const head = await restarted.call('/setup', undefined, { method: 'HEAD', headers });
+      expect(head.status).toBe(403);
+      expect(head.text).toBe('');
+      for (const [route, body] of [
+        ['/setup/step', { csrf: live.csrf, step: 'github', action: 'back', value: null }],
+        ['/setup/state', undefined], ['/owner/github/check', undefined], ['/owner/devices/pair', { csrf: live.csrf }],
+      ]) {
+        const refused = await restarted.call(route, body, { headers });
+        expect(refused.status).toBe(403);
+        expect(refused.value).toEqual({ error: { code: 'invalid-session', message } });
+        expect(refused.headers.get('set-cookie')).toBeNull();
+      }
+    }
+    expect(restarted.state.read().step).toBe('github');
+    const opened = await restarted.redeem(fresh);
+    expect(opened.status).toBe(303);
+    restarted.setCookie(opened.headers.get('set-cookie').split(';', 1)[0]);
+    expect((await restarted.call('/setup')).text).toContain('data-step="github"');
+  });
+
+  test('private setup names the host accurately and the ready page needs no assets', async () => {
+    const root = await scratch('oa-setup-ready-');
+    const h = await harness({ root, publication: 'private-site', readerAddress: 'http://127.0.0.1:4518/' });
+    const welcome = await h.signIn();
+    expect(welcome.text).toContain('private copy of your notes on the computer running Cyberbaser');
+    expect(welcome.text).not.toMatch(/this (machine|computer)/iu);
+    const otherSession = h.cookie;
+    await h.signIn();
+    await h.state.update((now) => ({ ...now, step: 'website', repository: 'owner/notes' }));
+    const website = await h.call('/setup');
+    expect(website.text).toContain('Open it on the computer running Cyberbaser or through your secure connection.');
+    expect(website.text).toContain('Address on the computer running Cyberbaser: <span class="setup-url">http://127.0.0.1:4518/</span>');
+    expect(website.text).not.toMatch(/this (machine|computer)|only here/iu);
+    await h.step('private');
+    await h.step('skip');
+    expect((await h.step('skip')).value).toEqual({ ok: true, step: 'done' });
+    expect(h.readyPages).toEqual([]);
+    // A HEAD probe or a different browser cannot release the setup listener.
+    expect((await h.call('/setup', undefined, { method: 'HEAD' })).status).toBe(200);
+    expect((await h.call('/setup', undefined, { headers: { Cookie: '' } })).status).toBe(403);
+    expect((await h.call('/setup', undefined, { headers: { Cookie: otherSession } })).status).toBe(200);
+    expect(h.readyPages).toEqual([]);
+    const page = await h.call('/setup');
+    expect(h.readyPages).toEqual(['ready']);
+    expect(page.text).toContain('Private: open it on the computer running Cyberbaser or through your secure connection.');
+    expect(page.text).not.toMatch(/this (machine|computer)/iu);
+    expect(page.text).toContain('Starting Cyberbaser…');
+    expect(page.text).toContain('id="setup-ready-actions" hidden');
+    expect(page.text).not.toMatch(/<link\b|<script\s|data-csrf|\/owner\/assets\//u);
+    const css = /<style>([\s\S]*?)<\/style>/u.exec(page.text)?.[1];
+    const script = /<script>([\s\S]*?)<\/script>/u.exec(page.text)?.[1];
+    expect(css).toContain('.setup-summary');
+    expect(script).toContain('setTimeout(check, 1500)');
+    const hash = (bytes) => createHash('sha256').update(bytes).digest('base64');
+    const csp = page.headers.get('content-security-policy');
+    expect(csp).toContain(`style-src 'sha256-${hash(css)}'`);
+    expect(csp).toContain(`script-src 'sha256-${hash(script)}'`);
+    expect(csp).not.toContain('unsafe-inline');
+    expect(csp).toContain("connect-src 'self'");
+    expect(csp).toContain("frame-ancestors 'none'");
+  });
+
+  test('the ready document survives releasing the loopback port for the next listener', async () => {
+    const root = await scratch('oa-setup-handover-');
+    let handler;
+    const listener = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: (request, server) => handler(request, server) });
+    const port = listener.port;
+    let next;
+    try {
+      const setup = await runFirstRun({ stateDirectory: path.join(root, 'state'), port,
+        serve: ({ fetch }) => { handler = fetch; return listener; } });
+      await setup.state.update((now) => ({ ...now, step: 'agent', repository: 'owner/notes' }));
+      const link = new URL(setup.setupLink());
+      const start = await fetch(`${setup.origin}/setup/start`, { method: 'POST', headers: { Origin: setup.origin },
+        body: link.searchParams, redirect: 'manual' });
+      const Cookie = start.headers.get('set-cookie').split(';', 1)[0];
+      const agent = await (await fetch(`${setup.origin}/setup`, { headers: { Cookie } })).text();
+      const csrf = /data-csrf="([^"]+)"/u.exec(agent)[1];
+      const complete = await fetch(`${setup.origin}/setup/step`, { method: 'POST',
+        headers: { Origin: setup.origin, Cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ csrf, step: 'agent', action: 'skip', value: null }) });
+      expect(await complete.json()).toEqual({ ok: true, step: 'done' });
+      await setup.completed;
+      const restart = setup.readyPage.then(async () => {
+        await setup.stop(false);
+        next = Bun.serve({ hostname: '127.0.0.1', port, fetch: () => new Response(null, { status: 302, headers: { Location: '/owner/review' } }) });
+      });
+      const page = await fetch(`${setup.origin}/setup`, { headers: { Cookie } });
+      expect(await page.text()).toContain('Starting Cyberbaser…');
+      await restart;
+      const head = await fetch(`${setup.origin}/`, { method: 'HEAD', headers: { Cookie }, redirect: 'manual' });
+      expect(head.status).toBe(302);
+    } finally {
+      await Promise.all([listener.stop(true), next?.stop(true)]);
+    }
+  });
+
   test('need the session and its CSRF token, and act only on the step on screen', async () => {
     const root = await scratch('oa-setup-csrf-');
     const h = await harness({ root });

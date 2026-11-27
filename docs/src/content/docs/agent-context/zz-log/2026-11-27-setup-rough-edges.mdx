@@ -1,0 +1,14 @@
+---
+title: Setup explains GitHub, expired sign-ins and the switch to normal running
+description: Four usability fixes from the first always-on setup, verified with local fixtures only.
+status: log
+---
+
+The [first always-on install](/cyberbaser/agent-context/zz-log/2026-11-27-truenas-always-on-install/) showed four places where the owner lost their bearings. The maintainer chose to fix those before a paired-device publish or a real-site move.
+
+- Setup now explains GitHub's passkey or password prompt, the green **Create GitHub App** button, **Only select repositories**, and **Authorize** before sending the owner there. Returning shows **Connected to GitHub**. Publisher-owned state, callback checks and permissions are unchanged.
+- Expired setup pages or actions say: “Your setup sign-in ended. Ask for a fresh setup link to carry on; your progress is saved.” Only the local operator can issue a new setup link. A request with no valid session still returns 403 and cannot issue a link, set a cookie or change a step.
+- **Cyberbaser is ready** carries its own hash-authorized style and script. It needs no assets from the setup listener during the switch. The page keeps checking the same address, then shows **Open Proposals** and **Devices** once the signed-in normal server answers. The setup listener gives the finishing browser a bounded window to fetch the page and closes its old keep-alive connection after delivering it.
+- Private-site copy describes access from the computer running Cyberbaser or over a secure connection. A loopback site address is labeled as belonging to that computer, not to whichever device is viewing setup.
+
+Targeted Bun tests passed against in-process handlers, a loopback listener handover, a simulated browser and a stand-in GitHub. No live GitHub, server, install or human acceptance was run. A one-click remote setup launcher remains separate.
