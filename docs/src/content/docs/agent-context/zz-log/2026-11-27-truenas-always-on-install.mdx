@@ -1,0 +1,25 @@
+---
+title: First always-on install on the owner's TrueNAS
+description: Cyberbaser's TrueNAS release was installed as a custom app on the owner's home server after three security review rounds, set up by the owner by clicking from their desktop over a Tailscale SSH forward, against a private throwaway test repo. Setup completed, the private site built, phone reach bound only to the Tailscale address, nothing published.
+status: log
+---
+
+## What happened
+
+- Owner decisions (2026-11-26): install on TrueNAS after the security review; publish to a new test repo first while Cyberchief stays on the desktop; phones reach the server over Tailscale plus relay. The owner declined to narrow Tailscale-SSH root access, so root on the appliance is outside the trust boundary for the publisher's state.
+- Review rounds before deploy: (1) the enrolment code was reachable by any local principal and the node could spoof its UID through port-only `/proc/net/tcp` matching; the renderer could reach the node via `/proc/<pid>/mem` and node-trusted Git files; the private reader was unauthenticated. Fixed with 4-tuple ESTABLISHED allowlist matching, the publisher on its own bridge, Landlock plus seccomp for the renderer, and an owner-session check on the reader. (2) Renderer descendants could rewrite output after validation; fixed by sealing output into a fresh node-only copy after tearing down the whole process tree. (3) Six follow-ups (bootstrap reuse, store/cache overlap, real custom renderer paths, upgrade probe order, zombie reaping, O_PATH ancestors) fixed; final gate: "DEPLOY (test repo)".
+- The home-server agent (Home Lab project) used the existing scoped `truenas_admin` key (sudo for midclt and docker only): verified the image config ID after `docker load`, passed the appliance launcher probe (kernel 6.12.99, Landlock ABI 6 under docker-default AppArmor), created the 12 exact paths non-recursively, and installed with `app.create`. A one-line edit switched the bundled `relay-only` to the owner's chosen `private-address:100.65.8.18`. Daily snapshot of the dataset, 2 weeks, no replication.
+- Setup: plain `ssh -L` with host keys pinned from Tailscale's advertised keys (`tailscale ssh` 1.102 rejects `-N`), one Tailscale check click, the setup link handed through a 0600 file and opened directly in Brave. The owner created the server's GitHub App, installed it on the test repo only, chose Keep it private and Pair later.
+- Result: setup complete; reconciler delivered the publisher config and the publisher restarted once; node TCP only on loopback 4517/4518; Iroh UDP only on 100.65.8.18 and ::1; private site built with node peak 745 MiB; nothing pushed.
+
+## Usability problems seen (to fix)
+
+- The GitHub step gives no orientation: after GitHub's passkey prompt and app page the owner asked "did I already connect?". Setup should say what GitHub will show before sending them there.
+- An expired setup session left an old step page whose buttons silently did nothing; the owner's clicks never reached the node. It needs a plain "your setup session ended" with a way to get a fresh link (today: restart the node).
+- The ready page lost its stylesheet during the one-minute setup-to-normal handover (no listener in between). Inline the CSS or retry.
+- "Private, on this machine only" is wrong when setup runs from another computer.
+- Owner question: "what if you don't have a phone?" Approval needs a paired signing device; whether desktop Obsidian with the plugin serves is unconfirmed. Open product question.
+
+## Open
+
+Before Cyberchief moves to the server: a fresh per-build workspace for configured renderers, renderer read isolation (or a separate account), a sweep of interrupted-build directories, memory with the real vault. Remote phone pairing through the admin `enroll-code` handoff. A desktop "Set up my server" button so the forward is one click.
