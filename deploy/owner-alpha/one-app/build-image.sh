@@ -66,8 +66,7 @@ case "${CYBERBASER_IMAGE_FORM:-podman}" in
   truenas) jq '.port = 4517 | .reach = "relay-only"' "$PACK/install.json" > "$CTX/install.json" ;;
   *) printf 'Unknown image form.\n' >&2; exit 2 ;;
 esac
-cc -std=c11 -O2 -Wall -Wextra -Werror -fPIE -pie -fstack-protector-strong \
-  -Wl,-z,relro,-z,now "$PACK/render-offline.c" -o "$CTX/render-offline"
+cp -- "$SRC/packaging/dist/render-offline" "$CTX/render-offline"
 # Only the allowlisted build artifacts are sent to the container builder.
 # Neither the snapshot, lab fixture files nor the host checkout enters it.
 podman build --pull=never --force-rm --layers=false --skip-unused-stages \

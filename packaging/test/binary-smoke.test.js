@@ -7,7 +7,7 @@
 //   CYBERBASER_QUARTZ_SEED_DIR=/path/to/verified/seed bun test packaging/test/binary-smoke.test.js
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -59,6 +59,7 @@ async function prepareAppRoot() {
   expect(spawnSync('tar', ['-xf', path.join(REPO, 'packaging', 'dist', 'resources.tar'), '-C', root]).status).toBe(0);
   for (const directory of ['bin', 'libexec', '.workspace', 'vendor/quartz']) await mkdir(path.join(root, directory), { recursive: true });
   spawnSync('cp', [program, path.join(root, 'bin', 'cyberbaser')]);
+  await copyFile(path.join(REPO, 'packaging', 'dist', 'render-offline'), path.join(root, 'libexec', 'render-offline'));
   for (const name of ['node', 'bun']) {
     await writeFile(path.join(root, 'libexec', name), '#!/bin/sh\nBUN_BE_BUN=1 exec /opt/cyberbaser/bin/cyberbaser "$@"\n', { mode: 0o755 });
   }

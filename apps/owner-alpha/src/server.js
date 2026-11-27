@@ -18,6 +18,7 @@ import { listDurableJobs, loadDurableJob, validateJobId } from './job-state.js';
 import { ensureOwnerSite } from './site.js';
 import { createEditSession as createSourceEditSession, hasPendingStartupCheckout, liveUrlForSlug } from './source.js';
 import { configuredSiteBase, readSiteBase } from './site-base.js';
+import { readSiteFile } from './site-files.js';
 import { createUpstream } from './upstream.js';
 import { prepareStore, storeContextFromConfig } from './store.js';
 import { startSuggestionIntake, suggestionFormOrigin, suggestionChallengeOrigin } from './suggestions.js';
@@ -62,7 +63,6 @@ export function ownerHttpTools() {
 const COOKIE_NAME = 'owner_alpha_session';
 export const MAX_OWNER_SESSIONS = 64;
 const MAX_REVIEW_DECISION_BODY_BYTES = OWNER_DECISION_REASON_MAX_BYTES + 16 * 1024;
-const MAX_STATIC_BYTES = 64 * 1024 * 1024;
 const PUBLIC_ROOT = fileURLToPath(new URL('../public/', import.meta.url));
 const PROJECT_ROOT = path.resolve(fileURLToPath(new URL('../../../', import.meta.url)));
 const OWNER_CSP = [
@@ -1484,63 +1484,19 @@ function safePathSegments(encodedPath, { directoryIndex = true } = {}) {
   return segments;
 }
 
-function contained(root, candidate) {
-  const relative = path.relative(root, candidate);
-  return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
-}
-
 async function readSafeStatic(rootInput, encodedPath, { directoryIndex = true } = {}) {
   const root = path.resolve(rootInput);
   const segments = safePathSegments(encodedPath, { directoryIndex });
-  let rootReal;
   try {
-    const rootMetadata = await lstat(root);
-    if (rootMetadata.isSymbolicLink() || !rootMetadata.isDirectory()) return { status: 404 };
-    rootReal = await realpath(root);
-  } catch {
-    return { status: 404 };
-  }
-  if (rootReal !== root) return { status: 404 };
-
-  let current = root;
-  for (const segment of segments) {
-    current = path.join(current, segment);
-    let metadata;
-    try {
-      metadata = await lstat(current);
-    } catch (error) {
-      if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') return { status: 404 };
-      return { status: 500 };
-    }
-    if (metadata.isSymbolicLink()) return { status: 404 };
-  }
-
-  let candidateReal;
-  try {
-    candidateReal = await realpath(current);
-  } catch {
-    return { status: 404 };
-  }
-  if (candidateReal !== current || !contained(rootReal, candidateReal)) return { status: 404 };
-
-  let handle;
-  try {
-    handle = await open(current, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-    const metadata = await handle.stat();
-    if (!metadata.isFile() || metadata.nlink !== 1) return { status: 404 };
-    if (metadata.size > MAX_STATIC_BYTES) return { status: 413 };
-    const realMetadata = await stat(candidateReal);
-    if (metadata.dev !== realMetadata.dev || metadata.ino !== realMetadata.ino) return { status: 404 };
     return {
       status: 200,
-      bytes: await handle.readFile(),
-      contentType: CONTENT_TYPES[path.extname(current).toLowerCase()] ?? 'application/octet-stream',
+      bytes: await readSiteFile(root, segments),
+      contentType: CONTENT_TYPES[path.extname(segments.at(-1)).toLowerCase()] ?? 'application/octet-stream',
     };
   } catch (error) {
-    if (error?.code === 'ELOOP' || error?.code === 'ENOENT') return { status: 404 };
+    if (['ELOOP', 'ENOENT', 'ENOTDIR', 'EINVAL'].includes(error?.code)) return { status: 404 };
+    if (error?.code === 'EFBIG') return { status: 413 };
     return { status: 500 };
-  } finally {
-    await handle?.close();
   }
 }
 

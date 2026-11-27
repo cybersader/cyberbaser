@@ -27,6 +27,7 @@ import { addressFor, parseFrontmatter, readAddressStyle, renderSlug, select } fr
 
 const parseSlug = (text) => parseFrontmatter(text).data?.slug;
 import { createConfiguredRenderer, rendererIdentity } from './renderer-slot.js';
+import { copySiteOutput } from './site-files.js';
 import { verifyBytePreservingProjection } from './site.js';
 import { assertCheckoutReady } from './source.js';
 import { readBuiltSitePage, sitePageSlug } from './site-review-page.js';
@@ -100,6 +101,8 @@ export function createBundlePreview({ config, projectRoot, render = null, depend
     await mkdir(cacheRoot, { recursive: true, mode: 0o700 });
     const root = await mkdtemp(path.join(cacheRoot, `${bundleId}-`));
     const content = path.join(root, 'content');
+    const stagingRoot = path.join(root, 'renderer-handoff');
+    const staging = path.join(stagingRoot, 'site');
     const site = path.join(root, 'site');
     try {
       // The site build's own public selection, projected byte for byte.
@@ -116,8 +119,9 @@ export function createBundlePreview({ config, projectRoot, render = null, depend
         const bytes = file.kind === 'create' ? Buffer.from(file.text, 'utf8') : Buffer.from((await readImage(file.path)).bytes);
         await writeFile(target, bytes, { flag: 'wx', mode: 0o600 });
       }
-      const result = await build({ contentDir: content, outputDir: site, workspaceDir: path.join(root, 'work'), ownerOrigin });
+      const result = await build({ contentDir: content, outputDir: staging, outputWriteRoot: stagingRoot, workspaceDir: path.join(root, 'work'), ownerOrigin });
       if (result?.renderer !== identity.name || result.revision !== identity.revision) return skip('renderer-identity');
+      await copySiteOutput(staging, site);
       const siteYml = await readFile(path.join(checkout.root, '.cyberbaser', 'site.yml'), 'utf8').catch(() => null);
       const style = readAddressStyle(siteYml);
       if (!style.ok) return skip('address-style-unknown');

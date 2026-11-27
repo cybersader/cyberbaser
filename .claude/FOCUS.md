@@ -2,6 +2,8 @@
 
 > Update when direction changes, milestones complete, or priorities shift.
 
+**Private site renderer handoff hardened, 2026-11-26:** native and container builds reap the renderer tree before the node copies bounded regular files to private inodes for validation and promotion. Private reads use pinned directory descriptors. This is local fixture evidence; no updated image or install has been exercised. Record: `agent-context/zz-log/2026-11-26-renderer-output-handoff.mdx`.
+
 **TrueNAS release hardening, 2026-11-26:** publisher enrollment is UID-allowlisted and never logged; the TrueNAS publisher uses its own bridge and an admin-only code handoff. The offline renderer requires Landlock ABI 6 in addition to seccomp, and the private reader requires the owner session. The actual appliance must pass the operator preflight before install. Record: `agent-context/zz-log/2026-11-26-truenas-release-hardening.mdx`.
 
 **TrueNAS Custom App adapter, 2026-11-26:** the three-role Compose form keeps HTTP on host loopback, config reconciliation inside the app, and the publisher's authority out of the node. The node uses a renderer-only seccomp filter rather than adding privilege when Docker denies nested namespaces. Rootful local Docker and the designated TrueNAS host are distinct gates; no appliance change is authorized by the adapter. The pinned Iroh binding supports one selected private IPv4 plus relay, relay-only, or wildcard direct; selecting two specific IPv4s is follow-up. Record: `agent-context/zz-log/2026-11-26-truenas-custom-app.mdx`.

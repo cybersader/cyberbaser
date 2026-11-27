@@ -117,6 +117,8 @@ Each step is saved to an owner-only file, so a restart resumes at the same step.
 
 **The site builder.** The pinned Quartz runs on the program's own runtime: `node` and `bun` in the install are two-line scripts that start the same program as Bun. No Node.js is needed. With no network at all, a private build of a small vault took 1.1 s under Bun against 1.5 s under Node 22; the pages differ only in whitespace inside serialized functions and a source-map path. Quartz and its locked dependencies (465 MB installed) ship as one archive, 107 MB with zstd, whose SHA-256 the program pins; install checks the digest, unpacks it, and the renderer's own setup checks origin, tag, commit and lockfile again.
 
+**Renderer output is staging.** On Linux x64, the installed node and container use the same launcher, requiring Landlock ABI 6 (Linux 6.12 or newer) and the required seccomp/procfs access. The renderer can write its build workspace and disposable output, but not the candidate or live tree. After the build, the launcher kills and reaps the renderer tree before returning. The node copies regular, singly linked files into a new private tree and validates and hashes only that copy before promotion. Private asset reads resolve each component through a pinned directory handle without following symlinks. The native package provides the launcher from `bun packaging/build.js`; the compiler is needed to build the package, not to install it.
+
 **Two accounts.** `cyberbaser` runs the node and the intake; `cyberbaser-publisher` runs the publisher; both have the group `cyberbaser-share` as their primary group.
 
 | Place | Owner, mode | Who can read it |

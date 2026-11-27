@@ -1,11 +1,12 @@
 import { execFile } from 'node:child_process';
-import { lstat, mkdir, readFile, realpath, rm } from 'node:fs/promises';
+import { lstat, mkdir, realpath, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { fail } from './errors.js';
 import { validatePrivateNetworkHttpOrigin } from './network.js';
-import { CONTAINER_RENDERER_LAUNCHER, containerRendererIsolation, withContainerRenderer } from './renderer-isolation.js';
+import { containerRendererIsolation, rendererLauncher, withIsolatedRenderer } from './renderer-isolation.js';
+import { readSiteFile } from './site-files.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -44,23 +45,24 @@ function commandEnvironment(overrides = {}) {
   };
 }
 
-async function offlineSeedEnvironment() {
+export async function offlineSeedEnvironment(seed = PINNED_QUARTZ_SEED_DIR) {
   try {
-    const metadata = await lstat(PINNED_QUARTZ_SEED_DIR);
+    const metadata = await lstat(seed);
     if (metadata.isSymbolicLink() || !metadata.isDirectory()) {
       fail('quartz-seed-invalid', 'fixed Quartz seed must be one real directory');
     }
-    if (await realpath(PINNED_QUARTZ_SEED_DIR) !== PINNED_QUARTZ_SEED_DIR) {
+    if (await realpath(seed) !== seed) {
       fail('quartz-seed-invalid', 'fixed Quartz seed must not use symlink aliases');
     }
     return {
       QUARTZ_OFFLINE: '1',
-      QUARTZ_SEED_DIR: PINNED_QUARTZ_SEED_DIR,
+      QUARTZ_SEED_DIR: seed,
     };
   } catch (error) {
     if (error?.code === 'ENOENT') {
-      if (containerRendererIsolation() || typeof process.env.OWNER_ALPHA_STATE_PROFILE === 'string') {
-        fail('quartz-seed-missing', 'container rendering requires the fixed verified offline Quartz seed');
+      if (PINNED_QUARTZ_RENDERER_DIR.startsWith('/opt/cyberbaser/renderers/')
+        || containerRendererIsolation() || typeof process.env.OWNER_ALPHA_STATE_PROFILE === 'string') {
+        fail('quartz-seed-missing', 'installed rendering requires the fixed verified offline Quartz seed');
       }
       return { QUARTZ_OFFLINE: '0' };
     }
@@ -68,19 +70,21 @@ async function offlineSeedEnvironment() {
   }
 }
 
-async function runFixed(command, args, options, code, workspace, output) {
+async function runFixed(args, options, code, workspace, output, restricted = true) {
   try {
     const execOptions = { encoding: 'utf8', maxBuffer: MAX_COMMAND_OUTPUT_BYTES, ...options };
-    const result = containerRendererIsolation()
-      ? await withContainerRenderer({ workspace, output, env: options.env }, (policy, env) =>
-        execFileAsync(CONTAINER_RENDERER_LAUNCHER, [...policy, '/usr/bin/bash', ...args], { ...execOptions, env }))
-      : await execFileAsync(command, args, execOptions);
+    const launcher = restricted ? await rendererLauncher() : null;
+    const result = restricted
+      ? await withIsolatedRenderer({ workspace, output, env: options.env }, (policy, env) =>
+        execFileAsync(launcher, [...policy, '/usr/bin/bash', ...args], { ...execOptions, env }))
+      // Source-checkout dependency bootstrap only (no vault or output input).
+      : await execFileAsync('/usr/bin/bash', args, { ...execOptions, timeout: 600_000 });
     return {
       stdout: String(result.stdout ?? ''),
       stderr: String(result.stderr ?? ''),
     };
   } catch (error) {
-    fail(code, `${path.basename(args[0] ?? command)} failed`, {
+    fail(code, `${path.basename(args[0])} failed`, {
       exitCode: Number.isSafeInteger(error?.code) ? error.code : null,
       stdout: String(error?.stdout ?? '').slice(-4_000),
       stderr: String(error?.stderr ?? '').slice(-4_000),
@@ -145,7 +149,7 @@ export async function readProvenanceReport(environment) {
   const file = environment.CYBERBASER_PROVENANCE_REPORT;
   if (!file) return null;
   try {
-    const report = JSON.parse(await readFile(file, 'utf8'));
+    const report = JSON.parse((await readSiteFile(path.dirname(file), [path.basename(file)], 1024 * 1024)).toString('utf8'));
     const notes = Array.isArray(report?.notes) ? report.notes.map(({ path: notePath, step }) => ({ path: notePath, step })) : [];
     return { count: notes.length, notes, file };
   } catch (error) {
@@ -173,7 +177,6 @@ export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, 
   await mkdir(workspace, { recursive: true });
   const reportEnvironment = await provenanceReportEnvironment(workspace, formEnvironment);
   const setup = await runFixed(
-    'bash',
     [SETUP_SCRIPT, quartzDir],
     {
       env: commandEnvironment({
@@ -188,10 +191,9 @@ export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, 
           : {}),
       }),
     },
-    'quartz-setup-failed', workspace, output,
+    'quartz-setup-failed', workspace, output, seedEnvironment.QUARTZ_OFFLINE === '1',
   );
   const build = await runFixed(
-    'bash',
     [BUILD_SCRIPT, content, quartzDir],
     {
       env: commandEnvironment({

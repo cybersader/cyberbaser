@@ -20,6 +20,16 @@ COPY --from=bun-source /usr/local/bin/bun /usr/local/bin/bun
 RUN test "$(bun --version)" = '1.3.11' \
     && test "$(node --version)" = 'v22.23.2'
 
+# Build against the same pinned Debian snapshot, without adding a compiler
+# or its dependencies to the runtime image.
+FROM runtime-base AS renderer-launcher
+COPY deploy/owner-alpha/one-app/render-offline.c /tmp/render-offline.c
+RUN set -eux; \
+    apt-get -o Acquire::Retries=3 update; \
+    apt-get install -y --no-install-recommends gcc libc6-dev; \
+    cc -std=c11 -O2 -Wall -Wextra -Werror -fPIE -pie -fstack-protector-strong \
+      -Wl,-z,relro,-z,now /tmp/render-offline.c -o /tmp/render-offline
+
 FROM runtime-base AS quartz-seed
 RUN set -eux; \
     quartz_repository='https://github.com/jackyzha0/quartz.git'; \
@@ -68,6 +78,7 @@ COPY deploy/owner-alpha/entrypoint.sh deploy/owner-alpha/stage-config.js deploy/
 COPY --from=owner-dependencies /opt/cyberbaser/apps/owner-alpha/node_modules ./apps/owner-alpha/node_modules
 COPY --from=intake-dependencies /opt/cyberbaser/apps/account-free-intake/node_modules ./apps/account-free-intake/node_modules
 COPY --from=quartz-seed /seed/quartz ./vendor/quartz
+COPY --from=renderer-launcher --chmod=0555 /tmp/render-offline ./libexec/render-offline
 COPY --chmod=0555 deploy/owner-alpha/entrypoint.sh /usr/local/bin/owner-alpha-entrypoint
 COPY --chmod=0555 deploy/owner-alpha/state-init.sh /usr/local/bin/owner-alpha-state-init
 RUN printf '%s\n' '#!/bin/sh' 'exec bun /opt/cyberbaser/deploy/owner-alpha/git-credential-owner-alpha-socket.js "$@"' \
@@ -113,6 +124,7 @@ RUN /usr/bin/git config --system --add credential.helper '' \
 ENV HOME=/opt/cyberbaser/.workspace/owner-alpha/home \
     XDG_CACHE_HOME=/opt/cyberbaser/.workspace/owner-alpha/cache/xdg \
     TMPDIR=/tmp \
+    CYBERBASER_RENDERER_ISOLATION=socket-filter \
     OWNER_ALPHA_READY_FILE=/run/owner-alpha/ready \
     OWNER_ALPHA_CREDENTIAL_SOCKET=/run/owner-alpha-credentials/helper.sock
 

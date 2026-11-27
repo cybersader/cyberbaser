@@ -214,13 +214,14 @@ async function installProgram(programPath, seed) {
   const previous = `${LAYOUT.appRoot}.old-${randomBytes(4).toString('hex')}`;
   await mkdir(fresh, { mode: 0o755 });
   try {
-    const { RESOURCES_TAR } = await import('../resources.js');
+    const { RESOURCES_TAR, RENDER_LAUNCHER } = await import('../resources.js');
     const tarball = path.join(fresh, '.resources.tar');
     await writeFile(tarball, Buffer.from(await Bun.file(RESOURCES_TAR).arrayBuffer()), { mode: 0o600 });
     run('tar', ['--no-same-owner', '-C', fresh, '-xf', tarball]);
     await rm(tarball);
     for (const directory of ['bin', 'libexec', '.workspace', 'vendor']) await mkdir(path.join(fresh, directory), { mode: 0o755 });
     await writeFile(path.join(fresh, 'bin', 'cyberbaser'), Buffer.from(await Bun.file(programPath).arrayBuffer()), { mode: 0o755 });
+    await writeFile(path.join(fresh, 'libexec', 'render-offline'), Buffer.from(await Bun.file(RENDER_LAUNCHER).arrayBuffer()), { mode: 0o755 });
     // The renderer scripts call `node` and `bun`; both are this program's own runtime.
     for (const name of ['node', 'bun']) {
       await writeFile(path.join(fresh, 'libexec', name), `#!/bin/sh\nBUN_BE_BUN=1 exec ${LAYOUT.program} "$@"\n`, { mode: 0o755 });

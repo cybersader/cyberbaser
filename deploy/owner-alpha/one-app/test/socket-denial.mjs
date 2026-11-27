@@ -24,7 +24,8 @@ if (restricted) {
   if (c.sendto(-1, null, 0n, 0, ptr(address), address.length) !== -1 || read.i32(errno) !== 1) process.exit(1);
   if (c.sendto(-1, null, 0n, 0, null, 0) !== -1 || read.i32(errno) !== 9) process.exit(1);
   const filters = /^Seccomp_filters:\s+(\d+)$/m.exec(readFileSync('/proc/self/status', 'utf8'));
-  if (Number(filters?.[1]) < 2 || !filters) process.exit(1);
+  const minimum = process.argv.includes('--host-probe') ? 1 : 2;
+  if (!filters || Number(filters[1]) < minimum) process.exit(1);
   // A build may pipe output from its own child. Anonymous AF_UNIX pairs
   // support that; the child inherits the same filter.
   const child = Bun.spawnSync(['/usr/bin/printf', 'anonymous-pipe-ok'], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });

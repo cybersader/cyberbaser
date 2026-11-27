@@ -694,34 +694,9 @@ if [[ $engine == docker ]]; then
   ' < "$probe"
   pass 'renderer kernel filter refused AF_INET, AF_INET6, AF_NETLINK, AF_UNIX and connect; the unfiltered node could open all four families'
   dep "$node" bash -euc '
-    launcher=/opt/cyberbaser/libexec/render-offline
     [ "${HOME:?}" = /var/lib/cyberbaser/home ]
-    [ ! -e "$HOME/.gitconfig" ]
-    work=$(mktemp -d /opt/cyberbaser/.workspace/landlock-probe.XXXXXXXX)
-    trap '\''rm -rf -- "$work"; rm -f -- "$HOME/.gitconfig"'\'' EXIT
-    mkdir "$work/build" "$work/output" "$work/build/tmp"
-    (set -o noclobber; printf "synthetic config\n" > "$HOME/.gitconfig")
-    [ -w "$HOME/.gitconfig" ]
-    gitconfig=$HOME/.gitconfig
-    TMPDIR=$work/build/tmp "$launcher" "$work/build" "$work/output" -- /usr/bin/bash -euc '\''
-      parent=$1 build=$2 output=$3 gitconfig=$4
-      : > /dev/null
-      # These destinations contain only disposable fixture data. Never read or
-      # alter the parent memory; only check that an RDWR open is refused.
-      if ( : <>"/proc/$parent/mem" ) 2>/dev/null; then exit 21; fi
-      if ( : >"$gitconfig" ) 2>/dev/null; then exit 22; fi
-      if ( chmod 0777 "$gitconfig" ) 2>/dev/null; then exit 23; fi
-      if ( : >/tmp/renderer-shared-tmp-probe ) 2>/dev/null; then exit 24; fi
-      : > "$build/wrote"; : > "$output/wrote"; : > "$TMPDIR/wrote"
-    '\'' probe "$$" "$work/build" "$work/output" "$gitconfig"
-    [ "$(< "$gitconfig")" = "synthetic config" ]
-    [ -f "$work/build/wrote" ] && [ -f "$work/output/wrote" ] && [ -f "$work/build/tmp/wrote" ]
-    [ ! -e /tmp/renderer-shared-tmp-probe ]
-    ln -s -- "$HOME" "$work/alias"
-    result=0
-    "$launcher" "$work/alias" "$work/output" -- /usr/bin/true 2>/dev/null || result=$?
-    [ "$result" = 125 ]
-  '
+    exec /usr/bin/bash -euc "$1" landlock /opt/cyberbaser/libexec/render-offline /opt/cyberbaser/.workspace
+  ' probe "$(< "$HERE/test/landlock-denial.sh")"
   pass 'Landlock under default Docker seccomp allowed build/output/private temp writes and refused parent-memory open, node Git config and shared /tmp writes; symlink rule failed closed'
   if dep "$node" /usr/bin/unshare --user --map-root-user --net -- /usr/bin/true > "$work/unshare" 2>&1; then
     printf 'NOTICE local Docker allowed the unused nested namespace launcher.\n'

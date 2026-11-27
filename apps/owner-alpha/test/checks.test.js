@@ -20,6 +20,7 @@ import {
   PINNED_QUARTZ_RENDERER_DIR,
   PINNED_QUARTZ_REPOSITORY,
   renderPinnedQuartz,
+  offlineSeedEnvironment,
 } from '../src/quartz-renderer.js';
 
 const cleanup = [];
@@ -527,12 +528,7 @@ describe('pinned Quartz integration', () => {
     const previous = process.env.OWNER_ALPHA_STATE_PROFILE;
     process.env.OWNER_ALPHA_STATE_PROFILE = 'rootless-test-v1';
     try {
-      await expectCode(() => renderPinnedQuartz({
-        contentDir: path.join(root, 'content'),
-        outputDir: path.join(root, 'output'),
-        workspaceDir: path.join(root, 'workspace'),
-        ownerOrigin: 'http://127.0.0.1:4317',
-      }), 'quartz-seed-missing');
+      await expectCode(() => offlineSeedEnvironment(path.join(root, 'absent-seed')), 'quartz-seed-missing');
     } finally {
       if (previous === undefined) delete process.env.OWNER_ALPHA_STATE_PROFILE;
       else process.env.OWNER_ALPHA_STATE_PROFILE = previous;

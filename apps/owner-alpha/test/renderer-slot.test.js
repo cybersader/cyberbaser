@@ -1,7 +1,9 @@
 // The owner's renderer slot: config validation, the manifest's renderer
 // identity, symlink and permission refusals, and the offline build contract.
-import { afterEach, describe, expect, test } from 'bun:test';
-import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
+import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { chmod, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { computePolicyRevision, validateOwnerAlphaConfig } from '../src/config.js';
@@ -9,9 +11,23 @@ import { OwnerAlphaError } from '../src/errors.js';
 import { PINNED_QUARTZ_COMMIT, PINNED_QUARTZ_REF, PINNED_QUARTZ_REPOSITORY } from '../src/quartz-renderer.js';
 import { assertRendererDirectory, createConfiguredRenderer, rendererIdentity } from '../src/renderer-slot.js';
 import { loadSitePage } from '../src/site-review-page.js';
+import { createReaderHandler } from '../src/server.js';
 import { OWNER_SITE_MANIFEST_FILENAME, ensureOwnerSite, rebuildOwnerSite, reuseOwnerSite } from '../src/site.js';
 
 const cleanup = [];
+let launcherRoot;
+let launcher;
+beforeAll(async () => {
+  launcherRoot = await mkdtemp(path.join(os.tmpdir(), 'owner-alpha-launcher-'));
+  launcher = path.join(launcherRoot, 'render-offline');
+  const source = new URL('../../../deploy/owner-alpha/one-app/render-offline.c', import.meta.url).pathname;
+  const result = spawnSync('cc', ['-std=c11', '-O2', '-Wall', '-Wextra', '-Werror', source, '-o', launcher]);
+  if (result.status !== 0) throw new Error(String(result.stderr || result.error));
+});
+afterAll(() => launcherRoot && rm(launcherRoot, { recursive: true, force: true }));
+
+const configured = (setup) => createConfiguredRenderer(validateOwnerAlphaConfig(setup.config).renderer, { launcher });
+
 const HEAD = 'b'.repeat(40);
 const RESOURCE_ROOTS = ['apps/owner-alpha/src', 'apps/owner-alpha/public', 'renderers/quartz-cyberbase',
   ...['correction', 'linkcheck', 'ofm', 'projection', 'proposal', 'proposal-queue', 'proposal-review', 'publish', 'trust'].map((name) => `packages/${name}/src`)];
@@ -76,8 +92,8 @@ printf '<!doctype html><html><body><a href="/cyberbase/pub/Page">Page</a></body>
 printf '<!doctype html><html><head><link rel="stylesheet" href="../site.css"></head><body><article class="popover-hint">%s</article></body></html>' "$page" > "$out/pub/Page.html"
 printf 'body{color:#eee}' > "$out/site.css"
 { echo "prov=\${CYBERBASER_SOURCE_PROVENANCE:-}"; echo "mode=\${CYBERBASER_EDIT_LINK_MODE:-}"; echo "origin=\${CYBERBASER_OWNER_ORIGIN:-}";
-  echo "offline=\${npm_config_offline:-}"; echo "ci=\${CI:-}"; echo "report=\${CYBERBASER_PROVENANCE_REPORT:-}"; } > "$(dirname "$0")/../build-env.txt"
-awk 'NR>2 { sub(":", "", $1); print $1 }' /proc/net/dev > "$(dirname "$0")/../build-net.txt"
+  echo "offline=\${npm_config_offline:-}"; echo "ci=\${CI:-}"; echo "report=\${CYBERBASER_PROVENANCE_REPORT:-}"; } > "$PWD/build-env.txt"
+awk 'NR>2 { sub(":", "", $1); print $1 }' /proc/net/dev > "$PWD/build-net.txt"
 `;
 
 async function fixture(name, { renderer: rendererOverrides = {} } = {}) {
@@ -183,7 +199,7 @@ describe('renderer slot directory checks', () => {
 describe('building through the renderer slot', () => {
   test('builds offline through the configured renderer and records its identity in the manifest', async () => {
     const setup = await fixture('build');
-    const result = await rebuildOwnerSite({ config: setup.config, projectRoot: setup.projectRoot },
+    const result = await rebuildOwnerSite({ config: setup.config, projectRoot: setup.projectRoot, renderer: configured(setup) },
       { assertCheckoutReady: ready(setup.checkout), createBuildId: () => 'build-slot' });
     expect(result.ok).toBe(true);
     const manifest = JSON.parse(await readFile(path.join(siteRootOf(setup), OWNER_SITE_MANIFEST_FILENAME), 'utf8'));
@@ -191,7 +207,7 @@ describe('building through the renderer slot', () => {
       repository: PINNED_QUARTZ_REPOSITORY, directory: setup.rendererRoot, editLinkMode: 'owner', ownerOrigin: 'http://127.0.0.1:4317' });
     // The bundled renderer's files are not part of this identity; the slot's fingerprint is.
     expect(manifest.renderer.resources.files).toBe(RESOURCE_ROOTS.length - 1 + 3);
-    const env = await readFile(path.join(setup.root, 'renderers', 'build-env.txt'), 'utf8');
+    const env = await readFile(path.join(result.rendererWorkspace, 'build-env.txt'), 'utf8');
     expect(env).toContain('prov=enabled\n');
     expect(env).toContain('mode=owner\n');
     expect(env).toContain('origin=http://127.0.0.1:4317\n');
@@ -199,7 +215,7 @@ describe('building through the renderer slot', () => {
     expect(env).toContain('ci=\n');
     expect(env).toMatch(/report=\/.+provenance-skipped\.json\n/u);
     // No network inside the build: only a loopback interface.
-    expect((await readFile(path.join(setup.root, 'renderers', 'build-net.txt'), 'utf8')).trim().split('\n')).toEqual(['lo']);
+    expect((await readFile(path.join(result.rendererWorkspace, 'build-net.txt'), 'utf8')).trim().split('\n')).toEqual(['lo']);
     expect(await readFile(path.join(siteRootOf(setup), 'pub', 'Page.html'), 'utf8')).toContain('Canonical owner bytes.');
 
     // A current site is reused while the renderer is unchanged.
@@ -209,9 +225,55 @@ describe('building through the renderer slot', () => {
     expect(await reuseOwnerSite({ config: setup.config, projectRoot: setup.projectRoot }, { assertCheckoutReady: ready(setup.checkout) })).toBeNull();
   });
 
+  test.each(['native', 'container'])('%s reaps the renderer tree before serving the exact digested site', async (mode) => {
+    const setup = await fixture(`descendant-${mode}`);
+    const previous = process.env.CYBERBASER_RENDERER_ISOLATION;
+    if (mode === 'container') process.env.CYBERBASER_RENDERER_ISOLATION = 'socket-filter';
+    else delete process.env.CYBERBASER_RENDERER_ISOLATION;
+    try {
+      await writeFile(path.join(setup.rendererRoot, 'build'), `${BUILD}
+/usr/bin/setsid /usr/bin/bash -c '
+  exec 9>"$1/site.css"
+  printf "body{color:#eee}" >&9
+  printf "%s" "$$" > "$2"
+  /usr/bin/sleep 3
+  printf "late fixture bytes" >&9
+' fixture "$out" "$PWD/descendant.pid" </dev/null >/dev/null 2>&1 &
+for (( i=0; i<500; i++ )); do
+  [ -s "$PWD/descendant.pid" ] && exit 0
+  sleep .01
+done
+exit 1
+`);
+      const result = await rebuildOwnerSite({ config: setup.config, projectRoot: setup.projectRoot, renderer: configured(setup) },
+        { assertCheckoutReady: ready(setup.checkout), createBuildId: () => `build-descendant-${mode}` });
+      const pid = Number(await readFile(path.join(result.rendererWorkspace, 'descendant.pid'), 'utf8'));
+      expect(pid).toBeGreaterThan(1);
+      await expect(lstat(`/proc/${pid}`)).rejects.toHaveProperty('code', 'ENOENT');
+
+      const siteRoot = siteRootOf(setup);
+      const config = validateOwnerAlphaConfig(setup.config);
+      const host = `${config.listen.host}:${config.listen.readerPort}`;
+      const reader = createReaderHandler({ config, siteRoot, hasOwnerSession: () => true });
+      const served = await reader(new Request(`http://${host}/cyberbase/site.css`, { headers: { Host: host } }));
+      expect(served.status).toBe(200);
+      const css = Buffer.from(await served.arrayBuffer());
+      expect(css.toString()).toBe('body{color:#eee}');
+      const hash = createHash('sha256');
+      for (const name of ['index.html', 'pub/Page.html', 'site.css']) {
+        const bytes = name === 'site.css' ? css : await readFile(path.join(siteRoot, name));
+        hash.update(`${name}\0${bytes.length}\0`).update(bytes);
+      }
+      expect(result.manifest.site.outputTree.digest).toBe(`sha256:${hash.digest('hex')}`);
+    } finally {
+      if (previous === undefined) delete process.env.CYBERBASER_RENDERER_ISOLATION;
+      else process.env.CYBERBASER_RENDERER_ISOLATION = previous;
+    }
+  });
+
   test('a manifest from another renderer is never reused, here or by the review page', async () => {
     const setup = await fixture('switch');
-    await rebuildOwnerSite({ config: setup.config, projectRoot: setup.projectRoot },
+    await rebuildOwnerSite({ config: setup.config, projectRoot: setup.projectRoot, renderer: configured(setup) },
       { assertCheckoutReady: ready(setup.checkout), createBuildId: () => 'build-one' });
     const other = { ...setup.config, renderer: { ...setup.renderer, name: 'cyberchief-two' } };
     expect(await reuseOwnerSite({ config: other, projectRoot: setup.projectRoot }, { assertCheckoutReady: ready(setup.checkout) })).toBeNull();
@@ -241,11 +303,11 @@ describe('building through the renderer slot', () => {
     expect(await readFile(path.join(siteRootOf(setup), 'sentinel.txt'), 'utf8')).toBe('previous site');
   });
 
-  test('a build that rewrites a fingerprinted file is refused', async () => {
+  test('a build cannot rewrite its fingerprinted files', async () => {
     const setup = await fixture('self-modifying');
     await writeFile(path.join(setup.rendererRoot, 'build'), `${BUILD}echo changed >> "$(dirname "$0")/quartz.config.ts"\n`);
-    await expectCode(() => ensureOwnerSite({ config: setup.config, projectRoot: setup.projectRoot },
-      { assertCheckoutReady: ready(setup.checkout), createBuildId: () => 'build-self' }), 'renderer-changed-during-build');
+    await expectCode(() => ensureOwnerSite({ config: setup.config, projectRoot: setup.projectRoot, renderer: configured(setup) },
+      { assertCheckoutReady: ready(setup.checkout), createBuildId: () => 'build-self' }), 'renderer-build-failed');
     expect(await readFile(path.join(siteRootOf(setup), OWNER_SITE_MANIFEST_FILENAME), 'utf8').catch(() => null)).toBeNull();
   });
 

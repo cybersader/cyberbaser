@@ -4,13 +4,14 @@
 // contract (`<directory>/build <contentDir> <outDir>`, see RENDERER.md in the
 // renderer) on the same pinned Quartz commit. The directory is checked before
 // every fingerprint and every build: one real directory, no symlink aliases,
-// owned by this user and not writable by anyone else. Builds run with no
-// network (a fresh network namespace) and one at a time per directory.
+// owned by this user and not writable by anyone else. Builds run offline
+// and one at a time per directory.
 import { execFile } from 'node:child_process';
 import { lstat, mkdir, realpath, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fail } from './errors.js';
+import { containerRendererIsolation, rendererLauncher, withIsolatedRenderer } from './renderer-isolation.js';
 import { validatePrivateNetworkHttpOrigin } from './network.js';
 import {
   PINNED_QUARTZ_COMMIT,
@@ -26,10 +27,7 @@ export const BUNDLED_RENDERER_NAME = 'quartz-cyberbase';
 export const RENDERER_NAME_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/u;
 export const RENDERER_BUILD_FILE = 'build';
 export const MAX_RENDERER_FINGERPRINT_ENTRIES = 64;
-// The network namespace tool, at a fixed path: never looked up on PATH.
-import { CONTAINER_RENDERER_LAUNCHER, containerRendererIsolation, withContainerRenderer } from './renderer-isolation.js';
-
-export const OFFLINE_LAUNCHER = '/usr/bin/unshare';
+const OFFLINE_NAMESPACE = '/usr/bin/unshare';
 const MAX_COMMAND_OUTPUT_BYTES = 64 * 1024 * 1024;
 
 /**
@@ -89,8 +87,7 @@ export async function assertRendererDirectory(renderer) {
   return directory;
 }
 
-// One build at a time per renderer directory: the contract lets a build write
-// in its own directory (cache, patch state).
+// One build at a time per renderer directory (the native slot cache is shared).
 const queues = new Map();
 async function exclusive(key, task) {
   const previous = queues.get(key) ?? Promise.resolve();
@@ -133,29 +130,36 @@ function buildEnvironment(overrides) {
 export function createConfiguredRenderer(renderer, { launcher } = {}) {
   if (renderer === undefined || renderer === null) fail('renderer-not-configured', 'no renderer is configured');
   const identity = rendererIdentity({ renderer });
-  return async function renderConfigured({ contentDir, outputDir, workspaceDir, ownerOrigin, suggestions = null }) {
+  return async function renderConfigured({ contentDir, outputDir, workspaceDir, outputWriteRoot = null, ownerOrigin, suggestions = null }) {
     const content = absolute(contentDir, 'contentDir');
     const output = absolute(outputDir, 'outputDir');
     const workspace = absolute(workspaceDir, 'workspaceDir');
+    const writeRoot = outputWriteRoot === null ? output : absolute(outputWriteRoot, 'outputWriteRoot');
     validatePrivateNetworkHttpOrigin(ownerOrigin, 'ownerOrigin');
     if (suggestions !== null) {
       fail('renderer-form-unsupported', 'the suggestion form needs the bundled renderer');
     }
     return exclusive(identity.directory, async () => {
       const directory = await assertRendererDirectory(renderer);
-      for (const target of [content, output, workspace]) {
-        const relative = path.relative(directory, target);
-        if (relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))) {
+      const inside = (parent, child) => {
+        const relative = path.relative(parent, child);
+        return relative === '' || (relative !== '..' && !relative.startsWith('../') && !path.isAbsolute(relative));
+      };
+      for (const target of [content, writeRoot, workspace]) {
+        if (inside(directory, target) || inside(target, directory)) {
           fail('renderer-path-overlap', 'build paths must be outside the renderer directory');
         }
+      }
+      if (inside(writeRoot, content) || inside(writeRoot, workspace)) {
+        fail('renderer-path-overlap', 'output write access must exclude the projection and build workspace');
       }
       await mkdir(workspace, { recursive: true, mode: 0o700 });
       const report = path.join(workspace, PROVENANCE_REPORT_FILE);
       await rm(report, { force: true });
       const reportEnvironment = { CYBERBASER_PROVENANCE_REPORT: report };
       const build = path.join(directory, RENDERER_BUILD_FILE);
-      const filtered = launcher === undefined && containerRendererIsolation();
-      const args = filtered ? [build, content, output] : ['--user', '--map-root-user', '--net', '--', build, content, output];
+      const args = [build, content, output];
+      let command;
       let result;
       try {
         const env = buildEnvironment({
@@ -163,10 +167,14 @@ export function createConfiguredRenderer(renderer, { launcher } = {}) {
           CYBERBASER_OWNER_ORIGIN: ownerOrigin, ...reportEnvironment,
         });
         const options = { cwd: workspace, encoding: 'utf8', maxBuffer: MAX_COMMAND_OUTPUT_BYTES, env };
-        result = filtered
-          ? await withContainerRenderer({ workspace, output, env }, (policy, isolatedEnv) =>
-            execFileAsync(CONTAINER_RENDERER_LAUNCHER, [...policy, ...args], { ...options, env: isolatedEnv }))
-          : await execFileAsync(launcher ?? OFFLINE_LAUNCHER, args, options);
+        const executable = launcher ?? await rendererLauncher();
+        const native = !containerRendererIsolation();
+        const cache = native ? path.join(directory, '.quartz-cache') : undefined;
+        result = await withIsolatedRenderer({ workspace, output, outputWriteRoot: writeRoot, cache, env }, (policy, isolatedEnv) => {
+          const isolated = [executable, ...policy, ...args];
+          command = native ? [OFFLINE_NAMESPACE, '--user', '--map-root-user', '--net', '--', ...isolated] : isolated;
+          return execFileAsync(command[0], command.slice(1), { ...options, env: isolatedEnv });
+        });
       } catch (error) {
         fail('renderer-build-failed', `${identity.name} build failed`, {
           exitCode: Number.isSafeInteger(error?.code) ? error.code : null,
@@ -181,7 +189,7 @@ export function createConfiguredRenderer(renderer, { launcher } = {}) {
         outputDir: output,
         suggestionForm: false,
         provenanceSkipped: await readProvenanceReport(reportEnvironment),
-        commands: { build: [launcher, ...args] },
+        commands: { build: command },
         logs: {
           buildStdoutTail: String(result.stdout ?? '').slice(-4_000),
           buildStderrTail: String(result.stderr ?? '').slice(-4_000),

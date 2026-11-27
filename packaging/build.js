@@ -60,6 +60,7 @@ export const RESOURCE_PATHS = Object.freeze([
     .map((name) => `packages/${name}/src`),
 ]);
 export const RESOURCES_TAR = path.join(REPO, 'packaging', 'dist', 'resources.tar');
+const RENDER_LAUNCHER = path.join(REPO, 'packaging', 'dist', 'render-offline');
 
 export async function packResources(file = RESOURCES_TAR) {
   const listed = Bun.spawnSync(['git', '-C', REPO, 'ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', ...RESOURCE_PATHS]);
@@ -81,6 +82,11 @@ export async function packResources(file = RESOURCES_TAR) {
 
 export async function buildProgram({ target = null, outfile, entry = ENTRY } = {}) {
   await mkdir(path.dirname(outfile), { recursive: true });
+  await mkdir(path.dirname(RENDER_LAUNCHER), { recursive: true });
+  const compiler = Bun.spawnSync(['cc', '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror', '-fPIE', '-pie',
+    '-fstack-protector-strong', '-Wl,-z,relro,-z,now',
+    path.join(REPO, 'deploy/owner-alpha/one-app/render-offline.c'), '-o', RENDER_LAUNCHER], { stderr: 'inherit' });
+  if (compiler.exitCode !== 0) throw new Error('renderer launcher compile failed');
   await packResources();
   const started = performance.now();
   const result = await Bun.build({

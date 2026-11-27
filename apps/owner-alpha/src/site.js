@@ -19,6 +19,7 @@ import { computePolicyRevision, validateOwnerAlphaConfig } from './config.js';
 import { fail, OwnerAlphaError } from './errors.js';
 import { canonicalJson, deepFreeze, isPlainObject } from './json.js';
 import { renderPinnedQuartz } from './quartz-renderer.js';
+import { copySiteOutput } from './site-files.js';
 import { assertRendererDirectory, createConfiguredRenderer, rendererIdentity } from './renderer-slot.js';
 import { assertCheckoutReady } from './source.js';
 import {
@@ -791,6 +792,9 @@ export async function rebuildOwnerSite({
     strict: true,
     code: 'site-renderer-workspace-outside-cache',
   });
+  // The renderer never receives a writable grant on the candidate or its parent.
+  const stagingRoot = path.join(buildRoot, 'renderer-handoff');
+  const stagingSite = path.join(stagingRoot, 'site');
   const candidateSite = contained(workspaceRoot, `${siteRoot}.candidate-${buildId}`, {
     strict: true,
     code: 'site-candidate-outside-workspace',
@@ -937,7 +941,8 @@ export async function rebuildOwnerSite({
         siteConfigPath: await vaultSiteSettings(before.root),
         sourceCheckout: before.root,
         contentDir: projectionRoot,
-        outputDir: candidateSite,
+        outputDir: stagingSite,
+        outputWriteRoot: stagingRoot,
         workspaceDir: rendererWorkspace,
         editLinkMode: 'owner',
         ownerOrigin: `http://${config.listen.host}:${config.listen.port}`,
@@ -953,7 +958,7 @@ export async function rebuildOwnerSite({
       || rendererResult.renderer !== expectedRenderer.name
       || rendererResult.revision !== expectedRenderer.revision
       || rendererResult.tag !== expectedRenderer.tag
-      || (rendererResult.outputDir !== undefined && path.resolve(rendererResult.outputDir) !== candidateSite)) {
+      || (rendererResult.outputDir !== undefined && path.resolve(rendererResult.outputDir) !== stagingSite)) {
       fail('site-renderer-identity-mismatch', 'renderer result did not prove the configured renderer identity');
     }
     // A configured renderer is the same files after its build as before it:
@@ -965,6 +970,7 @@ export async function rebuildOwnerSite({
       }
     }
 
+    await copySiteOutput(stagingSite, candidateSite);
     const html = await inspectHtmlSite(candidateSite);
     const outputTree = await digestRegularTree(candidateSite, 'rendered candidate site');
     let linkCheck;
