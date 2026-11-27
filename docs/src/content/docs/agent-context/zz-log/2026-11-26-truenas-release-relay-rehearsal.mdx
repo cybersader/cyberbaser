@@ -1,0 +1,14 @@
+---
+title: TrueNAS release relay-only rehearsal
+description: Recorded synthetic acceptance of the exact hardened image, separate from deployment approval.
+---
+
+The `1cfc10d` TrueNAS image passed the local relay-only acceptance on rootful Docker 29.7.2 with the built-in seccomp profile. The release image config was `sha256:85180f57b5412667c7a5072fdfd50aee50f162e752d65783430a432cbf1d50d5`. The lab substituted a networkless namespace for the node's host networking and used an internal bridge for the publisher, with no published ports and no live relay or forge.
+
+- Private manifest setup rejected replay. The node could not reach the publisher's enrollment listener, and the node UID was refused even when tested on the publisher's loopback. The admin command handed a synthetic code directly to the signer without recording it.
+- The checked config copied byte-for-byte. After the harness enabled the release's restart policy, a valid update caused one automatic publisher restart. Invalid, missing and unchanged input retained the last checked config.
+- One exact job and the previous published revision survived a node restart. One valid synthetic signature allowed one app push to the fixture forge. The 4518 reader refused missing, invalid and stale cookies and showed the new revision after recovery with a fresh owner session.
+- Stock Quartz and a custom renderer completed under the shipped confinement. Negative probes refused socket creation, writes outside the renderer's working area into node home and `.git`, and an RDWR open of the synthetic parent's task memory. Anonymous subprocess IPC still worked.
+- Relay-only Iroh sockets stayed on IPv4 and IPv6 loopback. The node's largest measured cgroup peak was 1,296,437,248 bytes; sampled publisher and reconciler peaks were 42,176,512 and 29,798,400 bytes. No OOM was observed. These measurements describe one synthetic note, not real-vault sizing. The lab was removed and the image retained unchanged.
+
+Do not install this release based on this run. The independent review's separate renderer-output custody hold was not exercised here. A corrected image needs fresh exact-image evidence, and the actual appliance still needs its own preflight. No appliance, live forge, real reader or real signing device was contacted by this rehearsal.
