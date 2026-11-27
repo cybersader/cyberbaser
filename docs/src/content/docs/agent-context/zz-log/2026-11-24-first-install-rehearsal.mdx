@@ -1,0 +1,57 @@
+---
+title: First-install rehearsal with signed publishing
+description: The whole first install, from the installer to a signed publish, rehearsed end to end in a disposable container with a stand-in GitHub, the Obsidian plugin's own signing code as the phone, and a test Iroh relay. 96 of 96 checks pass after three fixes that would have blocked the real install.
+status: log
+---
+
+## What happened
+
+Before the owner registers the real GitHub App and installs for real ([owner decisions of 2026-11-23](https://github.com/cybersader/cyberbaser/blob/main/.claude/41-QUESTIONS-RESOLVED.md)), the opt-in container test (`packaging/test/container/setup-e2e.sh`) was rewritten to follow the first install as it now works with [signed publishing](/cyberbaser/design/signed-publish/), and run until it passed. Synthetic notes, a stand-in GitHub on loopback, no network.
+
+The owner's phone in the test is the Obsidian plugin's own pairing, enrolment and approval code (`apps/obsidian-cyberbaser/src/core`), run headless. Two things differ from the plugin in Obsidian: it reaches the node through Iroh's native bindings instead of the WASM build, and a "tap" is a test token instead of a trusted click. The node reaches it through a test-only Iroh relay on the container's loopback (the real install uses n0's public relay).
+
+## Result: 96 of 96 checks pass
+
+- **Install:** one setup link, a first-device code and a recovery code on the administrator's terminal; the recovery code is in no log; the node cannot read the publisher's owner keys or its code page.
+- **Setup:** connect the stand-in GitHub, pick the private repository (the publisher fetches it), choose public folders. The starter `publish.yml` is prepared as one commit and waits for the phone; nothing reaches GitHub during setup.
+- **Phone and agent:** the phone pairs with matching words, with the access that may approve publishing preselected; the setup page then frames the publisher's own code page. The agent pairs with `cyberbaser pair`. Done leaves exactly one phone and one agent, no extra pairing.
+- **Hand-off:** the owner lands in the node signed in. The node cannot push the starter unsigned or signed with its own key.
+- **Enrolment:** a code the node substituted enrols nothing; no tap, no enrolment; the printed code enrols the phone, once.
+- **First signed publish:** the phone is asked to approve exactly `publish.yml`; the publisher pushes exactly the prepared commit; copy and mirror follow.
+- **Agent proposal:** over the local signed socket, approved and applied; the job waits for the signature, nothing is pushed.
+- **Refusals, each with no push:** an approval the node forged under the phone's key ID (`owner-approval-invalid`); the phone's already used starter signature replayed (`owner-approval-expired`); a real phone signature for a different commit (`owner-approval-mismatch`); later, the revoked phone's signature for exactly the waiting commit (`owner-approval-invalid`).
+- **Signed push:** the phone is asked to approve exactly `Garden/Roses.md`, shown the changed words; the publisher pushes exactly that commit; status shows the job past its push.
+- **Recovery:** the recovery code sets up a replacement device once and is refused the second time; only the replacement can publish; its approval publishes the next change, on top of the last.
+- **Token canary:** no file, process environment, private temporary folder, notes copy, mirror, Git config, reflog or journal the node can read holds the GitHub token.
+- **GitHub down:** after a restart the sign-in link prints at once, the owner is served with the quiet "Can't reach GitHub" line, and a publish action says "Finishing an earlier publish" while recovery runs.
+
+## Fixed (each blocked the real first install)
+
+- **The setup phone could never approve publishing.** The phone step preselected "Review and suggest", which has no publish grant, while the same step asks the phone to become the signing device. It now preselects full access; the owner can still choose less (`apps/owner-alpha/src/first-run.js`, `pairFormHtml` in `server.js`).
+- **The node would not start while the starter waited.** With no `publish.yml` yet (the starter waiting for the phone, or "Publish nothing yet") the preview build failed with `site-publication-empty` and the node refused to start, so the phone could never enrol. The node now starts without a preview and rebuilds it once the starter lands (`server.js`, `core/job-approvals.js`).
+- **The publisher refused the starter after setup.** Only the setup-mode publisher could push the starter, but the phone's approval arrives after setup. The normal-mode publisher now offers the same signed, exact starter check (`publisher/server.js`).
+- **Done in the plugin's pairing dialog paired again.** The Pair handler stayed attached after success, so tapping Done sent a second pairing request with the spent code (`apps/obsidian-cyberbaser/src/main.js`).
+- The installer now accepts `--iroh-relay http://127.0.0.1:<port>/`, the loopback test relay the node config already allowed.
+
+## Evidence
+
+- Container rehearsal: `RESULT pass=96 fail=0` (needs the renderer seed archive and the plugin's test relay, `bun run build:wasm` in `apps/obsidian-cyberbaser`).
+- Required suites: 1,332 pass, 21 skipped, 0 fail; plugin tests 19 pass.
+
+## Seen, not changed
+
+- **With no Pages workflow detected, every publish holds the node for the whole deployment check** (15 minutes by default) before the next publish can start. The real vault has a Pages workflow, so this should not apply there; the test shortens the wait because the stand-in GitHub has no Actions.
+- The refusal codes are plain but not uniform: a replayed signature reads as "expired".
+
+## What the owner must do for the real install, in order
+
+1. Register the Cyberbaser GitHub App: a name, the docs site as homepage, Repository contents read and write and nothing else, Enable Device Flow ticked, expiring user tokens on, no webhook. Note its client ID.
+2. Install the app on the one vault repository only.
+3. Put the Obsidian plugin on the phone as a pre-release build (it is not in the community list yet).
+4. On the always-on machine, run `cyberbaser install --quartz-seed <archive> --github-client-id <client ID>` and enter the admin password once.
+5. Write down the recovery code it prints. Keep the terminal open for the first-device code.
+6. Open the printed setup link: sign in to GitHub with the code, pick the vault, choose the public folders (or "Publish nothing yet").
+7. Pair the phone by scanning the QR code in Obsidian and confirming the four words. Keep "Everything you can do" selected.
+8. In Obsidian, scan the publisher's code (on the setup page or the terminal) to let the phone approve publishing; check the four groups match.
+9. Optionally pair an agent, then Done.
+10. On the phone, approve the waiting `publish.yml`; check it appears on GitHub and the site builds.

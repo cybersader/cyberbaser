@@ -22,12 +22,13 @@ export function registerV2ApplicationCases(api) {
   const base = Buffer.from(text);
   const resolveSlug = async () => 'docs/multi';
 
-  async function fixture({ replacements = ['the', 'new'] } = {}) {
+  async function fixture({ replacements = ['the', 'new'], trustFile = true } = {}) {
     const item = await createFixture({ pages: [{ path: sourcePath, text }] });
     cleanup.push(() => item.cleanup());
     item.bare = path.join(item.root, 'objects.git');
     // The owner pipeline's policy is real, committed and independently reread.
-    await writeFile(path.join(item.checkout, '.cyberbaser/trust.yml'), 'trusted: [owner]\nagents: []\n');
+    if (trustFile) await writeFile(path.join(item.checkout, '.cyberbaser/trust.yml'), 'trusted: [owner]\nagents: []\n');
+    else await unlink(path.join(item.checkout, '.cyberbaser/trust.yml')); // a fresh vault: no trust file at all
     await writeFile(path.join(item.checkout, 'publish.yml'), 'allow:\n  - "docs/**"\n');
     await git(item.checkout, ['add', '--all']);
     await git(item.checkout, ['commit', '-q', '-m', 'Fixture publication policy']);
@@ -144,14 +145,16 @@ export function registerV2ApplicationCases(api) {
     expect(signIn.status).toBe(303);
     const cookie = signIn.headers.get('set-cookie').split(';')[0];
     const inbox = await handler(request('/owner/review', cookie));
-    expect(await inbox.text()).toContain('docs/multi.md — 2 changes');
+    expect(inbox.status).toBe(200);
+    expect(await inbox.text()).toMatch(new RegExp(`<a[^>]+href="/owner/review/${queueId}"[^>]*>[\\s\\S]*?class="proposal-row-count">2 changes</span>`));
     const detail = await handler(request(`/owner/review/${queueId}`, cookie));
     expect(detail.status).toBe(200);
     const html = await detail.text();
     expect(html).toContain('Line 5, column 9');
     expect(html).toContain('Change 2');
-    expect(html).toContain('Approve all');
-    expect(html).toContain('Reject all');
+    // One whole-set decision: the panel lists both changes and the note sheet covers both.
+    expect(html).toContain('See all 2 changes');
+    expect(html).toContain('data-change-count="2"');
     expect(html).toContain('Tail');
     const before = await gitState(item.checkout);
     await decide();
@@ -201,6 +204,25 @@ export function registerV2ApplicationCases(api) {
     expect((await recovered.resumeJob({ jobId: 'OA-v2-atomic' })).state).toBe('completed');
     expect(await gitState(item.checkout)).toEqual(after);
   }, 60_000);
+
+  // A fresh vault has no .cyberbaser/trust.yml. Every change then classifies
+  // as full-review, which the owner's own approval satisfies: the owner read
+  // the whole proposal and approved it. Nothing writes a trust file.
+  test('an owner-approved proposal applies in a vault with no trust file, and is recorded as owner-reviewed', async () => {
+    const { item, runtime, decide, apply, queueId } = await fixture({ trustFile: false });
+    await decide();
+    const result = await apply();
+    expect(result.applied).toBe(true);
+    const completed = await runtime.completions.get('OA-v2-atomic');
+    expect(completed.failure).toBeNull();
+    expect(completed.state).toBe('completed');
+    const checks = await readJsonArtifact(runtime.context, pipelineArtifactPaths('OA-v2-atomic').preApplyChecks);
+    expect(checks.result.immediate.trust.route).toBe('full-review');
+    expect(checks.result.immediate.trust.reasons).toEqual(['no-trust-config']);
+    expect(checks.result.immediate.trustRequirement).toMatchObject({ route: 'full-review',
+      satisfiedBy: { type: 'approved-proposal', queueId } });
+    expect(await git(item.checkout, ['ls-files', '.cyberbaser'])).toBe('');
+  });
 
   test('v2 policy eligibility counts the complete set, not each independently acceptable change', async () => {
     const { runtime, queueId, decide } = await fixture();

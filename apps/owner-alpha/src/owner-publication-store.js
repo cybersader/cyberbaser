@@ -1,14 +1,21 @@
-import { createHash } from 'node:crypto';
-import { opendir } from 'node:fs/promises';
+import { createHash, randomBytes } from 'node:crypto';
+import { opendir, realpath } from 'node:fs/promises';
 import path from 'node:path';
-import { createJsonArtifactOnce } from './artifacts.js';
+import { createJsonArtifactOnce, replaceJsonArtifactAtomic } from './artifacts.js';
 import { computePolicyRevision, validateOwnerAlphaConfig } from './config.js';
 import { fail } from './errors.js';
 import { withFileLock } from './flock.js';
 import { JOB_STATES, validateJobId } from './job-state.js';
 import { artifactJson, canonicalJson, deepFreeze, isPlainObject } from './json.js';
-import { prepareOwnerPublication, revalidateOwnerPublicationSource } from './owner-publication.js';
+import { applyEditorOperation } from './operation.js';
+import {
+  assertFoldedWorkspaceNote, assertSourceReference, assertWorkspaceDeliveryRoundTrip, foldWorkspaceText, isPublicationDigest,
+  prepareOwnerPublication, publicationDigest, readAuthoringSource, revalidateOwnerPublicationSource, validatePublicationAttribution,
+} from './owner-publication.js';
 import { assertPrivateDirectory, readPrivateFile } from './proposal-decisions.js';
+import { defaultProposalReviewGit, exactObjectId, literalPathspec, parseTreeEntry, readBlob, trimFinalLf } from './proposal-review.js';
+import { assertWorkspaceNotRetired } from './retired-list.js';
+import { liveUrlForSlug, pathMatchesPolicy } from './source.js';
 import { assertSafeStoreTarget, defineStoreContext, prepareStore, prepareStoreParent, resolveStorePath } from './store.js';
 
 export const OWNER_PUBLICATION_DRAFT_ROOT = 'owner-publication';
@@ -42,15 +49,15 @@ function hash(value) {
   return createHash('sha256').update(canonicalJson(value)).digest('hex');
 }
 
-function id(value) {
-  if (typeof value !== 'string' || !/^[0-9a-f]{64}$/u.test(value)) {
+export function validatePublicationDraftId(value) {
+  if (typeof value !== 'string' || value.length !== 64 || !/^[0-9a-f]{64}$/u.test(value)) {
     fail('invalid-publication-draft-id', 'draft id must be one full lowercase SHA-256 identifier');
   }
   return value;
 }
 
 function paths(draftId) {
-  const key = id(draftId);
+  const key = validatePublicationDraftId(draftId);
   return {
     draft: `${OWNER_PUBLICATION_DRAFT_ROOT}/drafts/${key}.json`,
     authorization: `${OWNER_PUBLICATION_DRAFT_ROOT}/authorizations/${key}.json`,
@@ -58,7 +65,7 @@ function paths(draftId) {
 }
 
 function jobIdFor(draftId) {
-  return validateJobId(`OA-PUB-${id(draftId)}`);
+  return validateJobId(`OA-PUB-${validatePublicationDraftId(draftId)}`);
 }
 
 function timestamp(value) {
@@ -135,32 +142,47 @@ async function readArtifact(context, relativePath, maximum) {
   }
 }
 
-async function validateDraft(value, config, draftId) {
+function validateDraftIdentity(value, draftId) {
   exact(value, ['schemaVersion', 'artifactType', 'draftId', 'jobId', 'createdAt', 'checks', 'prepared']);
   exact(value.checks, ['ok']);
   exact(value.prepared, ['schemaVersion', 'artifactType', 'reference', 'session', 'operation', 'candidate']);
-  exact(value.prepared.reference, ['mapping', 'policyRevision', 'source']);
-  exact(value.prepared.reference.source, ['identity', 'path', 'version', 'byteLength', 'digest']);
+  const { reference } = value.prepared;
+  const isWorkspace = reference?.mapping?.source?.kind === 'workspace';
+  exact(reference, ['mapping', 'policyRevision', 'source', ...(isWorkspace ? ['workspaceBaseline'] : [])]);
   exact(value.prepared.candidate, ['text', 'bytesBase64', 'byteLength', 'digest']);
-  if (value.schemaVersion !== 1 || value.artifactType !== DRAFT_TYPE || value.draftId !== id(draftId)
+  if (value.schemaVersion !== 1 || value.artifactType !== DRAFT_TYPE || value.draftId !== validatePublicationDraftId(draftId)
     || value.jobId !== jobIdFor(draftId) || value.checks.ok !== true || hash(value.prepared) !== draftId) {
     fail('invalid-publication-draft', 'publication draft identity or successful-check binding is invalid');
   }
   timestamp(value.createdAt);
+  if (isWorkspace) assertBaseline(reference.workspaceBaseline);
+}
+
+async function validateDraft(value, config, draftId) {
+  validateDraftIdentity(value, draftId);
   if (value.prepared.reference.policyRevision !== computePolicyRevision(config)) {
     fail('publication-draft-policy-mismatch', 'publication draft no longer matches the configured policy');
   }
+  const { source, mapping } = value.prepared.reference;
+  const { foldedTextDigest, ...rawReference } = source;
+  const candidate = value.prepared.candidate;
   let reproduced;
   try {
     // This synthetic reader validates persisted bytes only. It is not a fresh
     // source read and cannot establish current host coherence or publication authority.
     reproduced = await prepareOwnerPublication({
-      config, mappingId: value.prepared.reference.mapping?.id, session: value.prepared.session,
-      readNote: async () => ({ ...value.prepared.reference.source, text: value.prepared.candidate.text,
-        bytesBase64: value.prepared.candidate.bytesBase64 }),
+      config, workspaceBaseline: value.prepared.reference.workspaceBaseline, mappingId: value.prepared.reference.mapping?.id, session: value.prepared.session,
+      readNote: async () => ({ ...rawReference, text: candidate.text, bytesBase64: candidate.bytesBase64,
+        ...(mapping.source.kind === 'workspace' ? { digest: candidate.digest, byteLength: candidate.byteLength } : {}) }),
     });
-  } catch {
+  } catch (error) {
+    if (['workspace-text-repeated', 'workspace-properties-invalid'].includes(error?.code)) throw error;
     fail('invalid-publication-draft', 'persisted publication bindings do not reproduce one exact configured candidate');
+  }
+  if (!Object.hasOwn(source, 'attribution')) {
+    // Older immutable drafts predate attribution. Keep their original hashes.
+    reproduced = structuredClone(reproduced);
+    delete reproduced.reference.source.attribution;
   }
   if (canonicalJson(reproduced) !== canonicalJson(value.prepared)) {
     fail('invalid-publication-draft', 'persisted publication operation or candidate bindings differ from exact reproduction');
@@ -168,11 +190,144 @@ async function validateDraft(value, config, draftId) {
   return deepFreeze(value);
 }
 
+const GIT_COMMIT = /^[0-9a-f]{40}$/u;
+const workspaceMapping = (config, mappingId) => config.ownerPublication.mappings?.find((entry) => entry.id === mappingId && entry.source.kind === 'workspace');
+const workspaceBaselineFile = (mapping) => `${OWNER_PUBLICATION_DRAFT_ROOT}/baselines/${hash(mapping)}.json`;
+
+function assertBaseline(value) {
+  if (!Object.hasOwn(value ?? {}, 'foldedTextDigest') && Object.hasOwn(value ?? {}, 'digest')) {
+    fail('workspace-snapshot-incompatible', 'workspace baseline predates folded text binding and must be rebound');
+  }
+  exact(value, ['bindingId', 'commit', 'foldedTextDigest'], 'workspace-baseline-unavailable');
+  if (typeof value.bindingId !== 'string' || !/^[0-9a-f]{64}$/u.test(value.bindingId)
+    || typeof value.commit !== 'string' || !GIT_COMMIT.test(value.commit) || !isPublicationDigest(value.foldedTextDigest)) {
+    fail('workspace-baseline-unavailable', 'workspace baseline is not exact private evidence');
+  }
+}
+
+async function readBaseline({ context, maximum }, mapping, { forExplicitBind = false } = {}) {
+  try {
+    const file = workspaceBaselineFile(mapping);
+    const directory = path.dirname(resolveStorePath(context, file));
+    await assertSafeStoreTarget(context, directory);
+    if (!await privateDirectoryIfPresent(directory, 'workspace baselines')) return null;
+    for (const parent of [context.workspaceRoot, context.storeRoot, path.dirname(directory)]) {
+      await assertPrivateDirectory(parent, 'publication directory');
+    }
+    const value = await readArtifact(context, file, maximum);
+    if (value === null) return null;
+    exact(value, ['schemaVersion', 'baseline'], 'workspace-baseline-unavailable');
+    if (value.schemaVersion === 1 && forExplicitBind) return {};
+    if (value.schemaVersion === 1) fail('workspace-snapshot-incompatible', 'workspace baseline predates folded text binding and must be rebound');
+    if (value.schemaVersion !== 2) fail('workspace-baseline-unavailable', 'workspace baseline schema is not supported');
+    assertBaseline(value.baseline);
+    return deepFreeze(value.baseline);
+  } catch (error) {
+    if (error?.code === 'workspace-snapshot-incompatible') throw error;
+    fail('workspace-baseline-unavailable', 'workspace baseline could not be established from private evidence');
+  }
+}
+
+async function writeBaseline({ context, maximum }, mapping, baseline, replace) {
+  const write = replace ? replaceJsonArtifactAtomic : createJsonArtifactOnce;
+  return write(context, workspaceBaselineFile(mapping), { schemaVersion: 2, baseline }, { maxBytes: maximum });
+}
+
+const headAt = async (checkout) => exactObjectId(trimFinalLf(await defaultProposalReviewGit(checkout,
+  ['rev-parse', '--verify', 'HEAD^{commit}']), 'workspace HEAD'), 'workspace HEAD');
+
+async function currentDelivery(config, mapping, { baseline } = {}) {
+  pathMatchesPolicy(mapping.relativePath, config.paths);
+  const checkout = config.repository.checkout;
+  let commit;
+  let entry;
+  let bytes;
+  try {
+    const root = await realpath(checkout);
+    const topLevel = trimFinalLf(await defaultProposalReviewGit(checkout, ['rev-parse', '--show-toplevel']), 'workspace Git root');
+    if (topLevel !== root || root !== checkout) fail('invalid-workspace-checkout', 'workspace delivery must use its configured vault root');
+    commit = await headAt(checkout);
+    const tree = await defaultProposalReviewGit(checkout, ['ls-tree', '-z', commit, '--', literalPathspec(mapping.relativePath)]);
+    entry = parseTreeEntry(tree, mapping.relativePath, 'workspace delivery', { allowMissing: true });
+    if (entry?.type === 'blob' && ['100644', '100755'].includes(entry.mode)) {
+      bytes = await readBlob(defaultProposalReviewGit, checkout, entry.objectId, 'workspace delivery', config.limits.maxSourceBytes);
+    }
+    if (await headAt(checkout) !== commit) fail('source-snapshot-changed', 'workspace delivery HEAD changed during the read');
+  } catch (error) {
+    if (error?.code === 'source-snapshot-changed') throw error;
+    fail('workspace-delivery-unavailable', 'workspace delivery could not be read from the vault HEAD');
+  }
+  if (bytes === undefined) {
+    if (baseline !== undefined) fail('delivery-moved-since-baseline', 'vault delivery no longer matches its workspace baseline');
+    fail('workspace-delivery-unavailable', 'workspace delivery is not a regular Git file at the vault HEAD');
+  }
+  const foldedText = baseline === undefined ? foldWorkspaceText(bytes) : assertWorkspaceDeliveryRoundTrip(bytes);
+  const foldedTextDigest = publicationDigest(Buffer.from(foldedText));
+  const digest = publicationDigest(bytes);
+  if (baseline !== undefined && foldedTextDigest !== baseline.foldedTextDigest) {
+    fail('delivery-moved-since-baseline', 'vault delivery no longer matches its workspace baseline');
+  }
+  return { commit, digest, foldedTextDigest, foldedText, objectId: entry.objectId, mode: entry.mode };
+}
+
+/** Runtime-only explicit binding, with no content copy or ordinary Save. */
+export async function bindWorkspaceBaseline({ context: contextInput, config: configInput, mappingId, readNote }) {
+  const store = inputs(configInput, contextInput);
+  const { context, config } = store;
+  const mapping = workspaceMapping(config, mappingId);
+  if (!mapping) fail('publication-mapping-not-found', 'mapping is not configured for workspace publication');
+  await layout(context);
+  return locked(context, OWNER_PUBLICATION_PUBLISH_LOCK, async () => {
+    const delivery = await currentDelivery(config, mapping);
+    const note = await readAuthoringSource({ config, mappingId, readNote });
+    assertFoldedWorkspaceNote(delivery.foldedText, foldWorkspaceText(note.text));
+    if (note.foldedTextDigest !== delivery.foldedTextDigest) fail('workspace-diverged', 'workspace text differs from the vault delivery file');
+    if (await headAt(config.repository.checkout) !== delivery.commit) {
+      fail('source-snapshot-changed', 'workspace delivery HEAD changed during binding');
+    }
+    const previous = await readBaseline(store, mapping, { forExplicitBind: true });
+    if (previous?.commit !== delivery.commit || previous?.foldedTextDigest !== delivery.foldedTextDigest) {
+      const baseline = { bindingId: randomBytes(32).toString('hex'), commit: delivery.commit, foldedTextDigest: delivery.foldedTextDigest };
+      await writeBaseline(store, mapping, baseline, previous !== null);
+    }
+    return deepFreeze({ mappingId, commit: delivery.commit, foldedTextDigest: delivery.foldedTextDigest });
+  });
+}
+
+function requireBaseline(baseline) {
+  if (baseline === null) fail('workspace-unbound', 'workspace note must be explicitly bound to the vault before publication');
+  return baseline;
+}
+
+// The durable workspace check precedes operation derivation, including the
+// unchanged preview. Mappings without source.kind preserve the synthetic path.
+export async function workspacePublicationCapture({ context: contextInput, config: configInput, mappingId, readEvidence }) {
+  const config = validateOwnerAlphaConfig(configInput);
+  const mapping = workspaceMapping(config, mappingId);
+  if (!mapping) return null;
+  const store = inputs(config, contextInput);
+  const bound = requireBaseline(await readBaseline(store, mapping));
+  const baseline = typeof readEvidence !== 'function' ? bound : await locked(store.context, OWNER_PUBLICATION_PUBLISH_LOCK,
+    async () => requireBaseline(await refreshBaseline(store, mapping, readEvidence)));
+  const delivery = await currentDelivery(config, mapping, { baseline });
+  return Object.freeze({
+    workspaceBaseline: baseline,
+    workspaceNoteGate: (note) => assertWorkspaceNotRetired({ config, context: store.context, mapping, text: note.text }),
+    async workspaceGate({ session }) {
+      if (session.baseCommit !== delivery.commit || session.source.digest !== delivery.digest
+        || session.source.gitObjectId !== delivery.objectId || session.source.gitMode !== delivery.mode
+        || await headAt(config.repository.checkout) !== delivery.commit) {
+        fail('publication-base-mismatch', 'workspace publication must match the exact vault HEAD and delivery blob');
+      }
+    },
+  });
+}
+
 function summary(draft, replayed) {
   return deepFreeze({ draftId: draft.draftId, jobId: draft.jobId, createdAt: draft.createdAt,
     relativePath: draft.prepared.session.relativePath, slug: draft.prepared.session.slug,
     liveUrl: draft.prepared.session.liveUrl, candidateDigest: draft.prepared.candidate.digest,
-    capturedVersion: draft.prepared.reference.source.version, replayed });
+    capturedVersion: draft.prepared.reference.source.version, ...foldedProjection(draft.prepared.reference.source), replayed });
 }
 
 async function load(context, config, draftId, maximum) {
@@ -191,11 +346,12 @@ export async function loadOwnerPublicationDraft({ context: contextInput, config:
 /** Only mappingId is client intent. All source/session/check functions are trusted injections. */
 export async function prepareOwnerPublicationDraft({
   context: contextInput, config: configInput, mappingId, readNote, createEditSession,
-  immediateChecks, clock = () => new Date(),
+  immediateChecks, readEvidence, clock = () => new Date(),
 }) {
   for (const action of [readNote, createEditSession, immediateChecks, clock]) required(action);
   const { config, context, maximum } = inputs(configInput, contextInput);
-  const prepared = await prepareOwnerPublication({ config, mappingId, readNote, createEditSession });
+  const workspace = await workspacePublicationCapture({ config, context, mappingId, readEvidence });
+  const prepared = await prepareOwnerPublication({ config, mappingId, readNote, createEditSession, ...workspace });
   let checks;
   try {
     checks = await immediateChecks({ config, sourcePath: prepared.session.relativePath,
@@ -262,6 +418,10 @@ async function inspectJob(readJob, draft, event) {
   try { result = await readJob(draft.jobId); } catch {
     fail('publication-job-unavailable', 'publication job status could not be established');
   }
+  return boundJob(result, draft, event);
+}
+
+function boundJob(result, draft, event) {
   if (!isPlainObject(result) || !Object.hasOwn(result, 'status')
     || !Object.hasOwn(Object.getOwnPropertyDescriptor(result, 'status'), 'value')) {
     fail('invalid-publication-job-status', 'publication job status must be exact data');
@@ -282,7 +442,254 @@ async function inspectJob(readJob, draft, event) {
     fail('publication-job-binding-mismatch', 'durable publication job does not match the immutable authorized draft');
   }
   return deepFreeze({ draftId: draft.draftId, jobId: draft.jobId, state: result.state, authorizedAt: event.authorizedAt,
-    capturedVersion: draft.prepared.reference.source.version, candidateDigest: draft.prepared.candidate.digest });
+    capturedVersion: draft.prepared.reference.source.version, candidateDigest: draft.prepared.candidate.digest,
+    ...foldedProjection(draft.prepared.reference.source) });
+}
+
+// One baseline state for every durable job state. A live-capable state alone is
+// not evidence; inspect the confirmation history AND the matching result below.
+export const PUBLICATION_JOB_STATES = Object.freeze({
+  accepted: 'publishing',
+  preflighting: 'publishing',
+  checking: 'publishing',
+  rendering: 'publishing',
+  'ready-to-apply': 'publishing',
+  applying: 'publishing',
+  'source-applied': 'publishing',
+  committing: 'publishing',
+  committed: 'publishing',
+  pushing: 'publishing',
+  'awaiting-approval': 'publishing',
+  pushed: 'publishing',
+  'discovering-run': 'publishing',
+  'run-bound': 'publishing',
+  'monitoring-deployment': 'publishing',
+  'deployment-succeeded': 'publishing',
+  'verifying-live': 'publishing',
+  'live-confirmed': 'live',
+  'rebuilding-local': 'live',
+  completed: 'live',
+  'blocked-pre-apply': 'needs-attention',
+  'deployment-failed': 'needs-attention',
+  'live-verification-failed': 'not-verified',
+  'manual-intervention': 'needs-attention',
+  cancelled: 'needs-attention',
+  failed: 'needs-attention',
+});
+
+async function privateDirectoryIfPresent(directory, label) {
+  try {
+    await assertPrivateDirectory(directory, label);
+    return true;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
+async function openReadLayout(context) {
+  const directory = resolveStorePath(context, `${OWNER_PUBLICATION_DRAFT_ROOT}/drafts`);
+  await assertSafeStoreTarget(context, directory);
+  if (!await privateDirectoryIfPresent(directory, 'publication drafts')) return null;
+  for (const parent of [context.workspaceRoot, context.storeRoot, path.dirname(directory)]) {
+    await assertPrivateDirectory(parent, 'publication directory');
+  }
+  await privateDirectoryIfPresent(path.join(path.dirname(directory), 'authorizations'), 'publication authorizations');
+  return directory;
+}
+
+function samePublicationTarget(draft, mapping, config) {
+  return isPlainObject(draft?.prepared?.reference?.mapping)
+    && canonicalJson(draft.prepared.reference.mapping) === canonicalJson(mapping)
+    && draft.prepared.session?.liveUrl === liveUrlForSlug(config.live.baseUrl, mapping.slug);
+}
+
+function foldedProjection(source) {
+  return source.foldedTextDigest === undefined ? {} : { foldedTextDigest: source.foldedTextDigest };
+}
+
+function digestProjection(source) {
+  return source.foldedTextDigest === undefined ? { digest: source.digest } : foldedProjection(source);
+}
+
+async function validateReadDraft(draft, config, draftId, mapping, policyRevision) {
+  if (draft.prepared.reference.policyRevision === policyRevision) return validateDraft(draft, config, draftId);
+  // Policy changes revoke an old draft's write usability, not the fact that the
+  // same configured note and URL were witnessed. Recheck frozen bytes without
+  // requiring that the old operation be authorizable under today's policy.
+  validateDraftIdentity(draft, draftId);
+  const { reference, session, operation, candidate } = draft.prepared;
+  const { source } = reference;
+  assertSourceReference(source, mapping, Number.MAX_SAFE_INTEGER);
+  const workspace = mapping.source.kind === 'workspace';
+  const bytes = applyEditorOperation(session, operation, { workspacePublication: workspace, allowProperties: workspace });
+  if (workspace) {
+    const foldedBase = assertWorkspaceDeliveryRoundTrip(Buffer.from(session.source.bytesBase64, 'base64'));
+    const foldedCandidate = assertWorkspaceDeliveryRoundTrip(bytes);
+    if (publicationDigest(Buffer.from(foldedBase)) !== reference.workspaceBaseline.foldedTextDigest
+      || publicationDigest(Buffer.from(foldedCandidate)) !== source.foldedTextDigest) {
+      fail('invalid-publication-draft', 'historical workspace evidence does not match the folded baseline and capture');
+    }
+    assertFoldedWorkspaceNote(foldedBase, foldedCandidate);
+  }
+  if (session.relativePath !== mapping.relativePath || session.slug !== mapping.slug
+    || session.policyRevision !== reference.policyRevision || session.origin !== undefined
+    || candidate.digest !== publicationDigest(bytes)
+    || (!workspace && (source.digest !== candidate.digest || bytes.length !== source.byteLength))
+    || bytes.length !== candidate.byteLength
+    || bytes.toString('base64') !== candidate.bytesBase64 || bytes.toString('utf8') !== candidate.text) {
+    fail('invalid-publication-draft', 'historical publication evidence is not bound to the exact configured candidate');
+  }
+  return draft;
+}
+
+async function projectReadDraft({ context, config, maximum, policyRevision, readEvidence }, draft) {
+  const { mapping, source } = draft.prepared.reference;
+  let jobId = null;
+  let state = 'needs-attention';
+  let liveVerified = false;
+  let liveKind;
+  let liveOrder = null;
+  let publishedCommit = null;
+  try {
+    let event = await readArtifact(context, paths(draft.draftId).authorization, maximum);
+    if (event !== null) event = validateAuthorization(event, draft, config);
+    const evidence = await readEvidence(draft.jobId, draft.prepared.reference.policyRevision);
+    const job = boundJob(evidence.job, draft, event);
+    if (job === null) {
+      if (event === null && draft.prepared.reference.policyRevision === policyRevision) state = 'prepared';
+    } else {
+      jobId = job.jobId;
+      liveVerified = evidence.confirmedAt !== null && evidence.verified === true;
+      state = PUBLICATION_JOB_STATES[job.state];
+      if (evidence.confirmedAt !== null && !liveVerified) state = 'not-verified';
+      if (liveVerified) {
+        liveKind = evidence.liveKind ?? 'text';
+        liveOrder = [evidence.confirmedAt, evidence.createdAt, job.authorizedAt, draft.draftId];
+        const effect = evidence.committed;
+        const commit = effect?.status === 'committed' && effect.commit === effect.verification?.commit
+          ? effect.verification : effect;
+        const { session } = draft.prepared;
+        if (commit?.status === 'commit-verified' && typeof commit.commit === 'string' && GIT_COMMIT.test(commit.commit)
+          && commit.commit !== session.baseCommit && commit.parentCommit === session.baseCommit
+          && commit.sourcePath === session.relativePath && commit.sourceMode === session.source.gitMode
+          && commit.parentBlob === session.source.gitObjectId && commit.candidateDigest === draft.prepared.candidate.digest
+          && typeof commit.candidateBlob === 'string' && GIT_COMMIT.test(commit.candidateBlob)) {
+          publishedCommit = commit.commit;
+        }
+      }
+    }
+  } catch { /* Partial or invalid job evidence can never assert live or prepared. */ }
+  return { receipt: { draftId: draft.draftId, mappingId: mapping.id, version: source.version,
+    ...digestProjection(source), attribution: validatePublicationAttribution(source.attribution ?? 'unknown'),
+    jobId, state, liveVerified, ...(liveVerified && { liveKind }) }, liveOrder, publishedCommit };
+}
+
+// Sort only immutable timestamps; confirmation time, not preparation time or
+// source version, determines the last witnessed publication. Resolve timestamp
+// ties consistently without persisting another order record.
+function isLater(order, previous) {
+  if (previous === null) return true;
+  const firstDifference = order.findIndex((part, i) => part !== previous[i]);
+  return firstDifference >= 0 && order[firstDifference] > previous[firstDifference];
+}
+
+async function scanPublicationDrafts(store, mapping, readEvidence, visit) {
+  const { context, config, maximum } = store;
+  const request = { ...store, policyRevision: computePolicyRevision(config), readEvidence };
+  const directory = await openReadLayout(context);
+  if (directory === null) return;
+  // Drafts are immutable and capped at 64. No extra queue/index to recover.
+  let count = 0;
+  for await (const entry of await opendir(directory)) {
+    if (entry.isFile() && /^[0-9a-f]{64}\.json\.tmp-\d+-[0-9a-f-]{36}$/u.test(entry.name)) continue;
+    if (!entry.isFile() || !/^[0-9a-f]{64}\.json$/u.test(entry.name) || ++count > OWNER_PUBLICATION_DRAFT_LIMIT) {
+      fail('invalid-publication-artifact', 'publication draft layout is not bounded private evidence');
+    }
+    const draftId = entry.name.slice(0, -5);
+    const record = await readArtifact(context, paths(draftId).draft, maximum);
+    if (record === null || !isPlainObject(record.prepared?.reference?.mapping)) {
+      fail('invalid-publication-artifact', 'publication draft evidence is missing or malformed');
+    }
+    if (!samePublicationTarget(record, mapping, config)) continue;
+    let draft;
+    try { draft = await validateReadDraft(record, config, draftId, mapping, request.policyRevision); }
+    catch (error) { if (error?.code === 'workspace-snapshot-incompatible') continue; throw error; }
+    visit(draft, await projectReadDraft(request, draft));
+  }
+}
+
+async function refreshBaseline(store, mapping, readEvidence, visit = () => {}) {
+  const baseline = await readBaseline(store, mapping);
+  if (baseline === null || typeof readEvidence !== 'function') return baseline;
+  let next = null;
+  let order = null;
+  await scanPublicationDrafts(store, mapping, readEvidence, (draft, result) => {
+    visit(draft, result);
+    if (result.publishedCommit !== null && result.liveOrder !== null && isLater(result.liveOrder, order)
+      && canonicalJson(draft.prepared.reference.workspaceBaseline) === canonicalJson(baseline)) {
+      next = { bindingId: baseline.bindingId, commit: result.publishedCommit, foldedTextDigest: draft.prepared.reference.source.foldedTextDigest };
+      order = result.liveOrder;
+    }
+  });
+  if (next === null) return baseline;
+  await writeBaseline(store, mapping, next, true);
+  return deepFreeze(next);
+}
+
+export async function readOwnerPublicationStatus({ context: contextInput, config: configInput, mappingId, readEvidence }) {
+  const store = inputs(configInput, contextInput);
+  const mapping = store.config.ownerPublication.mappings?.find((entry) => entry.id === mappingId);
+  if (!mapping) fail('publication-mapping-not-found', 'mapping id is not configured for owner publication');
+  let latest = null;
+  let live = null;
+  let latestOrder = null;
+  let liveOrder = null;
+  const visit = (draft, result) => {
+    const { version, attribution, jobId, state, liveKind } = result.receipt;
+    const digest = digestProjection(draft.prepared.reference.source);
+    const order = [draft.createdAt, draft.draftId];
+    if (isLater(order, latestOrder)) {
+      latest = { draftId: draft.draftId, version, ...digest, attribution, jobId, state };
+      latestOrder = order;
+    }
+    if (result.liveOrder !== null && isLater(result.liveOrder, liveOrder)) {
+      live = { version, ...digest, attribution, jobId, verified: true, liveKind, confirmedAt: result.liveOrder[0] };
+      liveOrder = result.liveOrder;
+    }
+  };
+  try {
+    if (mapping.source.kind === 'workspace' && await readBaseline(store, mapping) !== null) {
+      await locked(store.context, OWNER_PUBLICATION_PUBLISH_LOCK, () => refreshBaseline(store, mapping, readEvidence, visit));
+    } else {
+      await scanPublicationDrafts(store, mapping, readEvidence, visit);
+    }
+  } catch (error) {
+    if (error?.code === 'workspace-snapshot-incompatible') throw error;
+    fail('publication-status-unavailable', 'publication status could not be established from private evidence');
+  }
+  return deepFreeze({ mappingId, selected: true, live, latest });
+}
+
+export async function readOwnerPublicationReceipt({ context: contextInput, config: configInput, draftId, readEvidence }) {
+  const store = inputs(configInput, contextInput);
+  const { context, config, maximum } = store;
+  let receipt;
+  try {
+    const directory = await openReadLayout(context);
+    const record = directory === null ? null : await readArtifact(context, paths(draftId).draft, maximum);
+    const mapping = config.ownerPublication.mappings?.find((entry) => samePublicationTarget(record, entry, config));
+    if (mapping) {
+      const policyRevision = computePolicyRevision(config);
+      const draft = await validateReadDraft(record, config, draftId, mapping, policyRevision);
+      ({ receipt } = await projectReadDraft({ ...store, policyRevision, readEvidence }, draft));
+    }
+  } catch (error) {
+    if (error?.code === 'workspace-snapshot-incompatible') throw error;
+    fail('publication-receipt-unavailable', 'publication receipt could not be established from private evidence');
+  }
+  if (!receipt) fail('publication-draft-not-found', 'configured publication draft does not exist');
+  return deepFreeze(receipt);
 }
 
 function observe(completion, onCompletion, draft) {
@@ -304,19 +711,40 @@ function observe(completion, onCompletion, draft) {
  */
 export async function publishOwnerPublicationDraft({
   context: contextInput, config: configInput, draftId, readNote, checkoutReady,
-  readJob, startEdit, onCompletion, clock = () => new Date(),
+  readJob, readEvidence, startEdit, onCompletion, clock = () => new Date(),
 }) {
   for (const action of [readNote, checkoutReady, readJob, startEdit, onCompletion, clock]) required(action);
-  const { config, context, maximum } = inputs(configInput, contextInput);
-  id(draftId);
+  const store = inputs(configInput, contextInput);
+  const { config, context, maximum } = store;
+  validatePublicationDraftId(draftId);
   await layout(context);
   return locked(context, OWNER_PUBLICATION_PUBLISH_LOCK, async () => {
     const draft = await load(context, config, draftId, maximum);
     let event = await readArtifact(context, paths(draftId).authorization, maximum);
     if (event !== null) event = validateAuthorization(event, draft, config);
     const existing = await inspectJob(readJob, draft, event);
+    const { reference, session } = draft.prepared;
+    const { mapping } = reference;
+    // An existing job is a read-only replay, not a request for a new effect.
+    const baseline = mapping.source.kind === 'workspace' ? await refreshBaseline(store, mapping, readEvidence) : undefined;
     if (existing !== null) return deepFreeze({ ...existing, replayed: true });
-    await revalidateOwnerPublicationSource({ config, reference: draft.prepared.reference, readNote });
+    let delivery;
+    if (baseline !== undefined) {
+      requireBaseline(baseline);
+      delivery = await currentDelivery(config, mapping, { baseline });
+      await assertWorkspaceNotRetired({ config, context, mapping, text: draft.prepared.candidate.text });
+      if (canonicalJson(reference.workspaceBaseline) !== canonicalJson(baseline)
+        || delivery.commit !== session.baseCommit || delivery.objectId !== session.source.gitObjectId
+        || delivery.mode !== session.source.gitMode || delivery.digest !== session.source.digest) {
+        fail('publication-base-mismatch', 'workspace publication must match the exact reviewed binding and vault base');
+      }
+    }
+    await revalidateOwnerPublicationSource({ config, reference, readNote,
+      async checkNote(note) {
+        if (delivery) assertFoldedWorkspaceNote(delivery.foldedText, foldWorkspaceText(note.text));
+        await assertWorkspaceNotRetired({ config, context, mapping, text: note.text });
+      },
+    });
     let checkout;
     try { checkout = await checkoutReady(config); } catch {
       fail('publication-checkout-unavailable', 'publication checkout readiness could not be established');
@@ -386,5 +814,15 @@ export async function guardOwnerPublicationSource({
     || !sameJson(operation, draft.prepared.operation, 'publication-handoff-mismatch')) {
     fail('publication-handoff-mismatch', 'publication source guard must match the authorized immutable job inputs');
   }
-  return revalidateOwnerPublicationSource({ config, reference: draft.prepared.reference, readNote });
+  const { reference, candidate } = draft.prepared;
+  await assertWorkspaceNotRetired({ config, context, mapping: reference.mapping, text: candidate.text });
+  return revalidateOwnerPublicationSource({ config, reference, readNote,
+    async checkNote(note) {
+      if (reference.mapping.source.kind === 'workspace') {
+        const foldedBase = foldWorkspaceText(draft.prepared.session.source.text);
+        assertFoldedWorkspaceNote(foldedBase, foldWorkspaceText(note.text));
+      }
+      await assertWorkspaceNotRetired({ config, context, mapping: reference.mapping, text: note.text });
+    },
+  });
 }

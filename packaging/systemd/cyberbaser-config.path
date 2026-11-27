@@ -1,0 +1,9 @@
+[Unit]
+Description=Restart the Cyberbaser publisher when the node config changes
+
+[Path]
+PathChanged=/var/lib/cyberbaser/config/owner-alpha.json
+Unit=cyberbaser-config-apply.service
+
+[Install]
+WantedBy=multi-user.target

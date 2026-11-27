@@ -627,7 +627,7 @@ const ownerFetch = createOwnerAlphaHandler({
   saveEdit: async ({ jobId }) => ({ jobId, state: 'accepted' }),
   lookupJob: async () => null,
 });
-const readerFetch = createReaderHandler({ config, siteRoot });
+const readerFetch = createReaderHandler({ config, siteRoot, hasOwnerSession: ownerFetch.hasOwnerSession });
 const runtime = startOwnerAlphaServers({ config, ownerFetch, readerFetch });
 await writeOwnerAlphaReadyMarker(process.env.OWNER_ALPHA_READY_FILE);
 console.log('Owner alpha reader: ' + runtime.readerOrigin + '/cyberbase/');
@@ -675,7 +675,8 @@ await new Promise(() => {});
     });
     expect(badOrigin.status).toBe(403);
     const readerOwnerRoute = await request(port + 1, '/owner/bootstrap?token=x');
-    expect(readerOwnerRoute.status).toBe(404);
+    expect(readerOwnerRoute.status).toBe(403);
+    expect((await request(port + 1, '/cyberbase/', { headers: { Cookie: cookie } })).status).toBe(200);
 
     const logs = Bun.spawnSync({ cmd: ['docker', 'logs', firstContainer], stdout: 'pipe', stderr: 'pipe' });
     expect(logs.exitCode).not.toBe(0);

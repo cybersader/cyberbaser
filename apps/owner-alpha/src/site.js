@@ -18,15 +18,13 @@ import { select } from '@cyberbaser/publish';
 import { computePolicyRevision, validateOwnerAlphaConfig } from './config.js';
 import { fail, OwnerAlphaError } from './errors.js';
 import { canonicalJson, deepFreeze, isPlainObject } from './json.js';
-import {
-  PINNED_QUARTZ_COMMIT,
-  PINNED_QUARTZ_REF,
-  PINNED_QUARTZ_REPOSITORY,
-  renderPinnedQuartz,
-} from './quartz-renderer.js';
+import { renderPinnedQuartz } from './quartz-renderer.js';
+import { copySiteOutput } from './site-files.js';
+import { assertRendererDirectory, createConfiguredRenderer, rendererIdentity } from './renderer-slot.js';
 import { assertCheckoutReady } from './source.js';
 import {
   retainPublication as retainPublicationDefault,
+  agentLaneEnabled,
   suggestionFormOrigin,
   verifyRetainedPublication as verifyRetainedPublicationDefault,
 } from './suggestions.js';
@@ -204,7 +202,7 @@ function updateTreeDigest(hash, relativePath, bytes) {
   hash.update(bytes);
 }
 
-async function verifyBytePreservingProjection(checkoutRoot, projectionRoot, published) {
+export async function verifyBytePreservingProjection(checkoutRoot, projectionRoot, published) {
   const paths = [...published].map(exactPublishedPath).sort();
   if (new Set(paths).size !== paths.length) {
     fail('duplicate-published-path', 'publication selection returned duplicate paths');
@@ -309,11 +307,43 @@ async function digestRegularTree(root, label, { exclude = [] } = {}) {
   };
 }
 
-async function runtimeResourceIdentity(projectRoot) {
+// The files the owner named as the identity of a configured renderer, hashed
+// with the same no-symlink, one-link reads as every other runtime resource.
+async function updateRendererFingerprint(hash, renderer) {
+  const directory = await assertRendererDirectory(renderer);
+  let files = 0;
+  let bytes = 0;
+  for (const entry of renderer.fingerprint) {
+    const target = path.join(directory, ...entry.split('/'));
+    let metadata;
+    try {
+      metadata = await lstat(target);
+    } catch (error) {
+      fail('renderer-fingerprint-missing', `renderer fingerprint entry ${entry} is missing`, { cause: error?.code ?? 'unknown' });
+    }
+    if (metadata.isSymbolicLink()) fail('renderer-symlink-rejected', `renderer fingerprint entry ${entry} must not be a symlink`);
+    const relativePaths = metadata.isDirectory()
+      ? (await inspectRegularTree(await exactExistingDirectory(target, `renderer ${entry}`), `renderer ${entry}`))
+        .map((relativePath) => `${entry}/${relativePath}`)
+      : [entry];
+    for (const relativePath of relativePaths) {
+      const contents = await readRegularNoFollow(directory, path.join(directory, ...relativePath.split('/')),
+        `renderer ${relativePath}`);
+      updateTreeDigest(hash, `renderer:${renderer.name}/${relativePath}`, contents);
+      files += 1;
+      bytes += contents.length;
+    }
+  }
+  return { files, bytes };
+}
+
+async function runtimeResourceIdentity(projectRoot, config) {
+  const configured = config.renderer ?? null;
   const roots = [
     'apps/owner-alpha/src',
     'apps/owner-alpha/public',
-    'renderers/quartz-cyberbase',
+    // The bundled renderer, unless the owner configured their own (below).
+    ...(configured === null ? ['renderers/quartz-cyberbase'] : []),
     'packages/correction/src',
     'packages/linkcheck/src',
     'packages/ofm/src',
@@ -343,6 +373,11 @@ async function runtimeResourceIdentity(projectRoot) {
       bytes += contents.length;
     }
   }
+  if (configured !== null) {
+    const counted = await updateRendererFingerprint(hash, configured);
+    files += counted.files;
+    bytes += counted.bytes;
+  }
   return {
     digest: `sha256:${hash.digest('hex')}`,
     files,
@@ -353,8 +388,10 @@ async function runtimeResourceIdentity(projectRoot) {
 async function inspectHtmlSite(siteRoot) {
   const html = (await inspectRegularTree(siteRoot, 'rendered candidate site'))
     .filter((relativePath) => /\.html?$/iu.test(relativePath));
-  if (html.length === 0 || !html.includes('index.html')) {
-    fail('site-html-baseline-missing', 'rendered candidate must contain index.html and at least one HTML page');
+  // A site that publishes only some folders has no home page (no root
+  // index.md is public), so index.html is not required; some page is.
+  if (html.length === 0) {
+    fail('site-html-baseline-missing', 'rendered candidate must contain at least one HTML page');
   }
   for (const relativePath of html) {
     const bytes = await readRegularNoFollow(
@@ -522,13 +559,27 @@ async function publishCandidate({ projectRoot, workspaceRoot, candidateSite, sit
 
 // The built pages either carry no form, or carry the form bound to exactly the
 // intake origin the current config would use plus one retained binding digest.
-function suggestionsMatch(value, formOrigin, editEntry) {
+// With the form off but paired agents on, the pages carry no form and the
+// manifest still names the one retained binding agents' proposals bind to.
+function suggestionsMatch(value, formOrigin, editEntry, agents = false) {
   if (!isPlainObject(value)) return false;
-  if (formOrigin === null) return value.form === false;
+  if (formOrigin === null) {
+    return value.form === false && (agents ? value.agents === true && typeof value.bindingDigest === 'string' : value.agents !== true);
+  }
   return value.form === true
     && (value.editEntry ?? 'auto') === editEntry
     && value.intakeOrigin === formOrigin
     && typeof value.bindingDigest === 'string';
+}
+
+// The manifest names exactly the renderer the config selects: its name, Quartz
+// pin and, for a configured renderer, its directory (absent for the bundled one).
+function sameRendererIdentity(recorded, expected) {
+  return recorded.name === expected.name
+    && recorded.revision === expected.revision
+    && recorded.tag === expected.tag
+    && recorded.repository === expected.repository
+    && recorded.directory === expected.directory;
 }
 
 function reusableManifest(value, config, checkout, htmlPages, resources, outputTree) {
@@ -543,16 +594,13 @@ function reusableManifest(value, config, checkout, htmlPages, resources, outputT
     || value.source.remote?.name !== config.repository.remote.name
     || value.source.remote?.url !== config.repository.remote.url
     || value.policyRevision !== computePolicyRevision(config)
-    || value.renderer.name !== 'quartz-cyberbase'
-    || value.renderer.revision !== PINNED_QUARTZ_COMMIT
-    || value.renderer.tag !== PINNED_QUARTZ_REF
-    || value.renderer.repository !== PINNED_QUARTZ_REPOSITORY
+    || !sameRendererIdentity(value.renderer, rendererIdentity(config))
     || value.renderer.editLinkMode !== 'owner'
     || value.renderer.ownerOrigin !== `http://${config.listen.host}:${config.listen.port}`
     || value.renderer.resources?.digest !== resources.digest
     || value.renderer.resources?.files !== resources.files
     || value.renderer.resources?.bytes !== resources.bytes
-    || !suggestionsMatch(value.suggestions, suggestionFormOrigin(config), config.suggestions.editEntry ?? 'auto')
+    || !suggestionsMatch(value.suggestions, suggestionFormOrigin(config), config.suggestions.editEntry ?? 'auto', agentLaneEnabled(config))
     || value.site.manifest !== OWNER_SITE_MANIFEST_FILENAME
     || value.site.htmlPages !== htmlPages
     || value.site.outputTree?.digest !== outputTree.digest
@@ -570,7 +618,7 @@ export async function reuseOwnerSite({
 } = {}, dependencyOverrides = {}) {
   const config = validateOwnerAlphaConfig(configInput);
   const project = await exactExistingDirectory(projectRoot, 'projectRoot');
-  const resources = await runtimeResourceIdentity(project);
+  const resources = await runtimeResourceIdentity(project, config);
   const workspaceRoot = contained(project, path.resolve(project, config.workspace.root), {
     strict: true,
     code: 'site-workspace-outside-project',
@@ -619,7 +667,7 @@ export async function reuseOwnerSite({
     outputTree,
   );
   if (accepted === null) return null;
-  if (accepted.suggestions.form === true && !(await verifyRetained({
+  if ((accepted.suggestions.form === true || accepted.suggestions.agents === true) && !(await verifyRetained({
     config,
     projectRoot: project,
     head: before.head,
@@ -657,11 +705,13 @@ export async function ensureOwnerSite(options = {}, dependencyOverrides = {}) {
 export async function rebuildOwnerSite({
   config: configInput,
   projectRoot = DEFAULT_OWNER_ALPHA_PROJECT_ROOT,
-  renderer = renderPinnedQuartz,
+  // null: the renderer the config selects (bundled, or the owner's slot).
+  renderer = null,
 } = {}, dependencyOverrides = {}) {
   const config = validateOwnerAlphaConfig(configInput);
   const project = await exactExistingDirectory(projectRoot, 'projectRoot');
-  const resources = await runtimeResourceIdentity(project);
+  const resources = await runtimeResourceIdentity(project, config);
+  const expectedRenderer = rendererIdentity(config);
   const workspaceRoot = contained(project, path.resolve(project, config.workspace.root), {
     strict: true,
     code: 'site-workspace-outside-project',
@@ -677,6 +727,11 @@ export async function rebuildOwnerSite({
   if (pathsOverlap(siteRoot, cacheRoot)) {
     fail('site-workspace-path-overlap', 'configured owner site and cache paths must not overlap');
   }
+  if (expectedRenderer.directory !== undefined && (pathsOverlap(expectedRenderer.directory, workspaceRoot)
+    || containedWithoutFailure(project, expectedRenderer.directory) || containedWithoutFailure(expectedRenderer.directory, project)
+    || expectedRenderer.directory === project)) {
+    fail('renderer-workspace-overlap', 'the renderer directory must be outside the owner workspace and project');
+  }
 
   await prepareContainedDirectory(project, workspaceRoot, workspaceRoot, 'workspace root');
   await prepareContainedDirectory(project, workspaceRoot, cacheRoot, 'cache root');
@@ -686,7 +741,8 @@ export async function rebuildOwnerSite({
   const selectPublic = dependencyOverrides.select ?? select;
   const projectPublic = dependencyOverrides.project ?? projectContent;
   const verifyPublic = dependencyOverrides.verifyProjection ?? verifyProjection;
-  const render = dependencyOverrides.renderPinnedQuartz ?? renderer;
+  const render = dependencyOverrides.renderPinnedQuartz ?? renderer
+    ?? (config.renderer ? createConfiguredRenderer(config.renderer) : renderPinnedQuartz);
   const checkLinks = dependencyOverrides.checkSite ?? checkSite;
   const retain = dependencyOverrides.retainPublication ?? retainPublicationDefault;
   const now = dependencyOverrides.now ?? (() => new Date());
@@ -736,6 +792,9 @@ export async function rebuildOwnerSite({
     strict: true,
     code: 'site-renderer-workspace-outside-cache',
   });
+  // The renderer never receives a writable grant on the candidate or its parent.
+  const stagingRoot = path.join(buildRoot, 'renderer-handoff');
+  const stagingSite = path.join(stagingRoot, 'site');
   const candidateSite = contained(workspaceRoot, `${siteRoot}.candidate-${buildId}`, {
     strict: true,
     code: 'site-candidate-outside-workspace',
@@ -823,7 +882,8 @@ export async function rebuildOwnerSite({
     const formOrigin = suggestionFormOrigin(config);
     let suggestions = { form: false };
     let rendererSuggestions = null;
-    if (formOrigin !== null) {
+    const agents = formOrigin === null && agentLaneEnabled(config);
+    if (formOrigin !== null || agents) {
       let retained;
       try {
         retained = await retain({
@@ -842,27 +902,37 @@ export async function rebuildOwnerSite({
       if (!isPlainObject(retained) || typeof retained.bindingDigest !== 'string') {
         fail('site-suggestion-binding-failed', 'retainPublication did not return one binding digest');
       }
-      rendererSuggestions = {
-        editEntry: config.suggestions.editEntry ?? 'auto',
-        intakeOrigin: formOrigin,
-        bindingDigest: retained.bindingDigest,
-        sourceRepository: config.repository.remote.url,
-        sourceRevision: before.head,
-        ...(config.suggestions.form.challenge ? {
-          challenge: {
-            provider: config.suggestions.form.challenge.provider,
-            siteKey: config.suggestions.form.challenge.siteKey,
-          },
-        } : {}),
-      };
-      suggestions = {
-        form: true,
-        ...(config.suggestions.editEntry !== undefined ? { editEntry: config.suggestions.editEntry } : {}),
-        intakeOrigin: formOrigin,
-        bindingDigest: retained.bindingDigest,
-        pages: safeCount(retained.pages, 'retained pages'),
-        trustPolicy: jsonSafe(retained.trustPolicy ?? null, 'retained trust policy'),
-      };
+      if (agents) {
+        suggestions = {
+          form: false,
+          agents: true,
+          bindingDigest: retained.bindingDigest,
+          pages: safeCount(retained.pages, 'retained pages'),
+          trustPolicy: jsonSafe(retained.trustPolicy ?? null, 'retained trust policy'),
+        };
+      } else {
+        rendererSuggestions = {
+          editEntry: config.suggestions.editEntry ?? 'auto',
+          intakeOrigin: formOrigin,
+          bindingDigest: retained.bindingDigest,
+          sourceRepository: config.repository.remote.url,
+          sourceRevision: before.head,
+          ...(config.suggestions.form.challenge ? {
+            challenge: {
+              provider: config.suggestions.form.challenge.provider,
+              siteKey: config.suggestions.form.challenge.siteKey,
+            },
+          } : {}),
+        };
+        suggestions = {
+          form: true,
+          ...(config.suggestions.editEntry !== undefined ? { editEntry: config.suggestions.editEntry } : {}),
+          intakeOrigin: formOrigin,
+          bindingDigest: retained.bindingDigest,
+          pages: safeCount(retained.pages, 'retained pages'),
+          trustPolicy: jsonSafe(retained.trustPolicy ?? null, 'retained trust policy'),
+        };
+      }
     }
 
     let rendererResult;
@@ -871,7 +941,8 @@ export async function rebuildOwnerSite({
         siteConfigPath: await vaultSiteSettings(before.root),
         sourceCheckout: before.root,
         contentDir: projectionRoot,
-        outputDir: candidateSite,
+        outputDir: stagingSite,
+        outputWriteRoot: stagingRoot,
         workspaceDir: rendererWorkspace,
         editLinkMode: 'owner',
         ownerOrigin: `http://${config.listen.host}:${config.listen.port}`,
@@ -884,13 +955,22 @@ export async function rebuildOwnerSite({
       });
     }
     if (!isPlainObject(rendererResult)
-      || rendererResult.renderer !== 'quartz-cyberbase'
-      || rendererResult.revision !== PINNED_QUARTZ_COMMIT
-      || rendererResult.tag !== PINNED_QUARTZ_REF
-      || (rendererResult.outputDir !== undefined && path.resolve(rendererResult.outputDir) !== candidateSite)) {
-      fail('site-renderer-identity-mismatch', 'renderer result did not prove the pinned Quartz owner build identity');
+      || rendererResult.renderer !== expectedRenderer.name
+      || rendererResult.revision !== expectedRenderer.revision
+      || rendererResult.tag !== expectedRenderer.tag
+      || (rendererResult.outputDir !== undefined && path.resolve(rendererResult.outputDir) !== stagingSite)) {
+      fail('site-renderer-identity-mismatch', 'renderer result did not prove the configured renderer identity');
+    }
+    // A configured renderer is the same files after its build as before it:
+    // the manifest records the identity the build actually ran with.
+    if (expectedRenderer.directory !== undefined) {
+      const afterBuild = await runtimeResourceIdentity(project, config);
+      if (afterBuild.digest !== resources.digest) {
+        fail('renderer-changed-during-build', 'the renderer files changed while the site was built; fingerprint only files the build does not write');
+      }
     }
 
+    await copySiteOutput(stagingSite, candidateSite);
     const html = await inspectHtmlSite(candidateSite);
     const outputTree = await digestRegularTree(candidateSite, 'rendered candidate site');
     let linkCheck;
@@ -952,10 +1032,11 @@ export async function rebuildOwnerSite({
         bytePreserving: byteVerification,
       },
       renderer: {
-        name: 'quartz-cyberbase',
-        revision: PINNED_QUARTZ_COMMIT,
-        tag: PINNED_QUARTZ_REF,
-        repository: PINNED_QUARTZ_REPOSITORY,
+        name: expectedRenderer.name,
+        revision: expectedRenderer.revision,
+        tag: expectedRenderer.tag,
+        repository: expectedRenderer.repository,
+        ...(expectedRenderer.directory === undefined ? {} : { directory: expectedRenderer.directory }),
         editLinkMode: 'owner',
         ownerOrigin: `http://${config.listen.host}:${config.listen.port}`,
         resources,
@@ -990,6 +1071,8 @@ export async function rebuildOwnerSite({
       rendererWorkspace,
       manifest,
       publication,
+      // Notes rendered without source provenance (review falls back for them).
+      provenanceSkipped: rendererResult.provenanceSkipped ?? null,
     });
   } finally {
     if (!published) {

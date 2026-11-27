@@ -1,0 +1,18 @@
+// Opt-in: install, first-run setup with signed publishing (the plugin core as the phone),
+// hand-off, an agent proposal signed and pushed, the refusals, recovery, and the
+// isolation and offline checks, in a disposable systemd container with no network.
+//   CYBERBASER_CONTAINER_TEST=1 CYBERBASER_QUARTZ_SEED_ARCHIVE=/path/quartz-seed-v4.5.2.tar.zst \
+//     bun test packaging/test/container-setup.test.js
+import { expect, test } from 'bun:test';
+import { spawnSync } from 'node:child_process';
+import path from 'node:path';
+
+const ENABLED = process.env.CYBERBASER_CONTAINER_TEST === '1' && Boolean(process.env.CYBERBASER_QUARTZ_SEED_ARCHIVE);
+
+test.skipIf(!ENABLED)('installed first run end to end: setup, hand-off, agent proposal pushed, token isolation, offline start', () => {
+  const run = spawnSync('bash', [path.join(import.meta.dir, 'container', 'run.sh'), 'setup-e2e.sh'], { encoding: 'utf8', timeout: 1_800_000 });
+  const output = `${run.stdout}${run.stderr}`;
+  console.log(output.split('\n').filter((line) => /^(FAIL|RESULT)/u.test(line)).join('\n'));
+  expect(output).toMatch(/RESULT pass=\d+ fail=0/u);
+  expect(run.status).toBe(0);
+}, 1_800_000);

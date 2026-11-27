@@ -1,10 +1,12 @@
 import { execFile } from 'node:child_process';
 import { cp, lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { copyCommittedFolder, DEFAULT_MAX_PAGES, validateCopyOptions } from './suggestions-rehearsal-source.js';
 import { validatePrivateNetworkIpv4Host } from '../src/network.js';
+import { readSiteBase } from '../src/site-base.js';
 
 const exec = promisify(execFile);
 export const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -80,11 +82,17 @@ export async function assertPrerequisites({ seed = RENDERER_SEED } = {}) {
 }
 
 /** Only fresh fixture-owned files are written. The real owner config is never read. */
-export async function createSuggestionsFixture({ port = 46437, host = '127.0.0.1', keep = false, challenge = null, from = null, folder = null, ref = 'origin/main', maxPages = DEFAULT_MAX_PAGES } = {}) {
+export const AGENT_REHEARSAL_DELIVERY_PATH = 'workspace-note.md';
+
+export async function createSuggestionsFixture({ port = 46437, host = '127.0.0.1', keep = false, challenge = null, from = null, folder = null, ref = 'origin/main', maxPages = DEFAULT_MAX_PAGES, agentBase = null, siteTitle = null } = {}) {
   optionsFromArgs(['--port', String(port), '--host', host, ...(challenge === null ? [] : ['--challenge', challenge])]);
   validateCopyOptions({ from, folder, ref, maxPages });
-  await mkdir(path.join(PROJECT_ROOT, '.workspace'), { recursive: true, mode: 0o700 });
-  const root = await mkdtemp(path.join(PROJECT_ROOT, '.workspace/try-suggestions-'));
+  if (agentBase !== null && (host !== '127.0.0.1' || from !== null || keep || challenge !== null || typeof agentBase !== 'string')) {
+    throw new Error('The agent rehearsal uses only disposable loopback state.');
+  }
+  const parent = agentBase === null ? path.join(PROJECT_ROOT, '.workspace') : await realpath(os.tmpdir());
+  await mkdir(parent, { recursive: true, mode: 0o700 });
+  const root = await mkdtemp(path.join(parent, agentBase === null ? 'try-suggestions-' : 'agent-proposal-'));
   const checkout = path.join(root, 'vault');
   const remote = path.join(root, 'local-only.git');
   const configFile = path.join(root, 'owner.json');
@@ -122,10 +130,18 @@ export async function createSuggestionsFixture({ port = 46437, host = '127.0.0.1
     await mkdir(checkout, { mode: 0o700 });
     await mkdir(path.join(checkout, '.cyberbaser'), { mode: 0o700 });
     const copied = from === null ? null : await copyCommittedFolder({ from, folder, ref, maxPages, checkout, root, projectRoot: PROJECT_ROOT, command });
-    if (copied === null) for (const [name, text] of Object.entries(PAGES)) await writeFile(path.join(checkout, name), text, { mode: 0o600 });
+    if (agentBase !== null) {
+      await writeFile(path.join(checkout, AGENT_REHEARSAL_DELIVERY_PATH), agentBase, { mode: 0o600 });
+      await writeFile(path.join(checkout, 'index.md'), '# Agent proposal rehearsal\n', { mode: 0o600 });
+    } else if (copied === null) for (const [name, text] of Object.entries(PAGES)) await writeFile(path.join(checkout, name), text, { mode: 0o600 });
     const allow = copied === null ? ['*.md'] : ['index.md', folder];
     await writeFile(path.join(checkout, 'publish.yml'), copied === null ? 'allow:\n  - "*.md"\n' : `${JSON.stringify({ allow })}\n`, { mode: 0o600 });
     await writeFile(path.join(checkout, '.cyberbaser/trust.yml'), 'trusted: [rehearsal]\nagents: []\n', { mode: 0o600 });
+    // Optional synthetic site settings, so the private site carries a title.
+    if (siteTitle !== null) {
+      if (typeof siteTitle !== 'string' || !/^[\w .-]{1,40}$/u.test(siteTitle)) throw new Error('The rehearsal site title must be short plain text.');
+      await writeFile(path.join(checkout, '.cyberbaser/site.yml'), `site:\n  title: ${siteTitle}\nappearance:\n  colorScheme: light\n`, { mode: 0o600 });
+    }
     await git(checkout, ['init', '-q', '--initial-branch=main']);
     await git(checkout, ['config', 'user.name', 'Suggestions Rehearsal']);
     await git(checkout, ['config', 'user.email', 'rehearsal@example.invalid']);
@@ -157,8 +173,10 @@ export async function createSuggestionsFixture({ port = 46437, host = '127.0.0.1
       config.suggestions.form.challenge = { provider: 'turnstile', siteKey: TEST_KEYS[challenge][0], secretFile, expectedHostnames: ['example.com'] };
     }
     await writeFile(configFile, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+    // The private site home: the reader serves at the base the vault is built for (site-base.js).
+    const readerHome = `http://${host}:${port + 1}${await readSiteBase(config)}`;
     return { root, checkout, remote, config, configFile, projectRoot, challenge, keep, copied, git, cleanup,
-      ownerOrigin: `http://${host}:${port}`, readerOrigin: `http://${host}:${port + 1}`, intakeOrigin: `http://${host}:${port + 2}`,
+      ownerOrigin: `http://${host}:${port}`, readerOrigin: `http://${host}:${port + 1}`, readerHome, intakeOrigin: `http://${host}:${port + 2}`,
       track(promise) { active.add(promise); promise.then(() => active.delete(promise), () => active.delete(promise)); return promise; },
       attachRuntime(value) { runtime = value; },
     };
@@ -167,23 +185,49 @@ export async function createSuggestionsFixture({ port = 46437, host = '127.0.0.1
 
 /** A fixture-local renderer seam reuses the pinned setup/build scripts offline. */
 export function createRehearsalRenderer({ seed = RENDERER_SEED } = {}) {
-  return async ({ contentDir, outputDir, workspaceDir, ownerOrigin, suggestions = null }) => {
-    const { PINNED_QUARTZ_COMMIT, PINNED_QUARTZ_REF, suggestionEnvironment } = await import('../src/quartz-renderer.js');
+  return async ({ contentDir, outputDir, workspaceDir, ownerOrigin, suggestions = null, siteConfigPath = null, sourceCheckout = null }) => {
+    const { PINNED_QUARTZ_COMMIT, PINNED_QUARTZ_REF, suggestionEnvironment, provenanceReportEnvironment, readProvenanceReport } = await import('../src/quartz-renderer.js');
+    const { BUNDLED_RENDERER_NAME } = await import('../src/renderer-slot.js');
     const quartz = path.join(workspaceDir, 'quartz');
     const renderer = path.join(PROJECT_ROOT, 'renderers/quartz-cyberbase');
     await mkdir(workspaceDir, { recursive: true });
     // Same build inputs as the real owner renderer (form, challenge, provenance).
     const form = suggestionEnvironment(suggestions);
+    const report = await provenanceReportEnvironment(workspaceDir, form);
     const env = { ...environment(), QUARTZ_OFFLINE: '1', QUARTZ_SEED_DIR: seed,
       ...(form.CYBERBASER_SOURCE_PROVENANCE ? { CYBERBASER_SOURCE_PROVENANCE: form.CYBERBASER_SOURCE_PROVENANCE } : {}) };
     await command('bash', [path.join(renderer, 'setup.sh'), quartz], { env });
     await command('bash', [path.join(renderer, 'build.sh'), contentDir, quartz], { env: { ...env, COPY_CONTENT: '1', OUTPUT_DIR: outputDir,
-      CYBERBASER_EDIT_LINK_MODE: 'owner', CYBERBASER_OWNER_ORIGIN: ownerOrigin, ...form } });
-    return { renderer: 'quartz-cyberbase', revision: PINNED_QUARTZ_COMMIT, tag: PINNED_QUARTZ_REF, outputDir, suggestionForm: suggestions !== null };
+      CYBERBASER_EDIT_LINK_MODE: 'owner', CYBERBASER_OWNER_ORIGIN: ownerOrigin, ...form, ...report,
+      // The vault's own site settings and read-only note dates, as the real renderer passes them.
+      ...(siteConfigPath ? { CYBERBASER_SITE_CONFIG: siteConfigPath } : {}),
+      ...(sourceCheckout ? { CYBERBASER_SOURCE_CHECKOUT: sourceCheckout } : {}) } });
+    return { renderer: BUNDLED_RENDERER_NAME, revision: PINNED_QUARTZ_COMMIT, tag: PINNED_QUARTZ_REF, outputDir, suggestionForm: suggestions !== null,
+      provenanceSkipped: await readProvenanceReport(report) };
   };
 }
 
-export async function startSuggestionsRehearsal(fixture, { renderer = createRehearsalRenderer() } = {}) {
+async function assertLocalAgentConfiguration(fixture) {
+  const { root, remote, checkout, git } = fixture;
+  const config = JSON.parse(await readFile(fixture.configFile, 'utf8'));
+  const inside = (value) => typeof value === 'string' && path.normalize(value) === value && value.startsWith(`${root}${path.sep}`);
+  if (!inside(remote) || await realpath(remote) !== remote || config.repository.checkout !== checkout
+    || config.repository.remote.url !== REPOSITORY || config.repository.remote.name !== 'origin' || config.publisher !== undefined
+    || config.listen.host !== '127.0.0.1' || config.suggestions.forge.enabled || config.suggestions.form.challenge
+    || await git(checkout, ['remote']) !== 'origin') throw new Error('Agent rehearsal remote containment refused.');
+  for (const option of [['origin'], ['--push', 'origin']]) {
+    if (await git(checkout, ['remote', 'get-url', '--all', ...option]) !== remote) throw new Error('Agent rehearsal remote containment refused.');
+  }
+  for (const socketPath of [config.proposalReview.socketPath, config.signedRequestSocket]) {
+    if (!inside(socketPath) || await realpath(path.dirname(socketPath)) !== path.dirname(socketPath)) {
+      throw new Error('Agent rehearsal socket containment refused.');
+    }
+  }
+}
+
+// renderer: null builds through the renderer the fixture config selects (the owner's slot).
+export async function startSuggestionsRehearsal(fixture, { renderer = createRehearsalRenderer(), simulatedRender = false, readAuthoringNote, publisherSigning = null } = {}) {
+  if (simulatedRender) await assertLocalAgentConfiguration(fixture);
   // The site manifest hashes actual runtime resources. Copy, never symlink,
   // this small code/resource closure into the owned runtime project.
   for (const relative of ['apps/owner-alpha/src', 'apps/owner-alpha/public', 'renderers/quartz-cyberbase',
@@ -201,6 +245,9 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
   const { applyAcceptedOperation } = await import('../src/apply.js');
   const { commitAppliedCandidate, pushExactCommit, verifyExactCommit } = await import('../src/git-publish.js');
   const { startSuggestionIntake } = await import('../src/suggestions.js');
+  const { createOwnerPublicationRuntime } = await import('../src/owner-publication-runtime.js');
+  const { createBundlePreview } = await import('../src/bundle-preview.js');
+  const { witnessDigest } = await import('../src/live-confirm.js');
   // The policy's HTTPS identity is not a destination. Verify both real remote
   // directions before mapping identity for the normal fail-closed policy checks.
   const policyGit = async (cwd, args, options) => {
@@ -214,8 +261,15 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
   const ready = (config) => assertCheckoutReady(config, { git: policyGit });
   const rebuild = ({ config }) => rebuildOwnerSite({ config, projectRoot: fixture.projectRoot, renderer }, { assertCheckoutReady: ready });
   const simulated = (stage, value) => ({ ...value, synthetic: true, evidence: `local-rehearsal-simulated-${stage}; no deployment or live verification` });
-  const runtime = await runOwnerAlphaServer({ configFile: fixture.configFile, projectRoot: fixture.projectRoot,
+  const runtime = await runOwnerAlphaServer({ configFile: fixture.configFile, projectRoot: fixture.projectRoot, publisherSigning,
+    ...(readAuthoringNote === undefined ? {} : { readAuthoringNote,
+      // Publication reads the same disposable checkout through the policy seam.
+      createPublication: (input) => createOwnerPublicationRuntime({ ...input, git: reviewGit, checkoutReady: ready,
+        sourceSession: (session) => createEditSession({ ...session, git: policyGit }) }) }),
     rebuildSite: rebuild,
+    // New pages on the site design (route C, and the address check before a
+    // bundle is offered) read the same disposable checkout through the policy seam.
+    createPreview: (input) => createBundlePreview({ ...input, dependencies: { ...input.dependencies, assertCheckoutReady: ready } }),
     startSuggestions: (input) => startSuggestionIntake({ ...input, intakeEntry: path.join(PROJECT_ROOT, 'apps/account-free-intake/bin/server.js') }),
     createReviewSource: (input) => createOwnerProposalReviewSource({ ...input, git: reviewGit }),
     createReviewService: (input) => createOwnerProposalReviewService({ ...input,
@@ -226,7 +280,9 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
       const pipeline = createSaveHandler({ config, context, projectRoot: fixture.projectRoot, dependencies: {
         ...dependencies, assertCheckoutReady: ready,
         createEditSession: (input) => createEditSession({ ...input, git: policyGit }),
-        runPreApplyChecks: (input) => runPreApplyChecks({ ...input, renderer }),
+        runPreApplyChecks: (input) => runPreApplyChecks({ ...input, ...(renderer === null ? {} : { renderer }) }, simulatedRender ? {
+          createTemporaryRoot: () => mkdtemp(path.join(fixture.root, 'checks-')),
+        } : undefined),
         applyAcceptedOperation: (input) => applyAcceptedOperation(input, { git: effectGit }),
         commitAppliedCandidate: (input) => commitAppliedCandidate(input, gitDependencies),
         verifyExactCommit: (input) => verifyExactCommit(input, gitDependencies),
@@ -235,13 +291,20 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
           return { ...await pushExactCommit({ ...input, remoteUrl: fixture.remote }, gitDependencies), syntheticLocalRemote: true };
         },
         getHead: (cwd) => fixture.git(cwd, ['rev-parse', 'HEAD']),
-        discoverDeploymentRun: async ({ applicationSha }) => simulated('discovery', { binding: { provider: 'github-actions', runId: 'local-only', headSha: applicationSha, runAttempt: 1 } }),
-        monitorDeploymentRun: async ({ boundRun }) => simulated('deployment', { provider: 'github-actions', run: boundRun, environment: { state: 'success' } }),
+        // Shaped as a successful bound run so the node's own deployment checks
+        // (live verification, note status) accept it; still marked synthetic.
+        discoverDeploymentRun: async ({ applicationSha }) => simulated('discovery', { binding: { provider: 'github-actions', runId: '1', headSha: applicationSha, runAttempt: 1 } }),
+        monitorDeploymentRun: async ({ boundRun }) => simulated('deployment', { provider: 'github-actions',
+          run: { ...boundRun, status: 'completed', conclusion: 'success' }, environment: { state: 'success' } }),
         confirmLivePage: async () => simulated('live-confirmation', { oldWitnessAbsent: true, newWitnessUnique: true }),
+        // New pages from a bundle: the same simulation, shaped as the new-page proof.
+        confirmNewPages: async ({ pages, images }) => simulated('live-confirmation', { kind: 'new-page-live',
+          pages: pages.map((page) => ({ pageUrl: page.pageUrl, witnessPresent: true, witnessDigest: witnessDigest(page.witness) })),
+          images: images.map(({ url, byteLength, sha256 }) => ({ url, byteLength, sha256 })) }),
         rebuildLocal: async ({ commit, jobId, sourcePath }) => {
           const built = await rebuild({ config });
           if (built.manifest.source.head !== commit) throw new Error('Local rebuild commit mismatch.');
-          return { status: 'local-rebuilt', commit, jobId, sourcePath, renderer: 'quartz-cyberbase', rendererRevision: built.manifest.renderer.revision };
+          return { status: 'local-rebuilt', commit, jobId, sourcePath, renderer: built.manifest.renderer.name, rendererRevision: built.manifest.renderer.revision };
         },
       } });
       return { ...pipeline, saveEdit(input) {
@@ -255,20 +318,31 @@ export async function startSuggestionsRehearsal(fixture, { renderer = createRehe
       const labelled = async (request) => {
         const result = await handler(request);
         if (request.method === 'HEAD' || !(result.headers.get('content-type') ?? '').startsWith('text/html')) return result;
+        // The sandboxed page frame is the site's look; the label belongs to the owner page around it.
+        if (/(^|; )sandbox(;|$)/u.test(result.headers.get('content-security-policy') ?? '')) return result;
         let body = await result.text();
         for (const [before, after] of [
           ['Published and confirmed.', 'Local rehearsal complete'],
           ['Live on the page.', 'Local rehearsal complete'],
           ['Pushing to your repository', 'Pushing to the disposable local remote'],
-          ['Refreshing your local copy', 'Rebuilding the private rehearsal site'],
+          ['Refreshing your local copy', simulatedRender ? 'Simulating the private site rebuild' : 'Rebuilding the private rehearsal site'],
+          ...(simulatedRender ? [['Checking the page', 'Checking the page (render simulated)']] : []),
           ['Waiting for the site to build', 'Simulating deployment (local rehearsal)'],
           ['Checking the live page', 'Simulating live confirmation (local rehearsal)'],
         ]) body = body.replaceAll(before, after);
-        const notice = '<aside class="owner-shell rehearsal-notice"><strong>Disposable suggestions rehearsal.</strong> Real local render, review, exact change, commit and push to a local bare remote. Deployment and live confirmation are simulated. No public site changes.</aside>';
+        const proposalPage = body.includes('class="rv-doc');
+        const notice = proposalPage
+          ? `<aside class="rehearsal-notice proposal-rehearsal-notice" aria-label="Synthetic rehearsal"><span>Rehearsal · ${simulatedRender ? 'Build and publication simulated' : 'Deployment and live checks simulated'}. No public changes.</span><button type="button" data-dismiss-rehearsal aria-label="Dismiss rehearsal notice">×</button></aside>`
+          : simulatedRender
+            ? '<aside class="owner-shell rehearsal-notice"><strong>Disposable agent proposal rehearsal.</strong> Real signed submission, review, exact change, commit and push to a local bare remote. Build, deployment, live confirmation and rebuild are simulated. No public site changes.</aside>'
+            : '<aside class="owner-shell rehearsal-notice"><strong>Disposable suggestions rehearsal.</strong> Real local render, review, exact change, commit and push to a local bare remote. Deployment and live confirmation are simulated. No public site changes.</aside>';
         const headers = new Headers(result.headers); headers.delete('content-length');
         const labelledBody = body.includes('id="job-rehearsal-details"')
           ? body.replace('<div id="job-rehearsal-details"></div>', `<div id="job-rehearsal-details">${notice}</div>`)
-          : body.replace(/(<body[^>]*>)/u, `$1${notice}`);
+          : proposalPage && /<div class="rv-app"[^>]*>/u.test(body)
+            // Inside the full-height review layout, as its own row, so it never covers the page.
+            ? body.replace(/(<div class="rv-app"[^>]*>)/u, `$1${notice}`)
+            : body.replace(/(<body[^>]*>)/u, `$1${notice}`);
         return new Response(labelledBody, { status: result.status, headers });
       };
       Object.defineProperties(labelled, { bootstrapToken: { value: handler.bootstrapToken }, issueBootstrap: { value: handler.issueBootstrap } });

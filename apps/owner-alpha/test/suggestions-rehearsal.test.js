@@ -133,17 +133,17 @@ describe('suggestions rehearsal fixture (hermetic)', () => {
 
   test('printed copied-page examples stay canonical and short, with home as the first link', () => {
     const fixture = {
-      root: '/owned/throwaway', readerOrigin: 'http://127.0.0.1:49001', ownerOrigin: 'http://127.0.0.1:49000', challenge: null, keep: false,
+      root: '/owned/throwaway', readerOrigin: 'http://127.0.0.1:49001', readerHome: 'http://127.0.0.1:49001/notes-site/', ownerOrigin: 'http://127.0.0.1:49000', challenge: null, keep: false,
       copied: { ref: 'origin/main', commit: 'a'.repeat(40), pages: 8, publishedPages: Array(8), attachments: 0,
         pageLinks: Array.from({ length: 8 }, (_, index) => `${encodeURIComponent('📁-Curations,-Stacks')}/page-${index}`) },
     };
     const output = instructions(fixture);
-    const links = output.match(/http:\/\/127\.0\.0\.1:49001\/cyberbase\/[^\s]*/gu);
+    const links = output.match(/http:\/\/127\.0\.0\.1:49001\/notes-site\/[^\s]*/gu);
     expect(links).toHaveLength(6);
-    expect(links[0]).toBe(`${fixture.readerOrigin}/cyberbase/`);
+    expect(links[0]).toBe(fixture.readerHome);
     expect(links[1]).toContain('%F0%9F%93%81-Curations%2C-Stacks/page-0');
     expect(output).not.toContain('%252C');
-    expect(output).not.toContain('/cyberbase/📁');
+    expect(output).not.toContain('/notes-site/📁');
   });
 
   test('arguments allow bounded ports, one private host and published test modes', () => {
@@ -181,7 +181,8 @@ describe('suggestions rehearsal fixture (hermetic)', () => {
     expect(text).toContain('simulated');
     expect(text).toContain('2. Tap the Edit button, tap into text and type, then choose Send and Send suggestion.');
     expect(text).not.toContain('Text to replace');
-    expect(text.indexOf(`${f.readerOrigin}/cyberbase/`)).toBeLessThan(text.indexOf(`${f.readerOrigin}/cyberbase/mfa-methods`));
+    expect(f.readerHome).toBe(`${f.readerOrigin}/suggestions-fixture/`);
+    expect(text.indexOf(f.readerHome)).toBeLessThan(text.indexOf(`${f.readerHome}mfa-methods`));
     expect(text).toContain('start from the site home');
     expect(text).toContain(`kill -USR1 ${process.pid}`);
     await f.cleanup();
@@ -262,9 +263,9 @@ describe('suggestions rehearsal fixture (hermetic)', () => {
     expect(index).not.toContain('Private note');
     expect(index).not.toContain('Other private');
     expect(instructions(f)).toContain('All edits go only to the throwaway copy, never the real vault.');
-    expect(instructions(f)).toContain(`/cyberbase/${encodeURIComponent('📁-03---Curations,-Stacks')}/MFA-methods`);
+    expect(instructions(f)).toContain(`${f.readerHome}${encodeURIComponent('📁-03---Curations,-Stacks')}/MFA-methods`);
     expect(instructions(f)).toContain('Tap the Edit button, tap into text and type');
-    expect(instructions(f)).not.toContain('/cyberbase/📁');
+    expect(instructions(f)).not.toContain(`${f.readerHome}📁`);
     expect(instructions(f)).toContain('needs internet access');
     expect(instructions(f)).not.toContain('open MFA methods');
     await f.cleanup();
@@ -392,7 +393,9 @@ for (const fromSource of [false, true]) realTest(`noninteractive launcher (${fro
     }, 150_000);
     root = output.match(/Owned state: (.+)\n/u)?.[1];
     expect(root).toBeTruthy();
-    const pageUrl = `${reader}/cyberbase/${source ? `${encodeURIComponent('📁-03---Curations,-Stacks')}/MFA-methods` : 'mfa-methods'}`;
+    const home = output.match(/Site home \(start here\): (\S+)/u)?.[1];
+    expect(home).toBe(`${reader}/suggestions-fixture/`);
+    const pageUrl = `${home}${source ? `${encodeURIComponent('📁-03---Curations,-Stacks')}/MFA-methods` : 'mfa-methods'}`;
     const page = await fetch(pageUrl, { signal: AbortSignal.timeout(5000) });
     expect(page.status).toBe(200);
     const html = await page.text();

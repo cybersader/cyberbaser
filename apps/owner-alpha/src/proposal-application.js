@@ -456,7 +456,7 @@ export function deriveProposalApplication({ config: configInput, input: inputVal
   try {
     candidate = applyEditorOperation(session, operation);
   } catch (error) {
-    if (error instanceof OwnerAlphaError && error.code === 'frontmatter-edit-rejected') return unapplicable('frontmatter-change');
+    if (error instanceof OwnerAlphaError && error.code === 'frontmatter-edit-rejected') return unapplicable('frontmatter-change', error.details);
     if (error instanceof OwnerAlphaError && ['candidate-not-lf-only', 'source-not-lf-only'].includes(error.code)) {
       return unapplicable('source-not-lf-only', { code: error.code });
     }
@@ -768,4 +768,29 @@ export async function guardChangeSetApplication({ context, config, jobId, sessio
     || canonicalJson(derived.operation) !== canonicalJson(operation)) {
     fail('application-authority-mismatch', 'durable v2 job differs from the exact authorized input or current eligibility');
   }
+}
+
+/**
+ * The owner review an approved-proposal job may claim at the trust check:
+ * only when the immutable owner decision is an approval and a recorded owner
+ * application event names exactly this job and this input. Anything else is
+ * not an owner review, and the job is checked like any other change.
+ */
+export async function verifiedOwnerReview({ context, jobId, session }) {
+  const origin = session?.origin;
+  if (origin?.type !== 'approved-proposal') return null;
+  const queueId = validateQueueId(origin.queueId);
+  const input = await readApprovedProposalInput(context, queueId);
+  const recovered = await recoverProposalDecisions(context);
+  const decision = recovered.decisions.find((item) => item.queueId === queueId);
+  const events = await listProposalApplicationEvents(context, { queueId });
+  const event = events.find((item) => item.job.jobId === jobId);
+  if (!input || !decision || !event || decision.action !== 'approve'
+    || input.decision.digest !== decisionDigest(decision)
+    || event.decision.digest !== input.decision.digest
+    || origin.inputDigest !== digestBytes(Buffer.from(artifactJson(input)))
+    || event.input.digest !== origin.inputDigest) {
+    fail('application-authority-mismatch', 'approved-proposal job does not match its immutable owner application act');
+  }
+  return { type: 'approved-proposal', queueId, inputDigest: origin.inputDigest };
 }

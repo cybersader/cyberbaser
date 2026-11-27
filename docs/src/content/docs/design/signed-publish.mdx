@@ -1,0 +1,167 @@
+---
+title: Signed publish (the owner's device approves every push)
+description: "Design for the owner decision of 2026-11-23: every push carries a signature from the owner's own device key or passkey, and the isolated publisher checks it itself before pushing, so a fully compromised owner node cannot publish. Covers the threat model, the exact signed push intent and how the publisher checks each field from Git objects alone, the publisher's own owner-key list (first key, more devices, revocation, recovery), passkeys and device keys behind one provider interface with conformance vectors, the owner's experience, the build order and the open owner decisions."
+status: building
+tags: [architecture, planning, security, deployment]
+---
+
+**Status: publisher side built and enforced, 2026-11-23** (see [Build order](#6-build-order) and the [log entry](/cyberbaser/agent-context/zz-log/2026-11-23-signed-publish-publisher/)). The format is frozen in `packages/signed-intent`; its README is the specification devices build against. The container end-to-end test is written but has not run yet, because it needs the renderer seed archive. The earlier prototype stays in `.workspace/signed-publish/` as scratch. It answers the owner decision "every publish carries your own signature from your device, checked by the publisher itself" ([decision log](https://github.com/cybersader/cyberbaser/blob/main/.claude/41-QUESTIONS-RESOLVED.md)). The two-account split it builds on is in [Deployment and reach](/cyberbaser/design/deployment-and-reach/).
+
+## The design in four sentences
+
+1. Before anything is pushed, one of the owner's devices signs a small **push intent**: which repository and branch, the remote head it builds on, the exact before and after content of every changed file, the exact commit message and author, an expiry, and a one-use number the publisher handed out.
+2. The publisher keeps **its own list of owner keys** in its own protected state, which the node cannot read or write, and refuses to push unless a key on that list signed the intent and the commit it imported matches the intent field for field, checked from the Git objects alone.
+3. Signing happens in clients whose code the node does not serve (the Obsidian plugin's device key, a paired computer, later the desktop shell) or with a **passkey at a page the publisher itself serves**, so a lying node can delay a publish but cannot change what the owner approves.
+4. The owner's existing Publish or Apply tap becomes the approval; only when a publish starts somewhere that cannot sign does a single "Approve and publish?" appear on a device that can.
+
+## 1. Threat model in plain terms
+
+Today the publisher already refuses anything that is not one exact non-force commit on the expected base, but it learns *what was approved* from job records the node writes. A compromised node can write those records. After this change the publisher learns what was approved only from a signature it verifies.
+
+| Who is compromised | Can still | Can no longer |
+|---|---|---|
+| **The owner node** (the web-facing app, its store, its config, its Iroh endpoint) | Read the vault and everything it already reads. Refuse, delay or drop publishes. Ask the owner to approve something, which the device shows truthfully. Spam approval requests (rate-limited, grouped). Change the publisher's copy of its config (which only ever narrows what the publisher accepts, below). | Push anything the owner's device did not sign. Re-use an old approval. Add an owner key. Swap the target repository or branch without the device showing it. Push a starter `publish.yml` the owner did not approve. Forge a "Published" result on a device (receipts are signed by the publisher). |
+| **A renderer** (the Obsidian app or browser tab on a signing device, including another Obsidian plugin in the same app) | While it runs, ask that device's key to sign intents of its choosing, as the screen it controls can lie. | Copy the key out (it is non-extractable), act after it is closed, or sign for a different publisher. The damage window is the compromise itself; revoking that device ends it. |
+| **A stolen phone** | If unlocked, approve publishes until the owner revokes it from another device. | Act after revocation (checked on every push). Reach the publisher without the node relaying. Lock the owner out for good (recovery, below). |
+| **A malicious agent** | Prepare changes and ask for approval, labelled as coming from that agent. | Publish. Agent keys live only in the node's registry; the publisher's list accepts owner keys only. |
+| **A network attacker or relay** (Iroh relay, home network) | Deny or delay. | Read or alter intents (Iroh is end-to-end encrypted, and signatures are end-to-end anyway), replay them (one-use nonce, base binding), or redirect them (the publisher's identity is inside the signed bytes). |
+
+**Out of scope:** root on the machine, or the publisher's own OS account (they can read the forge credential and push directly); a compromised GitHub account, GitHub App private key, or GitHub itself; the Actions workflow that builds the site after the push; a malicious Cyberbaser release (the node and publisher run the same root-owned binary); and a node that is already compromised **during first-run setup**, before any owner key exists (section 3 narrows this). Signing does not make a change *safe*: it proves the owner approved exactly these bytes.
+
+## 2. What is signed, and how the publisher checks it
+
+The intent is canonical JSON (sorted keys, integers only, unknown members refused), prefixed with the domain line `cyberbaser.publish-intent.v1`, then hashed with SHA-256. Every provider signs that 32-byte digest.
+
+```json
+{
+  "v": 1, "kind": "publish",
+  "publisher": "<publisher public key, hex>",
+  "keyId": "pixel-phone",
+  "nonce": "<32 random bytes from the publisher, base64url>",
+  "issuedAt": 1800000000000, "expiresAt": 1800000600000,
+  "target": { "remote": "https://github.com/example/vault.git", "branch": "main" },
+  "base": "<40-hex commit the remote branch must still point at>",
+  "commit": {
+    "author":    { "name": "Owner", "email": "owner@example.invalid", "time": 1800000000, "tz": "+0000" },
+    "committer": { "name": "Owner", "email": "owner@example.invalid", "time": 1800000000, "tz": "+0000" },
+    "message": "Edit notes/zero-trust.md\n"
+  },
+  "changes": [
+    { "path": "notes/zero-trust.md",
+      "before": { "mode": "100644", "sha256": "<hash of the bytes the owner saw before>" },
+      "after":  { "mode": "100644", "sha256": "<hash of the bytes the owner saw after>" } }
+  ]
+}
+```
+
+`before: null` is a new file, `after: null` a deletion. At most 64 files, a 4 KiB message, and a lifetime of at most 15 minutes.
+
+**Why the commit ID is not signed.** A phone cannot compute a Git commit ID without the whole tree, so signing an ID the node supplies would be signing on trust. Instead the intent signs every input that determines the commit, and the publisher derives the rest. The commit ID is then fixed: the tree is the base tree plus exactly the signed changes, and the header and message are signed. It also keeps one round trip: the owner signs before the node applies and commits, as today.
+
+**Why content hashes and not a diff.** The device hashes the exact bytes it drew the change from (it computes its own diff from them; it never displays a diff the node supplied). The publisher hashes the blobs in the commit it imported. If the owner's screen and the push differ by one byte, the hashes differ.
+
+| Field | How the publisher checks it, on its own |
+|---|---|
+| `publisher` | Equals the publisher's own public key, so an approval for one install cannot be used at another. |
+| `keyId` and signature | Key is on the publisher's own list, not revoked, and of the type the approval claims; the provider verifies the signature over the digest (section 5). |
+| `nonce` | Issued by this publisher process within 15 minutes and not yet used; consumed only after a valid signature, so garbage cannot burn it. Pending nonces live in memory: a publisher restart voids unfinished approvals, and the owner taps again. |
+| `issuedAt`, `expiresAt` | Publisher clock is inside the window. |
+| `target.remote`, `target.branch` | Equal to the publisher's own configuration **and** to the URL the push actually uses. A node that edits the config only makes signed intents fail. |
+| `base` | Exactly one parent in the imported commit; `git ls-remote` immediately before the push equals `base` (already done today); the push stays non-force, so a branch that moved meanwhile is refused by the forge too. |
+| `commit.author`, `committer`, `message` | Read with `git cat-file commit` from the publisher's own validated pack: the header must be exactly `tree`, one `parent`, `author`, `committer`, with no `gpgsig`, `encoding`, `mergetag` or other header, and the message bytes must be equal. |
+| `changes` | `git diff-tree -r --raw --no-renames base commit` lists every differing path. Each must be a signed change with the signed mode, and the SHA-256 of each before and after blob (read with `git cat-file blob`) must equal the signed hash. Every signed change must appear. Symlinks, submodules and other modes are refused. |
+
+The prototype runs this check against a real Git repository and names each divergence: a changed byte (`content-mismatch`), an extra file such as a sneaked-in `.github/` workflow (`unsigned-path-changed`), a different message, an added header, a missing change.
+
+The existing exact-splice check of node evidence stays as a consistency check. It no longer carries authority.
+
+**Receipts.** After a push the publisher writes a receipt `{intent digest, keyId, provider, commit, remote head before and after, time}`, signs it with its own key, appends it to a publish log in its own state, and returns it. The device that approved shows "Published" only on a receipt it can verify against the publisher key it pinned. The node's job receipt (`owner-alpha-pushed-effect`) gains the intent digest and the signed receipt.
+
+## 3. Who signs, and where the trust lives
+
+**The publisher's owner-key list.** One file in the publisher's state directory (`/var/lib/cyberbaser-publisher`, publisher account only, `InaccessiblePaths` to the node). Each entry: key ID, provider type, public key (and for passkeys the RP ID, allowed origin and last counter), label, what it may do (`publish`, `key-add`, `key-revoke`), when it was added and by which key. Changes are appended as signed entries, so the list carries its own history. It is never copied from the node's config: the `sync-publisher-config` step must keep excluding it.
+
+**The publisher's own key.** At first start the publisher creates an Ed25519 key in its state. Its public half is the `publisher` field of every intent and signs receipts and the key list. Each device pins it when it is enrolled.
+
+**The first owner key (setup).** Before any key exists there is nothing to check a signature against, so the first key needs a channel the node does not control. Recommended: the privileged installer (the one step that already asks for the admin password, or `docker logs` for the container) prints a QR code and six matching words carrying a one-use, ten-minute enrollment secret for the publisher. The owner scans it with the phone or computer that will approve publishes; the device proves the secret (HMAC over its new key and the publisher key, same pattern as [QR pairing](/cyberbaser/design/deployment-and-reach/#2-pairing-by-qr)) and both screens show the same words. The window closes after the first enrollment. The simpler alternative, accepting the first key confirmed in the node-served setup page, is safe only if the node is honest at setup; it is listed as an owner decision.
+
+**More devices.** A new device creates its key and is paired with the node as today. Being able to *publish* is a separate entry the publisher accepts only when signed by an existing owner key (intent kind `key-add`, carrying the new key and label). In practice: scan the pairing QR with the new laptop, then tap "Allow Work laptop to publish?" on the phone. All devices see the list, signed by the publisher, under "Devices that can publish"; an unfamiliar entry is how an early mistake would be noticed.
+
+**Revocation.** Any owner key can sign `key-revoke` for any other (one tap on "Remove" from another device). The publisher checks the list on every push, so a revoked key stops at once. The last key cannot be removed this way.
+
+**Recovery when every device is lost.**
+- **Recovery code** (recommended): at first enrollment the device creates a random 120-bit code, shows it once to write down, and enrolls only the public key derived from it (HKDF to an Ed25519 seed, bound to this publisher). Typing the code into any new client derives the key and signs one `recovery-reset`: replace all owner keys with this new device and a new recovery key. The publisher accepts it once; the old recovery key is spent. The node never sees the code.
+- **Console:** `cyberbaser publisher reset-owners`, run as root, clears the list and opens a fresh first-key window (a new installer-style QR in the terminal). Root is out of scope anyway, so this adds no new power.
+
+**Passkeys.** A passkey proves "the owner was present in this web page", and the page decides what it shows. So a passkey only helps if **the page's code is not served by the node**: a passkey ceremony in a page the compromised node serves would let it show one change and sign another. The design therefore allows passkeys at:
+- **a small confirm page the publisher serves itself** on `http://localhost:<port>` (RP ID `localhost`, a secure context), which renders the change from the commit it will push. This works on the machine that runs Cyberbaser.
+- later, **the static browser app** at its own origin, once its code delivery is pinned and trusted (owner decision below).
+
+Verification follows [WebAuthn Level 3, verifying an assertion](https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion): `clientDataJSON.type` is `webauthn.get`, its `challenge` equals the intent digest, `origin` is the enrolled origin and not cross-origin, the authenticator data starts with SHA-256 of the RP ID, user presence and user verification flags are set, the signature (ES256 or EdDSA) verifies over the authenticator data plus the hash of the client data with the enrolled public key, and a non-zero signature counter must increase. Synced passkeys report a zero counter forever; for them the publisher nonce alone prevents replay. A synced passkey cannot be revoked on one device only; revoking it revokes every copy.
+
+**Device keys.** The Obsidian plugin's non-extractable WebCrypto Ed25519 key, paired computers and the future desktop shell sign the message `cyberbaser.publish-approval.ed25519.v1\n` plus the intent digest ([RFC 8032](https://www.rfc-editor.org/rfc/rfc8032) pure Ed25519). The publisher refuses non-canonical signatures and small-order keys (the node's registry already checks keys this way). A plugin's publishing key is the same device key it pairs with, enrolled a second time, at the publisher.
+
+## 4. The owner's experience
+
+The mockups are in `.workspace/signed-publish/flow.html` (shown in the chat thread). Three moments:
+
+1. **Publish from the phone.** The plugin's own sheet: "Publish 1 change, to example/vault", the changed lines drawn from the bytes it signs, one Publish button, "Approved by this phone" in small type. No extra step: the tap that already says Publish is the signature.
+2. **Started somewhere that cannot sign** (a browser tab served by the node, an agent's suggestion applied in the web app). The phone shows "Approve publishing? Asked by Desktop browser", the files and lines, "Approve and publish" or "Not now". Several waiting changes are shown together and approved with one tap (each still has its own intent).
+3. **No signing device at hand.** "Saved, waiting to publish. Nothing is lost." with the list of devices that can approve, and "Use a passkey on this computer" where one is set up. The change stays queued until approved or discarded; an expired approval simply asks again.
+
+Plain words throughout: "Publish", "Approve", "Devices that can publish", "Remove". No mention of keys, signatures or nonces in the normal flow. A change that touches the site's build (anything under `.github/`) gets one extra line on the approval: "This changes how your site is built." The starter `publish.yml` during setup is approved exactly that way, as the first signed publish, right after the first device is enrolled.
+
+On desktop the same happens in the Obsidian plugin or, at the machine itself, in the publisher's confirm page with a passkey prompt.
+
+## 5. One check, swappable providers
+
+```text
+ApprovalProvider {
+  type: "ed25519" | "webauthn" | ...
+  verify({ digest, approval, key }) -> { ok: true, counter? } | { ok: false, code }
+}
+```
+
+A provider only answers "did key K approve exactly this digest". It never sees the key list, the nonces, Git or the clock; the publisher core does those once for every provider. Adding a hardware key needs nothing new (it is WebAuthn); an SSH signature from an `sk-ed25519` key (`ssh-keygen -Y sign`, namespace `cyberbaser-publish`) or an OpenPGP card would be one more provider plus its vectors.
+
+**Conformance vectors** (`vectors.json` in the prototype): the canonical intent bytes and digest, then cases with fixed inputs and expected outcomes: Ed25519 valid, over another intent, malleated `s + L`, truncated; passkey valid with a zero counter, other intent, wrong origin, wrong RP ID, a `webauthn.create` response, no user verification, counter advanced, counter replayed. Any implementation (the publisher, the plugin, a later Rust publisher) must reproduce the bytes and the outcomes. Publisher-level tests add nonce reuse, expiry, wrong publisher, revoked key and the Git divergence cases.
+
+## 6. Build order
+
+Each step is testable on its own; none changes what is published until step 5.
+
+1. **Intent and providers as a pure package.** *Built 2026-11-23* as `@cyberbaser/signed-intent` (`packages/signed-intent`): canonical bytes and validation for five kinds (`publish`, `enroll`, `key-add`, `key-revoke`, `recovery-reset`), the Ed25519 provider (which also refuses small-order keys), the WebAuthn verifier (RP ID, origin list, challenge, user presence and verification, counter), `admitApproval`, `checkCommit`, enrollment proofs, the recovery key and publisher statements. No dependencies; `src/intent.js` runs without `node:crypto`. Vectors cover every kind and 14 approval cases.
+2. **Publisher commit check.** *Built.* `checkCommit` runs on the publisher's own validated pack: in `repository.js` before a job push and in `mirror.js` before the starter push. A report-only mode (`owners.mode: 'report'`) logs every problem and lets the push go ahead; it is tested, and nothing installed uses it.
+3. **Publisher key and owner-key list.** *Built.* `apps/owner-alpha/src/publisher/owner-keys.js` keeps the publisher's Ed25519 key, the owner keys, the one-time first-device code, the public half of the recovery key and a short history in one owner-only directory. The publisher is given that directory at start (installed: `/var/lib/cyberbaser-publisher/owners`) and never reads it from the node config. A third socket beside the other two (`publisher.sock.owners`) answers `status`, `challenge`, `keys`, `enroll`, `change` and `publish-starter`; the node's side is `ownerRequest` in `owner-control.js`. The administrator commands are `cyberbaser publisher enroll-code` and `reset-owners`.
+4. **Signing in the plugin**: build the intent from the bytes it shows, sign with its device key, verify receipts. The node carries the signed intent in the job as an `owner-approval` artifact; its authority comes from the signature, not from where it is stored. The push frame stays `{v, jobId}`.
+   - **Built 2026-11-23 (plugin and relay side):** the plugin enrols as the first signing device from the installer's one-time code (`obsidian://cyberbaser-enrol?publisher=…&code=…`, or pasted), with a separate non-extractable Ed25519 key in its own IndexedDB database (`cyberbaser-signing`), never in `data.json`. It keeps the key only after the publisher's HMAC confirmation, and both screens show the same key fingerprint. A publish waiting for approval opens from **Cyberbaser: Approvals waiting** (command palette and note menu, nothing in the header) or right after the phone's own Publish. The sheet is drawn from the intent and from file bytes whose SHA-256 the intent fixes: note title, the changed words, repository and branch, and "This changes how your site is built" for `.github/`. Signing needs a real tap in the plugin's own dialog: a script's synthetic click, a forged event or a reused tap signs nothing. The node relays over the existing signed Iroh carrier only (`core/approvals.js`; commands `readSigningChallenge`, `enrollSigningKey`, `listApprovals`, `readApproval`, `submitApproval`, `declineApproval`; owner devices with the publish grant only; nothing on disk). Checked against the `@cyberbaser/signed-intent` vectors and against the publisher's real owner services (owner-key list, approval gate, owner-control socket): the plugin enrols with the code from the publisher's log, and its approval passes the gate and the commit check.
+   - **Wired to the publisher (same day):** the node relays `challenge` and `enroll` to the publisher's owner-control socket (`publisherSigningFromSocket`). Every job in `awaiting-approval` is offered to the phone whenever it asks what is waiting (`core/job-approvals.js`): a fresh challenge, the intent described from the committed Git objects, and the exact before and after bytes. A signature is attached to the job and the job resumes, with no restart. "Not now" asks again 15 minutes later. Setup's starter `publish.yml` is now only prepared during setup; it waits on the phone as the first signed publish and goes through the publisher's signed `publish-starter`, after which the checkout moves to it. The setup page's phone step embeds the publisher's own enrolment page (`http://127.0.0.1:<port+2>/enroll`) in a sandboxed frame it cannot read.
+   - **Still open on the plugin side:** showing publisher receipts, and adding or removing further devices.
+5. **Enforce.** *Built, and on in the installed publisher.* The push is refused for a missing or stale approval, an unknown or revoked key, another publisher, another repository or branch, or any difference in base, files, message or author. The starter `publish.yml` during setup needs a signed approval too, and the node's old unsigned `publish-starter` is refused. Pushed receipts gain the intent digest and a publisher-signed receipt, which the device verifies.
+6. **Approve-elsewhere and waiting queue.** *The durable state is built.* A job with no approval moves to `awaiting-approval` ("Waiting for your approval on a device that can publish"). It stays there across restarts with no retry and resumes when an approval is attached (`attachOwnerApproval`). An invalid or mismatched approval fails the job closed with a plain reason. The request to the phone is the plugin's side.
+7. **Publisher confirm page with passkeys** on localhost, then passkeys in the static browser app once its origin is decided. The WebAuthn verifier exists; the page does not.
+
+### How the first device is trusted (as built)
+
+The installer, running as administrator, runs `cyberbaser publisher enroll-code` as the publisher account. That prints on the installer's own terminal a QR code, a 32-character code (160 bits, valid for one hour and one device) and a 24-character recovery code. The publisher also shows the code at `http://127.0.0.1:<port+2>/enroll`. That page refuses connections from the node's account (it reads the connection's owner from the kernel's socket table), any other Host header, and any script request (no CORS headers; `Origin` and `Sec-Fetch-Mode: cors` are refused). So a setup page the node serves can show it in a frame but never read it.
+
+The device sends a signed `enroll` that carries an HMAC proof of the code, bound to the publisher key and its own key. The publisher answers with an HMAC confirmation that only a holder of the same code can make, and the device pins the publisher key only after checking it. A node that substitutes its own code or publisher key therefore enrolls nothing: the real publisher refuses its code, and it cannot make the confirmation for the owner's code. A wrong code is logged on the publisher's own log.
+
+**Not covered:** another local account on the same computer can open the loopback page while the window is open, and anyone who reads the administrator's terminal or the publisher's journal during setup sees the code. Neither is the node.
+
+Existing parts that change: `createJobPublisher` gains the approval check before `pushCommit`; `repository.js` and `mirror.js publishStarter` run `checkCommit`; `forge-control` gains approval on `publish-starter`; the node pipeline builds intents and waits for an approval before `pushing`; the `pushing` state may now wait indefinitely ("waiting for approval") without failing; packaging adds the installer QR and keeps the key list out of config sync.
+
+## 7. Decisions for the owner
+
+1. **First device at setup.** Recommended: scan a code the installer shows. Trade-off: one extra scan at install, but a compromised setup page cannot slip in its own key. Alternative: confirm in the setup page (simpler, trusts the app during setup).
+2. **Passkeys, and the browser app.** Recommended: device keys in the plugin and desktop app are the main way to approve; passkeys only at the publisher's own confirm page for now. Trade-off: no passkey approvals from a phone browser until the browser app's code hosting is trusted, because whoever serves that page could make a passkey approve something else.
+3. **Recovery.** Recommended: a written recovery code plus the admin console. Trade-off: one "write this down" step at setup, versus a lockout fixed only by someone with admin access to the machine.
+4. **Agents and scheduled publishing.** Recommended: nothing ever publishes without a human approval on an owner device. Trade-off: no unattended publishing.
+5. **Adding a device.** Recommended: one existing device approves. Trade-off: a stolen unlocked phone could add a device; requiring two devices would lock out owners with one.
+
+## What is not settled
+
+- **A malicious Obsidian plugin** on the signing device can ask the Cyberbaser plugin's key to sign, because plugins share one app. Owners with many third-party plugins on the phone they approve with carry that risk; a separate approval app would remove it.
+- **WebAuthn on `localhost`** across Chrome, Firefox and Safari, with synced passkeys, is untested here; the prototype uses a synthetic P-256 authenticator.
+- **The container install** has no `localhost` browser on the owner's computer, so passkey approval there waits for the browser-app decision.
+- **A bounded diff view** for large files that the owner can trust to show every changed region (with invisible characters marked) still needs a design.

@@ -74,19 +74,31 @@ echo "==> edit links: $CYBERBASER_EDIT_LINK_MODE"
 # only the projection delta while still deleting stale output deterministically.
 if [ "${COPY_CONTENT:-0}" = "1" ]; then
   mkdir -p "$QUARTZ_DIR/content"
-  rsync -a --delete "$CONTENT_DIR/" "$QUARTZ_DIR/content/"
+  if [ "${CYBERBASER_RESTRICTED_RENDER:-0}" = 1 ]; then
+    node "$SCRIPT_DIR/copy-render-tree.mjs" "$CONTENT_DIR" "$QUARTZ_DIR/content" mirror
+  else
+    rsync -a --delete "$CONTENT_DIR/" "$QUARTZ_DIR/content/"
+  fi
 else
   rm -rf "$QUARTZ_DIR/content"
   ln -s "$CONTENT_DIR" "$QUARTZ_DIR/content"
 fi
 
 # Stale output would inflate the page count and hide emitter regressions.
-rm -rf "$OUTPUT_DIR"
+quartz_output="$OUTPUT_DIR"
+if [ "${CYBERBASER_RESTRICTED_RENDER:-0}" = 1 ]; then
+  # Quartz itself removes its output directory. Give it a child of the granted
+  # directory so that operation cannot require write access to the parent.
+  find "$OUTPUT_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+  quartz_output="$(mktemp -d "$OUTPUT_DIR/.quartz-output.XXXXXXXX")"
+else
+  rm -rf "$OUTPUT_DIR"
+fi
 
 set +e
 # Execute the pre-seeded repository CLI directly. Using npx here would retain a
 # runtime package-install fallback, which the immutable image contract forbids.
-( cd "$QUARTZ_DIR" && node ./quartz/bootstrap-cli.mjs build -d "$QUARTZ_DIR/content" -o "$OUTPUT_DIR" )
+( cd "$QUARTZ_DIR" && node ./quartz/bootstrap-cli.mjs build -d "$QUARTZ_DIR/content" -o "$quartz_output" )
 STATUS=$?
 set -e
 
@@ -95,6 +107,11 @@ if [ "$STATUS" -ne 0 ]; then
   # Quartz has no per-file error isolation: a single bad YAML frontmatter file
   # aborts the whole build. If this fails, fix the projection's pre-flight.
   exit "$STATUS"
+fi
+
+if [ "$quartz_output" != "$OUTPUT_DIR" ]; then
+  find "$quartz_output" -mindepth 1 -maxdepth 1 -exec mv -t "$OUTPUT_DIR" -- {} +
+  rmdir "$quartz_output"
 fi
 
 echo "==> pages: $(find "$OUTPUT_DIR" -name '*.html' | wc -l)"

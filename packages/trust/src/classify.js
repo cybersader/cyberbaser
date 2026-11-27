@@ -11,6 +11,7 @@
 // config never reaches auto-merge.
 import { checkChange } from '@cyberbaser/ofm';
 import yaml from 'js-yaml';
+import { findFrontmatterInText } from '../../correction/src/frontmatter.js';
 
 /** Routes, ordered least to most restrictive. Downgrades only ever move right. */
 export const ROUTES = ['auto-merge', 'quick-review', 'full-review', 'reject'];
@@ -89,23 +90,26 @@ const words = (ls) =>
 
 // --- document-level analysis -------------------------------------------------
 
-const FM_RE = /^---\r?\n([\s\S]*?)\r?\n---(\r?\n|$)/;
-
 function frontmatter(src) {
-  const m = typeof src === 'string' ? src.match(FM_RE) : null;
-  if (!m) return { present: false, data: {}, ok: true };
+  const found = findFrontmatterInText(src);
+  if (found.kind === 'none') return { data: {}, ok: true };
+  if (found.kind === 'fence-like') {
+    return { data: {}, ok: true, fenceLike: src.slice(0, found.textRange.end) };
+  }
   try {
-    const data = yaml.load(m[1]);
-    return { present: true, data: data && typeof data === 'object' ? data : {}, ok: true };
+    const data = yaml.load(found.yamlText);
+    return { data: data && typeof data === 'object' ? data : {}, ok: true };
   } catch {
-    return { present: false, data: {}, ok: false };
+    return { data: {}, ok: false };
   }
 }
 
 /** Top-level frontmatter keys whose presence or value differs. */
 function frontmatterChanges(before, after) {
   const b = frontmatter(before), a = frontmatter(after);
-  if (!b.ok || !a.ok) return { keys: [], unparseable: true };
+  // Legacy fence-like text is not parsed; a change to it takes the existing
+  // unparseable-frontmatter route rather than appearing to be an ordinary typo.
+  if (!b.ok || !a.ok || b.fenceLike !== a.fenceLike) return { keys: [], unparseable: true };
   const keys = new Set([...Object.keys(b.data), ...Object.keys(a.data)]);
   const changed = [];
   for (const k of keys) {

@@ -1,0 +1,11 @@
+{
+  "name": "@cyberbaser/media-check",
+  "version": "0.1.0",
+  "description": "Pure checks for images in a page bundle: type from magic bytes, size limits, a whole-structure walk that refuses trailing or polyglot data, location metadata detection, location stripping for the writing device, and image-embed scanning. No decoding libraries, no I/O, no Node APIs.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "bun test test"
+  }
+}

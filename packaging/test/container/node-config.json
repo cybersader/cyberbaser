@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "listen": { "host": "127.0.0.1", "port": 4317, "readerPort": 4318 },
+  "proposalReview": { "enabled": false, "socketPath": null, "requestTimeoutMs": 5000, "maxListEntries": 100 },
+  "repository": {
+    "checkout": "/var/lib/cyberbaser-shared/notes/notes",
+    "remote": { "name": "origin", "url": "https://github.com/smoke/notes.git" },
+    "branch": "main"
+  },
+  "owner": { "identity": "smoke", "allowedTrustRoutes": ["auto-merge", "quick-review"] },
+  "live": { "baseUrl": "https://smoke.github.io/notes/" },
+  "workflow": {
+    "provider": "github-actions", "repository": "smoke/notes", "name": "Publish", "path": ".github/workflows/publish.yml",
+    "event": "push", "branch": "main", "jobs": ["build", "deploy"], "environment": "github-pages"
+  },
+  "workspace": {
+    "root": ".workspace/owner-alpha", "store": ".workspace/owner-alpha/store",
+    "site": ".workspace/owner-alpha/site", "cache": ".workspace/owner-alpha/cache"
+  },
+  "paths": { "include": ["*.md", "docs/*.md"], "exclude": [".git/**", ".workspace/**"] },
+  "limits": {
+    "maxSourceBytes": 65536, "maxReplacementBytes": 65536, "maxChangedBytes": 65536, "maxChangedLines": 60,
+    "maxArtifactBytes": 8388608, "requestTimeoutMs": 30000, "networkTimeoutMs": 30000
+  },
+  "checks": {
+    "allowedOfmVerdicts": ["clean"], "requirePublishedSource": true, "requireProjectionVerification": true,
+    "requireNoNewBrokenLinks": true, "requireRenderedWitness": true
+  },
+  "git": { "autoCommit": true, "autoPush": true, "useHooks": false, "commitMessagePrefix": "synthetic:" },
+  "publisher": { "socketPath": "/run/cyberbaser-publisher/publisher.sock" }
+}

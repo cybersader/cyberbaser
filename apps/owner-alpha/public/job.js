@@ -33,7 +33,7 @@ function stageCopy(jobState) {
   return step ? step.label : jobState;
 }
 
-function paint(jobState) {
+function paint(jobState, liveCopy) {
   const current = stepIndex(jobState);
   const done = jobState === 'completed';
   const stopped = Object.hasOwn(stages.stops, jobState) && !done && jobState !== 'live-verification-failed';
@@ -42,7 +42,7 @@ function paint(jobState) {
     element.className = `job-step job-step-${status}`;
     element.dataset.status = status;
   });
-  if (stage) stage.textContent = stageCopy(jobState);
+  if (stage) stage.textContent = liveCopy ?? stageCopy(jobState);
   const indicator = document.querySelector('#job-steps');
   if (indicator) indicator.hidden = done || (stopped && jobState !== 'live-verification-failed');
   const links = document.querySelector('#save-result-links');
@@ -67,7 +67,7 @@ async function refresh() {
     updated.textContent = job.updatedAt ?? '';
     recovery.textContent = job.recovery?.instruction ?? '';
     error.textContent = job.failure ? `Stopped (${job.failure.code}).` : '';
-    paint(job.state);
+    paint(job.state, job.liveCopy);
     if (!terminal.has(job.state)) window.setTimeout(refresh, 2000);
   } catch (caught) {
     error.textContent = `Status refresh failed (${caught.message}).`;

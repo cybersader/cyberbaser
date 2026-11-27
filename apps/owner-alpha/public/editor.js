@@ -42,6 +42,12 @@ if (root && form && textarea && button && status) {
         }),
       });
       const result = await response.json();
+      if (result?.error?.code === 'recovery-in-progress') {
+        status.className = 'status';
+        status.textContent = 'Finishing an earlier publish. Try again in a moment.';
+        button.disabled = false;
+        return;
+      }
       if (!response.ok || typeof result.statusUrl !== 'string') {
         throw new Error(result?.error?.code ?? 'save-failed');
       }

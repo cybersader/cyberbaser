@@ -238,7 +238,10 @@ function annotateInitial(
       n._prov =
         alignOmissions(d, n.value) ??
         alignOmissions(lexical(raw, m, true), n.value);
-    } else if (n.type === "html") n._prov = m;
+    } else if (n.type === "html")
+      // An HTML block nested in a list item or blockquote omits the container's
+      // continuation indentation (or "> ") from its value; the source slice keeps it.
+      n._prov = raw === n.value ? m : alignOmissions({ text: raw, map: m }, n.value);
     else n._prov = alignOmissions(lexical(raw, m), n.value);
     if (n._prov === null) {
       n._prov = Array(n.value.length).fill(null);
@@ -568,6 +571,12 @@ function finishVirtual(tree: any, v: any) {
     delete n.position; // These were virtual instrumentation offsets, never original-source positions.
   });
 }
+/** Record the first provenance failure for one note; later steps skip it. */
+function markProvenanceFailed(state: any, step: string, error: unknown) {
+  if (!state || state.failed) return;
+  const message = error instanceof Error ? error.message : String(error);
+  state.failed = { step, error: message.split("\n", 1)[0].slice(0, 200) };
+}
 function wrap(plugin: any, stage: string): any {
   const attacher = Array.isArray(plugin) ? plugin[0] : plugin;
   const options = Array.isArray(plugin) ? plugin.slice(1) : [];
@@ -576,28 +585,42 @@ function wrap(plugin: any, stage: string): any {
     const transform = attacher.apply(this, options);
     if (typeof transform !== "function") return transform;
     return async (tree: any, file: any) => {
-      if (stage === "html:SyntaxHighlighting") fillCode(tree);
-      const before = new Map<any, any>();
-      walk(tree, (n) => {
-        if (typeof n.value === "string")
-          before.set(n, { value: n.value, map: n._prov?.slice() });
-      });
-      const syntax =
-        stage === "html:SyntaxHighlighting" ? structuredClone(tree) : null;
-      const virtual =
-        stage === "html:ObsidianFlavoredMarkdown" && name === "rehypeRaw"
-          ? makeVirtual(tree)
-          : null;
-      const restoreBlocks =
-        stage === "html:Latex" ? blockReplacementSnapshot(tree) : undefined;
+      // Provenance is best-effort per note: once a note's tracking fails, its
+      // plugins run untracked and the note is emitted without a sidecar.
+      const state = file?.data?.sourceProvenance;
+      if (state?.failed) return transform(tree, file);
+      let before: Map<any, any>, syntax: any, virtual: any, restoreBlocks: any;
+      try {
+        if (stage === "html:SyntaxHighlighting") fillCode(tree);
+        before = new Map<any, any>();
+        walk(tree, (n) => {
+          if (typeof n.value === "string")
+            before.set(n, { value: n.value, map: n._prov?.slice() });
+        });
+        syntax =
+          stage === "html:SyntaxHighlighting" ? structuredClone(tree) : null;
+        virtual =
+          stage === "html:ObsidianFlavoredMarkdown" && name === "rehypeRaw"
+            ? makeVirtual(tree)
+            : null;
+        restoreBlocks =
+          stage === "html:Latex" ? blockReplacementSnapshot(tree) : undefined;
+      } catch (error) {
+        markProvenanceFailed(state, `${stage}:${name}`, error);
+        return transform(tree, file);
+      }
       const result = await transform(tree, file);
-      const next = result ?? tree;
-      if (next === tree) restoreBlocks?.();
-      if (virtual) {
-        finishVirtual(next, virtual);
-        for (const [n, p] of virtual.positions) n.position = p;
-      } else syncMutation(before, next, stage + ":" + name);
-      if (syntax) syntaxRecover(syntax, next);
+      try {
+        const next = result ?? tree;
+        if (next === tree) restoreBlocks?.();
+        if (virtual) {
+          finishVirtual(next, virtual);
+          for (const [n, p] of virtual.positions) n.position = p;
+        } else syncMutation(before, next, stage + ":" + name);
+        if (syntax) syntaxRecover(syntax, next);
+      } catch (error) {
+        markProvenanceFailed(state, `${stage}:${name}`, error);
+      }
       return result;
     };
   };
@@ -608,6 +631,7 @@ export {
   originalMap,
   rewriteMap,
   annotateInitial,
+  markProvenanceFailed,
   wrap,
   walk,
   joinSpan,

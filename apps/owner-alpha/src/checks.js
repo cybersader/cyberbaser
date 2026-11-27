@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { findFrontmatter } from '../../../packages/correction/src/frontmatter.js';
 import { applyOwnerChangeSet, validateChangeSetCorrection, proveChangeSetOutsideBytes } from './change-set-operation.js';
 import { TextDecoder } from 'node:util';
 import { cp, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
@@ -6,11 +8,13 @@ import path from 'node:path';
 import { applyCorrection } from '@cyberbaser/correction';
 import { checkSite } from '@cyberbaser/linkcheck';
 import { checkChange } from '@cyberbaser/ofm';
-import { project, verifyProjection } from '@cyberbaser/projection';
+import { pageTargets, project, projectedPath, verifyProjection } from '@cyberbaser/projection';
 import { select } from '@cyberbaser/publish';
 import { classify, parseConfig } from '@cyberbaser/trust';
+import { comparePublicationEffects } from './effects.js';
 import { fail, OwnerAlphaError } from './errors.js';
 import { deepFreeze } from './json.js';
+import { ownerPropertyEditsAllowed } from './operation.js';
 import { renderPinnedQuartz } from './quartz-renderer.js';
 
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
@@ -117,6 +121,28 @@ function correctionFromOperation(operation) {
   };
 }
 
+// The only explicit owner review the trust check accepts: an owner-approved
+// proposal applied through the owner application act. The pipeline re-checks
+// that act against the immutable decision before any source effect.
+function ownerReviewEvidence(value) {
+  if (value === null || value === undefined) return null;
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+    || Object.keys(value).sort().join(',') !== 'inputDigest,queueId,type'
+    || value.type !== 'approved-proposal'
+    || typeof value.queueId !== 'string' || !/^Q-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(value.queueId)
+    || typeof value.inputDigest !== 'string' || !/^sha-256=:[A-Za-z0-9+/]{43}=:$/u.test(value.inputDigest)) {
+    fail('invalid-owner-review', 'owner review evidence must name one approved proposal and its exact input');
+  }
+  return { type: value.type, queueId: value.queueId, inputDigest: value.inputDigest };
+}
+
+/** The owner review a durable edit session carries, from its origin only. */
+export function ownerReviewFromSession(session) {
+  const origin = session?.origin;
+  if (origin?.type !== 'approved-proposal') return null;
+  return ownerReviewEvidence({ type: origin.type, queueId: origin.queueId, inputDigest: origin.inputDigest });
+}
+
 /** Run the checks that need only the bound base, operation, candidate and owner policy. */
 export function runImmediateChecks({
   baseBytes,
@@ -126,6 +152,7 @@ export function runImmediateChecks({
   config,
   trustPolicy,
   trustSubject,
+  ownerReview = null,
 }) {
   const base = exactBytes(baseBytes, 'baseBytes');
   const candidate = exactBytes(candidateBytes, 'candidateBytes');
@@ -182,7 +209,14 @@ export function runImmediateChecks({
     meta: { ownerAlpha: true },
   }, normalizeTrustPolicy(trustPolicy));
   const allowedTrustRoutes = allowedList(config?.owner?.allowedTrustRoutes, 'config.owner.allowedTrustRoutes');
-  if (!allowedTrustRoutes.includes(trust.route)) {
+  const review = ownerReviewEvidence(ownerReview);
+  // `full-review` means "the owner must look at the whole change". An approved
+  // proposal is exactly that: the owner read the full proposal and approved it.
+  // So that route, and only that route, is satisfied by an explicit owner
+  // review, with or without a trust file. Lighter routes still need the owner
+  // policy to allow them, and `reject` is never satisfied.
+  const reviewedByOwner = trust.route === 'full-review' && review !== null;
+  if (!reviewedByOwner && !allowedTrustRoutes.includes(trust.route)) {
     fail('trust-route-not-allowed', `trust route ${trust.route} is not allowed by owner policy`, {
       route: trust.route,
       allowed: [...allowedTrustRoutes],
@@ -192,6 +226,7 @@ export function runImmediateChecks({
   }
 
   return deepFreeze({
+    ...(reviewedByOwner ? { trustRequirement: { route: 'full-review', satisfiedBy: review } } : {}),
     ok: true,
     operation: multi ? { reproducesCandidate: true, ...multiProof } : {
       reproducesCandidate: true,
@@ -217,8 +252,9 @@ function summarizeVerification(verification) {
   };
 }
 
-/** Select, project and explicitly verify one isolated baseline or candidate vault. */
-export async function runPublicationChecks({ vaultDir, outputDir, sourcePath }) {
+const LOWERCASE_PROJECTION = false;
+
+async function inspectPublication({ vaultDir, outputDir, sourcePath }) {
   const relativePath = sourcePathValue(sourcePath);
   const selection = select(vaultDir, { audience: 'public' });
   if (!selection.published.includes(relativePath)) {
@@ -231,7 +267,7 @@ export async function runPublicationChecks({ vaultDir, outputDir, sourcePath }) 
   const projection = project(vaultDir, outputDir, {
     audience: 'public',
     selectResult: selection,
-    lowercase: false,
+    lowercase: LOWERCASE_PROJECTION,
     verify: true,
     writeReport: false,
   });
@@ -241,7 +277,7 @@ export async function runPublicationChecks({ vaultDir, outputDir, sourcePath }) 
     });
   }
 
-  const verification = verifyProjection(vaultDir, outputDir, selection, { lowercase: false });
+  const verification = verifyProjection(vaultDir, outputDir, selection, { lowercase: LOWERCASE_PROJECTION });
   if (!verification.ok) {
     fail('projection-verification-failed', 'explicit post-copy publication verification failed', {
       unexpected: verification.unexpected.slice(0, 20),
@@ -256,7 +292,7 @@ export async function runPublicationChecks({ vaultDir, outputDir, sourcePath }) 
     fail('projected-source-bytes-changed', 'the selected source was not projected byte-for-byte');
   }
 
-  return deepFreeze({
+  const summary = deepFreeze({
     ok: true,
     sourcePublished: true,
     published: [...selection.published].sort(),
@@ -273,6 +309,30 @@ export async function runPublicationChecks({ vaultDir, outputDir, sourcePath }) 
     verification: summarizeVerification(verification),
     sourceBytesIdentical: true,
   });
+  return { summary, selection };
+}
+
+/** Select, project and explicitly verify one isolated baseline or candidate vault. */
+export async function runPublicationChecks(input) {
+  return (await inspectPublication(input)).summary;
+}
+
+/** Use the projection's canonical targets, not any renderer's emitted URLs. */
+function publicationEffectsInput(selection, lane) {
+  try {
+    const { published: { pages, assets }, slugs } = selection.report;
+    const addresses = pageTargets(pages, slugs, LOWERCASE_PROJECTION);
+    for (const asset of assets) addresses.set(asset, projectedPath(asset, LOWERCASE_PROJECTION));
+    if (addresses.size === selection.published.length && selection.published.every((source) => {
+      const address = addresses.get(source);
+      return typeof address === 'string' && address.length > 0;
+    })) {
+      return { published: selection.published, addresses };
+    }
+  } catch {
+    // The underlying error may identify a different source. Report only the lane.
+  }
+  fail('address-map-unavailable', 'a complete publication address map could not be computed', { lane });
 }
 
 function compareText(left, right) {
@@ -556,6 +616,7 @@ export async function runRenderChecks({
   oldText,
   newText,
   maxWitnessChars = MAX_VISIBLE_WITNESS_CHARS,
+  propertyChange = null,
 }) {
   const page = renderedPagePath(targetPage);
   let baselineHtml;
@@ -594,12 +655,22 @@ export async function runRenderChecks({
       maxChars: maxWitnessChars,
     })
     : null;
-  if (hasNonEmptyAnchors && anchored === null) {
+  let witnesses = anchored;
+  if (witnesses === null && propertyChange === 'only' && baselineVisible === candidateVisible && baselineVisible) {
+    const stable = Array.from(baselineVisible).slice(0, maxWitnessChars).join('').trimEnd();
+    witnesses = { kind: 'no-visible-change', stable, digest: `sha256:${createHash('sha256').update(baselineVisible).digest('hex')}` };
+  }
+  if (witnesses === null && hasNonEmptyAnchors && (!propertyChange || baselineVisible === candidateVisible)) {
     fail('rendered-operation-witness-missing', 'the exact old/new operation text could not produce bounded visible witnesses');
   }
-  const witnesses = anchored ?? deriveVisibleWitnesses(baselineVisible, candidateVisible, {
-    maxChars: maxWitnessChars,
-  });
+  if (witnesses === null) {
+    try {
+      witnesses = deriveVisibleWitnesses(baselineVisible, candidateVisible, { maxChars: maxWitnessChars });
+    } catch (error) {
+      if (!propertyChange || !hasNonEmptyAnchors || !(error instanceof OwnerAlphaError)) throw error;
+      fail('rendered-operation-witness-missing', 'the property change could not produce bounded visible witnesses');
+    }
+  }
 
   return deepFreeze({
     ok: true,
@@ -651,10 +722,6 @@ async function copyCheckout(sourceDir, destinationDir) {
   });
 }
 
-function sameStrings(left, right) {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
-}
-
 function basePathFromConfig(config) {
   try {
     return new URL(config?.live?.baseUrl).pathname.replace(/^\/+|\/+$/gu, '');
@@ -678,6 +745,17 @@ function rendererFunction(renderer) {
   fail('invalid-renderer', 'renderer must be an injected function or object with render()');
 }
 
+function propertyChangeScope({ config, session, base, candidate, operation }) {
+  if (config?.owner?.allowProperties !== true || !ownerPropertyEditsAllowed(session)) return null;
+  const before = findFrontmatter(base);
+  const after = findFrontmatter(candidate);
+  if (before.kind !== 'block' || after.kind !== 'block') return null;
+  const spans = operation.operationType === 'change-set' ? operation.proposal.changeSet.files[0].operations : [operation];
+  if (!spans.some(({ start }) => start < before.range.end)) return null;
+  return spans.every(({ start, end }) => start >= before.range.start && start < before.range.end && end <= before.range.end)
+    && base.subarray(before.range.end).equals(candidate.subarray(after.range.end)) ? 'only' : 'mixed';
+}
+
 /**
  * Run every automatic pre-apply check against isolated baseline/candidate copies.
  * No write targets the supplied checkout, and temporary workspaces are removed in finally.
@@ -692,6 +770,7 @@ export async function runPreApplyChecks({
   operation,
   trustPolicy,
   trustSubject,
+  ownerReview = null,
   targetPage,
   targetSlug,
   renderer = renderPinnedQuartz,
@@ -752,6 +831,7 @@ export async function runPreApplyChecks({
       config,
       trustPolicy: effectiveTrustPolicy,
       trustSubject,
+      ownerReview,
     });
 
     temporaryRoot = await createTemporaryRoot();
@@ -780,18 +860,32 @@ export async function runPreApplyChecks({
       fail('baseline-copy-changed', 'the isolated baseline source changed while preparing the candidate');
     }
 
-    const baselinePublication = await runPublicationChecks({
+    const baselinePublication = await inspectPublication({
       vaultDir: baselineVault,
       outputDir: baselineProjection,
       sourcePath: relativePath,
     });
-    const candidatePublication = await runPublicationChecks({
+    const candidatePublication = await inspectPublication({
       vaultDir: candidateVault,
       outputDir: candidateProjection,
       sourcePath: relativePath,
     });
-    if (!sameStrings(baselinePublication.published, candidatePublication.published)) {
+    const { publicSet, addresses } = comparePublicationEffects(
+      publicationEffectsInput(baselinePublication.selection, 'baseline'),
+      publicationEffectsInput(candidatePublication.selection, 'candidate'),
+    );
+    if (publicSet.changed) {
       fail('published-set-changed', 'the candidate changed the selected publication file set');
+    }
+    // As with selected-set equality, an ordinary edit cannot authorize this effect.
+    if (addresses.changed) {
+      const edited = addresses.moved.find(({ source }) => source === relativePath);
+      fail('address-map-changed', 'the candidate changed the publication address map', {
+        added: addresses.added.length,
+        removed: addresses.removed.length,
+        moved: addresses.moved.length,
+        ...(edited && { editedSource: { from: edited.from, to: edited.to } }),
+      });
     }
 
     const baselineRender = await render({
@@ -818,15 +912,17 @@ export async function runPreApplyChecks({
       oldText: decodeUtf8(normalizedOperation.expectedOldBytes, 'operation expected old bytes'),
       newText: decodeUtf8(normalizedOperation.replacementBytes, 'operation replacement bytes'),
       maxWitnessChars,
+      propertyChange: propertyChangeScope({ config, session, base, candidate, operation: normalizedOperation.correction }),
     });
 
     result = {
       ok: true,
       immediate,
       publication: {
-        baseline: baselinePublication,
-        candidate: candidatePublication,
+        baseline: baselinePublication.summary,
+        candidate: candidatePublication.summary,
         selectedSetUnchanged: true,
+        addressMapUnchanged: true,
       },
       renderer: {
         baseline: plain(baselineRender ?? {}),

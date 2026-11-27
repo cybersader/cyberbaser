@@ -233,19 +233,20 @@ acceptanceTest('browser Save and startup recovery compose through exact local Gi
       }),
     });
 
-    const recovered = await runtime.recovery;
-    expect(recovered).toHaveLength(1);
-    expect(recovered[0].jobId).toBe(recoveryJobId);
-    expect(recovered[0].state).toBe('completed');
-    expect(await readFile(path.join(fx.checkout, 'docs', 'recovery.md'), 'utf8'))
-      .toContain('Recovery new value.');
-
+    // Signing in does not wait for startup recovery; owner acts do (server.test.js).
     const { chromium } = await import(pathToFileURL(PLAYWRIGHT).href);
     browser = await chromium.launch({ headless: true });
     const firstContext = await browser.newContext();
     const firstPage = await firstContext.newPage();
     await firstPage.goto(`${runtime.ownerOrigin}/owner/bootstrap?token=${runtime.bootstrapToken}`);
     await firstPage.waitForURL(`${runtime.readerOrigin}/cyberbase/`);
+
+    const recovered = await runtime.recovery;
+    expect(recovered).toHaveLength(1);
+    expect(recovered[0].jobId).toBe(recoveryJobId);
+    expect(recovered[0].state).toBe('completed');
+    expect(await readFile(path.join(fx.checkout, 'docs', 'recovery.md'), 'utf8'))
+      .toContain('Recovery new value.');
 
     const staleSecondCapability = runtime.issueBootstrap();
     const liveSecondCapability = runtime.issueBootstrap();

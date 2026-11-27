@@ -1,0 +1,31 @@
+---
+title: Signed publish, publisher side
+description: The publisher now refuses every push that the owner's own device did not sign. Built the frozen intent package, the publisher's own owner-key list with first-device enrollment by an installer code, device changes and a one-time recovery code, the check of each imported commit against the signed intent from Git objects alone, a durable "waiting for your approval" job state, and the installer and container test changes. Synthetic keys and repositories only.
+status: log
+---
+
+## What happened
+
+The owner decided that every publish carries the owner's own signature, checked by the publisher, so even a fully compromised node cannot publish; that the first signing device is enrolled by scanning a code the installer shows; that recovery is a written code accepted once plus the admin console; that passkeys are used only from pages the node cannot change; and that nothing publishes unattended for now ([decision log](https://github.com/cybersader/cyberbaser/blob/main/.claude/41-QUESTIONS-RESOLVED.md)). This session built the publisher side of [Signed publish](/cyberbaser/design/signed-publish/), steps 1, 2, 3, 5 and the waiting state of step 6. The Obsidian plugin's signing (step 4) was built in parallel against the same package.
+
+## What now holds
+
+- **The node cannot publish on its own.** The publisher pushes only after a key on its own list signed an intent for this publisher, with a one-use number it issued, and the commit it imported matches that intent in every field: one parent equal to the signed base; exactly the signed author, committer and message with no other header; and exactly the signed files, by mode and SHA-256, read from its own validated pack. The node's records carry the approval, but nothing in them is trusted.
+- **The key list is the publisher's.** It lives in `/var/lib/cyberbaser-publisher/owners`, which the node cannot read, and its location is a start argument, never a config field. The config copy step does not touch it.
+- **The first device.** The installer prints a one-time code (and QR) and a recovery code on the administrator's terminal. The publisher also shows the code on a loopback page that refuses the node's account and any script. The device proves it holds the code; the publisher proves it back before the device trusts it.
+- **Waiting is a state, not an error.** A job with no approval moves to `awaiting-approval` and stays there across restarts with no retry. A bad or mismatched approval fails the job with "nothing was published".
+- **The starter publish.yml** during setup now needs the same signature; the node's unsigned request is refused.
+
+## Evidence
+
+- `packages/signed-intent`: 40 tests (conformance vectors for all five kinds, 14 provider cases, codes, statements, admission and the Git check).
+- `apps/owner-alpha/test/signed-publish.test.js`: 15 tests, including every refusal (missing, expired, unissued or reused number, unknown, revoked or node key, another publisher, repository or branch, mismatched base, files, message and author, a node-substituted code, a key list planted where the node can write), recovery once, and the loopback page.
+- `apps/owner-alpha/test/publisher-process.test.js`: two new two-process tests. Unsigned, the job waits with no push; signed, exactly that commit is pushed and the device verifies the receipt. A node-signed approval fails closed with no push.
+- Required suites: 1,325 pass, 21 skipped. The one remaining failure, in `deploy/owner-alpha/test/structure.test.js`, checks the node's startup order in `server.js`, which the parallel setup fix changed.
+- The opt-in container test (`packaging/test/container/setup-e2e.sh`) now covers the code, enrollment, a forged code, the refused unsigned and node-signed starter, the signed starter, a job that waits and then pushes once signed, adding and revoking a device, and the recovery code working once. **It has not run**: no renderer seed archive was available on this machine.
+
+## Still open
+
+- The setup page does not yet show the publisher's code frame or ask a device to sign the starter file. Until it does, setup's own "Publish this file" is refused, and "Publish nothing yet" works.
+- The node does not yet ask a device for approval when a job starts waiting, or attach and resume when one arrives. The plugin worker's relay (`core/approvals.js`) is the place for that.
+- The passkey confirm page is not built.

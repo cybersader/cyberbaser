@@ -129,12 +129,18 @@ describe('owner-alpha container structure', () => {
     expect(entrypoint).not.toContain('bin/start.sh');
     expect(entrypoint).not.toContain('bin/launch.sh');
     expect(entrypoint).not.toMatch(/0\.0\.0\.0|::|tailscale/iu);
-    const recovery = server.indexOf('await runtime.recovery;');
-    const marker = server.indexOf('writeOwnerAlphaReadyMarker(readyFile)');
+    // Sign-in is offered at once; owner acts wait for recovery inside the
+    // runtime (createRecoveryGate). The ready marker, which the container
+    // health check reads, is written only once recovery has settled.
+    expect(server).not.toContain('await runtime.recovery;');
     const bootstrap = server.indexOf('Owner alpha bootstrap:');
-    expect(recovery).toBeGreaterThan(0);
+    const recovery = server.indexOf('runtime.recovery.then(');
+    const marker = server.indexOf('writeOwnerAlphaReadyMarker(readyFile)');
+    expect(bootstrap).toBeGreaterThan(0);
+    expect(recovery).toBeGreaterThan(bootstrap);
     expect(marker).toBeGreaterThan(recovery);
-    expect(bootstrap).toBeGreaterThan(marker);
+    expect(server.slice(recovery, marker)).not.toContain('console.log(');
+    expect(server).toContain('if (request.method === \'POST\') {\n      const recovery = recovering();');
   });
 
   test('pre-seeds Quartz and selects verified offline materialization in the image', async () => {

@@ -277,10 +277,12 @@ export function validateConfig(input) {
   const clientAddress = validateClientAddress(input.clientAddress);
 
   // The public form endpoint is off when listen is null. The service then runs
-  // for the review socket and the forge watcher only; at least one input must be on.
+  // for the review socket and the forge watcher only; at least one input must
+  // be on. The review socket is itself an input: paired agents send signed
+  // proposals through it.
   const formEnabled = input.listen !== null;
-  if (!formEnabled && !(forgejo?.enabled === true)) {
-    fail('invalid-config', 'listen may be null only when the forgejo watcher is enabled');
+  if (!formEnabled && !(forgejo?.enabled === true) && input.reviewIpc?.enabled !== true) {
+    fail('invalid-config', 'listen may be null only when the forgejo watcher or the review socket is enabled');
   }
   let publicOrigin = null;
   let listen = null;

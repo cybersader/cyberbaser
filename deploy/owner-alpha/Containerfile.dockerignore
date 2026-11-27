@@ -80,6 +80,13 @@
 !renderers/quartz-cyberbase/
 !renderers/quartz-cyberbase/build.sh
 !renderers/quartz-cyberbase/setup.sh
+!renderers/quartz-cyberbase/copy-render-tree.mjs
+!renderers/quartz-cyberbase/patches/
+!renderers/quartz-cyberbase/patches/quartz-4.5.2-provenance.*
+!renderers/quartz-cyberbase/patches/apply-provenance.mjs
+!renderers/quartz-cyberbase/vendor/
+!renderers/quartz-cyberbase/vendor/source-editor.*.js
+!renderers/quartz-cyberbase/vendor/source-editor.*.js.sha256
 !renderers/quartz-cyberbase/quartz.config.ts
 !renderers/quartz-cyberbase/quartz.layout.ts
 !renderers/quartz-cyberbase/validate-owner-origin.ts
@@ -100,6 +107,8 @@
 !deploy/owner-alpha/state-init.sh
 !deploy/owner-alpha/git-credential-owner-alpha-socket.js
 !deploy/owner-alpha/healthcheck.js
+!deploy/owner-alpha/one-app/
+!deploy/owner-alpha/one-app/render-offline.c
 !deploy/owner-alpha/owner-alpha.container.example.json
 
 .git

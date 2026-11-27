@@ -1,25 +1,130 @@
 import { validateOwnerAlphaConfig } from '../config.js';
 import { fail, OwnerAlphaError } from '../errors.js';
 import { validateJobId } from '../job-state.js';
+import { isPlainObject } from '../json.js';
 import { authorizeOwnerDirect, deriveOwnerDirect, validateOwnerHandoff } from '../owner-direct.js';
+import { isPublicationDigest } from '../owner-publication.js';
+import { validatePublicationDraftId } from '../owner-publication-store.js';
 import { storeContextFromConfig } from '../store.js';
+import { actorAllowsGrant } from './grants.js';
+import { createCaptureProposalBuilder, deliveryPathFor } from './capture-submission.js';
+import { createProposalSubmission } from './proposal-submission.js';
+import { refuseSignedRequest } from './signed-request.js';
+import { bundleJobId, bundleProgress } from '../bundle-lifecycle.js';
+
+const signedCommands = new WeakMap();
+
+export async function executeSigned(commands, verifier, envelope) {
+  const registered = signedCommands.get(commands);
+  const { command, input, principal } = verifier.verify(envelope, (name) => registered?.has(name) === true);
+  const run = registered?.get(command);
+  if (!run) refuseSignedRequest();
+  return run(input, principal);
+}
+
+function directEditScope(principal) {
+  return principal.method === 'device-key' ? { deviceKeyId: principal.keyId } : { sessionId: principal.sessionId };
+}
+
+function closedInput(input, required, optional = []) {
+  if (!isPlainObject(input) || !Object.hasOwn(input, required)) {
+    fail('invalid-command-input', 'owner command requires its declared input fields');
+  }
+  return Object.fromEntries(Reflect.ownKeys(input).map((key) => {
+    const field = Object.getOwnPropertyDescriptor(input, key);
+    if ((key !== required && !optional.includes(key)) || !field || !Object.hasOwn(field, 'value')) {
+      fail('invalid-command-input', 'owner command accepts only its declared data fields');
+    }
+    return [key, field.value];
+  }));
+}
+
+function mappingInput(input, optional) {
+  const request = closedInput(input, 'mappingId', optional);
+  const { mappingId } = request;
+  if (typeof mappingId !== 'string' || mappingId.length > 128 || mappingId.trim() !== mappingId
+    || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(mappingId) || mappingId.includes('..')) {
+    fail('invalid-publication-mapping-id', 'mapping id must be one opaque safe identifier');
+  }
+  return request;
+}
+
+function draftInput(input) {
+  return { draftId: validatePublicationDraftId(closedInput(input, 'draftId').draftId) };
+}
 
 // Distinguish command preconditions from same-named errors raised by injected
 // effects, whose existing HTTP error mappings differ.
 export class OwnerCommandPrecondition extends OwnerAlphaError {}
 
 export function createOwnerCommands({
-  config: configInput, projectRoot, principalAdapter, createEditSession,
+  config: configInput, projectRoot, principalAdapter, devicePrincipalAdapter = null, createEditSession,
   editSessions, handoffs, directEdits, saveEdit, lookupJob, createJobId,
-  proposalReview = null, publication = null,
+  proposalReview = null, publication = null, proposalClock = Date.now, readCaptureBase,
+  // Optional: status for every published note, and the owner's note links.
+  noteStatus = null, noteLinks = null,
+  // Optional: the relay between the publisher and the owner's signing device
+  // (core/approvals.js). Only owner devices that may publish reach it.
+  approvals = null,
+  // Optional: page bundles (core/bundle-desk.js), new notes and images.
+  bundleDesk = null,
 }) {
   const config = validateOwnerAlphaConfig(configInput);
+  if (devicePrincipalAdapter !== null && devicePrincipalAdapter.ownerId !== config.owner.identity) {
+    throw new TypeError('device registry owner does not match the configured owner');
+  }
   const inFlight = new Set();
+  const signedHandlers = new Map();
+  const submitProposal = createProposalSubmission({
+    clock: proposalClock,
+    submit: (input) => proposalReview.submitSigned(input),
+  });
+  const buildCapture = createCaptureProposalBuilder({ config, clock: proposalClock,
+    resolvePath: (notePath) => noteLinks?.resolve(notePath) ?? null,
+    ...(readCaptureBase === undefined ? {} : { readBase: readCaptureBase }) });
+  const isOwnerDevice = (principal) => principal?.method === 'device-key' && principal.actor?.kind === 'owner-device'
+    && principal.id === config.owner.identity;
+  // A device Send the node cannot place: leave a request for the owner's
+  // linking step and give the device one plain reason.
+  const needsLinking = (principal, notePath, text = null) => {
+    if (noteLinks === null || !isOwnerDevice(principal)) return false;
+    return noteLinks.request({ notePath, text }) !== null;
+  };
+  // The public tier of note status: what the public site shows anyway.
+  const publicStatusAllowed = (principal) => devicePrincipalAdapter?.isVerified(principal) === true
+    && principal.method === 'device-key'
+    && ['publication', 'propose'].some((grant) => actorAllowsGrant(principal.actor.kind, grant)
+      && devicePrincipalAdapter.hasGrant(principal, grant));
+
+  // An owner device the owner allowed to publish. Independent of the owner
+  // publication page: a signing device approves every kind of publish.
+  function signingGrant(principal) {
+    if (!isOwnerDevice(principal) || devicePrincipalAdapter?.isVerified(principal) !== true
+      || !devicePrincipalAdapter.hasGrant(principal, 'publish')) refuseSignedRequest();
+    if (approvals === null) fail('signing-unavailable', 'this node does not relay signed approvals');
+  }
+
+  // Page bundles: an owner device that may publish sends straight to its own
+  // signature ('owner'); any other device needs the propose grant ('propose').
+  function bundleGrant(principal) {
+    if (isOwnerDevice(principal) && devicePrincipalAdapter?.isVerified(principal) === true
+      && devicePrincipalAdapter.hasGrant(principal, 'publish')) return 'owner';
+    requireGrant('propose', principal);
+    return 'propose';
+  }
 
   function requireGrant(grant, principal) {
-    if (!principalAdapter.isVerified(principal) || principal.id !== config.owner.identity) {
-      fail('invalid-session', 'a verified owner session is required');
+    const bootstrap = principalAdapter?.isVerified(principal) && principal.method === 'bootstrap-session';
+    const device = !bootstrap && devicePrincipalAdapter?.isVerified(principal) && principal.method === 'device-key'
+      && actorAllowsGrant(principal.actor.kind, grant) && devicePrincipalAdapter.hasGrant(principal, grant);
+    if (grant === 'propose') {
+      if (!device) refuseSignedRequest();
+      if (!config.proposalReview.enabled || typeof proposalReview?.submitSigned !== 'function') {
+        fail('proposal-submission-refused', 'proposal submission was refused');
+      }
+      return;
     }
+    if ((!bootstrap && !device) || principal.id !== config.owner.identity) refuseSignedRequest();
     switch (grant) {
       case 'read':
       case 'save':
@@ -44,18 +149,25 @@ export function createOwnerCommands({
   }
 
   function command(grant, fallback, execute, { preserveCode = false } = {}) {
-    return async (input, principal) => {
-      requireGrant(grant, principal);
+    const run = async (input, principal) => {
+      // A function grant decides for itself and passes its tier to execute.
+      const tier = typeof grant === 'function' ? grant(principal) : requireGrant(grant, principal);
+      // A device attestation authorizes only its one signed request, even if
+      // an in-process binding invokes the core without executeSigned().
+      if (principal.method === 'device-key'
+        && !devicePrincipalAdapter.consumeRequest(principal, signedHandlers.get(run), input)) refuseSignedRequest();
       try {
-        return await execute(input, principal);
+        return await execute(input, principal, tier);
       } catch (error) {
         if (error instanceof OwnerAlphaError) throw error;
         fail(preserveCode ? error?.code ?? fallback : fallback, 'owner command failed');
       }
     };
+    signedHandlers.set(run, null);
+    return run;
   }
 
-  return Object.freeze({
+  const commands = Object.freeze({
     // The HTTP binding uses the same check before parsing for routes where
     // feature/availability errors have precedence over malformed input.
     requireGrant,
@@ -76,14 +188,15 @@ export function createOwnerCommands({
       if (!handoff) throw new OwnerCommandPrecondition('owner-handoff-expired', 'the staged change has expired');
       const session = await createEditSession({ config, renderer: { relativePath: handoff.source.path, slug: handoff.slug } });
       const derived = deriveOwnerDirect({ config, session, handoff });
-      const stored = directEdits.create({ ...derived, stageId, sessionId: principal.sessionId });
+      const stored = directEdits.create({ ...derived, stageId, ...directEditScope(principal) });
       return { ...derived, editId: stored.id, operationCount: handoff.operations.length };
     }, { preserveCode: true }),
 
     saveOwnerDirect: command('save', 'owner-save-failed', async (input, principal) => {
       const { editId } = input;
       const edit = directEdits.get(editId);
-      if (!edit || edit.sessionId !== principal.sessionId || !handoffs.get(edit.stageId)) {
+      const scope = directEditScope(principal);
+      if (!edit || edit.sessionId !== scope.sessionId || edit.deviceKeyId !== scope.deviceKeyId || !handoffs.get(edit.stageId)) {
         throw new OwnerCommandPrecondition('owner-handoff-expired', 'the staged change has expired');
       }
       if (inFlight.has(edit.stageId)) throw new OwnerCommandPrecondition('save-in-progress', 'a Save is already in progress');
@@ -137,6 +250,152 @@ export function createOwnerCommands({
       return { jobId, state: started.state ?? 'accepted' };
     }),
 
+    submitProposal: command('propose', 'proposal-submission-refused', submitProposal),
+
+    // A paired device's open note, bound by the node to the committed vault
+    // text and queued as an ordinary proposal: same grant, budget and queue
+    // rules as submitProposal.
+    submitCapture: command('propose', 'proposal-submission-refused', async (input, principal) => {
+      let deliveryPath = null;
+      const receipt = await submitProposal.submitBuilt(async () => {
+        let built;
+        try { built = await buildCapture(input); } catch (error) {
+          // No committed file at the path the node would use, and the owner
+          // has not linked this note: ask the owner to link it on the node.
+          if (error instanceof OwnerAlphaError && error.code === 'capture-base-unavailable'
+            && noteLinks?.resolve(input.path) === null && needsLinking(principal, input.path, input.text)) {
+            fail('note-needs-linking', 'link this note to the vault on the node first');
+          }
+          throw error;
+        }
+        deliveryPath = built.deliveryPath;
+        return built.unchanged ? null : built.proposal;
+      }, principal);
+      return receipt === null ? { unchanged: true, deliveryPath } : { ...receipt, deliveryPath };
+    }, { preserveCode: true }),
+
+    // One chunk of an image for a page bundle, held in memory until the
+    // bundle that names it arrives (or 15 minutes pass).
+    stageAsset: command(bundleGrant, 'proposal-submission-refused', async (input, principal) => {
+      if (bundleDesk === null) fail('proposal-submission-refused', 'this node does not accept new pages');
+      const request = closedInput(input, 'sha256', ['size', 'offset', 'data']);
+      return bundleDesk.staging.stage({ keyId: principal.keyId, ...request });
+    }, { preserveCode: true }),
+
+    // A new page (or an edited one) with its images. An owner device that may
+    // publish sends it straight to its own signature; any other device's
+    // bundle waits for the owner's review. Nothing publishes without the
+    // owner's signature, which the publisher checks.
+    submitPageBundle: command(bundleGrant, 'proposal-submission-refused', async (input, principal, tier) => {
+      if (bundleDesk === null) fail('proposal-submission-refused', 'this node does not accept new pages');
+      // Charged before any Git read, like every other submission.
+      await submitProposal.submitBuilt(async () => null, principal);
+      return bundleDesk.submit(input, principal, tier);
+    }, { preserveCode: true }),
+
+    // Where a bundle this device sent is now (its progress view and status bar).
+    readPageBundle: command(bundleGrant, 'bundle-not-found', async (input, principal) => {
+      if (bundleDesk === null) fail('bundle-not-found', 'no such bundle');
+      const { bundleId } = closedInput(input, 'bundleId');
+      if (typeof bundleId !== 'string' || !/^bundle-[0-9a-f-]{36}$/u.test(bundleId)) fail('bundle-not-found', 'no such bundle');
+      const record = await bundleDesk.load(bundleId);
+      if (record.submitter?.keyId !== principal.keyId) fail('bundle-not-found', 'no such bundle');
+      // After the push the bundle's own job record is the only answer. Not
+      // recorded yet: still publishing. Unreadable, or no job lookup on this
+      // carrier: a refusal, never a guess from other evidence.
+      let job = null;
+      if (record.state === 'published') {
+        if (typeof lookupJob !== 'function') fail('bundle-progress-unavailable', 'this node cannot read job records');
+        try {
+          job = await lookupJob(bundleJobId(bundleId));
+        } catch (error) {
+          if (!(error instanceof OwnerAlphaError) || !['artifact-not-found', 'job-not-found'].includes(error.code)) {
+            fail('bundle-progress-unavailable', 'the bundle job record could not be read');
+          }
+        }
+      }
+      let privateBase = null;
+      if (config.workflow?.provider === 'private-site') {
+        try { privateBase = await (await import('../deployment/private-site.js')).privateReaderBase(config); } catch { privateBase = null; }
+      }
+      return bundleProgress({ config, record, job: job ?? null, privateBase });
+    }, { preserveCode: true }),
+
+    // The device takes back what it sent, before it is signed. The waiting
+    // approval is taken back too, so no signing device can approve it later.
+    withdrawPageBundle: command(bundleGrant, 'bundle-not-found', async (input, principal) => {
+      if (bundleDesk === null) fail('bundle-not-found', 'no such bundle');
+      const { bundleId } = closedInput(input, 'bundleId');
+      if (typeof bundleId !== 'string' || !/^bundle-[0-9a-f-]{36}$/u.test(bundleId)) fail('bundle-not-found', 'no such bundle');
+      const result = await bundleDesk.withdraw(bundleId, principal.keyId);
+      if (approvals !== null) await approvals.list().catch(() => {});
+      return result;
+    }, { preserveCode: true }),
+
+    listBundles: command('review', 'review-list-failed', async () => {
+      if (bundleDesk === null) return { bundles: [] };
+      const records = await bundleDesk.list();
+      return { bundles: records.map((record) => ({ bundleId: record.bundleId, state: record.state, submitter: record.submitter,
+        receivedAt: record.receivedAt, publicAdditions: record.publicAdditions, images: record.images, reason: record.reason })) };
+    }),
+
+    approveBundle: command('review', 'decision-record-failed', async (input) => {
+      if (bundleDesk === null) fail('bundle-not-found', 'no such bundle');
+      return bundleDesk.approve(closedInput(input, 'bundleId').bundleId);
+    }, { preserveCode: true }),
+
+    declineBundle: command('review', 'decision-record-failed', async (input) => {
+      if (bundleDesk === null) fail('bundle-not-found', 'no such bundle');
+      return bundleDesk.decline(closedInput(input, 'bundleId').bundleId);
+    }, { preserveCode: true }),
+
+    // Whether the device's open note is public and which version is live.
+    // Owner devices with the publication grant get the full answer (drafts,
+    // the publication page, publishing). Any device holding `propose` gets
+    // only what the public site shows: public or not, and the live version.
+    // Paths, never note text; only the path the device asked about.
+    readNoteStatus: command((principal) => {
+      try { requireGrant('publication', principal); return 'owner'; } catch (error) {
+        if (!publicStatusAllowed(principal)) throw error;
+        return 'public';
+      }
+    }, 'publication-status-unavailable', async (input, principal, tier) => {
+      const { path: notePath } = closedInput(input, 'path');
+      if (typeof notePath !== 'string' || notePath.length > 1024) fail('invalid-command-input', 'path must be text');
+      const publishAvailable = tier === 'owner' && publication?.publishAvailable === true;
+      const mapping = tier === 'owner' ? config.ownerPublication.mappings.find((entry) => entry.source.path === notePath
+        || entry.relativePath === notePath) : undefined;
+      if (mapping && publication !== null) {
+        const status = await publication.readStatus({ mappingId: mapping.id });
+        const live = status.live === null ? null : { version: status.live.version,
+          digest: status.live.foldedTextDigest ?? status.live.digest, folded: status.live.foldedTextDigest !== undefined };
+        // When it was confirmed live: the publication job's own record, else
+        // the verified deployment when it carries this same text.
+        if (live !== null && typeof status.live.confirmedAt === 'string') live.at = status.live.confirmedAt;
+        else if (live !== null && noteStatus !== null) {
+          const general = await noteStatus.status(mapping.relativePath).catch(() => null);
+          if (general?.live?.digest === live.digest) live.at = general.live.at;
+        }
+        const latest = status.latest === null ? null : { version: status.latest.version, state: status.latest.state,
+          draftId: status.latest.draftId };
+        return { path: notePath, selected: true, mappingId: mapping.id, workspace: mapping.source.kind === 'workspace',
+          live, latest, publishAvailable };
+      }
+      if (noteStatus === null) return tier === 'owner' ? { path: notePath, selected: false, publishAvailable } : { path: notePath, selected: false, live: null };
+      const vaultPath = noteLinks?.resolve(notePath) ?? deliveryPathFor(config, notePath);
+      const found = await noteStatus.status(vaultPath);
+      const live = found.live === null ? null : { digest: found.live.digest, folded: true, at: found.live.at };
+      // Only for the owner's devices that publish: the published text at the
+      // branch head, so the device can tell its new page went out before it is
+      // confirmed live. Other devices get what the public site shows.
+      // (The same test as bundleGrant: an owner device that may publish new pages.)
+      const publishes = tier === 'owner' || (isOwnerDevice(principal) && devicePrincipalAdapter?.isVerified(principal) === true
+        && devicePrincipalAdapter.hasGrant(principal, 'publish'));
+      const committed = publishes && typeof found.committed === 'string' ? { committed: { digest: found.committed, folded: true } } : {};
+      return tier === 'owner' ? { path: notePath, selected: found.selected, live, publishAvailable: false, ...committed }
+        : { path: notePath, selected: found.selected, live, ...committed };
+    }),
+
     listProposals: command('review', 'review-list-failed', async (input) => {
       return proposalReview.list(input);
     }),
@@ -175,8 +434,34 @@ export function createOwnerCommands({
       return proposalReview.apply(input.queueId);
     }),
 
-    preparePublication: command('publication', 'publication-prepare-failed', async (input) => {
-      return publication.prepare(input);
+    preparePublication: command('publication', 'publication-prepare-failed', async (input, principal) => {
+      const request = mappingInput(input, ['expectedVersion', 'expectedDigest']);
+      if (Object.hasOwn(request, 'expectedVersion')
+        && (!Number.isSafeInteger(request.expectedVersion) || request.expectedVersion <= 0)) {
+        fail('invalid-publication-expected-version', 'expected version must be a positive safe integer');
+      }
+      if (Object.hasOwn(request, 'expectedDigest') && !isPublicationDigest(request.expectedDigest)) {
+        fail('invalid-publication-expected-digest', 'expected digest must be one canonical SHA-256 digest');
+      }
+      try {
+        return await publication.prepare(request);
+      } catch (error) {
+        // The publication page has no baseline yet: the owner links it on the node.
+        const mapping = config.ownerPublication.mappings.find((entry) => entry.id === request.mappingId);
+        if (error instanceof OwnerAlphaError && error.code === 'workspace-unbound' && mapping
+          && needsLinking(principal, mapping.source.path)) {
+          fail('note-needs-linking', 'link this note to the vault on the node first');
+        }
+        throw error;
+      }
+    }),
+
+    readPublicationStatus: command('publication', 'publication-status-unavailable', async (input) => {
+      return publication.readStatus(mappingInput(input));
+    }),
+
+    readPublicationReceipt: command('publication', 'publication-receipt-unavailable', async (input) => {
+      return publication.readReceipt(draftInput(input));
     }),
 
     readPublicationCurrent: command('publication', 'publication-review-unavailable', async (input) => {
@@ -184,17 +469,45 @@ export function createOwnerCommands({
     }),
 
     readPublicationReview: command('publication', 'publication-review-unavailable', async (input) => {
-      const draft = await publication.load(input);
+      const draft = await publication.load(draftInput(input));
       const job = await publication.readJob(draft.jobId);
       return { draft, job, publishAvailable: publication.publishAvailable === true };
     }),
 
     publish: command('publish', 'publication-publish-refused', async (input) => {
-      return publication.publish(input);
+      return publication.publish(draftInput(input));
+    }),
+
+    // Signing device: enrol with the publisher, then approve publishes. The
+    // node relays; the device and the publisher check everything themselves.
+    readSigningChallenge: command(signingGrant, 'signing-unavailable', async (input) => {
+      const { publisher } = closedInput(input, 'publisher');
+      if (typeof publisher !== 'string' || !/^[0-9a-f]{64}$/u.test(publisher)) fail('invalid-command-input', 'publisher must be 64 hex');
+      return approvals.challenge();
+    }, { preserveCode: true }),
+    enrollSigningKey: command(signingGrant, 'enroll-refused', async (input) => {
+      const { intent, approval } = closedInput(input, 'intent', ['approval']);
+      return approvals.enroll({ intent, approval });
+    }, { preserveCode: true }),
+    listApprovals: command(signingGrant, 'approval-not-found', async (input) => {
+      if (closedInput(input, 'waiting').waiting !== true) fail('invalid-command-input', 'waiting must be true');
+      return { waiting: await approvals.list() };
+    }),
+    readApproval: command(signingGrant, 'approval-not-found', async (input) => {
+      return approvals.read(closedInput(input, 'requestId'));
+    }),
+    readApprovalChunk: command(signingGrant, 'approval-not-found', async (input) => {
+      return approvals.readChunk(closedInput(input, 'requestId', ['path', 'offset']));
+    }),
+    submitApproval: command(signingGrant, 'approval-invalid', async (input) => {
+      return approvals.submit(closedInput(input, 'requestId', ['intent', 'approval']));
+    }),
+    declineApproval: command(signingGrant, 'approval-not-found', async (input) => {
+      return approvals.decline(closedInput(input, 'requestId'));
     }),
 
     readJob: command('read', 'job-lookup-failed', async (input) => {
-      const jobId = validateJobId(input?.jobId);
+      const jobId = validateJobId(closedInput(input, 'jobId').jobId);
       let job;
       try {
         job = await lookupJob(jobId);
@@ -208,4 +521,14 @@ export function createOwnerCommands({
       return job;
     }),
   });
+  // Only public command wrappers belong here, never requireGrant or the
+  // browser's anonymous owner-direct staging route.
+  const byName = new Map();
+  for (const [name, run] of Object.entries(commands)) {
+    if (!signedHandlers.has(run)) continue;
+    signedHandlers.set(run, name);
+    byName.set(name, run);
+  }
+  signedCommands.set(commands, byName);
+  return commands;
 }

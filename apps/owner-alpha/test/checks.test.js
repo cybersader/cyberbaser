@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { applyCorrection, deriveContiguousCorrection } from '@cyberbaser/correction';
@@ -20,6 +20,7 @@ import {
   PINNED_QUARTZ_RENDERER_DIR,
   PINNED_QUARTZ_REPOSITORY,
   renderPinnedQuartz,
+  offlineSeedEnvironment,
 } from '../src/quartz-renderer.js';
 
 const cleanup = [];
@@ -91,8 +92,11 @@ function trustPolicy() {
 }
 
 function correctionFixture(oldText = 'The old phrase is unique.', newText = 'The new phrase is unique.') {
-  const before = Buffer.from(`# Page\n\n${oldText}\n`, 'utf8');
-  const edited = `# Page\n\n${newText}\n`;
+  return exactChangeFixture(`# Page\n\n${oldText}\n`, `# Page\n\n${newText}\n`);
+}
+
+function exactChangeFixture(beforeText, edited) {
+  const before = Buffer.from(beforeText, 'utf8');
   const operation = deriveContiguousCorrection(before, edited, {
     maxBaseBytes: 4096,
     maxEditedBytes: 4096,
@@ -101,7 +105,7 @@ function correctionFixture(oldText = 'The old phrase is unique.', newText = 'The
     maxChangedBytes: 1024,
     maxChangedLines: 10,
   });
-  return { before, candidate: applyCorrection(before, operation), operation, oldText, newText };
+  return { before, candidate: applyCorrection(before, operation), operation };
 }
 
 function ownerOperation(fixture) {
@@ -207,6 +211,36 @@ describe('immediate automatic checks', () => {
       config: policy(),
       trustPolicy: null,
     }), 'trust-route-not-allowed');
+  });
+
+  const ownerReview = { type: 'approved-proposal', queueId: 'Q-0f0e0d0c-0b0a-4908-8706-050403020100',
+    inputDigest: `sha-256=:${Buffer.alloc(32, 7).toString('base64')}:` };
+
+  test('an explicit owner review satisfies full-review without a trust file, and says so', () => {
+    const fixture = correctionFixture();
+    const result = runImmediateChecks({ baseBytes: fixture.before, candidateBytes: fixture.candidate,
+      operation: fixture.operation, sourcePath: 'pub/Page.md', config: policy(), trustPolicy: null, ownerReview });
+    expect(result.trust.route).toBe('full-review');
+    expect(result.trust.reasons).toEqual(['no-trust-config']);
+    expect(result.trustRequirement).toEqual({ route: 'full-review', satisfiedBy: ownerReview });
+  });
+
+  test('an owner review never unlocks a lighter route the owner policy does not allow', async () => {
+    // trusted human, non-typo change -> quick-review; policy allows only auto-merge.
+    const fixture = correctionFixture('The old phrase is unique and fairly long.', 'A rather different sentence was written here instead, with many more words added so it is clearly no typo fix at all.');
+    await expectCode(() => runImmediateChecks({ baseBytes: fixture.before, candidateBytes: fixture.candidate,
+      operation: fixture.operation, sourcePath: 'pub/Page.md', trustPolicy: trustPolicy(), ownerReview,
+      config: policy({ owner: { identity: 'owner', allowedTrustRoutes: ['auto-merge'] } }) }), 'trust-route-not-allowed');
+  });
+
+  test('owner review evidence must be exact', async () => {
+    const fixture = correctionFixture();
+    for (const bad of [{ ...ownerReview, type: 'owner-direct' }, { ...ownerReview, queueId: 'Q-1' },
+      { ...ownerReview, inputDigest: 'sha256:abc' }, { ...ownerReview, extra: true }, 'approved']) {
+      await expectCode(() => runImmediateChecks({ baseBytes: fixture.before, candidateBytes: fixture.candidate,
+        operation: fixture.operation, sourcePath: 'pub/Page.md', config: policy(), trustPolicy: null, ownerReview: bad }),
+      'invalid-owner-review');
+    }
   });
 });
 
@@ -333,6 +367,7 @@ describe('composed isolated pre-apply checks', () => {
 
     expect(result.ok).toBe(true);
     expect(result.publication.selectedSetUnchanged).toBe(true);
+    expect(result.publication.addressMapUnchanged).toBe(true);
     expect(result.renderer.isolatedWorkspaces).toBe(true);
     expect(result.rendered.witnesses.counts).toMatchObject({
       baselineOld: 1,
@@ -374,6 +409,79 @@ describe('composed isolated pre-apply checks', () => {
     expect(cleanupCalled).toBe(true);
     expect(await exists(temporaryRoot)).toBe(false);
     expect((await readFile(path.join(checkout, 'pub', 'Page.md'))).equals(fixture.before)).toBe(true);
+  });
+});
+
+describe('pre-apply publication effects', () => {
+  async function prepare(fixture) {
+    const checkoutDir = await publicationFixture();
+    await write(checkoutDir, 'pub/Page.md', fixture.before);
+    return {
+      config: policy(),
+      checkoutDir,
+      sourcePath: 'pub/Page.md',
+      baseBytes: fixture.before,
+      candidateBytes: fixture.candidate,
+      operation: fixture.operation,
+      trustPolicy: trustPolicy(),
+      targetPage: 'pub/Page.html',
+      renderer: () => { throw new Error('publication refusal must come before rendering'); },
+    };
+  }
+
+  test('blocks an edited note from moving even if the operation layer was bypassed', async () => {
+    // Supply the exact candidate directly, instead of asking the owner edit route to authorize it.
+    const inputs = await prepare(exactChangeFixture(
+      '---\nslug: pub/old-address\n---\n# Page\n',
+      '---\nslug: pub/new-address\n---\n# Page\n',
+    ));
+    const error = await expectCode(() => runPreApplyChecks(inputs), 'address-map-changed');
+    expect(error.details).toEqual({
+      added: 0,
+      removed: 0,
+      moved: 1,
+      editedSource: { from: 'pub/old-address.md', to: 'pub/new-address.md' },
+    });
+  });
+
+  test('reports only counts for another note moving across the isolated trees', async () => {
+    const inputs = await prepare(correctionFixture());
+    await write(inputs.checkoutDir, 'pub/Other.md', '---\nslug: pub/other-before\n---\n# Another note\n');
+    const error = await expectCode(() => runPreApplyChecks(inputs, {
+      // Projection rejects collisions rather than reassigning a different note's URL.
+      // Model a second source drifting between the two copies, then run real selection/projection.
+      copyCheckout: async (source, destination) => {
+        await cp(source, destination, { recursive: true });
+        if (path.basename(path.dirname(destination)) === 'candidate') {
+          await write(destination, 'pub/Other.md', '---\nslug: pub/other-after\n---\n# Another note\n');
+        }
+      },
+    }), 'address-map-changed');
+    expect(error.details).toEqual({ added: 0, removed: 0, moved: 1 });
+  });
+
+  for (const lane of ['baseline', 'candidate']) {
+    test(`fails closed when projection rejects an invalid ${lane} page target`, async () => {
+      const good = '---\nslug: pub/valid\n---\n# Page\n';
+      const bad = '---\nslug: ../invalid\n---\n# Page\n';
+      const inputs = await prepare(lane === 'baseline'
+        ? exactChangeFixture(bad, good)
+        : exactChangeFixture(good, bad));
+      const error = await expectCode(() => runPreApplyChecks(inputs), 'projection-failed');
+      expect(error.details.failures).toMatchObject([{ kind: 'slug', path: 'pub/Page.md' }]);
+    });
+  }
+
+  test('keeps the existing selected-set failure for a body edit that publishes an asset', async () => {
+    const inputs = await prepare(correctionFixture('The old phrase is unique.', 'The old phrase is unique.\n\n![Diagram](../private/diagram.png)'));
+    await write(inputs.checkoutDir, 'private/diagram.png', 'synthetic image bytes');
+    const error = await expectCode(() => runPreApplyChecks(inputs), 'published-set-changed');
+    expect(error.details).toEqual({});
+  });
+
+  test('keeps the existing unpublished-source failure for the candidate', async () => {
+    const inputs = await prepare(exactChangeFixture('# Page\n', '---\npublish: false\n---\n# Page\n'));
+    await expectCode(() => runPreApplyChecks(inputs), 'source-not-published');
   });
 });
 
@@ -420,12 +528,7 @@ describe('pinned Quartz integration', () => {
     const previous = process.env.OWNER_ALPHA_STATE_PROFILE;
     process.env.OWNER_ALPHA_STATE_PROFILE = 'rootless-test-v1';
     try {
-      await expectCode(() => renderPinnedQuartz({
-        contentDir: path.join(root, 'content'),
-        outputDir: path.join(root, 'output'),
-        workspaceDir: path.join(root, 'workspace'),
-        ownerOrigin: 'http://127.0.0.1:4317',
-      }), 'quartz-seed-missing');
+      await expectCode(() => offlineSeedEnvironment(path.join(root, 'absent-seed')), 'quartz-seed-missing');
     } finally {
       if (previous === undefined) delete process.env.OWNER_ALPHA_STATE_PROFILE;
       else process.env.OWNER_ALPHA_STATE_PROFILE = previous;

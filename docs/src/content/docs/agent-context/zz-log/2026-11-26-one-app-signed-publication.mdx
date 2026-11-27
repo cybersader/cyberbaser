@@ -1,0 +1,19 @@
+---
+title: One-app signed publication and private reader pass the offline lab
+description: An isolated container rehearsal completed setup, enforced signing, and served a synthetic note with both renderer choices.
+status: log
+---
+
+## What changed
+
+The container node writes its generated config to a dedicated volume. A trusted host script serializes each reconciliation. Its networkless oneshot mounts that volume read-only and mounts only the publisher's config destination for writing. It checks directory and file ownership, privacy, type and size, validates the application schema and fixed publisher layout, then atomically replaces the config copy. The normal publisher mounts its own copy read-only; neither running app mounts the other's private state. The host requests a publisher restart only after a valid copy and records the active digest only after the restart command succeeds. An identical digest does not trigger another restart. A future host path unit can call the same script; the rehearsal harness performed that supervisor role for this run.
+
+## What the lab proved
+
+A rootless, SELinux-confined Podman pod with no external network or host ports ran the real node and publisher. A distinct synthetic viewer enrolled a signing key from the publisher's real loopback page; the node UID was refused. After the config write, the publisher activated in enforce mode. Invalid and missing updates left the last good copy and process unchanged. A failed restart command was unacknowledged and retried. The unsigned Save job did not reach the fake forge. One valid signature moved exactly one ref by one commit changing one note, and the mirror adopted the commit. The test stubbed pre-apply check witnesses, not the signature, Git, push or rendering.
+
+The private reader served that note on the next port. Bundled Quartz built offline and served the signed revision across recreation of both roles. A tiny configured renderer built in a fresh network namespace, where the fake forge's loopback listener was unreachable; its reader output and enrolled signer survived another recreation. Relay-only listener checks and credential confinement still passed. The final image passed 24 lab check groups including cleanup, and 49 targeted Bun tests passed with one opt-in native install test skipped. The image is local only.
+
+## Where the evidence stops
+
+The successful recreation starts after the signed push. An earlier recreation with a local commit still waiting for approval hit `checkout-not-at-origin-branch`; recovery of the pending unsigned job is not established. No working relay, physical phone, target-host watcher, remote setup/enrollment handoff, install or upgrade was verified. The Compose file is a lab layout reference, not a deployable recipe. No real repository or server was touched.

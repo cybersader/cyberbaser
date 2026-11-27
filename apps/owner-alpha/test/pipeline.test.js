@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -18,6 +18,9 @@ import {
   transitionDurableJob,
   validateOwnerAlphaConfig,
 } from '../src/index.js';
+
+import { createJobPublisher, getOwnerAlphaJob } from '../src/pipeline.js';
+import { resolveStorePath } from '../src/store.js';
 
 const APP_ROOT = path.resolve(import.meta.dir, '..');
 const EXAMPLE = path.join(APP_ROOT, 'owner-alpha.example.json');
@@ -40,13 +43,14 @@ async function command(args, cwd) {
   if (exitCode !== 0) throw new Error(`${args.join(' ')} failed: ${stderr || stdout}`);
 }
 
-async function fixture({ provider = 'github-actions' } = {}) {
+async function fixture({ provider = 'github-actions', allowProperties = false } = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'owner-alpha-pipeline-'));
   cleanup.push(root);
   await command(['git', 'init', '-q'], root);
   await writeFile(path.join(root, '.gitignore'), '.workspace/\n', 'utf8');
   const raw = JSON.parse(await readFile(EXAMPLE, 'utf8'));
   raw.repository.checkout = root;
+  if (allowProperties) raw.owner.allowProperties = true;
   if (provider === 'forgejo-actions') {
     raw.repository.remote.url = 'https://forgejo.example/owner/repository.git';
     raw.owner.identity = 'owner';
@@ -310,6 +314,117 @@ describe('owner-alpha integration pipeline', () => {
     const applied = await readJsonArtifact(data.context, paths.sourceApplied);
     expect(applied.result.candidateBytesBase64).toBe(bound.candidateBytes.toString('base64'));
     expect(applied.result).not.toHaveProperty('candidateBytes');
+    expect(await getOwnerAlphaJob({ ...data, jobId: 'OA-HAPPY' })).toHaveProperty('liveKind', 'text');
+  });
+
+  for (const [name, provider, code] of [
+    ['GitHub success', 'github-actions'],
+    ['Forgejo success', 'forgejo-actions'],
+    ['missing deployment', 'github-actions', 'deployment-evidence-missing'],
+    ['other commit', 'github-actions', 'deployment-evidence-missing'],
+    ['other attempt', 'github-actions', 'deployment-evidence-missing'],
+    ['missing stable text', 'github-actions', 'live-confirm-timeout'],
+    ['unreachable page', 'github-actions', 'live-confirm-timeout'],
+  ]) {
+    test(`stable witness with ${name} verifies only exact durable deployment and visible page evidence`, async () => {
+      const data = await fixture({ provider, allowProperties: true });
+      const input = acceptedInput();
+      const policyRevision = computePolicyRevision(data.config);
+      const session = { ...input.session, policyRevision, liveUrl: `${data.config.live.baseUrl}docs/page` };
+      const operation = { ...input.operation, source: { ...input.operation.source, policyRevision, liveUrl: session.liveUrl } };
+      const jobId = 'OA-STABLE';
+      const paths = pipelineArtifactPaths(jobId);
+      const at = '2026-07-31T12:00:00.000Z';
+      await initializeDurableJob(data.context, { jobId, policyRevision, at });
+      for (const state of [
+        'preflighting', 'checking', 'rendering', 'ready-to-apply', 'applying', 'source-applied', 'committing', 'committed',
+        'pushing', 'pushed', 'discovering-run', 'run-bound', 'monitoring-deployment', 'deployment-succeeded', 'verifying-live',
+      ]) await transitionDurableJob(data.context, jobId, state, { at, reason: `seed-${state}` });
+      const save = (file, artifactType, result) => createJsonArtifactOnce(data.context, file, { schemaVersion: 1, artifactType, jobId, result });
+      const stable = 'A stable visible passage.';
+      const visibleTextDigest = `sha256:${createHash('sha256').update(stable).digest('hex')}`;
+      await save(paths.preApplyChecks, 'owner-alpha-pre-apply-check-result', {
+        rendered: { witnesses: { kind: 'no-visible-change', stable, digest: visibleTextDigest } },
+      });
+      await save(paths.committed, 'owner-alpha-committed-effect', { status: 'committed', commit: COMMIT });
+      await save(paths.runBound, 'owner-alpha-run-bound-effect', { binding: { provider, headSha: COMMIT, runId: '42', runAttempt: 1 } });
+      if (name !== 'missing deployment') {
+        const headSha = name === 'other commit' ? BASE_COMMIT : COMMIT;
+        await save(paths.deployment, 'owner-alpha-deployment-result', provider === 'github-actions'
+          ? { provider, run: { runId: '42', headSha, runAttempt: name === 'other attempt' ? 2 : 1, status: 'completed', conclusion: 'success' }, environment: { state: 'success' } }
+          : { provider, run: { id: '42', headSha, status: 'success' }, publication: { state: 'success' } });
+      }
+      const calls = {};
+      const { confirmLivePage: _, ...dependencies } = fixtureDependencies(input, calls);
+      let now = 0;
+      let fetchCount = 0;
+      const result = await runOwnerAlphaPipeline({ ...data, jobId, session, operation, liveDependencies: {
+        clock: () => now,
+        sleep: async (ms) => { now += ms; },
+        fetch: async (url) => {
+          expect(url).toBe(session.liveUrl);
+          fetchCount += 1;
+          const paragraph = name === 'missing stable text' ? `<p hidden>${stable}</p><p>Different visible text.</p>` : `<p>${stable}</p>`;
+          return new Response(`<html><body>${paragraph}</body></html>`, {
+            status: name === 'unreachable page' ? 503 : 200, headers: { 'Content-Type': 'text/html' },
+          });
+        },
+      } }, dependencies);
+      if (code) {
+        expect(result).toMatchObject({ state: 'live-verification-failed', failure: { code, retryable: true } });
+        if (code === 'deployment-evidence-missing') expect(fetchCount).toBe(0);
+        else expect(fetchCount).toBeGreaterThan(0);
+        expect(calls).toEqual({});
+        await expectCodeAsync(() => readJsonArtifact(data.context, paths.live), 'artifact-not-found');
+        expect(await getOwnerAlphaJob({ ...data, jobId })).not.toHaveProperty('liveKind');
+      } else {
+        expect(result.state).toBe('completed');
+        expect(fetchCount).toBe(1);
+        expect(calls).toEqual({ rebuild: 1 });
+        const { result: live } = await readJsonArtifact(data.context, paths.live);
+        expect(live).toMatchObject({ kind: 'no-visible-change', pageUrl: session.liveUrl, stableWitnessPresent: true, applicationSha: COMMIT, visibleTextDigest });
+        expect(live).not.toHaveProperty('oldWitnessAbsent');
+        expect(live).not.toHaveProperty('newWitnessUnique');
+        expect(await getOwnerAlphaJob({ ...data, jobId })).toHaveProperty('liveKind', live.kind);
+        await unlink(resolveStorePath(data.context, paths.deployment));
+        expect(await getOwnerAlphaJob({ ...data, jobId })).not.toHaveProperty('liveKind');
+      }
+    });
+  }
+
+  test('publisher accepts a job ID only and requires the durable phase, current policy and exact effect records', async () => {
+    const { context, config } = await fixture();
+    let calls = 0;
+    const publish = createJobPublisher({ context, config, pushCommit: () => { calls++; } });
+    await expectCodeAsync(() => publish({ jobId: 'job', remote: 'elsewhere' }), 'invalid-job-state');
+    for (const [jobId, policyRevision] of [['old-policy', POLICY_REVISION], ['current-policy', computePolicyRevision(config)]]) {
+      const at = '2026-07-31T12:00:00.000Z';
+      await initializeDurableJob(context, { jobId, policyRevision, at });
+      await expectCodeAsync(() => publish(jobId), 'publisher-job-not-admitted');
+      for (const phase of ['preflighting', 'checking', 'rendering', 'ready-to-apply', 'applying', 'source-applied', 'committing', 'committed', 'pushing']) {
+        await transitionDurableJob(context, jobId, phase, { at, reason: `seed-${phase}` });
+      }
+      await expectCodeAsync(() => publish(jobId), jobId === 'old-policy' ? 'publisher-job-not-admitted' : 'publication-evidence-missing');
+    }
+    expect(calls).toBe(0);
+  });
+
+  test('a push receipt for another branch cannot advance the job to deployment', async () => {
+    const data = await fixture();
+    const input = acceptedInput();
+    const policyRevision = computePolicyRevision(data.config);
+    const session = { ...input.session, policyRevision };
+    const operation = { ...input.operation, source: { ...input.operation.source, policyRevision } };
+    const calls = {};
+    const dependencies = fixtureDependencies({ ...input, session, operation }, calls);
+    const push = dependencies.pushExactCommit;
+    dependencies.pushExactCommit = async () => ({ ...await push(), branch: 'other' });
+    const jobId = 'different-receipt';
+    const result = await runOwnerAlphaPipeline({ ...data, jobId, session, operation }, dependencies);
+    expect(result.state).toBe('manual-intervention');
+    expect(result.failure.code).toBe('publisher-receipt-mismatch');
+    expect(calls.discover).toBeUndefined();
+    await expectCodeAsync(() => readJsonArtifact(data.context, pipelineArtifactPaths(jobId).pushed), 'artifact-not-found');
   });
 
   test('blocks a checkout or remote advance immediately before source application', async () => {
@@ -350,14 +465,14 @@ describe('owner-alpha integration pipeline', () => {
     );
   });
 
-  test('classifies pre-apply, effectful, deployment, and live failures exactly', async () => {
-    const cases = [
-      ['preapply', 'runPreApplyChecks', 'blocked-pre-apply'],
-      ['apply', 'applyAcceptedOperation', 'manual-intervention'],
-      ['deployment', 'monitorDeploymentRun', 'deployment-failed'],
-      ['live', 'confirmLivePage', 'live-verification-failed'],
-    ];
-    for (const [suffix, dependency, expectedState] of cases) {
+  const failureCases = [
+    ['preapply', 'runPreApplyChecks', 'blocked-pre-apply'],
+    ['apply', 'applyAcceptedOperation', 'manual-intervention'],
+    ['deployment', 'monitorDeploymentRun', 'deployment-failed'],
+    ['live', 'confirmLivePage', 'live-verification-failed'],
+  ];
+  for (const [suffix, dependency, expectedState] of failureCases) {
+    test(`classifies ${suffix} failure as ${expectedState}`, async () => {
       const data = await fixture();
       const input = acceptedInput();
       const policyRevision = computePolicyRevision(data.config);
@@ -376,8 +491,8 @@ describe('owner-alpha integration pipeline', () => {
       expect(result.state).toBe(expectedState);
       expect(result.failure.code).toBe(`${suffix}-failed`);
       expect(result.failure.retryable).toBe(expectedState === 'live-verification-failed');
-    }
-  });
+    });
+  }
 
   test('resumes a persisted Forgejo run/job binding without rediscovery or replaying mutation effects', async () => {
     const data = await fixture({ provider: 'forgejo-actions' });
@@ -531,19 +646,26 @@ describe('owner-alpha integration pipeline', () => {
       dependencies,
     });
     const first = handler.startEdit({ jobId: 'OA-LOCK-1', session, operation });
-    const accepted = await first.accepted;
-    expect(accepted.state).toBe('accepted');
-    const paths = pipelineArtifactPaths('OA-LOCK-1');
-    expect(await readJsonArtifact(data.context, paths.session)).toEqual(session);
-    expect(await readJsonArtifact(data.context, paths.operation)).toEqual(operation);
+    let completed;
+    try {
+      const accepted = await first.accepted;
+      expect(accepted.state).toBe('accepted');
+      const paths = pipelineArtifactPaths('OA-LOCK-1');
+      expect(await readJsonArtifact(data.context, paths.session)).toEqual(session);
+      expect(await readJsonArtifact(data.context, paths.operation)).toEqual(operation);
 
-    await started;
-    await expectCodeAsync(
-      () => handler.saveEdit({ jobId: 'OA-LOCK-2', session, operation }),
-      'lock-busy',
-    );
-    releaseChecks();
-    expect((await first.completion).state).toBe('completed');
+      await Promise.race([started, first.completion.then(({ state }) => {
+        throw new Error(`first Save completed as ${state} before reaching the checks gate`);
+      })]);
+      await expectCodeAsync(
+        () => handler.saveEdit({ jobId: 'OA-LOCK-2', session, operation }),
+        'lock-busy',
+      );
+    } finally {
+      releaseChecks();
+      completed = await first.completion;
+    }
+    expect(completed.state).toBe('completed');
     expect((await handler.getJob('OA-LOCK-1')).state).toBe('completed');
   });
 });

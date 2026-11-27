@@ -28,6 +28,7 @@ const env = {
   CYBERBASER_SOURCE_PROVENANCE: "disabled",
   CYBERBASER_EDIT_LINK_MODE: "public",
   TZ: "UTC",
+  CYBERBASER_PROVENANCE_REPORT: path.join(temp, "provenance-skipped.json"),
 };
 delete env.CYBERBASER_ACCOUNT_FREE_INTAKE;
 const run = (cmd, args, options = {}) =>
@@ -130,6 +131,22 @@ try {
       "---\ntitle: Target\ndate: 2020-01-01\n---\n# Target\n\nForeign source prose.\n",
     );
     fs.writeFileSync(path.join(input, "empty.md"), "---\ntitle: Empty\n---\n");
+    // An HTML block inside a list item: its value omits the item's continuation
+    // indentation, so it is shorter than its source slice (once aborted the build).
+    fs.writeFileSync(
+      path.join(input, "nested-html.md"),
+      "---\ntitle: Nested HTML\ndate: 2020-01-01\n---\n- Editors\n    \n    <aside>\n    🖌️ [Example editor](https://example.test/a) is the usual one.\n    \n    </aside>\n    \n    [Other editors](https://example.test/b)\n",
+    );
+    // Not UTF-8: provenance cannot describe its bytes, so this one note is
+    // emitted without a sidecar and listed in the report; the build continues.
+    fs.writeFileSync(
+      path.join(input, "legacy-bytes.md"),
+      Buffer.concat([
+        Buffer.from("---\ntitle: Legacy bytes\ndate: 2020-01-01\n---\nCaf"),
+        Buffer.from([0xe9]),
+        Buffer.from(" note.\n"),
+      ]),
+    );
   }
   // Stable filesystem date fallback, including empty/no-frontmatter pages.
   for (const file of files(input))
@@ -379,6 +396,27 @@ try {
     assert.equal(first.sidecars.length, 57);
     assert.ok(first.mapped / first.chars > 0.98);
   } else {
+    assert.ok(
+      first.manifests.has("nested-html.md"),
+      "list-nested HTML block lost its provenance",
+    );
+    const nestedLeaves = first.manifests
+      .get("nested-html.md")
+      .leaves.flatMap((l) => l.runs.filter((r) => r.source));
+    assert.ok(nestedLeaves.length > 0);
+    assert.ok(!first.manifests.has("legacy-bytes.md"));
+    assert.ok(fs.existsSync(path.join(output, "legacy-bytes.html")));
+    const skipped = JSON.parse(
+      fs.readFileSync(env.CYBERBASER_PROVENANCE_REPORT, "utf8"),
+    );
+    assert.equal(skipped.schema, "cyberbaser.provenance-skipped");
+    assert.deepEqual(
+      skipped.notes.map(({ path, step }) => [path, step]),
+      [["legacy-bytes.md", "decode"]],
+    );
+    console.log(
+      "PASS per-note isolation: list-nested HTML keeps provenance; an undecodable note renders without a sidecar and is reported",
+    );
     const fixtureManifest = first.manifests.get("index.md");
     const blocks = fixtureManifest.blocks;
     for (const text of [

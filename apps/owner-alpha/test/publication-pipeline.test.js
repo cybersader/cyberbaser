@@ -95,7 +95,7 @@ test('postapplication recovery completes with unavailable host using only durabl
     applyAcceptedOperation: async () => { throw new Error('must not reapply'); },
     getHead: async () => data.head,
     commitAppliedCandidate: async () => { calls.push('commit'); return { status: 'committed', commit }; },
-    pushExactCommit: async () => { calls.push('push'); return { status: 'pushed', commit }; },
+    pushExactCommit: async ({ remote, branch }) => { calls.push('push'); return { status: 'pushed', commit, remoteRef: commit, remote, branch }; },
     discoverDeploymentRun: async () => { calls.push('discover'); return { binding: { runId: '42', headSha: commit } }; },
     monitorDeploymentRun: async () => { calls.push('monitor'); return { state: 'success' }; },
     confirmLivePage: async () => { calls.push('live'); return { oldWitnessAbsent: true, newWitnessUnique: true }; },

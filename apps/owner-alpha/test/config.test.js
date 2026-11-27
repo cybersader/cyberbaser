@@ -521,6 +521,16 @@ describe('strict one-Save private owner config', () => {
       })),
       'invalid-config-path',
     );
+    for (const [parent, child] of [['store', 'site'], ['store', 'cache'], ['site', 'cache']]) {
+      for (const [a, b] of [[parent, child], [child, parent]]) {
+        expectCode(() => validateOwnerAlphaConfig(variant(raw, (copy) => {
+          copy.workspace[b] = `${copy.workspace[a]}/quartz-owner/child`;
+        })), 'invalid-config-path');
+      }
+    }
+    expect(validateOwnerAlphaConfig(variant(raw, (copy) => {
+      copy.workspace.store = `${copy.workspace.cache}-sibling`;
+    })).workspace.store).toBe(`${raw.workspace.cache}-sibling`);
     expectCode(
       () => validateOwnerAlphaConfig(variant(raw, (copy) => { copy.paths.include = ['../**/*.md']; })),
       'invalid-config-path',

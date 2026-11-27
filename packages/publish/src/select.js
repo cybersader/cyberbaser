@@ -6,35 +6,31 @@
 // identity between a published file and its vault source is a hard invariant
 // (R12), and the cheapest way to hold it is to never be in the content path.
 //
-// Precedence, evaluated per markdown file:
+// Precedence, evaluated per markdown file (page-rules.js holds rules 1-4):
 //   1. `publish: false`            -> never published. Beats everything.
+//   1b. `exclude_when` marker set  -> not published (default: draft, sample).
+//                                     Beats allow globs and `publish: true`.
 //   2. `publish: true`             -> published. Outside the allowlist an
 //                                     explicit `slug:` is required, else ERROR
 //                                     (the URL would name the private folder).
 //   3. path matches an allow glob  -> published.
 //   4. otherwise                   -> not published.
 //   5. non-markdown assets         -> published only if a published page
-//                                     references them. Never by path.
+//                                     references them (body links and embeds,
+//                                     or a property naming the image from the
+//                                     vault root or the note's own folder:
+//                                     property-refs.js). Never by path.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import yaml from 'js-yaml';
 import { extractRefs } from './links.js';
+import { propertyImageRefs, resolvePropertyImage } from './property-refs.js';
+import { CONFIG_FILENAME, RULES, classifyPage, globToRegExp, parseFrontmatter, resolveConfig } from './page-rules.js';
 
-export const CONFIG_FILENAME = 'publish.yml';
+export { CONFIG_FILENAME, RULES, globToRegExp, parseFrontmatter, resolveConfig };
 export const MARKDOWN_EXTENSIONS = new Set(['.md']);
 export const DEFAULT_IGNORED_DIRS = new Set(['.git', '.obsidian', '.trash', 'node_modules']);
-
-export const RULES = {
-  DENY_FLAG: 'rule-1-publish-false',
-  PUBLISH_FLAG: 'rule-2-publish-true',
-  MISSING_SLUG: 'rule-2-missing-slug',
-  ALLOWLIST: 'rule-3-allowlist',
-  DEFAULT_DENY: 'rule-4-default-deny',
-  ASSET_REACHABLE: 'rule-5-asset-reachable',
-  ASSET_UNREACHABLE: 'rule-5-asset-unreachable',
-  FRONTMATTER_ERROR: 'frontmatter-unparseable',
-};
 
 // ---------------------------------------------------------------- paths, globs
 
@@ -46,7 +42,6 @@ const extOf = (p) => {
 };
 export const isMarkdown = (p) => MARKDOWN_EXTENSIONS.has(extOf(p));
 const dirOf = (p) => { const i = p.lastIndexOf('/'); return i < 0 ? '' : p.slice(0, i); };
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 function joinRel(base, rel) {
   const parts = [];
@@ -56,115 +51,6 @@ function joinRel(base, rel) {
     else parts.push(seg);
   }
   return parts.join('/');
-}
-
-/**
- * A folder allowlist, not a general glob engine. `cyber` and `cyber/**` both
- * mean "everything under cyber/"; `*` stops at a separator, `**` crosses one.
- */
-export function globToRegExp(glob) {
-  const g = normalize(glob).replace(/\/+$/, '');
-  if (!/[*?]/.test(g)) return new RegExp(`^${escapeRe(g)}(?:/.*)?$`);
-  let re = '';
-  for (let i = 0; i < g.length; i++) {
-    const c = g[i];
-    if (c === '*') {
-      if (g[i + 1] === '*') {
-        const prevSlash = i === 0 || g[i - 1] === '/';
-        const nextSlash = g[i + 2] === '/';
-        if (prevSlash && nextSlash) { re += '(?:.*/)?'; i += 2; }
-        else { re += '.*'; i += 1; }
-      } else re += '[^/]*';
-    } else if (c === '?') re += '[^/]';
-    else re += escapeRe(c);
-  }
-  return new RegExp(`^${re}$`);
-}
-
-const matchesAny = (p, regexes) => regexes.some((r) => r.test(p));
-
-// --------------------------------------------------------------------- config
-
-function describe(v) {
-  if (v === null) return 'null';
-  if (v === undefined) return 'an empty document';
-  if (Array.isArray(v)) return 'a list';
-  return typeof v;
-}
-
-/**
- * Resolve `publish.yml` for one audience. v1 only ever passes `public`; the
- * `audiences:` map is parsed now so v2 can emit one artifact per audience
- * without changing the call site.
- */
-export function resolveConfig(config, audience = 'public') {
-  if (config === null || config === undefined || typeof config !== 'object' || Array.isArray(config)) {
-    return {
-      ok: false,
-      error: {
-        code: 'config-empty',
-        message: `${CONFIG_FILENAME} must be a YAML mapping with an \`allow:\` list; got ${describe(config)}. Failing closed: nothing publishes.`,
-      },
-    };
-  }
-  const allow = [];
-  const invalid = (message) => ({ ok: false, error: { code: 'config-invalid', message } });
-
-  const collect = (value, where) => {
-    if (value === undefined) return null;
-    if (!Array.isArray(value)) return invalid(`\`${where}\` must be a list of path globs.`);
-    for (const g of value) {
-      if (typeof g !== 'string' || g.trim() === '') return invalid(`\`${where}\` entries must be non-empty strings.`);
-      allow.push(g.trim());
-    }
-    return null;
-  };
-
-  const topErr = collect(config.allow, 'allow');
-  if (topErr) return topErr;
-
-  if (config.audiences !== undefined) {
-    const map = config.audiences;
-    if (map === null || typeof map !== 'object' || Array.isArray(map)) return invalid('`audiences` must be a mapping of audience name to allow list.');
-    const entry = map[audience];
-    if (entry !== undefined) {
-      const list = Array.isArray(entry) ? entry : entry && typeof entry === 'object' ? entry.allow : undefined;
-      if (list === undefined && !Array.isArray(entry)) return invalid(`\`audiences.${audience}\` must be a list or a mapping with an \`allow:\` list.`);
-      const audErr = collect(list, `audiences.${audience}.allow`);
-      if (audErr) return audErr;
-    }
-  }
-
-  return { ok: true, allow, patterns: allow.map(globToRegExp) };
-}
-
-// ---------------------------------------------------------------- frontmatter
-
-const FRONTMATTER = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
-
-export function parseFrontmatter(content) {
-  const m = typeof content === 'string' ? content.match(FRONTMATTER) : null;
-  if (!m) return { data: {} };
-  try {
-    const data = yaml.load(m[1]);
-    if (data === null || data === undefined) return { data: {} };
-    if (typeof data !== 'object' || Array.isArray(data)) return { data: {}, error: 'frontmatter is not a mapping' };
-    return { data };
-  } catch (e) {
-    return { data: {}, error: e.message };
-  }
-}
-
-/** Only real booleans, plus the string forms an Obsidian property editor can write. */
-function readPublishFlag(value) {
-  if (value === undefined) return { flag: null };
-  if (value === true || value === false) return { flag: value };
-  if (typeof value === 'string') {
-    const v = value.trim().toLowerCase();
-    if (v === 'true' || v === 'yes') return { flag: true };
-    if (v === 'false' || v === 'no') return { flag: false };
-  }
-  return { flag: null, invalid: true };
 }
 
 // ----------------------------------------------------------------- resolution
@@ -213,6 +99,27 @@ function resolveWiki(target, fromPath, index) {
     if (hits.length) return hits.slice().sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b))[0];
   }
   return null;
+}
+
+/**
+ * The non-Markdown files one note references, resolved against the vault's
+ * paths the way the selector does: body embeds, markdown images and links,
+ * HTML src, and images named by a property. For callers that check one
+ * change rather than select a whole vault (the publisher's bundle rules).
+ */
+export function noteAssetTargets(notePath, content, paths) {
+  const index = buildIndex(Object.fromEntries([...paths].map((p) => [normalize(p), null])));
+  const from = normalize(notePath);
+  const text = typeof content === 'string' ? content : '';
+  const refs = extractRefs(text);
+  const out = new Set();
+  for (const ref of refs.embeds) { const t = resolveWiki(ref.target, from, index); if (t && !isMarkdown(t)) out.add(t); }
+  for (const ref of [...refs.mdImages, ...refs.mdLinks, ...refs.htmlSrcs]) { const t = resolveHref(ref.target, from, index); if (t && !isMarkdown(t)) out.add(t); }
+  for (const ref of propertyImageRefs(text, from)) {
+    const t = resolvePropertyImage(ref, (p) => index.byPath.has(p) && !isMarkdown(p));
+    if (t) out.add(t);
+  }
+  return [...out].sort();
 }
 
 // ------------------------------------------------------------------- selector
@@ -264,54 +171,12 @@ export function selectFiles(fileMap, config, opts = {}) {
   for (const p of Object.keys(files).sort()) {
     if (!isMarkdown(p)) continue;
     const content = typeof files[p] === 'string' ? files[p] : '';
-    const fm = parseFrontmatter(content);
-    if (fm.error) {
-      errors.push({ code: RULES.FRONTMATTER_ERROR, path: p, message: `unreadable frontmatter (${fm.error}); failing closed` });
-      deny(p, RULES.FRONTMATTER_ERROR, 'frontmatter could not be parsed');
-      continue;
-    }
-    // Key namespacing (2026-07-25, R15): the real vault has 587 files carrying
-    // stale `publish: true` from an earlier publishing era — including daily
-    // notes and journals — so the bare key cannot be trusted as ALLOW intent.
-    // Grants are read only from the cyberbaser-owned `cb-publish:`; denies are
-    // read from either key, because noise in the deny direction is harmless.
-    const grantRead = readPublishFlag(fm.data['cb-publish']);
-    if (grantRead.invalid) {
-      errors.push({ code: 'invalid-publish-value', path: p, message: `\`cb-publish:\` must be true or false, got ${JSON.stringify(fm.data['cb-publish'])}; failing closed` });
-      deny(p, RULES.DEFAULT_DENY, 'invalid `cb-publish:` value');
-      continue;
-    }
-    const legacyDeny = readPublishFlag(fm.data.publish).flag === false;
-    const flag = grantRead.flag === false || legacyDeny ? false : grantRead.flag;
-
-    if (flag === false) { deny(p, RULES.DENY_FLAG, '`cb-publish: false` (or legacy `publish: false`) beats every grant'); continue; }
-
-    const inAllow = matchesAny(p, cfg.patterns);
-    const slug = typeof fm.data.slug === 'string' && fm.data.slug.trim() !== '' ? fm.data.slug.trim() : null;
-
-    if (flag === true) {
-      if (!inAllow && !slug) {
-        errors.push({
-          code: RULES.MISSING_SLUG,
-          path: p,
-          message: `\`cb-publish: true\` outside the allowlist requires an explicit \`slug:\`; the generated URL would name the folder "${dirOf(p) || '/'}"`,
-        });
-        deny(p, RULES.MISSING_SLUG, 'published out of a non-allowlisted folder without a slug');
-        continue;
-      }
-      publishedPages.add(p);
-      report.granted[p] = RULES.PUBLISH_FLAG;
-      if (slug) report.slugs[p] = slug;
-      continue;
-    }
-
-    if (inAllow) {
-      publishedPages.add(p);
-      report.granted[p] = RULES.ALLOWLIST;
-      if (slug) report.slugs[p] = slug;
-      continue;
-    }
-    deny(p, RULES.DEFAULT_DENY, 'no allowlist match and no `publish: true`');
+    const verdict = classifyPage(p, content, cfg);
+    if (verdict.error) errors.push({ code: verdict.error.code, path: p, message: verdict.error.message });
+    if (!verdict.published) { deny(p, verdict.rule, verdict.reason); continue; }
+    publishedPages.add(p);
+    report.granted[p] = verdict.rule;
+    if (verdict.slug) report.slugs[p] = verdict.slug;
   }
 
   // Rule 5 plus the boundary report. Reachability is computed from published
@@ -352,6 +217,13 @@ export function selectFiles(fileMap, config, opts = {}) {
         continue;
       }
       noteRef(target, ref, p);
+    }
+
+    // Images named by a property (`cover: posts/x.png`): from the vault root,
+    // then from the note's own folder (property-refs.js). Never by file name.
+    for (const ref of propertyImageRefs(content, p)) {
+      const target = resolvePropertyImage(ref, (c) => index.byPath.has(c) && !isMarkdown(c));
+      if (target) noteRef(target, ref, p);
     }
 
     for (const ref of refs.wikilinks) {
@@ -458,6 +330,33 @@ export function select(vaultDir, opts = {}) {
   }
 
   const files = walk(vaultDir, ignoreDirs);
+  delete files[CONFIG_FILENAME];
+  return selectFiles(files, config, { audience });
+}
+
+/**
+ * Select from an in-memory tree, for callers that read a Git commit rather
+ * than a directory. `publishYml` is the raw publish.yml text, or null when the
+ * commit has none. Same fail-closed rules as select().
+ *
+ * @param {Object<string, string|null>} fileMap
+ * @param {string|null} publishYml
+ * @param {{audience?: string}} opts
+ */
+export function selectTree(fileMap, publishYml, opts = {}) {
+  const audience = opts.audience ?? 'public';
+  const closed = (code, message) => {
+    const report = emptyReport(audience);
+    report.errors.push({ code, path: CONFIG_FILENAME, message });
+    report.counts.errors = 1;
+    return { published: [], errors: report.errors, report };
+  };
+  if (typeof publishYml !== 'string') return closed('config-missing', `${CONFIG_FILENAME} is missing. Failing closed: nothing publishes.`);
+  let config;
+  try { config = yaml.load(publishYml); } catch (e) {
+    return closed('config-unparseable', `${CONFIG_FILENAME} is not valid YAML (${e.message}). Failing closed: nothing publishes.`);
+  }
+  const files = { ...fileMap };
   delete files[CONFIG_FILENAME];
   return selectFiles(files, config, { audience });
 }

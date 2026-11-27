@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cyberbaser.dev/schema/proposal-review-v2.schema.json",
+  "title": "Cyberbaser proposal review artifacts (v1 and signed v2)",
+  "oneOf": [
+    { "$ref": "#/$defs/legacyReview" },
+    { "$ref": "#/$defs/reviewEvidence" },
+    { "$ref": "#/$defs/reviewSummary" },
+    { "$ref": "#/$defs/ownerDecision" }
+  ],
+  "$defs": {
+    "legacyReview": {
+      "$ref": "proposal-review-v1.schema.json",
+      "not": {
+        "anyOf": [
+          { "required": ["carrier"], "properties": { "carrier": { "$ref": "#/$defs/signedLane" } } },
+          { "required": ["receipt"], "properties": { "receipt": { "$ref": "#/$defs/signedLane" } } },
+          {
+            "required": ["reviewEvidence"],
+            "properties": {
+              "reviewEvidence": {
+                "anyOf": [
+                  { "required": ["carrier"], "properties": { "carrier": { "$ref": "#/$defs/signedLane" } } },
+                  { "required": ["receipt"], "properties": { "receipt": { "$ref": "#/$defs/signedLane" } } }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    "signedLane": { "type": "object", "required": ["lane"], "properties": { "lane": { "const": "lane-signed" } } },
+    "digest": { "$ref": "proposal-review-v1.schema.json#/$defs/digest" },
+    "utcSecond": { "$ref": "proposal-review-v1.schema.json#/$defs/utcSecond" },
+    "submitter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "label", "keyId"],
+      "properties": {
+        "kind": { "enum": ["agent", "owner-device"] },
+        "id": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "label": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "keyId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" }
+      }
+    },
+    "reviewEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "artifactType", "queueId", "proposal", "receipt", "carrier", "classification", "state"],
+      "properties": {
+        "schemaVersion": { "const": 2 },
+        "artifactType": { "$ref": "proposal-review-v1.schema.json#/$defs/reviewEvidence/properties/artifactType" },
+        "queueId": { "$ref": "proposal-review-v1.schema.json#/$defs/reviewEvidence/properties/queueId" },
+        "proposal": { "type": "object", "required": ["schemaVersion"], "properties": { "schemaVersion": { "const": 2 } } },
+        "receipt": { "type": "object", "required": ["lane"], "properties": { "lane": { "const": "lane-signed" } } },
+        "carrier": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schemaVersion", "artifactType", "lane", "replayScope", "metadata"],
+          "properties": {
+            "schemaVersion": { "const": 1 },
+            "artifactType": { "const": "cyberbaser-proposal-queue-carrier" },
+            "lane": { "const": "lane-signed" },
+            "replayScope": { "$ref": "#/$defs/digest" },
+            "metadata": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["bindingDigest", "pageId", "submitter"],
+              "properties": {
+                "bindingDigest": { "$ref": "#/$defs/digest" },
+                "pageId": { "type": "string", "minLength": 1, "maxLength": 512 },
+                "submitter": { "$ref": "#/$defs/submitter" }
+              }
+            }
+          }
+        },
+        "classification": { "type": "object" },
+        "state": { "type": "object" }
+      }
+    },
+    "reviewSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "artifactType", "queueId", "proposalId", "proposalDigest", "candidateDigest", "reviewEvidenceDigest", "source", "receivedAt", "expiresAt", "state", "lane", "tier", "route", "submitter"],
+      "properties": {
+        "schemaVersion": { "const": 2 },
+        "artifactType": { "$ref": "proposal-review-v1.schema.json#/$defs/reviewSummary/properties/artifactType" },
+        "queueId": { "$ref": "proposal-review-v1.schema.json#/$defs/reviewEvidence/properties/queueId" },
+        "proposalVersion": { "const": 2 },
+        "proposalId": { "$ref": "proposal-review-v1.schema.json#/$defs/reviewSummary/properties/proposalId" },
+        "proposalDigest": { "$ref": "#/$defs/digest" },
+        "candidateDigest": { "$ref": "#/$defs/digest" },
+        "reviewEvidenceDigest": { "$ref": "#/$defs/digest" },
+        "source": { "$ref": "proposal-review-v1.schema.json#/$defs/reviewSummary/properties/source" },
+        "receivedAt": { "$ref": "#/$defs/utcSecond" },
+        "expiresAt": { "$ref": "#/$defs/utcSecond" },
+        "state": { "$ref": "proposal-review-v1.schema.json#/$defs/reviewSummary/properties/state" },
+        "lane": { "const": "lane-signed" },
+        "tier": { "$ref": "proposal-review-v1.schema.json#/$defs/reviewSummary/properties/tier" },
+        "route": { "$ref": "proposal-review-v1.schema.json#/$defs/reviewSummary/properties/route" },
+        "submitter": { "$ref": "#/$defs/submitter" }
+      }
+    },
+    "ownerDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "artifactType", "queueId", "action", "reason", "decidedAt", "decisionAuthority", "authorityScope", "reviewEvidenceDigest", "reviewEvidence", "effectBoundary"],
+      "properties": {
+        "schemaVersion": { "const": 2 },
+        "artifactType": { "$ref": "proposal-review-v1.schema.json#/$defs/ownerDecision/properties/artifactType" },
+        "queueId": { "$ref": "proposal-review-v1.schema.json#/$defs/reviewEvidence/properties/queueId" },
+        "action": { "$ref": "proposal-review-v1.schema.json#/$defs/ownerDecision/properties/action" },
+        "reason": { "$ref": "proposal-review-v1.schema.json#/$defs/ownerDecision/properties/reason" },
+        "decidedAt": { "$ref": "#/$defs/utcSecond" },
+        "decisionAuthority": { "$ref": "proposal-review-v1.schema.json#/$defs/ownerDecision/properties/decisionAuthority" },
+        "authorityScope": { "const": "decision-only" },
+        "reviewEvidenceDigest": { "$ref": "#/$defs/digest" },
+        "reviewEvidence": { "$ref": "#/$defs/reviewEvidence" },
+        "effectBoundary": { "$ref": "proposal-review-v1.schema.json#/$defs/ownerDecision/properties/effectBoundary" }
+      }
+    }
+  }
+}

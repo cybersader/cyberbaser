@@ -1,10 +1,12 @@
 import { digestBytes } from '@cyberbaser/proposal-queue';
+import { findFrontmatterInText } from '../../../packages/correction/src/frontmatter.js';
 import { validateChangeSetCorrection } from './change-set-operation.js';
 import { randomUUID } from 'node:crypto';
 import { applyAcceptedOperation } from './apply.js';
-import { createJsonArtifactOnce, readJsonArtifact } from './artifacts.js';
+import { createJsonArtifactOnce, readJsonArtifact, replaceJsonArtifactAtomic } from './artifacts.js';
+import { rm } from 'node:fs/promises';
 import { runPreApplyChecks } from './checks.js';
-import { computePolicyRevision, validateOwnerAlphaConfig } from './config.js';
+import { computePolicyRevision, isPrivateSite, validateOwnerAlphaConfig } from './config.js';
 import {
   discoverDeploymentRun,
   monitorDeploymentRun,
@@ -24,14 +26,19 @@ import {
   validateJobId,
 } from './job-state.js';
 import { canonicalJson, deepFreeze, isPlainObject } from './json.js';
-import { confirmLivePage } from './live-confirm.js';
+import { bundleJobId, PAGE_BUNDLE_ORIGIN, validateBundleSession } from './bundle-lifecycle.js';
+import {
+  confirmLivePage, confirmNewPagesLive, hasExactSuccessfulDeployment, hasNewPageLiveProof, hasStableLiveProof, isStableWitness,
+} from './live-confirm.js';
 import { applyEditorOperation, deriveEditorOperation } from './operation.js';
+import { requestPublication } from './publisher/client.js';
 import {
   DEFAULT_OWNER_ALPHA_PROJECT_ROOT,
+  ensureOwnerSite,
   rebuildOwnerSite,
 } from './site.js';
 import { assertCheckoutReady, createEditSession, defaultGitRunner } from './source.js';
-import { storeContextFromConfig } from './store.js';
+import { assertSafeStoreTarget, resolveStorePath, storeContextFromConfig } from './store.js';
 
 export const PIPELINE_SCHEMA_VERSION = 1;
 export const PIPELINE_MUTATION_LOCK = 'locks/owner-alpha-mutation.lock';
@@ -106,6 +113,55 @@ async function optionalArtifact(context, relativePath, options) {
   } catch (error) {
     if (error instanceof OwnerAlphaError && error.code === 'artifact-not-found') return null;
     throw error;
+  }
+}
+
+// The owner approval travels as standard base64 of its JSON, so random
+// signature text can never look like a credential to the artifact writer.
+export const OWNER_APPROVAL_ARTIFACT = 'owner-alpha-owner-approval';
+const MAX_APPROVAL_BYTES = 12 * 1024;
+
+function encodeOwnerApproval(jobId, record) {
+  if (!isPlainObject(record) || Object.keys(record).sort().join(',') !== 'approval,intent') {
+    fail('owner-approval-invalid', 'an owner approval is exactly { intent, approval }');
+  }
+  const text = JSON.stringify(record);
+  if (Buffer.byteLength(text) > MAX_APPROVAL_BYTES) fail('owner-approval-invalid', 'owner approval is too large');
+  return { schemaVersion: 1, artifactType: OWNER_APPROVAL_ARTIFACT, jobId, recordBase64: Buffer.from(text, 'utf8').toString('base64') };
+}
+
+function decodeOwnerApproval(stored, jobId) {
+  if (!isPlainObject(stored) || stored.artifactType !== OWNER_APPROVAL_ARTIFACT || stored.jobId !== jobId
+    || typeof stored.recordBase64 !== 'string' || stored.recordBase64.length > MAX_APPROVAL_BYTES * 2) return null;
+  try { return JSON.parse(Buffer.from(stored.recordBase64, 'base64').toString('utf8')); } catch { return null; }
+}
+
+/** The approval record attached to a job, or null. Read by the publisher only as a carrier. */
+export async function readOwnerApproval(context, jobId, options = {}) {
+  const stored = await optionalArtifact(context, pipelineArtifactPaths(jobId).ownerApproval, options);
+  return stored === null ? null : decodeOwnerApproval(stored, jobId);
+}
+
+async function discardOwnerApproval(context, paths, options) {
+  const file = resolveStorePath(context, paths.ownerApproval);
+  if (await optionalArtifact(context, paths.ownerApproval, options).catch(() => null) === null) return;
+  await assertSafeStoreTarget(context, file);
+  await rm(file, { force: true });
+}
+
+/**
+ * Attach (or replace) the owner's signed approval for a job's push. The node
+ * stores what a device sent; only the publisher decides whether it counts.
+ */
+export async function attachOwnerApproval({ context, config, jobId, record }) {
+  const id = validateJobId(jobId);
+  const paths = pipelineArtifactPaths(id);
+  const options = artifactOptions(config);
+  const value = encodeOwnerApproval(id, record);
+  try { await createJsonArtifactOnce(context, paths.ownerApproval, value, options); }
+  catch (error) {
+    if (!(error instanceof OwnerAlphaError) || error.code !== 'artifact-already-exists') throw error;
+    await replaceJsonArtifactAtomic(context, paths.ownerApproval, value, options);
   }
 }
 
@@ -196,6 +252,7 @@ function dependencySet(overrides = {}) {
     discoverDeploymentRun,
     monitorDeploymentRun,
     confirmLivePage,
+    confirmNewPages: confirmNewPagesLive,
     rebuildLocal: defaultLocalRebuild,
     getHead: (checkout) => defaultGitRunner(checkout, ['rev-parse', 'HEAD']),
     now: () => new Date().toISOString(),
@@ -217,6 +274,7 @@ function validateDependencies(dependencies) {
     'discoverDeploymentRun',
     'monitorDeploymentRun',
     'confirmLivePage',
+    'confirmNewPages',
     'rebuildLocal',
     'getHead',
     'now',
@@ -238,6 +296,9 @@ export function pipelineArtifactPaths(jobIdInput) {
     sourceApplied: `jobs/${jobId}/effects/source-applied.json`,
     committed: `jobs/${jobId}/effects/committed.json`,
     pushed: `jobs/${jobId}/effects/pushed.json`,
+    // The owner's signed approval for this job's push, as a device sent it.
+    // Its authority comes from the signature the publisher checks, not from being stored here.
+    ownerApproval: `jobs/${jobId}/approvals/owner-approval.json`,
     runBound: `jobs/${jobId}/effects/run-bound.json`,
     deployment: `jobs/${jobId}/results/deployment.json`,
     live: `jobs/${jobId}/results/live.json`,
@@ -253,6 +314,43 @@ function artifactOptions(config) {
 async function loadRecord(context, relativePath, artifactType, jobId, options) {
   const value = await optionalArtifact(context, relativePath, options);
   return value === null ? null : artifactResult(value, artifactType, jobId);
+}
+
+// Read-only startup exception. A commit ID binds the entire tree; re-prove
+// the recorded one-file effect against that immutable object and its sole
+// parent rather than trusting the job's status or the checkout's bytes alone.
+export async function matchesPendingPublication({ config, context, listJobs, root, head, remoteHead }) {
+  const options = artifactOptions(config);
+  const policyRevision = computePolicyRevision(config);
+  const jobs = await listJobs(context, options);
+  const git = (checkout, args, opts) => defaultGitRunner(checkout, ['--no-replace-objects', ...args], { encoding: 'buffer', ...opts });
+  let matched = false;
+  for (const job of jobs) {
+    if (job.state !== 'awaiting-approval' || job.policyRevision !== policyRevision) continue;
+    const paths = pipelineArtifactPaths(job.jobId);
+    const committed = await loadRecord(context, paths.committed, 'owner-alpha-committed-effect', job.jobId, options);
+    if (committed?.status !== 'committed' || committed.commit !== head || typeof committed.message !== 'string'
+      || committed.verification?.commit !== head || committed.verification.parentCommit !== remoteHead) continue;
+    const durable = await loadRecord(context, paths.sourceApplied, 'owner-alpha-source-applied-effect', job.jobId, options);
+    if (durable?.checkout !== root || durable.baseCommit !== remoteHead
+      || await optionalArtifact(context, paths.pushed, options) !== null) continue;
+    // Read the object's actual parent, not a synthetic history from local Git grafts.
+    const object = await git(root, ['cat-file', 'commit', head], { encoding: 'utf8' });
+    const parents = object.split('\n\n', 1)[0].split('\n').filter((line) => line.startsWith('parent '));
+    if (parents.length !== 1 || parents[0] !== `parent ${remoteHead}`) continue;
+    await verifyExactCommit({ checkout: root, commit: head, application: deserializeApplication(durable),
+      expectedMessage: committed.message }, { git });
+    if (matched) return false; // One local commit must belong to exactly one pending job.
+    matched = true;
+  }
+  return matched;
+}
+
+async function readStableDeploymentCommit(context, paths, jobId, options) {
+  const commit = (await loadRecord(context, paths.committed, 'owner-alpha-committed-effect', jobId, options))?.commit;
+  const binding = await loadRecord(context, paths.runBound, 'owner-alpha-run-bound-effect', jobId, options);
+  const deployment = await loadRecord(context, paths.deployment, 'owner-alpha-deployment-result', jobId, options);
+  return hasExactSuccessfulDeployment(commit, binding, deployment) ? commit : null;
 }
 
 async function saveRecord(context, relativePath, artifactType, jobId, result, options) {
@@ -372,7 +470,7 @@ async function boundInputs(input, config, context, paths, dependencies, options)
     fail('source-operation-artifact-mismatch', 'supplied source operation differs from the durable immutable operation');
   }
   operation = deepFreeze(operation);
-  const candidateBytes = dependencies.applyEditorOperation(session, operation);
+  const candidateBytes = dependencies.applyEditorOperation(session, operation, { allowProperties: config.owner.allowProperties });
   return { session, operation, candidateBytes };
 }
 
@@ -399,6 +497,64 @@ async function reconcileCommit(input, application, config, dependencies) {
   });
 }
 
+function assertPushedReceipt(pushed, committed, config) {
+  if (!['pushed', 'already-pushed'].includes(pushed?.status) || pushed.commit !== committed.commit
+    || pushed.remoteRef !== committed.commit || pushed.branch !== config.repository.branch
+    || pushed.remote !== config.repository.remote.name) {
+    fail('publisher-receipt-mismatch', 'push evidence does not match the bound commit and destination');
+  }
+}
+
+// The executor accepts a job ID, never a destination, checkout, commit or candidate.
+// The pipeline holds the mutation lock; the IPC publisher must not acquire it again.
+// approvalGate (publisher only, approval-gate.js): every push first needs the
+// owner's signed approval for exactly this commit. Absent, nothing changes.
+export function createJobPublisher({ config, context, pushCommit = pushExactCommit, bindCommitMessage = false, approvalGate = null }) {
+  const options = artifactOptions(config);
+  const policyRevision = computePolicyRevision(config);
+  return async function publishJob(id) {
+    const jobId = validateJobId(id);
+    const paths = pipelineArtifactPaths(jobId);
+    const state = await loadDurableJob(context, jobId, options);
+    if (state.state !== 'pushing' || state.policyRevision !== policyRevision || !config.git.autoPush || !config.git.autoCommit) {
+      fail('publisher-job-not-admitted', 'publication requires a pushing job bound to the current automatic publication policy');
+    }
+    const durable = await loadRecord(context, paths.sourceApplied, 'owner-alpha-source-applied-effect', jobId, options);
+    const committed = await loadRecord(context, paths.committed, 'owner-alpha-committed-effect', jobId, options);
+    if (durable === null || committed === null) {
+      fail('publication-evidence-missing', 'push phase requires durable source and commit evidence');
+    }
+    const application = deserializeApplication(durable);
+    const prior = await loadRecord(context, paths.pushed, 'owner-alpha-pushed-effect', jobId, options);
+    if (prior !== null) {
+      assertPushedReceipt(prior, committed, config);
+      return 'already-pushed';
+    }
+    let authorization = null;
+    if (approvalGate !== null) {
+      // The record is only a carrier; admitPublish checks the signature against
+      // the publisher's own key list and spends its one-use nonce.
+      const record = await readOwnerApproval(context, jobId, options).catch(() => null);
+      authorization = await approvalGate.authorize(record, { remote: config.repository.remote.url, branch: config.repository.branch });
+    }
+    let pushed = await pushCommit({
+      checkout: config.repository.checkout, application, commit: committed.commit,
+      remote: config.repository.remote.name, remoteUrl: config.repository.remote.url,
+      branch: config.repository.branch, useHooks: config.git.useHooks,
+      ...(bindCommitMessage ? { expectedMessage: committed.message } : {}),
+      ...(authorization === null ? {} : { verifyCommit: authorization.verifyCommit }),
+    });
+    assertPushedReceipt(pushed, committed, config);
+    const signed = authorization?.receipt(pushed) ?? null;
+    if (signed !== null) {
+      pushed = { ...pushed, ownerApproval: { intent: signed.body.intent, keyId: signed.body.keyId },
+        publisherReceiptBase64: Buffer.from(JSON.stringify(signed), 'utf8').toString('base64') };
+    }
+    await saveRecord(context, paths.pushed, 'owner-alpha-pushed-effect', jobId, pushed, options);
+    return pushed.status;
+  };
+}
+
 function pipelineSummary(state, paths) {
   return deepFreeze({
     jobId: state.jobId,
@@ -412,12 +568,39 @@ function pipelineSummary(state, paths) {
   });
 }
 
+// The states a page bundle job may be in: it starts at its push.
+const BUNDLE_JOB_STATES = new Set(['accepted', 'pushed', ...DEPLOYMENT_STATES, 'deployment-succeeded', 'verifying-live',
+  'live-verification-failed', 'live-confirmed', 'rebuilding-local', 'completed', 'deployment-failed', 'failed']);
+
+// Record a pushed bundle's evidence once, then its job (bundle-lifecycle.js).
+// Existing evidence must match exactly; a second call only resumes.
+async function ensureBundleJob(evidence, context, jobId, paths, policyRevision, dependencies, options) {
+  if (!isPlainObject(evidence) || jobId !== bundleJobId(evidence.session?.origin?.bundleId)) {
+    fail('invalid-bundle-session', 'bundle evidence does not belong to this job');
+  }
+  validateBundleSession(evidence.session);
+  const existing = await optionalArtifact(context, paths.session, options);
+  if (existing === null) await createJsonArtifactOnce(context, paths.session, jsonClone(evidence.session), options);
+  else if (canonicalJson(existing) !== canonicalJson(evidence.session)) {
+    fail('pipeline-artifact-mismatch', 'a different bundle is already recorded for this job');
+  }
+  await saveRecord(context, paths.committed, 'owner-alpha-committed-effect', jobId, evidence.committed, options);
+  await saveRecord(context, paths.pushed, 'owner-alpha-pushed-effect', jobId, evidence.pushed, options);
+  try {
+    await loadDurableJob(context, jobId, options);
+  } catch (error) {
+    if (!(error instanceof OwnerAlphaError) || error.code !== 'artifact-not-found') throw error;
+    await initializeDurableJob(context, { jobId, policyRevision, at: exactTimestamp(dependencies.now()), ...options });
+  }
+}
+
 async function executeLocked(input, config, context, dependencies) {
   const jobId = validateJobId(input.jobId);
   const paths = pipelineArtifactPaths(jobId);
   const options = artifactOptions(config);
   const policyRevision = computePolicyRevision(config);
   let bindings = null;
+  if (input.pushedBundle !== undefined) await ensureBundleJob(input.pushedBundle, context, jobId, paths, policyRevision, dependencies, options);
   const ensured = await ensureJob(
     context,
     jobId,
@@ -431,13 +614,17 @@ async function executeLocked(input, config, context, dependencies) {
   // Owner-direct authority must survive every restart, including after the
   // source effect but before commit/push. Never infer it from job state alone.
   const durableSession = bindings?.session ?? await optionalArtifact(context, paths.session, options);
+  const bundleSession = durableSession?.origin?.type === PAGE_BUNDLE_ORIGIN ? validateBundleSession(durableSession) : null;
+  if (bundleSession !== null && !BUNDLE_JOB_STATES.has(state.state)) {
+    fail('bundle-job-state-invalid', 'a page bundle job only follows its pushed commit');
+  }
   if (durableSession?.origin?.type === 'owner-direct') {
     bindings ??= await boundInputs(input, config, context, paths, dependencies, options);
     const { guardOwnerDirect } = await import('./owner-direct.js');
     await guardOwnerDirect({ context, config, jobId, ...bindings });
   }
   if (TERMINAL_NO_RESUME.has(state.state)) return pipelineSummary(state, paths);
-  if (state.state === 'accepted') {
+  if (state.state === 'accepted' && bundleSession === null) {
     bindings ??= await boundInputs(input, config, context, paths, dependencies, options);
     if (typeof input.onAccepted === 'function') {
       input.onAccepted(pipelineSummary(state, paths));
@@ -447,7 +634,9 @@ async function executeLocked(input, config, context, dependencies) {
   let checks = null;
   let application = null;
   let committed = null;
-  let pushed = null;
+  const publishJob = config.publisher ? null : createJobPublisher({
+    config, context, pushCommit: (request) => dependencies.pushExactCommit(request, input.gitDependencies),
+  });
   let runBinding = null;
   let enteredApplying = false;
 
@@ -455,6 +644,17 @@ async function executeLocked(input, config, context, dependencies) {
     while (true) {
       switch (state.state) {
         case 'accepted':
+          if (bundleSession !== null) {
+            // The bundle was pushed by the publisher; its job starts from that evidence.
+            committed = await loadRecord(context, paths.committed, 'owner-alpha-committed-effect', jobId, options);
+            const pushed = await loadRecord(context, paths.pushed, 'owner-alpha-pushed-effect', jobId, options);
+            if (committed === null || pushed === null || committed.commit !== bundleSession.origin.commit) {
+              fail('pushed-evidence-missing', 'a page bundle job needs its durable commit and push evidence');
+            }
+            assertPushedReceipt(pushed, committed, config);
+            state = await transition(context, state, 'pushed', 'page-bundle-pushed', dependencies);
+            break;
+          }
           state = await transition(context, state, 'preflighting', 'begin-accepted-save', dependencies);
           break;
         case 'preflighting':
@@ -471,6 +671,11 @@ async function executeLocked(input, config, context, dependencies) {
           bindings ??= await boundInputs(input, config, context, paths, dependencies, options);
           checks = await loadRecord(context, paths.preApplyChecks, 'owner-alpha-pre-apply-check-result', jobId, options);
           if (checks === null) {
+            // An owner-approved proposal carries the owner's full review into the
+            // trust check, but only after its immutable application act is verified.
+            const ownerReview = bindings.session.origin?.type === 'approved-proposal'
+              ? await (await import('./proposal-application.js')).verifiedOwnerReview({ context, jobId, session: bindings.session })
+              : null;
             checks = await dependencies.runPreApplyChecks({
               config,
               checkoutDir: config.repository.checkout,
@@ -481,6 +686,7 @@ async function executeLocked(input, config, context, dependencies) {
               operation: bindings.operation,
               trustPolicy: input.trustPolicy,
               trustSubject: input.trustSubject,
+              ownerReview,
               renderer: input.rendererAdapter,
             });
             checks = await saveRecord(
@@ -609,37 +815,56 @@ async function executeLocked(input, config, context, dependencies) {
           state = await transition(context, state, 'pushing', 'begin-exact-push', dependencies);
           break;
         }
+        case 'awaiting-approval': {
+          // Waiting for the owner's device. A job resumes from here only when an
+          // approval was attached to it (attachOwnerApproval); otherwise it stays
+          // put: no retry loop, no failure, nothing lost.
+          if (await optionalArtifact(context, paths.ownerApproval, options) === null) return pipelineSummary(state, paths);
+          state = await transition(context, state, 'pushing', 'owner-approval-attached', dependencies);
+          break;
+        }
         case 'pushing': {
-          const durableApplication = await loadRecord(context, paths.sourceApplied, 'owner-alpha-source-applied-effect', jobId, options);
-          committed = await loadRecord(context, paths.committed, 'owner-alpha-committed-effect', jobId, options);
-          if (durableApplication === null || committed === null) {
-            fail('publication-evidence-missing', 'push phase requires durable source and commit evidence');
-          }
-          application = deserializeApplication(durableApplication);
-          pushed = await loadRecord(context, paths.pushed, 'owner-alpha-pushed-effect', jobId, options);
-          if (pushed === null) {
-            pushed = await dependencies.pushExactCommit({
-              checkout: config.repository.checkout,
-              application,
-              commit: committed.commit,
-              remote: config.repository.remote.name,
-              remoteUrl: config.repository.remote.url,
-              branch: config.repository.branch,
-              useHooks: config.git.useHooks,
-            }, input.gitDependencies);
-            pushed = await saveRecord(
-              context,
-              paths.pushed,
-              'owner-alpha-pushed-effect',
-              jobId,
-              pushed,
-              options,
-            );
+          if (config.publisher) {
+            try {
+              await requestPublication({
+                socketPath: config.publisher.socketPath,
+                jobId,
+                timeoutMs: config.limits.networkTimeoutMs,
+              });
+            } catch (error) {
+              // Waiting or a spent approval: park the job durably and drop the stale
+              // approval so a fresh one can be attached. Nothing was pushed.
+              if (error instanceof OwnerAlphaError && ['owner-approval-missing', 'owner-approval-expired'].includes(error.code)) {
+                await discardOwnerApproval(context, paths, options);
+                state = await transition(context, state, 'awaiting-approval', error.code, dependencies);
+                return pipelineSummary(state, paths);
+              }
+              // A bad or mismatched approval never pushes: the job fails closed.
+              if (error instanceof OwnerAlphaError && ['owner-approval-invalid', 'owner-approval-mismatch'].includes(error.code)) {
+                state = await transition(context, state, 'failed', error.code, dependencies, {
+                  code: error.code,
+                  message: error.message,
+                  retryable: false,
+                });
+                return pipelineSummary(state, paths);
+              }
+              throw error;
+            }
+            const receipt = await loadRecord(context, paths.pushed, 'owner-alpha-pushed-effect', jobId, options);
+            if (receipt === null) fail('pushed-evidence-missing', 'publisher did not persist an exact push receipt');
+            const boundCommit = await loadRecord(context, paths.committed, 'owner-alpha-committed-effect', jobId, options);
+            if (boundCommit === null) fail('committed-evidence-missing', 'push phase has no durable exact commit evidence');
+            assertPushedReceipt(receipt, boundCommit, config);
+          } else {
+            await publishJob(jobId);
           }
           state = await transition(context, state, 'pushed', 'exact-push-durable', dependencies);
           break;
         }
         case 'pushed':
+          if (bundleSession === null && state.history.some(({ from, to }) => from === 'accepted' && to === 'pushed')) {
+            fail('pushed-evidence-missing', 'only a page bundle job may start at its push');
+          }
           if (await optionalArtifact(context, paths.pushed, options) === null) {
             fail('pushed-evidence-missing', 'pushed state has no durable exact remote evidence');
           }
@@ -653,6 +878,7 @@ async function executeLocked(input, config, context, dependencies) {
             const discovery = await dependencies.discoverDeploymentRun({
               config,
               applicationSha: committed.commit,
+              projectRoot: context.projectRoot,
               signal: input.signal,
             }, input.deploymentDependencies);
             runBinding = await saveRecord(
@@ -681,6 +907,7 @@ async function executeLocked(input, config, context, dependencies) {
             deployment = await dependencies.monitorDeploymentRun({
               config,
               applicationSha: committed.commit,
+              projectRoot: context.projectRoot,
               boundRun: runBinding.binding ?? runBinding,
               signal: input.signal,
             }, input.deploymentDependencies);
@@ -706,32 +933,61 @@ async function executeLocked(input, config, context, dependencies) {
           state = await transition(context, state, 'verifying-live', 'retry-read-only-live-verification', dependencies);
           break;
         case 'verifying-live': {
+          if (bundleSession !== null) {
+            const applicationSha = await readStableDeploymentCommit(context, paths, jobId, options);
+            if (applicationSha === null || applicationSha !== bundleSession.origin.commit) {
+              fail('deployment-evidence-missing', 'live verification requires a successful deployment of the exact commit');
+            }
+            const proof = { commit: applicationSha, pages: bundleSession.pages, images: bundleSession.images };
+            let live = await loadRecord(context, paths.live, 'owner-alpha-live-result', jobId, options);
+            if (live === null) {
+              live = await dependencies.confirmNewPages({
+                config,
+                pages: bundleSession.pages.map((page) => ({ pageUrl: page.liveUrl, witness: page.witness })),
+                images: bundleSession.images.map(({ url, byteLength, sha256 }) => ({ url, byteLength, sha256 })),
+                signal: input.signal,
+              }, input.liveDependencies);
+              live = { ...live, applicationSha };
+              if (!hasNewPageLiveProof(live, proof)) fail('live-witness-evidence-missing', 'the new pages or images are not live as published');
+              live = await saveRecord(context, paths.live, 'owner-alpha-live-result', jobId, live, options);
+            }
+            if (!hasNewPageLiveProof(live, proof)) {
+              fail('live-witness-evidence-missing', 'stored live result does not match the new pages and deployed commit');
+            }
+            state = await transition(context, state, 'live-confirmed', 'new-page-live-confirmed', dependencies);
+            break;
+          }
           bindings ??= await boundInputs(input, config, context, paths, dependencies, options);
           checks ??= await loadRecord(context, paths.preApplyChecks, 'owner-alpha-pre-apply-check-result', jobId, options);
           if (checks === null) fail('pre-apply-evidence-missing', 'live verification requires durable rendered witnesses');
+          const witnesses = checks.rendered?.witnesses;
+          const stable = witnesses?.kind === 'no-visible-change';
           let live = await loadRecord(context, paths.live, 'owner-alpha-live-result', jobId, options);
+          const applicationSha = stable ? await readStableDeploymentCommit(context, paths, jobId, options) : null;
+          if (stable && applicationSha === null) {
+            fail('deployment-evidence-missing', 'live verification requires a successful deployment of the exact commit');
+          }
+          const proof = { pageUrl: bindings.session.liveUrl, commit: applicationSha, witness: witnesses };
           if (live === null) {
-            const witnesses = checks.rendered?.witnesses;
-            if (typeof witnesses?.old !== 'string' || typeof witnesses?.new !== 'string') {
-              fail('live-witness-evidence-missing', 'pre-apply checks did not persist exact old/new live witnesses');
+            if (stable ? !isStableWitness(witnesses) : typeof witnesses?.old !== 'string' || typeof witnesses?.new !== 'string') {
+              fail('live-witness-evidence-missing', 'pre-apply checks did not persist a valid live witness');
             }
             live = await dependencies.confirmLivePage({
               config,
               pageUrl: bindings.session.liveUrl,
-              oldWitness: witnesses.old,
-              newWitness: witnesses.new,
+              ...(stable ? { stableWitness: witnesses.stable } : { oldWitness: witnesses.old, newWitness: witnesses.new }),
               signal: input.signal,
             }, input.liveDependencies);
-            live = await saveRecord(
-              context,
-              paths.live,
-              'owner-alpha-live-result',
-              jobId,
-              live,
-              options,
-            );
+            if (stable) {
+              live = { ...live, applicationSha, visibleTextDigest: witnesses.digest };
+              if (!hasStableLiveProof(live, proof)) fail('live-witness-evidence-missing', 'live page did not establish the stable witness');
+            }
+            live = await saveRecord(context, paths.live, 'owner-alpha-live-result', jobId, live, options);
           }
-          state = await transition(context, state, 'live-confirmed', 'live-visible-witness-confirmed', dependencies);
+          if (stable && !hasStableLiveProof(live, proof)) {
+            fail('live-witness-evidence-missing', 'stored live result does not match the stable witness and deployed commit');
+          }
+          state = await transition(context, state, 'live-confirmed', stable ? 'live-stable-witness-confirmed' : 'live-visible-witness-confirmed', dependencies);
           break;
         }
         case 'live-confirmed':
@@ -742,7 +998,7 @@ async function executeLocked(input, config, context, dependencies) {
           break;
         case 'rebuilding-local': {
           committed = await loadRecord(context, paths.committed, 'owner-alpha-committed-effect', jobId, options);
-          bindings ??= await boundInputs(input, config, context, paths, dependencies, options);
+          if (bundleSession === null) bindings ??= await boundInputs(input, config, context, paths, dependencies, options);
           if (committed === null) fail('committed-evidence-missing', 'local rebuild requires durable commit evidence');
           let rebuild = await loadRecord(context, paths.localRebuild, 'owner-alpha-local-rebuild-effect', jobId, options);
           if (rebuild === null) {
@@ -751,7 +1007,7 @@ async function executeLocked(input, config, context, dependencies) {
               projectRoot: context.projectRoot,
               jobId,
               commit: committed.commit,
-              sourcePath: bindings.session.relativePath,
+              sourcePath: bundleSession?.relativePath ?? bindings.session.relativePath,
               signal: input.signal,
             });
             rebuild = await saveRecord(
@@ -816,17 +1072,34 @@ export async function getOwnerAlphaJob({ config: configInput, projectRoot, conte
   // Where the change came from: the owner's own edit, or an approved suggestion.
   const session = await optionalArtifact(store, paths.session, artifactOptions(config));
   let origin = null;
-  if (session && typeof session.relativePath === 'string') {
+  if (session?.origin?.type === PAGE_BUNDLE_ORIGIN && typeof session.relativePath === 'string') {
+    origin = { type: PAGE_BUNDLE_ORIGIN, bundleId: session.origin.bundleId, relativePath: session.relativePath };
+  } else if (session && typeof session.relativePath === 'string') {
     origin = session.origin?.type === 'approved-proposal' && typeof session.origin.queueId === 'string'
       ? { type: 'approved-proposal', queueId: session.origin.queueId, relativePath: session.relativePath }
       : { type: session.origin?.type === 'owner-publication' ? 'owner-publication' : 'owner-edit', relativePath: session.relativePath };
   }
   const filename = session?.relativePath?.split('/').at(-1)?.replace(/\.md$/u, '');
-  const frontmatter = session?.source?.text?.match(/^---\r?\n([\s\S]*?)^---\r?$/mu)?.[1];
-  const titleLine = frontmatter?.match(/^title:[ \t]*([^\r\n]+)$/mu)?.[1];
+  const found = findFrontmatterInText(session?.source?.text ?? '');
+  const titleLine = found.yamlText?.match(/^title:[ \t]*([^\r\n]+)$/mu)?.[1];
   const title = titleLine?.trim().replace(/^(["'])(.*)\1$/u, '$2') || filename;
   const page = session && typeof session.slug === 'string' ? { title: title || 'Your page', slug: session.slug } : null;
-  return deepFreeze({ ...pipelineSummary(state, paths), origin, page });
+  const options = artifactOptions(config);
+  const live = state.history.some(({ to }) => to === 'live-confirmed')
+    ? await loadRecord(store, paths.live, 'owner-alpha-live-result', jobId, options) : null;
+  let liveKind = null;
+  if (live?.kind === 'new-page-live' && session?.origin?.type === PAGE_BUNDLE_ORIGIN) {
+    const commit = await readStableDeploymentCommit(store, paths, jobId, options);
+    if (commit && hasNewPageLiveProof(live, { commit, pages: session.pages, images: session.images })) liveKind = live.kind;
+  } else if (live?.kind === 'no-visible-change') {
+    const commit = await readStableDeploymentCommit(store, paths, jobId, options);
+    const checks = await loadRecord(store, paths.preApplyChecks, 'owner-alpha-pre-apply-check-result', jobId, options);
+    if (commit && hasStableLiveProof(live, { pageUrl: session?.liveUrl, commit, witness: checks?.rendered?.witnesses })) liveKind = live.kind;
+  } else if (live?.oldWitnessAbsent === true && live.newWitnessUnique === true) {
+    liveKind = 'text';
+  }
+  const liveConfirmedAt = liveKind ? state.history.findLast(({ to }) => to === 'live-confirmed')?.at ?? null : null;
+  return deepFreeze({ ...pipelineSummary(state, paths), origin, page, ...(liveKind && { liveKind, liveConfirmedAt }) });
 }
 
 /** Narrow server adapter: durable acceptance precedes the automatic effect pipeline. */
@@ -897,6 +1170,17 @@ export function createSaveHandler({ config: configInput, projectRoot, context, d
     async getJob(jobId) {
       return getOwnerAlphaJob({ config, projectRoot: root, context: store, jobId });
     },
+    // A pushed page bundle (bundle-lifecycle.js pushedBundleEvidence): record
+    // it as a job and follow it through deployment and the live check.
+    async trackBundle(evidence) {
+      return runOwnerAlphaPipeline({
+        jobId: bundleJobId(evidence?.session?.origin?.bundleId),
+        pushedBundle: evidence,
+        config,
+        projectRoot: root,
+        context: store,
+      }, dependencies);
+    },
   });
 }
 
@@ -916,7 +1200,11 @@ export async function defaultLocalRebuild({
       'local rebuild checkout HEAD must equal the confirmed application commit',
     );
   }
-  const rebuilt = await rebuildOwnerSite({ config, projectRoot });
+  // A private site was just built from this commit as its "deployment":
+  // reuse that build when it is still current instead of building twice.
+  const rebuilt = isPrivateSite(config)
+    ? await ensureOwnerSite({ config, projectRoot })
+    : await rebuildOwnerSite({ config, projectRoot });
   if (rebuilt.manifest.source.head !== commit) {
     fail(
       'local-rebuild-manifest-mismatch',

@@ -1,10 +1,12 @@
 import { execFile } from 'node:child_process';
-import { lstat, mkdir, realpath } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { fail } from './errors.js';
 import { validatePrivateNetworkHttpOrigin } from './network.js';
+import { containerRendererIsolation, rendererLauncher, withIsolatedRenderer } from './renderer-isolation.js';
+import { readSiteFile } from './site-files.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -43,23 +45,24 @@ function commandEnvironment(overrides = {}) {
   };
 }
 
-async function offlineSeedEnvironment() {
+export async function offlineSeedEnvironment(seed = PINNED_QUARTZ_SEED_DIR) {
   try {
-    const metadata = await lstat(PINNED_QUARTZ_SEED_DIR);
+    const metadata = await lstat(seed);
     if (metadata.isSymbolicLink() || !metadata.isDirectory()) {
       fail('quartz-seed-invalid', 'fixed Quartz seed must be one real directory');
     }
-    if (await realpath(PINNED_QUARTZ_SEED_DIR) !== PINNED_QUARTZ_SEED_DIR) {
+    if (await realpath(seed) !== seed) {
       fail('quartz-seed-invalid', 'fixed Quartz seed must not use symlink aliases');
     }
     return {
       QUARTZ_OFFLINE: '1',
-      QUARTZ_SEED_DIR: PINNED_QUARTZ_SEED_DIR,
+      QUARTZ_SEED_DIR: seed,
     };
   } catch (error) {
     if (error?.code === 'ENOENT') {
-      if (typeof process.env.OWNER_ALPHA_STATE_PROFILE === 'string') {
-        fail('quartz-seed-missing', 'container rendering requires the fixed verified offline Quartz seed');
+      if (PINNED_QUARTZ_RENDERER_DIR.startsWith('/opt/cyberbaser/renderers/')
+        || containerRendererIsolation() || typeof process.env.OWNER_ALPHA_STATE_PROFILE === 'string') {
+        fail('quartz-seed-missing', 'installed rendering requires the fixed verified offline Quartz seed');
       }
       return { QUARTZ_OFFLINE: '0' };
     }
@@ -67,19 +70,20 @@ async function offlineSeedEnvironment() {
   }
 }
 
-async function runFixed(command, args, options, code) {
+async function runFixed(args, options, code, isolation = null) {
   try {
-    const result = await execFileAsync(command, args, {
-      encoding: 'utf8',
-      maxBuffer: MAX_COMMAND_OUTPUT_BYTES,
-      ...options,
-    });
+    const execOptions = { encoding: 'utf8', maxBuffer: MAX_COMMAND_OUTPUT_BYTES, ...options };
+    const result = isolation
+      ? await withIsolatedRenderer({ ...isolation, env: options.env }, (policy, env) =>
+        execFileAsync(isolation.launcher, [...policy, '/usr/bin/bash', ...args], { ...execOptions, env }))
+      // Source-checkout dependency bootstrap only (no vault or output input).
+      : await execFileAsync('/usr/bin/bash', args, { ...execOptions, timeout: 600_000 });
     return {
       stdout: String(result.stdout ?? ''),
       stderr: String(result.stderr ?? ''),
     };
   } catch (error) {
-    fail(code, `${path.basename(args[0] ?? command)} failed`, {
+    fail(code, `${path.basename(args[0])} failed`, {
       exitCode: Number.isSafeInteger(error?.code) ? error.code : null,
       stdout: String(error?.stdout ?? '').slice(-4_000),
       stderr: String(error?.stderr ?? '').slice(-4_000),
@@ -129,6 +133,30 @@ export function suggestionEnvironment(suggestions) {
   };
 }
 
+// Notes the private build emitted without source provenance. The renderer
+// writes this report (paths only) beside, never inside, the published output.
+export const PROVENANCE_REPORT_FILE = 'provenance-skipped.json';
+
+export async function provenanceReportEnvironment(workspaceDir, formEnvironment) {
+  if (!formEnvironment.CYBERBASER_SOURCE_PROVENANCE) return {};
+  const file = path.join(workspaceDir, PROVENANCE_REPORT_FILE);
+  await rm(file, { force: true });
+  return { CYBERBASER_PROVENANCE_REPORT: file };
+}
+
+export async function readProvenanceReport(environment) {
+  const file = environment.CYBERBASER_PROVENANCE_REPORT;
+  if (!file) return null;
+  try {
+    const report = JSON.parse((await readSiteFile(path.dirname(file), [path.basename(file)], 1024 * 1024)).toString('utf8'));
+    const notes = Array.isArray(report?.notes) ? report.notes.map(({ path: notePath, step }) => ({ path: notePath, step })) : [];
+    return { count: notes.length, notes, file };
+  } catch (error) {
+    if (error?.code === 'ENOENT') return { count: 0, notes: [], file };
+    throw error;
+  }
+}
+
 export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, ownerOrigin, suggestions = null, siteConfigPath = null, sourceCheckout = null }) {
   // The vault's own site settings (.cyberbaser/site.yml), when it has one.
   if (sourceCheckout !== null && (typeof sourceCheckout !== 'string' || !path.isAbsolute(sourceCheckout) || path.normalize(sourceCheckout) !== sourceCheckout)) {
@@ -142,61 +170,81 @@ export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, 
   const workspace = absoluteDirectory(workspaceDir, 'workspaceDir');
   validatePrivateNetworkHttpOrigin(ownerOrigin, 'ownerOrigin');
   const formEnvironment = suggestionEnvironment(suggestions);
-  const quartzDir = path.join(workspace, 'quartz');
+  const launcher = await rendererLauncher();
   const seedEnvironment = await offlineSeedEnvironment();
-
   await mkdir(workspace, { recursive: true });
-  const setup = await runFixed(
-    'bash',
-    [SETUP_SCRIPT, quartzDir],
-    {
-      env: commandEnvironment({
-        QUARTZ_REPO: PINNED_QUARTZ_REPOSITORY,
-        QUARTZ_REF: PINNED_QUARTZ_REF,
-        QUARTZ_COMMIT: PINNED_QUARTZ_COMMIT,
-        QUARTZ_LOCK_SHA256: PINNED_QUARTZ_LOCK_SHA256,
-        QUARTZ_INSTALL_SHA256: PINNED_QUARTZ_INSTALL_SHA256,
-        ...seedEnvironment,
-        ...(formEnvironment.CYBERBASER_SOURCE_PROVENANCE
-          ? { CYBERBASER_SOURCE_PROVENANCE: formEnvironment.CYBERBASER_SOURCE_PROVENANCE }
-          : {}),
-      }),
-    },
-    'quartz-setup-failed',
-  );
-  const build = await runFixed(
-    'bash',
-    [BUILD_SCRIPT, content, quartzDir],
-    {
-      env: commandEnvironment({
-        COPY_CONTENT: '1',
-        OUTPUT_DIR: output,
-        CYBERBASER_EDIT_LINK_MODE: 'owner',
-        CYBERBASER_OWNER_ORIGIN: ownerOrigin,
-        ...(siteConfigPath ? { CYBERBASER_SITE_CONFIG: siteConfigPath } : {}),
-        // Read-only: dates for notes without frontmatter dates come from its git history.
-        ...(sourceCheckout ? { CYBERBASER_SOURCE_CHECKOUT: sourceCheckout } : {}),
-        ...formEnvironment,
-      }),
-    },
-    'quartz-build-failed',
-  );
+  // Give setup/build a disposable working tree. Keep online bootstrap even
+  // outside the parent cache workspace, so a concurrent configured renderer
+  // cannot write the directory used by trusted Git/npm.
+  const invocation = await mkdtemp(path.join(workspace, 'quartz-build-'));
+  let bootstrap;
+  try {
+    const buildWorkspace = path.join(invocation, 'build');
+    const quartzDir = path.join(buildWorkspace, 'quartz');
+    const setupEnvironment = commandEnvironment({
+      QUARTZ_REPO: PINNED_QUARTZ_REPOSITORY,
+      QUARTZ_REF: PINNED_QUARTZ_REF,
+      QUARTZ_COMMIT: PINNED_QUARTZ_COMMIT,
+      QUARTZ_LOCK_SHA256: PINNED_QUARTZ_LOCK_SHA256,
+      QUARTZ_INSTALL_SHA256: PINNED_QUARTZ_INSTALL_SHA256,
+      ...seedEnvironment,
+    });
+    if (setupEnvironment.QUARTZ_OFFLINE === '0') {
+      bootstrap = await mkdtemp(path.join(path.dirname(workspace), '.quartz-bootstrap-'));
+      const seed = path.join(bootstrap, 'seed');
+      await runFixed([SETUP_SCRIPT, seed], {
+        cwd: bootstrap, env: { ...setupEnvironment, QUARTZ_BOOTSTRAP_ONLY: '1' },
+      }, 'quartz-setup-failed');
+      setupEnvironment.QUARTZ_SEED_DIR = seed;
+      setupEnvironment.QUARTZ_OFFLINE = '1';
+    }
+    await mkdir(buildWorkspace, { mode: 0o700 });
+    const reportEnvironment = await provenanceReportEnvironment(buildWorkspace, formEnvironment);
+    const setup = await runFixed([SETUP_SCRIPT, quartzDir], {
+      cwd: buildWorkspace,
+      env: { ...setupEnvironment,
+        CYBERBASER_SOURCE_PROVENANCE: formEnvironment.CYBERBASER_SOURCE_PROVENANCE ?? 'disabled',
+      },
+    }, 'quartz-setup-failed', { launcher, workspace: buildWorkspace, output });
+    const build = await runFixed(
+      [BUILD_SCRIPT, content, quartzDir],
+      {
+        cwd: buildWorkspace,
+        env: commandEnvironment({
+          COPY_CONTENT: '1',
+          OUTPUT_DIR: output,
+          CYBERBASER_EDIT_LINK_MODE: 'owner',
+          CYBERBASER_OWNER_ORIGIN: ownerOrigin,
+          ...(siteConfigPath ? { CYBERBASER_SITE_CONFIG: siteConfigPath } : {}),
+          // Read-only: dates for notes without frontmatter dates come from its git history.
+          ...(sourceCheckout ? { CYBERBASER_SOURCE_CHECKOUT: sourceCheckout } : {}),
+          ...formEnvironment,
+          ...reportEnvironment,
+        }),
+      },
+      'quartz-build-failed', { launcher, workspace: buildWorkspace, output },
+    );
+    const provenanceSkipped = await readProvenanceReport(reportEnvironment);
 
-  return {
-    renderer: 'quartz-cyberbase',
-    revision: PINNED_QUARTZ_COMMIT,
-    tag: PINNED_QUARTZ_REF,
-    outputDir: output,
-    suggestionForm: formEnvironment.CYBERBASER_ACCOUNT_FREE_INTAKE === 'enabled',
-    commands: {
-      setup: ['bash', SETUP_SCRIPT, quartzDir],
-      build: ['bash', BUILD_SCRIPT, content, quartzDir],
-    },
-    logs: {
-      setupStdoutTail: setup.stdout.slice(-4_000),
-      setupStderrTail: setup.stderr.slice(-4_000),
-      buildStdoutTail: build.stdout.slice(-4_000),
-      buildStderrTail: build.stderr.slice(-4_000),
-    },
-  };
+    return {
+      renderer: 'quartz-cyberbase',
+      revision: PINNED_QUARTZ_COMMIT,
+      tag: PINNED_QUARTZ_REF,
+      outputDir: output,
+      suggestionForm: formEnvironment.CYBERBASER_ACCOUNT_FREE_INTAKE === 'enabled',
+      provenanceSkipped,
+      commands: {
+        setup: ['bash', SETUP_SCRIPT, quartzDir],
+        build: ['bash', BUILD_SCRIPT, content, quartzDir],
+      },
+      logs: {
+        setupStdoutTail: setup.stdout.slice(-4_000),
+        setupStderrTail: setup.stderr.slice(-4_000),
+        buildStdoutTail: build.stdout.slice(-4_000),
+        buildStderrTail: build.stderr.slice(-4_000),
+      },
+    };
+  } finally {
+    await Promise.all([invocation, bootstrap].filter(Boolean).map((root) => rm(root, { recursive: true, force: true })));
+  }
 }

@@ -1,0 +1,21 @@
+---
+title: Always-on image rehearsed on the desktop; phone reach becomes a setting
+description: The home-server image now runs the real node and signature-enforcing publisher in separate containers. A networkless lab rehearsal with a fake GitHub and a throwaway repo passed bootstrap, credential isolation, no-push and restart. It failed only on Iroh's non-loopback UDP listeners, and the owner made phone reach an install-time choice.
+status: log
+---
+
+## What happened
+
+- Owner chose "Build here, then deploy": build and test the always-on image on the desktop against a throwaway repo before a home-server agent deploys it.
+- Design pass (scratch `.workspace/always-on/design.md`): the old one-app Compose started the publisher in the legacy group mode, without the signature enforcement of the native `service-publisher`. Remote first-run setup should forward the setup port from the owner's desktop over an existing verified admin path (same-port, so GitHub's loopback callbacks need no change); first-device enrolment must not be tunnelled through a generic forward because it authorizes by connecting UID. Updates split into "Update site design" and "Update Cyberbaser".
+- Setup links now redeem only on an explicit **Start setup** POST (`2902a01`), so link prefetchers cannot spend them.
+- Image work (`b7a0676`): `service-publisher` from first boot, mirror and role layout with the native umasks, fatal build checks, recipe parity tests, and `rehearse.sh`, a rootless pod with `--network none`, fake GitHub, and no published ports.
+- Rehearsal result: node and publisher under separate UIDs; node refused at enrolment (403); fake Create/Install/Authorize passed and replay was refused; one note copied at the exact commit with no push; forge credentials only in publisher-private 0600 files; restart kept state without re-authorization; the offline renderer namespace probe passed without added privilege. **Gate failed** on two non-loopback UDP listeners opened by Iroh at the phone step (setup binds Iroh with no address and ignores config).
+
+## Decision
+
+Owner, asked whether the server may keep a port open for direct phone connections: "depends on config whether iroh based eith an app on the phone for a direct tunnel, tailscale based, and so on." Reach becomes an install-time setting (direct, relay-only, or one private address for an overlay), and the listener gate checks the chosen mode. Recorded under R23.
+
+## Open
+
+Reach setting implementation and per-mode gate; automatic config reconciliation; enforce-mode signed publishing in the container; private reader and full offline renderer build; the desktop "Set up my server" helper; private enrolment/recovery handoff; home-server inventory and installer (Quadlet or the appliance's own app mechanism).

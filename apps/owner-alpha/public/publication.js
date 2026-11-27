@@ -21,6 +21,12 @@ if (form && status) {
       const response = await fetch(`/api/publication/${action}`, { method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const result = await response.json();
+      if (result?.error?.code === 'recovery-in-progress') {
+        status.textContent = 'Finishing an earlier publish. Try again in a moment.';
+        pending = false; trigger.disabled = false; if (confirm) confirm.disabled = false;
+        form.removeAttribute('aria-busy');
+        return;
+      }
       if (!response.ok) throw new Error('publication-refused');
       const unchanged = action === 'prepare' && result.outcome === 'unchanged';
       if (unchanged && (Object.keys(result).sort().join(',') !== 'outcome,reviewUrl'
@@ -74,7 +80,9 @@ if (review) {
   const marks = document.querySelector('#publication-toggle-marks');
   const announcement = document.querySelector('#publication-review-announcement');
   const marksTip = document.querySelector('#publication-toggle-marks-tip');
-  let current = -1;
+  const startAtFirst = review.dataset.startFirstChange !== undefined;
+  if (startAtFirst) anchors.sort((left, right) => Number(left.dataset.change) - Number(right.dataset.change));
+  let current = startAtFirst ? 0 : -1;
   const announce = (text) => { if (announcement) announcement.textContent = text; };
   const showMarks = (visible) => {
     review.dataset.marksVisible = String(visible);
@@ -122,6 +130,11 @@ if (review) {
   const body = document.querySelector('#publication-details-body');
   const close = document.querySelector('#publication-close-details');
   const scroller = document.querySelector('#publication-document-scroll');
+  if (startAtFirst && scroller && anchors[0]) {
+    const viewport = scroller.getBoundingClientRect();
+    const first = anchors[0].getBoundingClientRect();
+    if (first.top > viewport.bottom - 24) anchors[0].scrollIntoView({ block: 'center', behavior: 'instant' });
+  }
   if (tools && details && fallback && sheet && body && close && scroller && typeof sheet.showModal === 'function') {
     let scrollTop = 0; let scrollLeft = 0;
     const restoreScroll = () => { scroller.scrollTop = scrollTop; scroller.scrollLeft = scrollLeft; };
@@ -179,7 +192,7 @@ if (root) {
     const done = job.state === 'completed';
     const stopped = Object.hasOwn(stages.stops, job.state) && !done;
     const uncertain = ['failed', 'manual-intervention', 'cancelled'].includes(job.state);
-    stage.textContent = stages.stops[job.state]?.copy ?? (found !== -1 ? stages.activeCopy : null) ?? 'Publication status is unavailable. Check the record before taking another action.';
+    stage.textContent = job.liveCopy ?? stages.stops[job.state]?.copy ?? (found !== -1 ? stages.activeCopy : null) ?? 'Publication status is unavailable. Check the record before taking another action.';
     steps.forEach((element, index) => {
       const status = uncertain ? 'unknown' : done || index < current ? 'done' : index === current ? (stopped ? 'stopped' : 'current') : 'pending';
       element.className = `job-step job-step-${status}`;

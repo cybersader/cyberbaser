@@ -281,16 +281,14 @@ describe('owner-alpha source edit session', () => {
     await expectCodeAsync(() => sessionFor(crlf), 'source-not-lf-only');
   });
 
-  test('detects optional YAML frontmatter and fails closed on an unterminated opening', () => {
+  test('detects optional frontmatter protection and guards all bytes after an unterminated opening', () => {
     expect(detectYamlFrontmatterRange(Buffer.from('body\n'))).toBeNull();
     expect(detectYamlFrontmatterRange(Buffer.from('---\na: b\n...\nbody\n'))).toEqual({
       start: 0,
       end: Buffer.byteLength('---\na: b\n...\n'),
     });
-    expectCode(
-      () => detectYamlFrontmatterRange(Buffer.from('---\na: b\nbody\n')),
-      'unterminated-frontmatter',
-    );
+    const unclosed = Buffer.from('---\na: b\nbody\n');
+    expect(detectYamlFrontmatterRange(unclosed)).toEqual({ start: 0, end: unclosed.length });
   });
 });
 

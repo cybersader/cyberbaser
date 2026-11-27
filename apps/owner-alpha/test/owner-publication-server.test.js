@@ -245,7 +245,7 @@ test('Publish returns actual durable acceptance and normal job progress, with tr
   const text = await accepted.text(); privateAbsent(text); const receipt = JSON.parse(text);
   const job = await app.fetch(request(receipt.statusUrl, { cookie: app.cookie })); const html = await job.text(); privateAbsent(html); expect(html).toContain('class="publication-shell publication-job"'); expect(html).toContain('<h1>Page</h1>');
   const json = await app.fetch(request(`/api/jobs/${draft.jobId}`, { cookie: app.cookie })); const safe = await json.text(); privateAbsent(safe); expect(JSON.parse(safe).origin).toEqual({ type: 'owner-publication', relativePath: MAPPING.relativePath });
-  data.setSource(); data.renderGate.resolve({ ok: true }); await data.completion;
+  data.setSource(EDITED.replace('new', 'next'), 7); data.renderGate.resolve({ ok: true }); await data.completion;
   const review = await app.fetch(request(`/owner/publication/${draft.draftId}`, { cookie: app.cookie }));
   const terminal = await review.text(); privateAbsent(terminal); expect(terminal).toContain('will not start again'); expect(terminal).not.toContain('id="publication-form"');
   data.setUnavailable(); const replay = await app.post('/api/publication/publish', { draftId: draft.draftId, csrf: CSRF }); expect(replay.status).toBe(202); privateAbsent(await replay.text());

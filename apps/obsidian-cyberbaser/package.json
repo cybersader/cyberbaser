@@ -1,0 +1,17 @@
+{
+  "name": "@cyberbaser/obsidian-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Thin Obsidian client for a Cyberbaser owner node: pair, status, send for review or publish, over Iroh.",
+  "license": "MIT",
+  "packageManager": "bun@1.3.11",
+  "type": "module",
+  "scripts": {
+    "build:wasm": "bash scripts/build-wasm.sh",
+    "build": "bun scripts/build.js",
+    "test": "bun test test"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  }
+}

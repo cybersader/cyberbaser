@@ -1,0 +1,104 @@
+---
+title: The Cyberchief author's whole flow, rehearsed once (scratch)
+description: A new post went from the New post form in real Obsidian to an approved, pushed commit on a throwaway repository, on scratch copies of the Cyberchief content and renderer. Rerun the same day with the phone approval sheet showing the pages, a title-driven file name, and a publishing checklist, status bar item and notices; it now ends at Live.
+status: log
+---
+
+## Outcome
+
+The flow works end to end up to the push. On scratch copies of the Cyberchief content (readable names, site model version 2) and renderer, a desktop Obsidian wrote a new post from the form with a cover photo, published it as a draft, the owner reviewed it on the site's own design at phone width, approved it on a phone with a real tap, and the publisher checked and pushed one commit to a local repository standing in for GitHub. The commit holds exactly the new note (Draft off, today's date filled in) and the cover photo with its location removed.
+
+It stops at "Public, not confirmed yet". Pages that arrive in bundles never get a deployment or live check, so the status cannot reach Live (see Open).
+
+## Built before the run
+
+- **Site model versions 1 and 2 in the form.** `default: first-publish` leaves the date empty at creation and Publish fills today's date inside the signed change, next to Draft off. The knowledge base itself is the first folder choice (`allow_root`, `[<folder...>/]`). Plain tags are accepted and suggested when `taxonomy.tags.allow_plain` is on. Version 2 names files and folders like their titles (`names: title-minus-unsafe`): characters file systems refuse become spaces, the name is editable before Create, Windows-reserved names are refused, and the form shows "On your site at /address".
+- **One address rule for every layer.** `packages/publish/src/addresses.js` turns a vault path into its web address by the vault's style, read from `.cyberbaser/site.yml` (`addresses:` under `site:` or at the top). `quartz` is stock Quartz (the default); `lowercase-hyphen` is the Cyberchief renderer's rule, and all 34 of its test cases pass. The device's "New public page", its approval check, the node's public additions and the review page's page lookup all call it. An unknown style fails closed everywhere.
+- **Address check before signing.** With a configured renderer, the node builds a bundle's page once before offering it to the phone. If the page is not at the address everyone was shown, the bundle is refused (`address-mismatch`) and never offered.
+- **Small fixes found in the flow.** Waiting for approval now clears once the page is pushed. Two previews of one bundle no longer share a build directory. A failed preview build now logs why it fell back. The rehearsal's review pages read the scratch checkout the way its site build does.
+
+## How each step was driven
+
+| Step | Real UI | Driven or stood in |
+|---|---|---|
+| Pair desktop and phone | Devices page, Obsidian pairing modal, Confirm | The pairing code was read from the page and handed to Obsidian as its link |
+| Enrol the phone as signing device | Obsidian enrol modal, real tap | Enrolment link taken from the publisher's own log |
+| New post, Create, write | Form in real Obsidian (OpenClast harness, 1280 wide) | Topic chosen by setting the select; the harness has no Node `Buffer`, so the page got a minimal `Buffer.from` for `vault.createBinary` |
+| Status, Publish to your site | Plugin modals | None |
+| Owner review | Owner app route C in Chromium at 390 | Signed in with a bootstrap link |
+| Approve | Approval sheet in a second Obsidian with mobile emulation, 390 wide, real tap | None |
+| Publisher push | Real owner services, approval gate and mirror | GitHub is a local bare repository reached through a git shim; deployment and live checks are not run for bundles |
+
+Scratch-only change: `publish.yml` in the copy says `exclude_when: [draft]` so the sample posts are public. Without them the Cyberchief renderer's build fails (below).
+
+## Screenshots
+
+In `.workspace/dad-flow/shots/` (scratch, not committed): 01–02 the filled form, 03 the written note, 04 status Draft, 05 the send sheet ("New public page: /threats-and-response/tabletop-in-one-hour, plus 1 image", cover "location removed"), 06–07 Waiting for approval, 08–10 owner review at 390 on the Cyberchief design, 11–13 approvals on the phone, 14 status after the push.
+
+## Open
+
+- **New pages never show Live.** Bundle commits get no deployment or live-page check, so status stays "Public, not confirmed yet". Needs a deployment watch for bundle commits and a live witness for a page that did not exist before.
+- **Cyberchief renderer:** its tag page fails (`PageHero.tsx:68`, reading `label` of undefined) when the only public page using a group tag such as `level/primer` is new. Reported to Cyberchief; worked around in scratch.
+- **Covers are not on the post page** in this design (they show on feed cards), so the owner review shows the cover in its list, not on the page.
+- The address check falls back to offering the bundle when the preview cannot be built; only a confirmed mismatch refuses.
+- Apostrophes and other punctuation follow Cyberchief's rule exactly. Any other renderer needs its own style declared.
+- Not run: real GitHub, the real Cyberchief vault, a real phone.
+
+## Rerun with the approval sheet, title names and publishing progress (same day)
+
+Content and renderer re-copied read-only from the Cyberchief project; the scratch `publish.yml` override is gone (Cyberchief's tag page fix made it unnecessary). The run passed and ends at Live.
+
+**Built for it.**
+
+- **Phone approval sheet for new pages.** Heading "Publish to Cyberchief?" from the device's own `site.yml` (`site.title`), never repository or branch. One line "1 new page with 1 photo". Each new page as a card: the cover drawn from the exact signed image bytes (a `blob:` URL on the device), title, address and summary read from the exact signed note text, and that text folded behind "Show exact text". What is signed is unchanged. Edits keep their word preview under the site name. The publisher already pins the target repository and branch, so dropping them from the sheet removes no check.
+- **New post form.** One Title field; the file name follows it (characters file systems refuse removed). A separate short name sits only under a closed "Advanced" at the end of the form. The address stays under the title. The same rule covers knowledge base pages and new folders.
+- **After Publish.** The sheet becomes a checklist: Checking your post, Waiting for your approval ("Open Cyberbaser on your phone to approve", or "on this device" for a signing device), Publishing ("Usually under a minute"), Live on Cyberchief. Its steps come from the node's new `readPageBundle` answer for the bundle, polled every 3 s while a view is open and every 10 s otherwise. Closing it stops nothing. A desktop status bar item appears only while a post is on its way or needs attention, then shows "Live ✓" for five seconds and disappears. The note mark beside the title shows only Draft, waiting, publishing or needs attention, and nothing once a post is live. Notices appear for approval needed, Live (with View on site and Copy link) and failures. Errors are one plain sentence ("Your post is safe.") with Try again, and the code sits in a closed Details fold.
+- **Withdraw.** Before approval, Withdraw asks the node (`withdrawPageBundle`, only the sending device) to make the bundle final. Its waiting approval is taken back from every signing device, a signature that still arrives is never used to push, and the note goes back to Draft.
+- **Offline.** With the node unreachable, the post waits on the device (local storage, not the synced settings) and is sent through the same checks when the node answers. The queue holds nothing that signs.
+- **Phones.** An Obsidian plugin cannot raise a real push notification on a backgrounded phone. Mobile gets in-app notices only, and none were faked.
+
+**How each step was driven (rerun).** As in the first run, with these differences. The cover came from the real "From device" button: Playwright answered the browser's file picker with a photo in a scratch folder outside the vault, and no inbox folder appeared in the vault. The error state is real plugin behaviour (a draft that shows a picture from another site is refused before sending), but the driver wrote that note. The Live notice, status bar and checklist are the plugin's own polling. Deployment and live checks are still simulated.
+
+**Private site 404 (driver, fixed).** The owner's private reader serves the site under `/cyberbase/` (`/` redirects there), and the driver asked for the bare address. With the prefix, the new page and its topic page answer 200. The prefix is fixed in the owner app regardless of vault (Cyberchief's private site lives at `/cyberbase/…`). That is a product naming leftover, reported here and not changed.
+
+**Found and fixed in the run.** The bundle's job record could not be read through the job lookup in the rehearsal, so progress stayed at Publishing although the pages were confirmed live. `readPageBundle` now falls back to the note status (the same live evidence) when the job record is unreadable. The cause of the unreadable record is not found.
+
+**Screenshots** (`.workspace/dad-flow/shots/`, scratch): 00 setup; 01 error state; 02–03 the form (Title, address, cover from the device, Advanced closed); 04 written; 05 Draft; 06 send sheet; 07 checklist with the spinner on Waiting; 08 status bar "Waiting for approval" after closing; 09 status Waiting; 10–12 owner review; 13 approvals waiting; 14–15 the phone approval sheet; 16 approved; 17 Live notice with "Live ✓"; 18–19 private site page and topic card; 20 status Live.
+
+**Tests.** Plugin 65 pass (57 before): sheet values equal a parse of the signed bytes, thumbnail from the signed cover bytes, hostile titles and summaries only ever text, title to file name, checklist mapping, status bar empty when idle, offline queue never signs, withdraw. Node: withdraw makes the bundle unsignable (and a racing signature is not used), only the sending device can read or withdraw. Acceptance suites 1,374 pass, 10 skip, the known `proposal-fixtures` missing-module error only.
+
+**Open.** A real phone and real GitHub are still not run. The job-record read failure in the rehearsal is unexplained. Covers still show on feed cards, not on the post page, in this design. The `/cyberbase/` reader prefix applies to every vault.
+
+## Publishing progress: root cause, and the private site path (same day)
+
+**Why progress stuck at Publishing.** The node built the command set it offers to paired devices over Iroh without the job lookup. `readPageBundle` therefore never read the bundle's job (`OA-<bundleId>`) and always answered Publishing. The job itself was recorded and confirmed Live the whole time, which is why the note status (a different command with its own reader) showed Live. Not a store location, permission, schema or timing problem.
+
+**Fix.** The device command set is now built by one function that refuses to start without the job lookup. `readPageBundle` answers Live only when the job belongs to this bundle and carries its verified new-page proof, with the job's own live-confirmed time. A job not recorded yet is still Publishing. An unreadable job, a missing lookup or another bundle's job is a named refusal (`bundle-progress-unavailable`, `bundle-job-mismatch`), not a guess.
+
+**Fallback removed.** The earlier fallback answered Live from the note status when the job could not be read. It is gone: it hid this wiring fault, and the note status is evidence about a note path (the newest job touching it), not about this bundle's job. A test pins that an unreadable job record stays a refusal even while the note status reads Live. The plugin's progress poll still swallows a refusal and keeps showing Publishing; surfacing it there is a plugin follow-up.
+
+**Private site path.** The owner app no longer serves every vault's private site under `/cyberbase/`. The path is the vault's own: `site.baseUrl` in `.cyberbaser/site.yml` when declared (the base the renderer builds with), otherwise the path of `live.baseUrl` (already the owner-site build's link-check base). A site at a domain root is served at `/`. A malformed declaration stops startup. Cyberbase is unchanged (`/cyberbase/`). The suggestions rehearsal fixture now serves at `/suggestions-fixture/`, its own `live.baseUrl` path, and prints those links.
+
+**Rerun.** `.workspace/dad-flow/flow.mjs` passed again. The device's progress reached Live from the job record (new check: the node's answer for the bundle is Live with the confirmed time, about 2 s after the push), and the new page and its topic page answer 200 on the private site at `/suggestions-fixture/…`. The driver now reads the cover's path from the note, since covers follow the vault's attachment setting (a parallel change the same day).
+
+**Tests.** Node: the device command set cannot be built without the job lookup; Publishing until the job exists, then Live with the confirmed time; a failed deployment reads failed; another bundle's job is refused; an unreadable job is refused even with the note Live. Site path: Cyberbase default, declared bases, invalid declarations, reader routes and the owner pages' home link for nested and root bases. Acceptance suites 1,382 pass, 10 skip, the known `proposal-fixtures` missing-module error only. Plugin 73 pass (includes the parallel attachment-placement tests).
+
+## Folder notes: one folder per post (same day)
+
+**Decision (owner, relayed).** Asked how Cyberchief should lay out posts and their photos, the owner said "look at my other plugins how i do attachments", then chose "Your folder-note style (Recommended)": each post is a folder named after it, the note inside under the same name, its photos next to it; topic folders get a same-name note instead of `index.md`; web addresses do not change. Cyberchief implemented the renderer side (site model v3, `site/address-rule.cases.json`, the `FolderNotes` render step) and Cyberbaser followed.
+
+**One address rule, now with folder notes.** `packages/publish/src/addresses.js` (`lowercase-hyphen`) normalises names to NFC first, and a note named `index` or named like its folder (compared as addresses, so case, accent encoding and `&` vs `and` do not matter) takes the folder's address: `Threats & response/Run a tabletop exercise in one hour/Run a tabletop exercise in one hour.md` is `/threats-and-response/run-a-tabletop-exercise-in-one-hour`. Addresses have no trailing `/` in this style, and images keep their own path. All 81 Cyberchief cases pass (54 paths, 4 tags, 17 render, 6 collision sets). The default `quartz` style is unchanged.
+
+**Where a folder note is drawn.** The address never depends on other files, but the built page does: a same-name note of a top-level folder, or of a folder holding another note, is drawn as the folder's page (`<folder>/index.html`), otherwise as a page (`<folder>.html`). `renderSlugs` copies that rule, so route C finds the built page of a new post (a page) or a new topic (a folder page), and the review page tries both forms and keeps the one whose provenance names the note.
+
+**Node and contract.** A bundle's second new note may now be the folder's note in either form (`Topic/Topic.md` or `Topic/index.md`) for a note that is itself a folder note (`Topic/Post/Post.md`). `create-address-collision` now compares every new file's address with every file of the base tree (published or not) and with the rest of the bundle, so an old flat `Topic/Post.md`, an `index.md` beside a same-name note, and names differing only by punctuation or accents are refused.
+
+**Form.** Create makes `<topic>/<name>/<name>.md` (and `Knowledge base/[<folder>/]<name>/<name>.md`, `Authors/<name>/<name>.md`); a new knowledge base folder is `<folder>/<folder>.md`. The cover goes into the note's own folder through Obsidian's attachment API (the vault's `.obsidian/app.json` sets `attachmentFolderPath: "./"`) and `cover:` gets the bare file name (rule: property-images log). A note's own folder is never offered as a topic or knowledge base folder: only folders whose note the renderer draws as a folder page.
+
+**Private site base.** Cyberchief's `site.yml` declares `baseUrl: https://cyberchief.me/`, with the scheme. The owner app stopped at startup on that (it accepted only `host[/path]`). It now reads an `http(s)://` address for its path; other schemes, credentials, query or fragment still stop startup.
+
+**Rerun.** Fresh read-only copies of the Cyberchief content (all notes already in folder-note form) and renderer (with the new `FolderNotes` step and the root-then-note-folder image rule). The scratch renderer identity now also fingerprints `quartz/plugins/cyberchief` and `quartz/util/path.ts`. The run passed with 42 checks and ends at Live. The pushed commit holds exactly `Threats & response/Run a tabletop exercise in one hour/Run a tabletop exercise in one hour.md` and `…/Run a tabletop exercise in one hour cover.jpg` (location removed), and the note says `cover: Run a tabletop exercise in one hour cover.jpg`. New checks: topic choices are only topic folders; `cover:` is a bare name; the vault's attachment setting is `./`; the commit's paths; the private site's Content page shows the post's card with that cover loaded (1200 px wide), resolved from the bare name. The topic page now shows Quartz's folder listing (the topic note is drawn as the folder page), so the cover check moved to the Content page.
+
+**Screenshots** (`.workspace/dad-flow/shots/`, scratch): 00 setup; 01 error state; 02–03 the form; 04 written; 05 Draft; 06 send sheet; 07 checklist; 08 status bar waiting; 09 status waiting; 10–12 owner review on the Cyberchief design; 13 approvals; 14–15 approval sheet; 16 approved; 17 status bar publishing; 18 Live notice; 19 new page on the private site; 20 topic listing; 21 Content page card with the cover; 22 status Live.
+
+**Tests.** Publish: every Cyberchief case including render slugs and collisions; property images from the root, then the note's folder, never by name elsewhere. Contract: two notes as note plus folder note in both forms, and the folder-note rule pinned to `addresses.js`. Node: collisions against the whole base, route C for a page and a folder page, a note-folder cover through the node and publisher, the https base. Plugin: site model v3 parse and fail-closed values, locations with repeated names, folder choices, Create paths and bare cover names. Plugin 80 pass (74 before).

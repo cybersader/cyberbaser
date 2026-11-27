@@ -1,0 +1,11 @@
+---
+title: Renderer output handoff
+---
+
+The private site must serve the bytes the node validated, not an inode a renderer was allowed to write. The renderer's output is staging. The node copies regular, singly linked files into a separate private tree, then validates, hashes and promotes that copy. The reader opens assets through pinned directory descriptors rather than checking and reopening an absolute path.
+
+The native package and both container build recipes now ship the same Linux x64 launcher. It requires Landlock ABI 6, a compatible seccomp profile, and procfs. The launcher owns a new process group, becomes a child subreaper, and refuses to report success until the kernel reports no remaining children. This also covers descendants that start their own session. A build times out after ten minutes; if teardown cannot be verified in its cleanup window, publication fails. Native configured renderers still run in the existing user/network namespace and may write a separate `.quartz-cache`; they cannot rewrite their own renderer files or the node's site. Deployment and the verified-seed path are distinct from the trusted networked source-checkout dependency bootstrap.
+
+The node's copy admits up to 64 MiB per file, 1 GiB total, 50,000 entries (including directories), and 64 directory levels. These are handoff limits, not a quota on the renderer's temporary disk use. The launcher is not a confidentiality sandbox and does not protect against a privileged host administrator. An abrupt supervisor kill or a kernel-stuck task is not proof of teardown; it cannot release that staging tree for promotion.
+
+**Local evidence:** 181 Bun tests passed, with two optional real-Quartz tests skipped. In both launcher modes, the fixture's detached child was gone before the reader served bytes matching the output manifest. The copier refused symlinks, FIFOs, hard links and over-budget trees; the reader returned only site bytes or a miss during ancestor swaps. The release-flags C compile, shared Landlock and seccomp refusals, anonymous subprocess IPC and short-deadline reaping probe passed on the local Linux kernel. No container image, appliance install, real GitHub call or live publication was exercised in this wave.

@@ -7,6 +7,7 @@ import { defaultHandlers } from "mdast-util-to-hast";
 import {
   annotateHast,
   annotateInitial,
+  markProvenanceFailed,
   joinSpan,
   walk,
   wrap,
@@ -214,32 +215,69 @@ function fileSink(ctx: any): ProvenanceSink {
     },
   };
 }
+/** One note the build emitted without source provenance, and the step that failed. */
+export type ProvenanceSkip = { path: string; step: string; error: string };
+export type ProvenanceSkipRecorder = (skip: ProvenanceSkip) => void;
+
+/**
+ * Default recorder: a count on stderr, and the note paths in the private JSON
+ * report named by CYBERBASER_PROVENANCE_REPORT (an absolute path outside the
+ * published output). Without that variable only the count is logged.
+ */
+export function provenanceSkipReport(
+  reportPath: string | undefined = process.env.CYBERBASER_PROVENANCE_REPORT,
+): ProvenanceSkipRecorder {
+  if (reportPath !== undefined && !path.isAbsolute(reportPath))
+    throw Error("CYBERBASER_PROVENANCE_REPORT must be an absolute path");
+  const notes: ProvenanceSkip[] = [];
+  return (skip) => {
+    notes.push(skip);
+    console.warn(
+      `source provenance: note emitted without provenance (${notes.length} so far; ${skip.step})`,
+    );
+    if (reportPath === undefined) return;
+    const report = {
+      schema: "cyberbaser.provenance-skipped",
+      version: 1,
+      count: notes.length,
+      notes,
+    };
+    fs.writeFileSync(reportPath, JSON.stringify(report, null, 2) + "\n", {
+      mode: 0o600,
+    });
+  };
+}
+
 export function withSourceProvenance(
   transformers: QuartzTransformerPluginInstance[],
   sink?: ProvenanceSink,
+  recordSkip: ProvenanceSkipRecorder = provenanceSkipReport(),
 ): QuartzTransformerPluginInstance[] {
   const capture: QuartzTransformerPluginInstance = {
     name: "SourceProvenance",
     beforeParse(ctx, file, original) {
-      const raw = new TextDecoder("utf-8", {
-        fatal: true,
-        ignoreBOM: true,
-      }).decode(original);
       const relative = path
         .relative(ctx.argv.directory, file.path)
         .split(path.sep)
         .join("/");
       if (relative.startsWith("../") || path.isAbsolute(relative))
         throw Error("source provenance input escapes content directory");
-      file.data.sourceProvenance = {
-        raw,
-        pre: trimmedSource(raw),
-        source: {
-          path: relative,
-          byteLength: original.length,
-          sha256: digest(original),
-        },
+      const source = {
+        path: relative,
+        byteLength: original.length,
+        sha256: digest(original),
       };
+      try {
+        const raw = new TextDecoder("utf-8", {
+          fatal: true,
+          ignoreBOM: true,
+        }).decode(original);
+        file.data.sourceProvenance = { raw, pre: trimmedSource(raw), source };
+      } catch (error) {
+        const state: any = { source };
+        markProvenanceFailed(state, "decode", error);
+        file.data.sourceProvenance = state;
+      }
     },
     markdownPlugins() {
       return [
@@ -247,25 +285,30 @@ export function withSourceProvenance(
           const processor = this;
           return (tree, file) => {
             const state = file.data.sourceProvenance;
-            if (!state || state.pre.text !== String(file.value))
-              throw Error(
-                "source provenance preprocessing diverged from Quartz",
+            if (!state || state.failed) return;
+            try {
+              if (state.pre.text !== String(file.value))
+                throw Error(
+                  "source provenance preprocessing diverged from Quartz",
+                );
+              annotateInitial(
+                tree,
+                state.pre.text,
+                state.pre.map,
+                state.source.path,
               );
-            annotateInitial(
-              tree,
-              state.pre.text,
-              state.pre.map,
-              state.source.path,
-            );
-            const original = trimmedSource(state.raw);
-            captureSourceBlocks(
-              state.raw,
-              processor.parse(original.text),
-              original.map,
-              tree,
-              state.pre.map,
-              state.source.path,
-            );
+              const original = trimmedSource(state.raw);
+              captureSourceBlocks(
+                state.raw,
+                processor.parse(original.text),
+                original.map,
+                tree,
+                state.pre.map,
+                state.source.path,
+              );
+            } catch (error) {
+              markProvenanceFailed(state, "markdown", error);
+            }
             delete state.pre;
           };
         },
@@ -289,11 +332,18 @@ export function withSourceProvenance(
       }).map(([name, handler]) => [
         name,
         (state, node, parent) => {
+          const file = state.options?.file;
           const scoped = {
             ...state,
             patch(from, to) {
               state.patch(from, to);
-              annotateHast(from, to);
+              const note = file?.data?.sourceProvenance;
+              if (note?.failed) return;
+              try {
+                annotateHast(from, to);
+              } catch (error) {
+                markProvenanceFailed(note, "mdast-to-hast", error);
+              }
             },
           };
           const result = handler(scoped, node, parent);
@@ -307,15 +357,28 @@ export function withSourceProvenance(
       const state = data.sourceProvenance;
       // Synthetic directory/tag pages have no authoritative source body.
       if (!state) return;
-      const leaves = annotateRenderedBody(tree, state.raw);
-      const blocks = renderedSourceBlocks(tree, state.raw, state.source.path);
-      emitProvenance(
-        sink ?? fileSink(ctx),
-        data.slug,
-        state.source,
-        leaves,
-        blocks,
-      );
+      if (!state.failed) {
+        try {
+          const leaves = annotateRenderedBody(tree, state.raw);
+          const blocks = renderedSourceBlocks(
+            tree,
+            state.raw,
+            state.source.path,
+          );
+          emitProvenance(
+            sink ?? fileSink(ctx),
+            data.slug,
+            state.source,
+            leaves,
+            blocks,
+          );
+          return;
+        } catch (error) {
+          markProvenanceFailed(state, "finalize", error);
+        }
+      }
+      // The page still renders; the owner review falls back for this note.
+      recordSkip({ path: state.source.path, ...state.failed });
     },
   };
   return [
@@ -326,21 +389,26 @@ export function withSourceProvenance(
         ? {
             textTransform(ctx, src, file) {
               const state = file?.data.sourceProvenance;
-              if (!state || state.pre.text !== src)
-                throw Error(
-                  `missing per-file provenance before ${plugin.name}`,
-                );
               const result = plugin.textTransform!(ctx, src, file);
-              if (plugin.name !== "ObsidianFlavoredMarkdown")
-                throw Error(
-                  `no provenance adapter for text transformer ${plugin.name}`,
-                );
-              const tracked = mapOfm(state.pre);
-              if (tracked.text !== result)
-                throw Error(
-                  "pinned OFM preprocessing changed; source provenance fails closed",
-                );
-              state.pre = tracked;
+              if (!state || state.failed) return result;
+              try {
+                if (state.pre.text !== src)
+                  throw Error(
+                    `missing per-file provenance before ${plugin.name}`,
+                  );
+                if (plugin.name !== "ObsidianFlavoredMarkdown")
+                  throw Error(
+                    `no provenance adapter for text transformer ${plugin.name}`,
+                  );
+                const tracked = mapOfm(state.pre);
+                if (tracked.text !== result)
+                  throw Error(
+                    "pinned OFM preprocessing changed; source provenance fails closed",
+                  );
+                state.pre = tracked;
+              } catch (error) {
+                markProvenanceFailed(state, `text:${plugin.name}`, error);
+              }
               return result;
             },
           }

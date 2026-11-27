@@ -1,12 +1,16 @@
 import net from 'node:net';
 import { lstat, realpath } from 'node:fs/promises';
 import path from 'node:path';
+import { PROPOSAL_MAX_BYTES } from '@cyberbaser/proposal';
 import {
   createReviewEvidence,
+  PROPOSAL_REVIEW_SCHEMA_VERSION,
+  SIGNED_PROPOSAL_REVIEW_SCHEMA_VERSION,
 } from '@cyberbaser/proposal-review';
 import {
   validateDigest,
   validateQueueId,
+  validateVerifiedSubmitter,
 } from '@cyberbaser/proposal-queue';
 import { fail, OwnerAlphaError } from './errors.js';
 import { canonicalJson, deepFreeze, isPlainObject } from './json.js';
@@ -111,6 +115,7 @@ function assertResponseJson(value) {
 }
 
 function reviewSummary(value) {
+  const signed = value?.lane === 'lane-signed';
   exactObject(value, [
     'schemaVersion',
     'artifactType',
@@ -126,15 +131,17 @@ function reviewSummary(value) {
     'lane',
     'tier',
     'route',
-    ...(Object.hasOwn(value, 'proposalVersion') ? ['proposalVersion'] : []),
+    ...(signed ? ['submitter'] : []),
+    ...(Object.hasOwn(value ?? {}, 'proposalVersion') ? ['proposalVersion'] : []),
   ], 'review summary');
   if (Object.hasOwn(value, 'proposalVersion') && ![1, 2].includes(value.proposalVersion)) fail('invalid-review-response', 'unsupported proposal version');
-  if (value.schemaVersion !== 1 || value.artifactType !== 'cyberbaser-proposal-review-summary') {
+  const version = signed ? SIGNED_PROPOSAL_REVIEW_SCHEMA_VERSION : PROPOSAL_REVIEW_SCHEMA_VERSION;
+  if (value.schemaVersion !== version || value.artifactType !== 'cyberbaser-proposal-review-summary') {
     fail('invalid-review-response', 'review summary schema or artifact type is unsupported');
   }
   exactObject(value.source, ['repository', 'revision', 'path'], 'review summary source');
   if (!['pending-review', 'expired'].includes(value.state)
-    || !['lane-a', 'lane-b'].includes(value.lane)
+    || !['lane-a', 'lane-b', 'lane-signed'].includes(value.lane)
     || !['auto-merge', 'quick-review', 'full-review', 'reject'].includes(value.route)) {
     fail('invalid-review-response', 'review summary contains an unsupported state, lane, or route');
   }
@@ -142,7 +149,9 @@ function reviewSummary(value) {
   let proposalDigest;
   let candidateDigest;
   let reviewEvidenceDigest;
+  let submitter;
   try {
+    if (signed) submitter = validateVerifiedSubmitter(value.submitter);
     queueId = validateQueueId(value.queueId);
     proposalDigest = validateDigest(value.proposalDigest, 'proposalDigest');
     candidateDigest = validateDigest(value.candidateDigest, 'candidateDigest');
@@ -158,7 +167,8 @@ function reviewSummary(value) {
     fail('invalid-review-response', 'review summary expiry must follow receipt');
   }
   return deepFreeze({
-    schemaVersion: 1,
+    schemaVersion: version,
+    ...(signed ? { submitter } : {}),
     ...(Object.hasOwn(value, 'proposalVersion') ? { proposalVersion: value.proposalVersion } : {}),
     artifactType: value.artifactType,
     queueId,
@@ -220,6 +230,8 @@ function parseResponse(input, maximum) {
     exactObject(parsed, ['schemaVersion', 'operation', 'entries', 'nextCursor'], 'review IPC list response');
   } else if (parsed.operation === 'load') {
     exactObject(parsed, ['schemaVersion', 'operation', 'entry'], 'review IPC load response');
+  } else if (parsed.operation === 'submit-signed') {
+    exactObject(parsed, ['schemaVersion', 'operation', 'receipt'], 'signed submission response');
   } else {
     fail('invalid-review-response', 'review IPC response operation is unsupported');
   }
@@ -313,7 +325,8 @@ async function exchange(socketPath, request, { timeoutMs, maxResponseBytes }) {
 
 function requestBytes(value) {
   const bytes = Buffer.from(`${canonicalJson(value)}\n`, 'utf8');
-  if (bytes.length > PROPOSAL_REVIEW_IPC_REQUEST_MAX_BYTES) {
+  const maximum = PROPOSAL_REVIEW_IPC_REQUEST_MAX_BYTES + (value.operation === 'submit-signed' ? 2 * PROPOSAL_MAX_BYTES : 0);
+  if (bytes.length > maximum) {
     fail('invalid-review-request', 'proposal review request exceeds its byte limit');
   }
   return bytes;
@@ -344,6 +357,15 @@ export function createProposalReviewClient({
   }
 
   return Object.freeze({
+    async submitSigned({ proposalText, bindingDigest, submitter }) {
+      const response = await request({ schemaVersion: PROPOSAL_REVIEW_IPC_SCHEMA_VERSION,
+        operation: 'submit-signed', proposalText, bindingDigest, submitter });
+      if (response.operation !== 'submit-signed') fail('invalid-review-response', 'signed submission response is invalid');
+      const receipt = exactObject(response.receipt, ['queueId', 'acceptedAt', 'baseBound'], 'signed submission receipt');
+      if (receipt.baseBound !== true) fail('invalid-review-response', 'signed submission lacks a base-bound receipt');
+      return deepFreeze({ queueId: validateQueueId(receipt.queueId),
+        acceptedAt: utcSecond(receipt.acceptedAt, 'signed submission acceptance time'), baseBound: true });
+    },
     async list(options = {}) {
       optionalObject(options, ['state', 'cursor', 'limit'], 'review list options');
       const state = options.state ?? 'pending-review';

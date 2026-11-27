@@ -149,7 +149,7 @@ test('actual durable pipeline acceptance and concurrent duplicate Publish share 
   expect(status.status).toBe('present');
   expect(status.session.origin.reference.source.identity).toBe(PRIVATE_ID);
   expect(status.publication.draftId).toBe(draft.draftId);
-  data.setSource(); // same bytes, newer coherent save version must still refuse.
+  data.setSource(BASE, 7); // Same advisory version, different text.
   data.renderGate.resolve({ ok: true, rendered: { witnesses: { old: 'old', new: 'new' } } });
   const completed = await data.completion;
   expect(completed.state).toBe('blocked-pre-apply');
@@ -170,7 +170,7 @@ test('a source save AFTER successful rendering and final checkout verification s
     runPreApplyChecks: async () => { const checks = await data.renderGate.promise; rendered = true; return checks; },
     assertCheckoutReady: async (config) => {
       const ready = await assertCheckoutReady(config, { git: data.git });
-      if (rendered) data.setSource(); // completed render, then checkout, then host save.
+      if (rendered) data.setSource(BASE, 7); // completed render, then checkout, then host save.
       return ready;
     },
     applyAcceptedOperation: async () => { effects += 1; throw new Error('must not apply'); },
@@ -203,7 +203,7 @@ test('guard keeps stale source, missing or tampered authorization, and missing d
     }
     await data.runtime.publish({ draftId: draft.draftId });
     const authorization = path.join(data.context.storeRoot, 'owner-publication/authorizations', `${draft.draftId}.json`);
-    if (condition === 'stale') data.setSource();
+    if (condition === 'stale') data.setSource(BASE, 7);
     if (condition === 'missing-authorization') await rm(authorization);
     if (condition === 'missing-draft') await rm(path.join(data.context.storeRoot, 'owner-publication/drafts', `${draft.draftId}.json`));
     if (condition === 'tampered-authorization') {

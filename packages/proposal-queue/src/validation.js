@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
+import { parseVersionedProposal, serializeChangeSetProposal, validateChangeSetProposal } from '@cyberbaser/proposal';
 import { fail } from './errors.js';
 
 export const QUEUE_SCHEMA_VERSION = 1;
 export const QUEUE_STATES = Object.freeze(['pending-review', 'expired']);
-export const QUEUE_LANES = Object.freeze(['lane-a', 'lane-b']);
+export const QUEUE_LANES = Object.freeze(['lane-a', 'lane-b', 'lane-signed']);
 export const DEFAULT_QUEUE_CONFIG = Object.freeze({
   maxPendingEntries: 1000,
   maxRetainedBytes: 256 * 1024 * 1024,
@@ -137,6 +138,49 @@ export function normalizeVerifiedSubject(value) {
   return { author: utf8String(value.author, 'verifiedSubject.author', { maxBytes: 1024, trim: true }), authorType: value.authorType };
 }
 
+export function validateVerifiedSubmitter(value) {
+  exactObject(value, ['kind', 'id', 'label', 'keyId'], 'verified submitter');
+  if (!['agent', 'owner-device'].includes(value.kind) || typeof value.keyId !== 'string'
+    || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(value.keyId)) {
+    fail('invalid-verified-submitter', 'verified submitter kind or key ID is invalid');
+  }
+  return deepFreeze({
+    kind: value.kind,
+    id: utf8String(value.id, 'verified submitter id', { maxBytes: 512, trim: true }),
+    label: utf8String(value.label, 'verified submitter label', { maxBytes: 512, trim: true }),
+    keyId: value.keyId,
+  });
+}
+
+export function signedSubmitterSubject(submitter) {
+  const { kind, id } = validateVerifiedSubmitter(submitter);
+  return { author: id, authorType: kind === 'agent' ? 'agent' : 'human' };
+}
+
+export function validateSignedProposal(value, submitter) {
+  const proposal = typeof value === 'string' || value instanceof Uint8Array
+    ? parseVersionedProposal(value).proposal : validateChangeSetProposal(value);
+  if (proposal.schemaVersion !== 2) fail('signed-proposal-version', 'signed submissions require proposal schemaVersion 2');
+  const verifiedSubject = signedSubmitterSubject(submitter);
+  const claim = proposal.submission.identityClaim;
+  if (claim !== null && (claim.type !== verifiedSubject.authorType || claim.subject !== verifiedSubject.author)) {
+    fail('signed-author-mismatch', 'submission claim does not match the verified submitter');
+  }
+  const proposalText = serializeChangeSetProposal(proposal);
+  return { proposal, proposalText, proposalDigest: digestBytes(Buffer.from(proposalText, 'utf8')), verifiedSubject };
+}
+
+// Rebind the attributed actor to the classifier and replay identity on read.
+export function assertSignedSubmission(proposal, receipt, carrier, classification) {
+  const { proposalDigest, verifiedSubject } = validateSignedProposal(proposal, carrier.metadata.submitter);
+  if (receipt.requestDigest !== proposalDigest || receipt.proposalDigest !== proposalDigest
+    || receipt.idempotencyKeyDigest !== null || carrier.replayScope !== signedReplayScope(carrier.metadata.submitter.keyId, proposalDigest)
+    || verifiedSubject.author !== classification.verifiedSubject?.author
+    || verifiedSubject.authorType !== classification.verifiedSubject?.authorType) {
+    fail('signed-evidence-mismatch', 'signed submission evidence does not bind the verified actor and proposal');
+  }
+}
+
 export function validatePolicyInput(value) {
   exactObject(value, ['status', 'digest', 'config'], 'policy');
   if (!['valid', 'missing', 'malformed'].includes(value.status)) fail('invalid-policy-status', 'policy.status must be valid, missing, or malformed');
@@ -164,6 +208,9 @@ export function validateIdempotencyInput(value, lane) {
   const key = validateIdempotencyKey(value.key);
   if (lane === 'lane-b' && value.scope !== 'lane-b') fail('invalid-idempotency-scope', 'Lane B idempotency.scope must be lane-b');
   if (lane === 'lane-a' && key !== null) fail('invalid-idempotency-key', 'Lane A replay is derived from repository ID, pull request, and head SHA and requires a null key');
+  if (lane === 'lane-signed' && (value.scope !== 'lane-signed' || key !== null)) {
+    fail('invalid-idempotency-scope', 'signed replay is derived from the verified key ID and canonical proposal digest');
+  }
   return deepFreeze({ scope: value.scope, key, requestDigest: validateDigest(value.requestDigest, 'idempotency.requestDigest') });
 }
 
@@ -184,11 +231,22 @@ function normalizeLaneBMetadata(value) {
   };
 }
 
+function normalizeSignedMetadata(value) {
+  exactObject(value, ['bindingDigest', 'pageId', 'submitter'], 'signed carrier metadata');
+  const { bindingDigest, pageId, submitter } = value;
+  return { ...normalizeLaneBMetadata({ bindingDigest, pageId }), submitter: validateVerifiedSubmitter(submitter) };
+}
+
 export function validateCarrierInput(value) {
   exactObject(value, ['lane', 'metadata'], 'carrier');
   if (value.lane === 'lane-a') return deepFreeze({ lane: 'lane-a', metadata: normalizeLaneAMetadata(value.metadata) });
   if (value.lane === 'lane-b') return deepFreeze({ lane: 'lane-b', metadata: normalizeLaneBMetadata(value.metadata) });
-  fail('invalid-carrier', 'carrier.lane must be lane-a or lane-b');
+  if (value.lane === 'lane-signed') return deepFreeze({ lane: 'lane-signed', metadata: normalizeSignedMetadata(value.metadata) });
+  fail('invalid-carrier', 'carrier.lane is unsupported');
+}
+
+export function signedReplayScope(keyId, proposalDigest) {
+  return digestBytes(Buffer.from(`lane-signed\0${keyId}\0${proposalDigest}`, 'utf8'));
 }
 
 export function idempotencyDigests(carrierInput, idempotencyInput) {
@@ -201,6 +259,8 @@ export function idempotencyDigests(carrierInput, idempotencyInput) {
       `lane-a\0${carrier.metadata.repositoryId}\0${carrier.metadata.pullRequestNumber}\0${carrier.metadata.headSha}`,
       'utf8',
     ));
+  } else if (carrier.lane === 'lane-signed') {
+    replayScope = signedReplayScope(carrier.metadata.submitter.keyId, idempotency.requestDigest);
   } else if (keyDigest !== null) {
     replayScope = digestBytes(Buffer.from(`lane-b\0${keyDigest}`, 'utf8'));
   }
@@ -224,6 +284,7 @@ export function validateDurableCarrier(value) {
   if (value.replayScope !== null) validateDigest(value.replayScope, 'carrier.replayScope');
   if (value.lane === 'lane-a') return deepFreeze({ schemaVersion: 1, artifactType: value.artifactType, lane: 'lane-a', replayScope: value.replayScope, metadata: normalizeLaneAMetadata(value.metadata) });
   if (value.lane === 'lane-b') return deepFreeze({ schemaVersion: 1, artifactType: value.artifactType, lane: 'lane-b', replayScope: value.replayScope, metadata: normalizeLaneBMetadata(value.metadata) });
+  if (value.lane === 'lane-signed' && value.replayScope !== null) return deepFreeze({ schemaVersion: 1, artifactType: value.artifactType, lane: 'lane-signed', replayScope: value.replayScope, metadata: normalizeSignedMetadata(value.metadata) });
   fail('invalid-carrier-artifact', 'carrier artifact lane is unsupported');
 }
 

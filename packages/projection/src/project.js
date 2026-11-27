@@ -37,10 +37,10 @@ import path from 'node:path';
 import yaml from 'js-yaml';
 import { select, lintVault, extractRefs } from '@cyberbaser/publish';
 import { parseFrontmatter } from '@cyberbaser/publish/src/select.js';
+import { findFrontmatterInText } from '../../correction/src/frontmatter.js';
 
 // Mirrors select.js. Kept local rather than imported so the two can never disagree
 // silently about what a match *span* is: the projection slices bytes on this match.
-const FRONTMATTER = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
 
 const MARKDOWN = /\.md$/i;
 
@@ -361,9 +361,9 @@ function aliasesRegion(lines) {
  */
 export function injectAlias(buf, alias) {
   const text = buf.toString('utf8');
-  const m = text.match(FRONTMATTER);
+  const frontmatter = findFrontmatterInText(text);
 
-  if (!m) {
+  if (frontmatter.kind !== 'block') {
     const block = yaml.dump({ aliases: [alias] }, { lineWidth: -1 });
     return {
       buffer: Buffer.concat([Buffer.from(`---\n${block}---\n`, 'utf8'), buf]),
@@ -373,10 +373,9 @@ export function injectAlias(buf, alias) {
     };
   }
 
-  // The regex is anchored, so the matched text is the file's byte prefix -- unless the
-  // file is not valid UTF-8, in which case decoding lost bytes and slicing would corrupt
-  // the body. Check rather than assume; a lost alias is recoverable, a corrupt body is not.
-  const prefix = Buffer.from(m[0], 'utf8');
+  // The matched text is the file's byte prefix unless UTF-8 decoding lost bytes.
+  // Check rather than assume; a lost alias is recoverable, a corrupt body is not.
+  const prefix = Buffer.from(text.slice(0, frontmatter.textRange.end), 'utf8');
   if (!buf.subarray(0, prefix.length).equals(prefix)) {
     return { buffer: buf, injected: false, existing: [], reason: 'file is not valid UTF-8; frontmatter left untouched' };
   }
@@ -388,7 +387,7 @@ export function injectAlias(buf, alias) {
   if (existing.includes(alias)) return { buffer: buf, injected: false, existing, reason: 'alias already present' };
 
   const block = yaml.dump({ aliases: [...existing, alias] }, { lineWidth: -1 });
-  const lines = m[1].split('\n').map((l) => l.replace(/\r$/, ''));
+  const lines = frontmatter.yamlText.split('\n').map((l) => l.replace(/\r$/, ''));
   const region = 'aliases' in (parsed.data ?? {}) ? aliasesRegion(lines) : null;
   const kept = region ? [...lines.slice(0, region[0]), ...lines.slice(region[1])] : lines;
   const head = kept.join('\n').replace(/[ \t\n]+$/, '');

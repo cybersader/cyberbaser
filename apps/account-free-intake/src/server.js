@@ -4,13 +4,14 @@ import {
   AccountFreeIntakeError,
   versionedIntentDigest,
   ACCOUNT_FREE_SUGGESTION_INTENT_MAX_BYTES,
+  computePageId,
   createBareGitObjectResolver,
   createRetainedSourceBindingResolver,
   deriveAccountFreeProposal,
   validateCorrectionIntent, validateSuggestionIntent,
 } from '@cyberbaser/account-free-intake';
 import { ProposalError } from '@cyberbaser/proposal';
-import { openProposalQueue, ProposalQueueError } from '@cyberbaser/proposal-queue';
+import { openProposalQueue, ProposalQueueError, validateSignedProposal } from '@cyberbaser/proposal-queue';
 import { createGlobalAbuseLimiter, createLayeredAbuseLimiter } from './abuse.js';
 import { createClientAddressResolver } from './client-address.js';
 import { CHALLENGE_TOKEN_HEADER, ChallengeError, createBotVerifier } from './bot-check.js';
@@ -323,7 +324,21 @@ export function createIntakeEvidenceContext({
     gitDirectory: config.gitDir,
     ...(deadline === null ? {} : { execute: executeGitWithDeadline(deadline) }),
   }));
+  async function resolveSignedEvidence(proposal, { bindingDigest, pageId }, deadline = null) {
+    const source = proposalSource(proposal);
+    const { base } = proposal.changeSet.files[0];
+    const binding = await bindings.resolve(bindingDigest, pageId);
+    if (binding.bindingDigest !== bindingDigest || source.repository !== config.repository
+      || binding.manifest.source.repository !== source.repository || binding.manifest.source.revision !== source.revision
+      || binding.page.pageId !== pageId || binding.page.path !== source.path
+      || binding.page.byteLength !== base.byteLength || binding.page.digest !== base.digest) {
+      throw new ProposalQueueError('signed-binding-mismatch', 'signed proposal does not bind a selected source page');
+    }
+    deadline?.assert();
+    return createGit(deadline).resolve(binding);
+  }
   const resolveDurableEvidence = async (entry) => {
+    if (entry.carrier.lane === 'lane-signed') return resolveSignedEvidence(entry.proposal, entry.carrier.metadata);
     if (entry.carrier.lane === 'lane-a') {
       // Forge entries are proven from the watcher's retained clone objects.
       if (laneA === null || typeof laneA.resolveEvidence !== 'function') {
@@ -332,7 +347,7 @@ export function createIntakeEvidenceContext({
       return laneA.resolveEvidence(entry);
     }
     if (entry.carrier.lane !== 'lane-b') {
-      throw new ProposalQueueError('unsupported-queue-lane', 'the account-free runtime queue may contain only Lane A and Lane B entries');
+      throw new ProposalQueueError('unsupported-queue-lane', 'the intake runtime does not resolve this queue lane');
     }
     const metadata = entry.carrier.metadata;
     const source = proposalSource(entry.proposal);
@@ -347,7 +362,7 @@ export function createIntakeEvidenceContext({
     }
     return createGit(null).resolve(binding);
   };
-  return Object.freeze({ bindings, createGit, resolveDurableEvidence });
+  return Object.freeze({ bindings, createGit, resolveDurableEvidence, resolveSignedEvidence });
 }
 
 export async function openIntakeService({
@@ -379,7 +394,7 @@ export async function openIntakeService({
     gitFactory,
     laneA,
   });
-  const { bindings, createGit, resolveDurableEvidence } = evidenceContext;
+  const { bindings, createGit, resolveDurableEvidence, resolveSignedEvidence } = evidenceContext;
 
   let queue = injectedQueue;
   if (queue === null) {
@@ -503,6 +518,30 @@ export async function openIntakeService({
     }
   }
 
+  // Private Unix socket only: the owner core authenticates the actor and
+  // resolves the current publication binding. Never expose this through fetch.
+  async function submitSigned({ proposalText, bindingDigest, submitter }) {
+    const deadline = createDeadline(config.limits.requestTimeoutMs);
+    try {
+      deadline.assert();
+      const { proposal, proposalDigest, verifiedSubject } = validateSignedProposal(proposalText, submitter);
+      const previous = await deadline.race(queue.replaySigned({ proposalText, submitter }));
+      if (previous !== null) return { queueId: previous.queueId, acceptedAt: previous.receivedAt };
+      if (bindingDigest === null) throw new ProposalQueueError('signed-binding-mismatch', 'no current publication binding');
+      const metadata = { bindingDigest, pageId: computePageId(proposalSource(proposal)), submitter };
+      const evidence = await deadline.race(resolveSignedEvidence(proposal, metadata, deadline));
+      deadline.assert();
+      const { receipt } = await deadline.race(queue.enqueue({
+        proposalText, baseBytes: evidence.baseBytes, policy: evidence.policy, verifiedSubject,
+        carrier: { lane: 'lane-signed', metadata },
+        idempotency: { scope: 'lane-signed', key: null, requestDigest: proposalDigest },
+      }));
+      return { queueId: receipt.queueId, acceptedAt: receipt.receivedAt };
+    } finally {
+      deadline.close();
+    }
+  }
+
   async function fetch(request, peer = null) {
     const url = new URL(request.url);
     let corsOrigin = null;
@@ -572,6 +611,7 @@ export async function openIntakeService({
     fetch,
     queue,
     review: queue.review,
+    submitSigned,
     forgejo: watcher,
     stats: () => queue.stats(),
     setReadyForTest(value) { ready = value === true; },
@@ -616,7 +656,7 @@ export async function startIntakeRuntime({
   let reviewIpc = null;
   let server = null;
   try {
-    reviewIpc = await startReview({ config, review: service.review });
+    reviewIpc = await startReview({ config, review: service.review, submitSigned: service.submitSigned ?? null });
     server = config.listen === null ? null : await startPublic({ config, service });
     service.forgejo?.start();
   } catch (error) {

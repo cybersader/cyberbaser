@@ -1,0 +1,30 @@
+---
+title: New pages now reach Live (built, rehearsal-verified)
+description: A pushed page bundle now gets the same after-push lifecycle as an edit, one durable job through deployment, a live check of every new page and image, and the local rebuild, so the note's status reads Live with the time it was confirmed. The Cyberchief rehearsal reran and reached Live; deployment and live checks were simulated there, as for edits.
+status: log
+---
+
+## Outcome
+
+Closes the first open item of [the author flow rehearsal](/agent-context/zz-log/2026-11-24-dad-flow-rehearsal/). After the publisher pushes a bundle, the node records it as an ordinary durable job and follows it the way it follows an edit. The rerun of the rehearsal went from the New post form to "Live. Confirmed on your site" in the plugin's status, about 17 seconds after the push.
+
+## What changed
+
+- **One pipeline, not a second one.** A pushed bundle becomes a job (`OA-<bundleId>`) whose evidence (the pushed commit, its parent, the publisher's receipt) is read from the commit's own Git objects. The job state machine gains one transition, `accepted → pushed`, which only a bundle job may take; an edit job that shows it is refused. From `pushed` on, the bundle uses the existing deployment discovery and monitoring, failure states and restart recovery unchanged.
+- **Live check for pages that did not exist before** (new evidence kind `new-page-live`). There is no old text to see disappear, so each new page must answer 200 HTML at its approved address with its title visible, and each new image must be served at its address with exactly the committed bytes. No redirects are followed. A missing title times out, other image bytes fail at once (`live-asset-mismatch`); both leave the job in `live-verification-failed`, retryable and read-only, as for edits. The stored result must name the same pages, witness digests, images and deployed commit, or it is not accepted.
+- **Status.** Nothing new in the note status: it already reads Live from the newest job with a verified deployment, and a bundle job now is one. The confirmed time is the job's `live-confirmed` time.
+- **Restarts.** The bundle desk keeps the publisher's answer on the published record, so a bundle pushed just before a restart still gets its job.
+- **Rehearsal fixture.** It now simulates the new-page check like the edit check. Its simulated deployment is now shaped as a successful bound run: before, the node's own deployment check refused it, which meant rehearsal edits also never showed Live in note status.
+
+## Evidence
+
+- `apps/owner-alpha/test/bundle-lifecycle.test.js`: pushed → deploying → live, with the job's state seen during discovery and monitoring, then the note status Live with the confirmed time; a failed deployment stops at `deployment-failed`; a mismatched image, a page without its title and a proof naming another witness each stop at `live-verification-failed` and the note is not Live; the retry then confirms it; a publisher answer for another commit or branch is refused.
+- `page-bundle-e2e.test.js`: after a real signed push, the bundle is handed on with its page address, title witness, image address and length, and the receipt.
+- Suites: 1,369 pass, 10 skip, the known `proposal-fixtures` missing-module error only; plugin 57 pass.
+- Rehearsal rerun on the scratch Cyberchief copies (renderer re-copied with Cyberchief's tag-page fix): passed; screenshot `.workspace/dad-flow/shots/15-desktop-status-live.png` (scratch, not committed).
+
+## Not verified
+
+- A real deployment and a real live page for a new note: the rehearsal simulates both, as it does for edits.
+- Whether a real renderer shows the note's title in the page body on every design. Stock Quartz and the Cyberchief design do; another design that hides it would never confirm (it fails closed).
+- The rehearsal's private-site check reported 404 for the new page and its topic page. Resolved later the same day: the driver asked for the bare address, and the private reader serves under `/cyberbase/` (see the rerun in [the author flow rehearsal](/agent-context/zz-log/2026-11-24-dad-flow-rehearsal/)).

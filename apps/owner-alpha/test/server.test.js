@@ -14,6 +14,7 @@ import {
   createReaderHandler,
   recoverOwnerAlphaJobs,
   runOwnerAlphaServer,
+  createRecoveryGate,
   startOwnerAlphaServer,
   startReaderServer,
 } from '../src/server.js';
@@ -203,6 +204,7 @@ async function handlerFixture({
   publicRoot,
   config: configInput,
   proposalReview = null,
+  reviewAppearance = null,
 } = {}) {
   const config = configInput ?? await exampleConfig();
   const calls = [];
@@ -223,6 +225,7 @@ async function handlerFixture({
     saveEdit,
     lookupJob,
     proposalReview,
+    reviewAppearance,
   });
   return { config, fetch, calls };
 }
@@ -231,7 +234,7 @@ async function readerFixture({ siteRoot, config: configInput } = {}) {
   const config = configInput ?? await exampleConfig();
   return {
     config,
-    fetch: createReaderHandler({ config, siteRoot }),
+    fetch: createReaderHandler({ config, siteRoot, hasOwnerSession: () => true }),
   };
 }
 
@@ -555,9 +558,10 @@ describe('privileged proposal review routes', () => {
     expect(opened.body).toContain('<h1>Proposals</h1>');
     expect(opened.body).toContain('Needs review');
     expect(opened.body).toContain('Decided');
-    expect(opened.body).toContain('docs/example.md');
-    expect(opened.body).toContain('changed-proposed');
-    expect(opened.body).toContain('deciding changes nothing on the page itself');
+    expect(opened.body).toContain(`href="/owner/review/${REVIEW_QUEUE_ID}"`);
+    expect(opened.body).toContain('class="proposal-row-title" title="Example">Example</strong>');
+    expect(opened.body).toContain('class="proposal-row-count">1 change</span>');
+    expect(opened.body).not.toContain('changed-proposed');
     expect(opened.body).not.toContain('<dt>Queue ID</dt>');
     expect(opened.body).not.toContain('<dt>Trust</dt>');
     expect(opened.response.headers.get('content-security-policy')).toContain("script-src 'self'");
@@ -573,19 +577,16 @@ describe('privileged proposal review routes', () => {
     }));
     const detailBody = await detail.text();
     expect(detail.status).toBe(200);
-    expect(detailBody).toContain('Review “teh” to “&lt;/pre&gt;&lt;script&gt;the&lt;/script&gt;”');
-    expect(detailBody).toContain('<nav class="review-modes" aria-label="Review mode">');
-    for (const mode of ['changes', 'proposed', 'current', 'compare']) {
-      expect(detailBody).toContain(`?mode=${mode}"`);
-    }
-    expect(detailBody).toContain('aria-current="page"');
-    expect(detailBody).toContain('<div class="mode-panel mode-panel-changes">');
-    expect(detailBody).toContain('<aside class="decision-bar" aria-label="Your decision">');
-    expect(detailBody).toContain('Approve this suggestion?');
-    expect(detailBody).toContain('<details class="technical-evidence">');
-    expect(detailBody).toContain('<summary>Details for the record</summary>');
+    expect(detailBody).toContain('The page can’t be shown here, so this is the exact change.');
+    expect(detailBody).not.toContain('Compare full versions');
+    expect(detailBody).toContain('<section class="rv-sheet" id="rv-sheet" aria-label="Cyberbaser, private to you">');
+    expect(detailBody).toContain('Approve this proposal?');
+    expect(detailBody).toContain('<details class="rv-details" id="publication-review-fallback">');
+    expect(detailBody).toContain('<summary>Details</summary>');
+    expect(detailBody).toContain('<section id="publication-review-details">');
+    expect(detailBody).toContain('docs/example.md');
     expect(detailBody).toContain('id="decision-reason"');
-    expect(detailBody).toContain('This records your decision and nothing else. The page stays exactly as it is.');
+    expect(detailBody).toContain('This records your decision. The page stays exactly as it is.');
     expect(detailBody).toContain('type="button" data-action="reject"');
     expect(detailBody).toContain('type="button" data-action="approve"');
     expect(detailBody).toContain('<dialog id="decision-dialog"');
@@ -608,7 +609,7 @@ describe('privileged proposal review routes', () => {
     expect(assetBody).not.toContain('data-review-tab');
   });
 
-  test('labels offset-bound proposals honestly when no quote context is available', async () => {
+  test('shows exact byte bounds without inventing quote context or a complete note', async () => {
     const offsetEntry = structuredClone(REVIEW_ENTRY);
     offsetEntry.evidence.proposal.operation.type = 'offset';
     offsetEntry.evidence.proposal.operation.selector = null;
@@ -619,14 +620,10 @@ describe('privileged proposal review routes', () => {
     const { fetch } = await enabledFixture({ proposalReview: service });
     const opened = await openReview(fetch, `/owner/review/${REVIEW_QUEUE_ID}`);
     expect(opened.response.status).toBe(200);
-    expect(opened.body).toContain('Offset operation at bytes 13–16.');
-    const compared = await fetch(request(`/owner/review/${REVIEW_QUEUE_ID}?mode=compare`, {
-      headers: { Cookie: opened.cookie },
-    }));
-    const comparedBody = await compared.text();
-    expect(compared.status).toBe(200);
-    expect(comparedBody).toContain('This offset-bound proposal does not include surrounding quote context.');
-    expect(comparedBody).toContain('<div class="mode-panel mode-panel-compare">');
+    expect(opened.body).toContain('Change 1 · Bytes 13–16');
+    expect(opened.body).toContain('<h4>Before</h4><pre>teh</pre>');
+    expect(opened.body).toContain('The page can’t be shown here, so this is the exact change.');
+    expect(opened.body).not.toContain('Compare full versions');
   });
 
   test('returns bounded review projections and rejects unknown or duplicate list queries', async () => {
@@ -677,15 +674,32 @@ describe('privileged proposal review routes', () => {
     return opened.body;
   }
 
+  // The note itself is served on its own sandboxed route, not in the shell.
+  async function renderFrame(entry) {
+    const service = {
+      ...reviewServiceFixture(),
+      async load() { return { entry, decision: null }; },
+    };
+    const { fetch } = await enabledFixture({ proposalReview: service });
+    const opened = await openReview(fetch);
+    const framed = await fetch(request(`/owner/review/${REVIEW_QUEUE_ID}/page`, { headers: { Cookie: opened.cookie } }));
+    expect(framed.status).toBe(200);
+    return framed.text();
+  }
+
   test('shows a changed passage exactly once even when the page holds invisible characters', async () => {
     const baseText = 'Intro\u200b text.\n\nMiddle para.\n\nTail changed.\n';
     const entry = projectedEntry({ baseText, oldText: 'changed', replacementText: 'edited' });
     const body = await renderMode(entry, 'changes');
-    expect(body.match(/Middle para\./gu)).toHaveLength(1);
-    expect(body.match(/⟦U\+200B ZERO WIDTH SPACE⟧/gu)).toHaveLength(1);
-    expect(body.match(/Exact source · changed passage/gu)).toHaveLength(1);
-    expect(body).toContain('<del class="doc-removed">changed</del>');
-    expect(body).toContain('<ins class="doc-added">edited</ins>');
+    const document = await renderFrame(entry);
+    expect(document.match(/Middle para\./gu)).toHaveLength(1);
+    expect(document.match(/⟦U\+200B ZERO WIDTH SPACE⟧/gu)).toHaveLength(1);
+    expect(document).toContain('<del>changed</del>');
+    expect(document).toContain('<ins>edited</ins>');
+    const comparison = body.split('<summary>Compare full versions</summary>')[1];
+    expect(comparison.match(/Exact source · changed passage/gu)).toHaveLength(1);
+    expect(comparison).toContain('<del class="doc-removed">changed</del>');
+    expect(comparison).toContain('<ins class="doc-added">edited</ins>');
   });
 
   test('keeps a change appended at the end of the page visible in every mode', async () => {
@@ -727,9 +741,10 @@ describe('privileged proposal review routes', () => {
     const entry = structuredClone(REVIEW_ENTRY);
     const reason = 'the pinned page exceeds the 262144 byte reading bound, so only the declared change spans are shown';
     entry.document = { baseText: null, candidateText: null, reason };
-    const body = await renderMode(entry, 'changes');
+    const body = await renderFrame(entry);
     expect(body).toContain(reason);
     expect(body).not.toContain('does not exist in the pinned base');
+    expect(await renderMode(entry, 'changes')).toContain('The page can’t be shown here, so this is the exact change.');
   });
 
   test('keeps verified reading text out of list and detail JSON projections', async () => {
@@ -921,7 +936,8 @@ describe('privileged proposal review routes', () => {
     const { fetch } = await enabledFixture({ proposalReview: service });
     const opened = await openReview(fetch);
     expect(opened.body).toContain('<span class="section-count">2 waiting</span>');
-    expect(opened.body).toContain('From <a href="https://forge.home.arpa:8443/cybersader/cyberbase/pulls/42" rel="noopener noreferrer">pull request #42</a> on your forge');
+    expect(opened.body).toContain('From pull request #42 on your forge');
+    expect(opened.body).not.toContain('href="https://forge.home.arpa:8443/cybersader/cyberbase/pulls/42"');
     expect(opened.body).toContain(`<a class="proposal-row-link" href="/owner/review/${newer.summary.queueId}">`);
     expect(opened.body).not.toContain(`<a class="proposal-row-link" href="/owner/review/${older.summary.queueId}">`);
     expect(opened.body).toContain(`Earlier version of this request: <a href="/owner/review/${older.summary.queueId}">received`);
@@ -934,7 +950,7 @@ describe('privileged proposal review routes', () => {
     const receipt = await fetch(request(`/owner/decisions/${newer.summary.queueId}`, { headers: { Cookie: opened.cookie } }));
     const receiptBody = await receipt.text();
     expect(receipt.status).toBe(200);
-    expect(receiptBody).toContain('<h2 id="application-heading">On its way to the page</h2>');
+    expect(receiptBody).toContain('<h1 id="application-heading">Applying</h1>');
     expect(receiptBody).toContain('Pull request #42</a> on your forge is still open. Close it there; this app never writes to your forge.');
   });
 
@@ -944,11 +960,12 @@ describe('privileged proposal review routes', () => {
     const ready = await eligible.fetch(request(`/owner/decisions/${REVIEW_QUEUE_ID}`, { headers: { Cookie: opened.cookie } }));
     const readyBody = await ready.text();
     expect(ready.status).toBe(200);
-    expect(readyBody).toContain('<h2 id="application-heading">Put it on the page</h2>');
+    expect(readyBody).toContain('<h1 id="application-heading">Approved</h1>');
+    expect(readyBody).toContain('The page has not changed. Applying is a separate step.');
     expect(readyBody).toContain('data-apply>Apply to page</button>');
     expect(readyBody).toContain('<script src="/owner/assets/apply.js" defer></script>');
     expect(readyBody).toContain(`data-queue-id="${REVIEW_QUEUE_ID}" data-csrf="${TOKENS.csrf}"`);
-    expect(readyBody).toContain('This changes the page and publishes it.');
+    expect(readyBody).toContain('This changes the page, commits and pushes it, and publishes it');
     const asset = await eligible.fetch(request('/owner/assets/apply.js', { headers: { Cookie: opened.cookie } }));
     expect(asset.status).toBe(200);
     expect(await asset.text()).toContain("/apply`");
@@ -958,7 +975,7 @@ describe('privileged proposal review routes', () => {
     const stale = await enabledFixture({ proposalReview: applicationServiceFixture({ status: { state: 'stale', reason: 'source-changed' } }) });
     const staleOpened = await openReview(stale.fetch);
     const staleBody = await (await stale.fetch(request(`/owner/decisions/${REVIEW_QUEUE_ID}`, { headers: { Cookie: staleOpened.cookie } }))).text();
-    expect(staleBody).toContain('<h2 id="application-heading">Cannot be applied as it is</h2>');
+    expect(staleBody).toContain('Approved, but the page has moved on</h1>');
     expect(staleBody).toContain('The page changed after you reviewed this suggestion');
     expect(staleBody).not.toContain('data-apply');
     expect(staleBody).not.toContain('/owner/assets/apply.js');
@@ -966,7 +983,7 @@ describe('privileged proposal review routes', () => {
     const blocked = await enabledFixture({ proposalReview: applicationServiceFixture({ status: { state: 'unapplicable', reason: 'frontmatter-change' } }) });
     const blockedOpened = await openReview(blocked.fetch);
     const blockedBody = await (await blocked.fetch(request(`/owner/decisions/${REVIEW_QUEUE_ID}`, { headers: { Cookie: blockedOpened.cookie } }))).text();
-    expect(blockedBody).toContain('<h2 id="application-heading">The page pipeline cannot apply this yet</h2>');
+    expect(blockedBody).toContain('Approved, but it can’t be applied</h1>');
     expect(blockedBody).toContain('metadata block at the top of the page');
     expect(blockedBody).not.toContain('data-apply');
 
@@ -981,11 +998,10 @@ describe('privileged proposal review routes', () => {
     const liveApi = await live.fetch(request('/api/review', { headers: { Cookie: liveOpened.cookie } }));
     expect((await liveApi.json()).history[0].application).toMatchObject({ state: 'live', jobId: 'OA-applied' });
     const appliedBody = await (await applied.fetch(request(`/owner/decisions/${REVIEW_QUEUE_ID}`, { headers: { Cookie: appliedOpened.cookie } }))).text();
-    expect(appliedBody).toContain('<h2 id="application-heading">On its way to the page</h2>');
+    expect(appliedBody).toContain('<h1 id="application-heading">Applying</h1>');
     expect(appliedBody).toContain('<strong>Pushing to your repository</strong>');
     expect(appliedBody).toContain('href="/owner/jobs/OA-applied">Follow it</a>');
-    expect(appliedBody).toContain('<strong>Applied</strong>');
-    expect(appliedBody).not.toContain('<strong>Source unchanged</strong>');
+    expect(appliedBody).toContain('Applied <time');
     expect(appliedBody).not.toContain('data-apply');
   });
 
@@ -1098,7 +1114,7 @@ describe('privileged proposal review routes', () => {
     const opened = await openReview(fetch);
     expect(opened.body).toContain('<h2 id="history-heading">Decided</h2>');
     expect(opened.body).toContain('decision-label decision-approve">Approved');
-    expect(opened.body).toContain('The exact correction is appropriate.');
+    expect(opened.body).not.toContain('The exact correction is appropriate.');
 
     const staleDetail = await fetch(request(`/owner/review/${REVIEW_QUEUE_ID}`, {
       headers: { Cookie: opened.cookie },
@@ -1112,13 +1128,11 @@ describe('privileged proposal review routes', () => {
     }));
     const body = await history.text();
     expect(history.status).toBe(200);
-    expect(body).toContain('<h1>You approved this suggestion</h1>');
-    expect(body).toContain('<strong>Source unchanged</strong>');
-    expect(body).toContain('Nothing on the page changed when you approved. Putting it on the page is the separate step below.');
-    expect(body).toContain('<h2 id="application-heading">Putting it on the page</h2>');
-    expect(body).toContain('Not available in this setup.');
+    expect(body).toContain('<h1 id="application-heading">Approved</h1>');
+    expect(body).toContain('The exact correction is appropriate.');
+    expect(body).toContain('The page has not changed. Putting it on the page isn’t available in this setup.');
     expect(body).not.toContain('/owner/assets/apply.js');
-    expect(body).toContain('<summary>Details for the record</summary>');
+    expect(body).toContain('<summary>Details</summary>');
     expect(body).toContain('No longer retained; exact reviewed evidence is embedded here.');
     expect(body).not.toContain('data-action="approve"');
     expect(body).not.toContain('data-action="reject"');
@@ -1237,11 +1251,19 @@ describe('owner-alpha runtime startup', () => {
       'recover-jobs',
     ]);
 
-    const browsed = await readerFetch(readerRequest('/cyberbase/'));
+    for (const method of ['GET', 'HEAD']) {
+      const absent = await readerFetch(readerRequest('/cyberbase/', { method }));
+      expect(absent.status).toBe(403);
+      const bad = await readerFetch(readerRequest('/cyberbase/', { method, headers: { Cookie: `owner_alpha_session=${'z'.repeat(43)}` } }));
+      expect(bad.status).toBe(403);
+      expect(await bad.text()).not.toContain('Runtime Cyberbase');
+    }
+    const opened = await openEdit(ownerFetch);
+    const browsed = await readerFetch(readerRequest('/cyberbase/', { headers: { Cookie: opened.cookie } }));
     expect(browsed.status).toBe(200);
+    expect(browsed.headers.get('cache-control')).toContain('no-store');
     expect(await browsed.text()).toContain('Runtime Cyberbase');
 
-    const opened = await openEdit(ownerFetch);
     expect(opened.response.status).toBe(200);
     expect(opened.body).toContain('# Runtime source');
 
@@ -1259,6 +1281,103 @@ describe('owner-alpha runtime startup', () => {
     }));
     expect(status.status).toBe(200);
     expect((await status.json()).state).toBe('checking');
+  });
+
+  test('the recovery gate keeps synchronous entry points synchronous', async () => {
+    const gate = createRecoveryGate();
+    const start = gate.wrapSync(({ jobId }) => ({ accepted: { jobId } }));
+    const save = gate.wrapAsync(async ({ jobId }) => ({ jobId }));
+    expect(gate.recovering()).toBe('running');
+    expect(() => start({ jobId: 'a' })).toThrow(expect.objectContaining({ code: 'recovery-in-progress' }));
+    await expect(save({ jobId: 'a' })).rejects.toHaveProperty('code', 'recovery-in-progress');
+    gate.settle(true);
+    expect(gate.recovering()).toBe(false);
+    // Publication needs its durable acceptance handle back at once, not a promise.
+    expect(start({ jobId: 'b' })).toEqual({ accepted: { jobId: 'b' } });
+    expect(await save({ jobId: 'b' })).toEqual({ jobId: 'b' });
+    const failed = createRecoveryGate();
+    failed.settle(false);
+    expect(failed.recovering()).toBe('failed');
+    expect(() => failed.wrapSync(() => 1)()).toThrow(expect.objectContaining({ code: 'recovery-failed' }));
+  });
+
+  // The owner must be able to sign in right after a restart, even when an
+  // earlier job is still being resumed (offline, a deployment check can retry
+  // for 15 minutes). This replaces the old guarantee "no sign-in link until
+  // recovery is done" with the invariant it stood for: no owner act runs beside
+  // a recovering job. Reading and signing in are allowed; every owner POST and
+  // every gated pipeline entry is refused with one plain message until
+  // recovery settles, and stays refused if recovery fails.
+  for (const outcome of ['settles', 'fails']) test(`signs in during recovery and refuses owner acts until recovery ${outcome}`, async () => {
+    const projectRoot = await mkdtemp(path.join(os.tmpdir(), 'owner-alpha-recovering-'));
+    cleanup.push(projectRoot);
+    await execFileAsync('git', ['init', '-q', projectRoot]);
+    await writeFile(path.join(projectRoot, '.gitignore'), '.workspace/\n');
+    const configFile = await privateConfigFile(projectRoot);
+    let finish;
+    const recoveryGate = new Promise((resolve, reject) => { finish = { resolve, reject }; });
+    let ownerFetch;
+    let gatedSave;
+    const saves = [];
+    const started = await runOwnerAlphaServer({
+      configFile,
+      projectRoot,
+      rebuildSite: async ({ config }) => {
+        const siteRoot = path.join(projectRoot, config.workspace.site);
+        await mkdir(siteRoot, { recursive: true });
+        await writeFile(path.join(siteRoot, 'index.html'), '<!doctype html><h1>Runtime Cyberbase</h1>');
+      },
+      loadPipeline: async () => ({
+        saveEdit: async ({ jobId }) => { saves.push(jobId); return { jobId, state: 'accepted' }; },
+        getJob: async (jobId) => fixtureJob(jobId),
+        resumeJob: async ({ jobId }) => ({ jobId, state: 'completed' }),
+      }),
+      createHandler: (options) => {
+        gatedSave = options.saveEdit;
+        return createOwnerAlphaHandler({
+          ...options,
+          createToken: tokenFactory(TOKENS.process, TOKENS.csrf, TOKENS.bootstrap),
+          createJobId: () => 'job-runtime',
+          createEditSession: async () => ({ source: { text: '# Runtime source\n' } }),
+        });
+      },
+      recoverDecisions: async () => ({ decisions: [], index: { decisions: [] } }),
+      recoverJobs: async () => recoveryGate,
+      serve(options) {
+        if (options.port === 4317) ownerFetch = options.fetch;
+        return { stop() {}, url: new URL(`http://127.0.0.1:${options.port}`) };
+      },
+    });
+
+    // Recovery has not settled, yet the owner signs in and opens a page.
+    const opened = await openEdit(ownerFetch);
+    expect(opened.bootstrap.status).toBe(303);
+    expect(opened.response.status).toBe(200);
+    const refused = await saveRequest(ownerFetch, opened, { editedText: '# Updated\n' });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({ error: { code: 'recovery-in-progress',
+      message: 'Finishing an earlier publish. Try again in a moment.' } });
+    // Paired devices and the signed socket reach the same pipeline entry.
+    await expect(gatedSave({ jobId: 'job-device' })).rejects.toHaveProperty('code', 'recovery-in-progress');
+    expect(saves).toEqual([]);
+
+    if (outcome === 'settles') {
+      finish.resolve([{ jobId: 'job-earlier', state: 'completed' }]);
+      expect(await started.recovery).toEqual([{ jobId: 'job-earlier', state: 'completed' }]);
+      const saved = await saveRequest(ownerFetch, opened, { editedText: '# Updated\n' });
+      expect(saved.status).toBe(202);
+      expect(saves).toEqual(['job-runtime']);
+    } else {
+      finish.reject(new Error('resume failed'));
+      await expect(started.recovery).rejects.toThrow('resume failed');
+      const stillRefused = await saveRequest(ownerFetch, opened, { editedText: '# Updated\n' });
+      expect(stillRefused.status).toBe(503);
+      expect((await stillRefused.json()).error.code).toBe('recovery-failed');
+      await expect(gatedSave({ jobId: 'job-device' })).rejects.toHaveProperty('code', 'recovery-failed');
+      expect(saves).toEqual([]);
+      const reading = await ownerFetch(request('/api/jobs/job-runtime', { headers: { Cookie: opened.cookie } }));
+      expect(reading.status).toBe(200);
+    }
   });
 
   test('starts the suggestion intake after the site build and stops it with the runtime', async () => {
@@ -1941,6 +2060,35 @@ describe('job status routes', () => {
     expect(stoppedBody).toContain('data-step="check" data-status="stopped"');
     expect(stoppedBody).toContain('Stopped (ofm-damage).');
     expect(stoppedBody).not.toContain('must-not-leak');
+  });
+
+  test('a finished job follows the site colour scheme, and only the owner’s own edit offers Edit again', async () => {
+    for (const [origin, colorScheme, editAgain] of [
+      [{ type: 'approved-proposal', queueId: REVIEW_QUEUE_ID, relativePath: 'docs/example.md' }, 'dark', false],
+      [{ type: 'owner-edit', relativePath: 'docs/example.md' }, 'light', true],
+    ]) {
+      const { fetch } = await handlerFixture({ reviewAppearance: { siteTitle: 'Cyberbase', colorScheme },
+        lookupJob: async (jobId) => ({ ...fixtureJob(jobId), state: 'completed', origin }) });
+      const opened = await openEdit(fetch);
+      const html = await (await fetch(request('/owner/jobs/OA-done', { headers: { Cookie: opened.cookie } }))).text();
+      expect(html).toContain(`<body class="save-page owner-scheme-${colorScheme}">`);
+      expect(html).toContain('>View page</a>');
+      expect(html.includes('>Edit again</a>')).toBe(editAgain);
+    }
+  });
+
+  test('reports an unchanged render as published without implying a text transition', async () => {
+    const { fetch } = await handlerFixture({
+      lookupJob: async (jobId) => ({ ...fixtureJob(jobId), state: 'completed', liveKind: 'no-visible-change' }),
+    });
+    const { cookie } = await openEdit(fetch);
+    const api = await fetch(request('/api/jobs/OA-PROPERTIES', { headers: { Cookie: cookie } }));
+    expect(await api.json()).toHaveProperty('liveCopy', 'Published, nothing visible changed');
+    const page = await fetch(request('/owner/jobs/OA-PROPERTIES', { headers: { Cookie: cookie } }));
+    expect(page.status).toBe(200);
+    const html = await page.text();
+    expect(html).toContain('<strong id="job-stage">Published, nothing visible changed</strong>');
+    expect(html).not.toContain('<strong id="job-stage">Saved</strong>');
   });
 
   test('returns a redacted job projection as JSON and a control-free status page', async () => {

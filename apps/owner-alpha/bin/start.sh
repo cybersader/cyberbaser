@@ -58,12 +58,19 @@ case "$PROJECT_ROOT" in
       done
     done
     rsync -a --delete --chmod=Du=rwx,Dgo=,Fu=rw,Fgo= "$PROJECT_ROOT/renderers/quartz-cyberbase/" "$RUNTIME_ROOT/renderers/quartz-cyberbase/"
+    chmod 700 "$RUNTIME_ROOT/renderers/quartz-cyberbase/restricted-bin/"{node,patch}
     install -m 600 "$PROJECT_ROOT/.gitignore" "$RUNTIME_ROOT/.gitignore"
     RUNTIME_CONFIG="$RUNTIME_ROOT/apps/owner-alpha/owner-alpha.local.json"
     install -m 600 "$CONFIG_FILE" "$RUNTIME_CONFIG"
     if [ ! -d "$RUNTIME_ROOT/.git" ]; then
       git -C "$RUNTIME_ROOT" init -q
     fi
+    LAUNCHER="$PROJECT_ROOT/packaging/dist/render-offline"
+    if [ ! -f "$LAUNCHER" ] || [ ! -x "$LAUNCHER" ] || [ -L "$LAUNCHER" ]; then
+      printf 'ERROR: build the source renderer launcher first: bun packaging/build.js --renderer-launcher-only\n' >&2
+      exit 1
+    fi
+    install -D -m 700 "$LAUNCHER" "$RUNTIME_ROOT/packaging/dist/render-offline"
     exec bun "$RUNTIME_ROOT/apps/owner-alpha/src/server.js" "$RUNTIME_CONFIG"
     ;;
   *)

@@ -4,6 +4,7 @@ import { open } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fail, OwnerAlphaError } from './errors.js';
+import { PINNED_QUARTZ_COMMIT } from './quartz-renderer.js';
 import {
   assertNoCredentialMaterial,
   canonicalJson,
@@ -11,6 +12,8 @@ import {
   isPlainObject,
 } from './json.js';
 import { validatePrivateNetworkIpv4Host } from './network.js';
+import { resolveReach } from './core/reach.js';
+import { validSocketPath } from './publisher/protocol.js';
 
 export const CONFIG_SCHEMA_VERSION = 1;
 export const MAX_CONFIG_BYTES = 256 * 1024;
@@ -261,7 +264,9 @@ function validateRepository(value, provider) {
 }
 
 function validateOwner(value, repository, provider) {
-  const input = objectAt(value, '$.owner', ['identity', 'allowedTrustRoutes']);
+  const optional = isPlainObject(value) && Object.hasOwn(value, 'allowProperties');
+  const input = objectAt(value, '$.owner', ['identity', 'allowedTrustRoutes', ...(optional ? ['allowProperties'] : [])]);
+  const allowProperties = optional && requiredBoolean(input.allowProperties, '$.owner.allowProperties');
   const maxIdentityLength = provider === 'github-actions' ? 39 : 100;
   const identity = exactString(input.identity, '$.owner.identity', { max: maxIdentityLength });
   if (identity !== repository.identity.owner) {
@@ -283,7 +288,7 @@ function validateOwner(value, repository, provider) {
   if (!allowedTrustRoutes.includes('auto-merge')) {
     fail('invalid-trust-policy', '$.owner.allowedTrustRoutes must include "auto-merge"');
   }
-  return { identity, allowedTrustRoutes };
+  return { identity, allowedTrustRoutes, ...(allowProperties ? { allowProperties } : {}) };
 }
 
 function validateGithubLive(value, repository) {
@@ -406,8 +411,46 @@ function workflowProvider(value) {
   if (!isPlainObject(value) || !Object.hasOwn(value, 'provider')) {
     fail('missing-config-key', '$.workflow is missing required keys', { location: '$.workflow', keys: ['provider'] });
   }
-  if (value.provider === 'github-actions' || value.provider === 'forgejo-actions') return value.provider;
+  if (value.provider === 'github-actions' || value.provider === 'forgejo-actions' || value.provider === PRIVATE_SITE_PROVIDER) return value.provider;
   fail('unsupported-deployment-provider', 'unsupported deployment observation provider');
+}
+
+// Private-only publication: no public website and no deployment to watch.
+// After the publisher pushes, the node rebuilds its own private site from that
+// exact commit and checks the page there ("Live on your private site"). The
+// repository is still a GitHub repository; nothing touches GitHub Pages.
+export const PRIVATE_SITE_PROVIDER = 'private-site';
+
+/** The forge the repository lives on, for a workflow provider. */
+function forgeProvider(provider) {
+  return provider === PRIVATE_SITE_PROVIDER ? 'github-actions' : provider;
+}
+
+/** True when this config publishes only to the node's own private site. */
+export function isPrivateSite(config) {
+  return config?.workflow?.provider === PRIVATE_SITE_PROVIDER;
+}
+
+function validatePrivateSiteWorkflow(value, repository) {
+  const input = objectAt(value, '$.workflow', ['provider', 'branch']);
+  if (input.provider !== PRIVATE_SITE_PROVIDER) fail('invalid-config', '$.workflow.provider must be exactly "private-site"');
+  const branch = branchName(input.branch, '$.workflow.branch');
+  if (branch !== repository.branch) {
+    fail('workflow-branch-mismatch', '$.workflow.branch must exactly match $.repository.branch');
+  }
+  return { provider: PRIVATE_SITE_PROVIDER, branch };
+}
+
+// The address the pages would have on a public site. With a private site it is
+// an identity only (page addresses are derived from it, then served by the
+// node); it is never fetched or deployed to.
+function validatePrivateSiteLive(value) {
+  const input = objectAt(value, '$.live', ['baseUrl']);
+  const url = exactHttpsUrl(input.baseUrl, '$.live.baseUrl');
+  if (!url.pathname.endsWith('/') || url.search) {
+    fail('invalid-config-url', '$.live.baseUrl must be a canonical credential-free HTTPS URL ending in /');
+  }
+  return { baseUrl: url.toString() };
 }
 
 function isStrictlyWithin(root, candidate) {
@@ -472,13 +515,23 @@ function validateOwnerPublication(value) {
     objectAt(value, '$.ownerPublication', ['enabled']);
     return { enabled: false };
   }
-  const input = objectAt(value, '$.ownerPublication', ['enabled', 'mappings']);
+  const input = objectAt(value, '$.ownerPublication', ['enabled', 'mappings',
+    ...(Object.hasOwn(value, 'retiredList') ? ['retiredList'] : []),
+  ]);
+  const retiredList = Object.hasOwn(input, 'retiredList') ? {
+    file: absoluteCheckout(objectAt(input.retiredList, '$.ownerPublication.retiredList', ['file']).file,
+      '$.ownerPublication.retiredList.file'),
+  } : undefined;
   if (!Array.isArray(input.mappings) || input.mappings.length !== 1) {
     fail('invalid-config', '$.ownerPublication.mappings must contain exactly one existing-page mapping');
   }
   const location = '$.ownerPublication.mappings[0]';
   const mapping = objectAt(input.mappings[0], location, ['id', 'source', 'relativePath', 'slug']);
-  const source = objectAt(mapping.source, `${location}.source`, ['identity', 'path']);
+  const hasKind = isPlainObject(mapping.source) && Object.hasOwn(mapping.source, 'kind');
+  const source = objectAt(mapping.source, `${location}.source`, ['identity', 'path', ...(hasKind ? ['kind'] : [])]);
+  if (hasKind && source.kind !== 'workspace') {
+    fail('invalid-config', `${location}.source.kind must be omitted or "workspace"`);
+  }
   const relativePath = publicationPath(mapping.relativePath, `${location}.relativePath`);
   if (path.posix.extname(relativePath) !== '.md') {
     fail('invalid-config-path', `${location}.relativePath must identify one lowercase .md page`);
@@ -490,10 +543,12 @@ function validateOwnerPublication(value) {
       source: {
         identity: publicationId(source.identity, `${location}.source.identity`),
         path: publicationPath(source.path, `${location}.source.path`),
+        ...(hasKind ? { kind: source.kind } : {}),
       },
       relativePath,
       slug: publicationPath(mapping.slug, `${location}.slug`),
     }],
+    ...(retiredList !== undefined ? { retiredList } : {}),
   };
 }
 
@@ -510,8 +565,10 @@ function validateWorkspace(value) {
     }
     return [key, candidate];
   }));
-  if (new Set(Object.values(children)).size !== Object.keys(children).length) {
-    fail('invalid-config-path', '$.workspace.store, site, and cache must be distinct paths');
+  const directories = Object.values(children);
+  if (directories.some((a, i) => directories.slice(i + 1).some((b) =>
+    a === b || isStrictlyWithin(a, b) || isStrictlyWithin(b, a)))) {
+    fail('invalid-config-path', '$.workspace.store, site, and cache must be disjoint directory trees');
   }
   return { root, ...children };
 }
@@ -737,6 +794,159 @@ export function suggestionsEnabled(config) {
   return config.suggestions.form.enabled || config.suggestions.forge.enabled;
 }
 
+// Off unless present with enabled: true. The relay is configuration: 'n0'
+// (n0's public relay, the explicit default when enabled), 'none' (direct
+// paths only), or one https relay URL the owner runs. Nothing falls back.
+export function validateIroh(value) {
+  const keys = isPlainObject(value) ? Object.keys(value) : [];
+  const input = objectAt(value, '$.iroh', ['enabled', 'stateDirectory',
+    ...['relay', 'reach', 'bindAddress'].filter((key) => keys.includes(key))]);
+  if (typeof input.enabled !== 'boolean') fail('invalid-config', '$.iroh.enabled must be a boolean');
+  const stateDirectory = absoluteCheckout(input.stateDirectory, '$.iroh.stateDirectory');
+  const relay = Object.hasOwn(input, 'relay') ? input.relay : 'n0';
+  if (relay !== 'n0' && relay !== 'none') {
+    let url;
+    try { url = new URL(relay); } catch { url = null; }
+    // Plain HTTP only for a relay on this machine's loopback address (local
+    // tests and browser clients on the same machine); anything else is https.
+    const loopbackHttp = url?.protocol === 'http:' && url.hostname === '127.0.0.1' && url.port !== '';
+    if (typeof relay !== 'string' || relay.length > 512 || (url?.protocol !== 'https:' && !loopbackHttp)
+      || url.username || url.password || url.search || url.hash) {
+      fail('invalid-config', "$.iroh.relay must be 'n0', 'none', one https relay URL, or an http://127.0.0.1:<port>/ relay");
+    }
+  }
+  let bindAddress = null;
+  if (Object.hasOwn(input, 'bindAddress')) {
+    const match = typeof input.bindAddress === 'string' && /^(\d{1,3}(?:\.\d{1,3}){3}):(\d{1,5})$/u.exec(input.bindAddress);
+    if (!match || match[1].split('.').some((part) => Number(part) > 255) || Number(match[2]) > 65535) {
+      fail('invalid-config', '$.iroh.bindAddress must be one IPv4 address and port');
+    }
+    bindAddress = input.bindAddress;
+  }
+  const reach = Object.hasOwn(input, 'reach') ? input.reach : 'direct';
+  if (bindAddress !== null && Object.hasOwn(input, 'reach')) {
+    fail('invalid-config', '$.iroh.reach and legacy $.iroh.bindAddress cannot be used together');
+  }
+  if (typeof reach !== 'string') fail('invalid-config', '$.iroh.reach must be a string');
+  try { resolveReach(reach); }
+  catch (error) { fail('invalid-config', `$.iroh.reach: ${error.message}`); }
+  return { enabled: input.enabled, stateDirectory, relay, ...(bindAddress === null ? { reach } : { bindAddress }) };
+}
+
+// Where the publisher gets its short-lived push credential. Only the provider
+// and the public GitHub App client ID are policy; the state directory is the
+// publisher's private storage and never enters the policy revision.
+const FORGE_ACCESS_PROVIDERS = Object.freeze(['github-app', 'token']);
+
+function validateForgeAccess(value, provider) {
+  const keys = isPlainObject(value) && value.provider === 'github-app'
+    ? ['provider', 'clientId', 'stateDirectory'] : ['provider', 'stateDirectory'];
+  const input = objectAt(value, '$.forgeAccess', keys);
+  if (!FORGE_ACCESS_PROVIDERS.includes(input.provider)) {
+    fail('invalid-config', '$.forgeAccess.provider must be "github-app" or "token"');
+  }
+  if (provider !== 'github-actions') {
+    fail('invalid-config', '$.forgeAccess is only available for a GitHub repository today');
+  }
+  const stateDirectory = absoluteCheckout(input.stateDirectory, '$.forgeAccess.stateDirectory');
+  if (input.provider === 'token') return { provider: 'token', stateDirectory };
+  const clientId = exactString(input.clientId, '$.forgeAccess.clientId', { max: 64 });
+  if (!/^Iv[0-9A-Za-z.]{6,40}$/u.test(clientId)) {
+    fail('invalid-config', '$.forgeAccess.clientId must be a GitHub App client ID (it starts with Iv)');
+  }
+  return { provider: 'github-app', clientId, stateDirectory };
+}
+
+/**
+ * The raw config with its GitHub repository changed to `fullName` ("owner/name").
+ * Every GitHub field is derived from that one identity, so the result changes the
+ * policy revision exactly as editing the repository by hand would.
+ */
+export function retargetGithubRepository(raw, fullName) {
+  const identity = typeof fullName === 'string' ? githubIdentityFromRemote(`https://github.com/${fullName}.git`) : null;
+  if (identity === null || identity.slug !== fullName) fail('invalid-repository', 'repository must be one exact owner/name');
+  const current = validateOwnerAlphaConfig(raw);
+  const privateSite = current.workflow.provider === PRIVATE_SITE_PROVIDER;
+  if (current.workflow.provider !== 'github-actions' && !privateSite) fail('invalid-config', 'only a GitHub repository can be picked this way');
+  const pagesHost = `${identity.owner.toLowerCase()}.github.io`;
+  const next = structuredClone(raw);
+  next.repository.remote.url = `https://github.com/${identity.slug}.git`;
+  if (!privateSite) next.workflow.repository = identity.slug;
+  next.owner.identity = identity.owner;
+  next.live.baseUrl = `https://${pagesHost}${identity.repository.toLowerCase() === pagesHost ? '/' : `/${identity.repository}/`}`;
+  if (Array.isArray(next.repository.aliases)) {
+    next.repository.aliases = next.repository.aliases.filter((alias) => alias !== next.repository.remote.url);
+    if (next.repository.aliases.length === 0) delete next.repository.aliases;
+  }
+  validateOwnerAlphaConfig(next);
+  return next;
+}
+
+// mirror: the publisher's read-only copy of the repository (a bare Git
+// repository it alone writes and fetches into). When present the node reads
+// the remote branch from it instead of asking the forge, so it starts and
+// works with no network, and holds no forge credential to fetch with.
+function validatePublisher(value) {
+  const input = objectAt(value, '$.publisher', ['socketPath', ...(isPlainObject(value) && Object.hasOwn(value, 'mirror') ? ['mirror'] : [])]);
+  const { socketPath } = input;
+  if (!validSocketPath(socketPath)) {
+    fail('invalid-config-path', '$.publisher.socketPath must be one normalized absolute Unix socket path');
+  }
+  if (!Object.hasOwn(input, 'mirror')) return { socketPath };
+  const mirror = input.mirror;
+  if (typeof mirror !== 'string' || !path.isAbsolute(mirror) || path.normalize(mirror) !== mirror || mirror.endsWith('/')
+    || path.dirname(mirror) === '/' || /[\\\p{Cc}]/u.test(mirror)) {
+    fail('invalid-config-path', '$.publisher.mirror must be one normalized absolute directory path beneath a non-root parent');
+  }
+  return { socketPath, mirror };
+}
+
+// The owner's renderer slot (renderer-slot.js). Local build routing: it never
+// enters the policy revision; the owner site manifest records and re-checks it.
+const RENDERER_NAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/u;
+const MAX_RENDERER_FINGERPRINT = 64;
+
+function overlaps(left, right) {
+  const relative = path.relative(left, right);
+  const back = path.relative(right, left);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
+    || (!back.startsWith('..') && !path.isAbsolute(back));
+}
+
+function validateRenderer(value, repository) {
+  const input = objectAt(value, '$.renderer', ['name', 'directory', 'quartzCommit', 'fingerprint']);
+  const name = exactString(input.name, '$.renderer.name', { max: 64 });
+  if (!RENDERER_NAME_PATTERN.test(name)) {
+    fail('invalid-config', '$.renderer.name must be lowercase letters, digits and hyphens');
+  }
+  if (name === 'quartz-cyberbase') {
+    fail('invalid-config', '$.renderer.name quartz-cyberbase is the bundled renderer; omit $.renderer to use it');
+  }
+  const directory = absoluteCheckout(input.directory, '$.renderer.directory');
+  if (overlaps(directory, repository.checkout)) {
+    fail('renderer-checkout-overlap', '$.renderer.directory must be outside the vault checkout');
+  }
+  if (typeof input.quartzCommit !== 'string' || !/^[0-9a-f]{40}$/u.test(input.quartzCommit)) {
+    fail('invalid-config', '$.renderer.quartzCommit must be one full commit ID');
+  }
+  if (input.quartzCommit !== PINNED_QUARTZ_COMMIT) {
+    fail('renderer-quartz-unsupported', `$.renderer.quartzCommit must be the pinned Quartz commit ${PINNED_QUARTZ_COMMIT}`);
+  }
+  if (!Array.isArray(input.fingerprint) || input.fingerprint.length === 0 || input.fingerprint.length > MAX_RENDERER_FINGERPRINT) {
+    fail('invalid-config', `$.renderer.fingerprint must list 1 to ${MAX_RENDERER_FINGERPRINT} files or folders`);
+  }
+  const fingerprint = input.fingerprint.map((entry, index) => repositoryRelativePath(entry, `$.renderer.fingerprint[${index}]`));
+  if (new Set(fingerprint).size !== fingerprint.length) fail('invalid-config', '$.renderer.fingerprint entries must be unique');
+  fingerprint.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  if (!fingerprint.includes('build')) {
+    fail('invalid-config', '$.renderer.fingerprint must include the build entry');
+  }
+  if (fingerprint.some((entry) => fingerprint.some((other) => other.startsWith(`${entry}/`)))) {
+    fail('invalid-config', '$.renderer.fingerprint entries must not contain one another');
+  }
+  return { name, directory, quartzCommit: input.quartzCommit, fingerprint };
+}
+
 export function validateOwnerAlphaConfig(value) {
   assertNoCredentialMaterial(value);
   const input = objectAt(value, '$', [
@@ -754,11 +964,18 @@ export function validateOwnerAlphaConfig(value) {
     'git',
     ...(isPlainObject(value) && Object.hasOwn(value, 'suggestions') ? ['suggestions'] : []),
     ...(isPlainObject(value) && Object.hasOwn(value, 'ownerPublication') ? ['ownerPublication'] : []),
+    ...(isPlainObject(value) && Object.hasOwn(value, 'publisher') ? ['publisher'] : []),
+    ...(isPlainObject(value) && Object.hasOwn(value, 'deviceRegistryFile') ? ['deviceRegistryFile'] : []),
+    ...(isPlainObject(value) && Object.hasOwn(value, 'signedRequestSocket') ? ['signedRequestSocket'] : []),
+    ...(isPlainObject(value) && Object.hasOwn(value, 'iroh') ? ['iroh'] : []),
+    ...(isPlainObject(value) && Object.hasOwn(value, 'forgeAccess') ? ['forgeAccess'] : []),
+    ...(isPlainObject(value) && Object.hasOwn(value, 'renderer') ? ['renderer'] : []),
   ]);
   if (input.schemaVersion !== CONFIG_SCHEMA_VERSION) {
     fail('unsupported-config-version', `schemaVersion must be ${CONFIG_SCHEMA_VERSION}`);
   }
-  const provider = workflowProvider(input.workflow);
+  const publication = workflowProvider(input.workflow);
+  const provider = forgeProvider(publication);
   const repositoryWithIdentity = validateRepository(input.repository, provider);
   const repository = {
     checkout: repositoryWithIdentity.checkout,
@@ -768,18 +985,37 @@ export function validateOwnerAlphaConfig(value) {
   };
   const listen = validateListen(input.listen);
   const proposalReview = validateProposalReview(input.proposalReview);
+  const deviceRegistryFile = Object.hasOwn(input, 'deviceRegistryFile')
+    ? absoluteCheckout(input.deviceRegistryFile, '$.deviceRegistryFile') : undefined;
+  if (Object.hasOwn(input, 'signedRequestSocket')) {
+    if (!validSocketPath(input.signedRequestSocket)) {
+      fail('invalid-config-path', '$.signedRequestSocket must be one normalized absolute Unix socket path');
+    }
+    if (deviceRegistryFile === undefined || !proposalReview.enabled) {
+      fail('signed-socket-requires-review-and-keys', '$.signedRequestSocket requires a device registry and proposal review');
+    }
+    if ([proposalReview.socketPath, input.publisher?.socketPath].includes(input.signedRequestSocket)) {
+      fail('signed-socket-path-conflict', '$.signedRequestSocket must not share another socket path');
+    }
+  }
+  const iroh = Object.hasOwn(input, 'iroh') ? validateIroh(input.iroh) : null;
+  if (iroh?.enabled && !proposalReview.enabled) {
+    fail('iroh-requires-review', '$.iroh requires proposal review, where paired agents send proposals');
+  }
   const normalized = {
     schemaVersion: CONFIG_SCHEMA_VERSION,
     listen,
     proposalReview,
     repository,
     owner: validateOwner(input.owner, repositoryWithIdentity, provider),
-    live: provider === 'github-actions'
-      ? validateGithubLive(input.live, repositoryWithIdentity)
-      : validateForgejoLive(input.live),
-    workflow: provider === 'github-actions'
-      ? validateGithubWorkflow(input.workflow, repositoryWithIdentity)
-      : validateForgejoWorkflow(input.workflow, repositoryWithIdentity),
+    live: publication === PRIVATE_SITE_PROVIDER ? validatePrivateSiteLive(input.live)
+      : provider === 'github-actions'
+        ? validateGithubLive(input.live, repositoryWithIdentity)
+        : validateForgejoLive(input.live),
+    workflow: publication === PRIVATE_SITE_PROVIDER ? validatePrivateSiteWorkflow(input.workflow, repositoryWithIdentity)
+      : provider === 'github-actions'
+        ? validateGithubWorkflow(input.workflow, repositoryWithIdentity)
+        : validateForgejoWorkflow(input.workflow, repositoryWithIdentity),
     workspace: validateWorkspace(input.workspace),
     paths: validatePaths(input.paths),
     limits: validateLimits(input.limits),
@@ -787,7 +1023,19 @@ export function validateOwnerAlphaConfig(value) {
     git: validateGit(input.git),
     suggestions: validateSuggestions(input.suggestions, { listen, proposalReview, repository }),
     ownerPublication: validateOwnerPublication(input.ownerPublication),
+    // Local execution routing, not a change to the approved publication policy.
+    ...(Object.hasOwn(input, 'publisher') ? { publisher: validatePublisher(input.publisher) } : {}),
+    ...(deviceRegistryFile === undefined ? {} : { deviceRegistryFile }),
+    ...(Object.hasOwn(input, 'signedRequestSocket') ? { signedRequestSocket: input.signedRequestSocket } : {}),
+    // Local reach routing, not publication policy: it never enters the policy revision.
+    ...(iroh === null ? {} : { iroh }),
+    ...(Object.hasOwn(input, 'forgeAccess') ? { forgeAccess: validateForgeAccess(input.forgeAccess, provider) } : {}),
+    // Local build routing, not publication policy.
+    ...(Object.hasOwn(input, 'renderer') ? { renderer: validateRenderer(input.renderer, repository) } : {}),
   };
+  if (normalized.renderer && normalized.suggestions.form.enabled) {
+    fail('renderer-form-unsupported', 'the suggestion form needs the bundled renderer; remove $.renderer or turn the form off');
+  }
   return deepFreeze(normalized);
 }
 
@@ -813,6 +1061,9 @@ export function policyDocument(configInput) {
     // Only lane authority enters the policy revision. editEntry is presentation only.
     ...(suggestionsEnabled(config) ? { suggestions: { form: config.suggestions.form, forge: config.suggestions.forge } } : {}),
     ...(config.ownerPublication.enabled ? { ownerPublication: config.ownerPublication } : {}),
+    // Only present when declared, so existing policy revisions are unchanged.
+    ...(config.forgeAccess ? { forgeAccess: { provider: config.forgeAccess.provider,
+      ...(config.forgeAccess.clientId ? { clientId: config.forgeAccess.clientId } : {}) } } : {}),
   });
 }
 

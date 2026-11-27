@@ -1,0 +1,76 @@
+# Resolve this template into a single-file TrueNAS Custom App payload. Set the
+# environment only in the packaging shell, not via host files or services.
+x-role: &role
+  image: ${CYBERBASER_IMAGE:-cyberbaser:local}
+  pull_policy: never
+  read_only: true
+  init: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  restart: unless-stopped
+  stop_grace_period: 30s
+  logging: {driver: json-file, options: {max-size: 1m, max-file: "2"}}
+x-bind: &bind
+  type: bind
+  bind: {create_host_path: false}
+
+services:
+  node:
+    <<: *role
+    network_mode: host
+    user: "65532:65530"
+    mem_limit: 1536m
+    memswap_limit: 1536m
+    cpus: 2
+    pids_limit: 256
+    command: [truenas-node]
+    environment:
+      HOME: /var/lib/cyberbaser/home
+      XDG_CACHE_HOME: /var/lib/cyberbaser/cache
+      CYBERBASER_CONTAINER_REACH: "${CYBERBASER_REACH:-relay-only}"
+    tmpfs:
+      # Bun extracts the embedded native Iroh binding here for dlopen().
+      - /tmp:rw,nosuid,nodev,exec,mode=1777,size=256m
+      - /run/cyberbaser:rw,nosuid,nodev,noexec,uid=65532,gid=65530,mode=0700,size=1m
+    volumes:
+      - {<<: *bind, source: "${CYBERBASER_DATA:-/mnt/personal/cyberbaser}/node/state", target: /var/lib/cyberbaser}
+      - {<<: *bind, source: "${CYBERBASER_DATA:-/mnt/personal/cyberbaser}/node/config", target: /var/lib/cyberbaser/config}
+      - {<<: *bind, source: "${CYBERBASER_DATA:-/mnt/personal/cyberbaser}/shared/workspace", target: /opt/cyberbaser/.workspace}
+      - {<<: *bind, source: "${CYBERBASER_DATA:-/mnt/personal/cyberbaser}/shared/notes", target: /var/lib/cyberbaser-shared/notes}
+      - {<<: *bind, source: "${CYBERBASER_DATA:-/mnt/personal/cyberbaser}/shared/mirror", target: /var/lib/cyberbaser-shared/mirror, read_only: true}
+      - {<<: *bind, source: "${CYBERBASER_DATA:-/mnt/personal/cyberbaser}/shared/publisher-sockets", target: /run/cyberbaser-publisher, read_only: true}
+
+  publisher:
+    <<: *role
+    # Default Compose bridge; outbound forge only, no published ports.
+    user: "65533:65530"
+    mem_limit: 256m
+    memswap_limit: 256m
+    cpus: 1
+    pids_limit: 128
+    command: [truenas-publisher]
+    environment:
+      HOME: /var/lib/cyberbaser-publisher
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,mode=1777,size=32m
+    volumes:
+      - {<<: *bind, source: "${CYBERBASER_DATA:-/mnt/personal/cyberbaser}/publisher/state", target: /var/lib/cyberbaser-publisher}
+      - {<<: *bind, source: "${CYBERBASER_DATA:-/mnt/personal/cyberbaser}/publisher/config", target: /var/lib/cyberbaser-publisher-config, read_only: true}
+      - {<<: *bind, source: "${CYBERBASER_DATA:-/mnt/personal/cyberbaser}/shared/workspace", target: /opt/cyberbaser/.workspace}
+      - {<<: *bind, source: "${CYBERBASER_DATA:-/mnt/personal/cyberbaser}/shared/notes", target: /var/lib/cyberbaser-shared/notes, read_only: true}
+      - {<<: *bind, source: "${CYBERBASER_DATA:-/mnt/personal/cyberbaser}/shared/mirror", target: /var/lib/cyberbaser-shared/mirror}
+      - {<<: *bind, source: "${CYBERBASER_DATA:-/mnt/personal/cyberbaser}/shared/publisher-sockets", target: /run/cyberbaser-publisher}
+
+  config-reconciler:
+    <<: *role
+    network_mode: none
+    user: "0:0"
+    cap_add: [CHOWN, DAC_OVERRIDE]
+    mem_limit: 96m
+    memswap_limit: 96m
+    cpus: 0.25
+    pids_limit: 64
+    command: [reconcile-config]
+    volumes:
+      - {<<: *bind, source: "${CYBERBASER_DATA:-/mnt/personal/cyberbaser}/node/config", target: /var/lib/cyberbaser/config, read_only: true}
+      - {<<: *bind, source: "${CYBERBASER_DATA:-/mnt/personal/cyberbaser}/publisher/config", target: /var/lib/cyberbaser-publisher-config}

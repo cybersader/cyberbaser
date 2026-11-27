@@ -12,15 +12,15 @@ export function installSignInSignal({ target = process, issueSignIn }) {
 export function instructions(fixture) {
   return [
     'Disposable suggestions rehearsal. No real vault or public site is changed.',
-    `Site home (start here): ${fixture.readerOrigin}/cyberbase/`,
+    `Site home (start here): ${fixture.readerHome}`,
     `Owned throwaway state: ${fixture.root}`,
     ...(fixture.copied ? [
       `Read-only source snapshot: ${fixture.copied.ref} (${fixture.copied.commit})`,
       `Copied ${fixture.copied.pages} Markdown pages (${fixture.copied.publishedPages.length} published) and ${fixture.copied.attachments} referenced attachments.`,
       'Published pages (or follow the links from the site home):',
-      ...fixture.copied.pageLinks.slice(0, 5).map((link) => `  ${fixture.readerOrigin}/cyberbase/${link}`),
+      ...fixture.copied.pageLinks.slice(0, 5).map((link) => `  ${fixture.readerHome}${link}`),
       'All edits go only to the throwaway copy, never the real vault.',
-    ] : [`MFA methods page: ${fixture.readerOrigin}/cyberbase/mfa-methods`]),
+    ] : [`MFA methods page: ${fixture.readerHome}mfa-methods`]),
     `Proposals: ${fixture.ownerOrigin}/owner/review`,
     'Sign in: open the one-time bootstrap URL printed below in your own browser. It signs in this browser only.',
     'The bootstrap link is a temporary local capability. Do not share the terminal output.',

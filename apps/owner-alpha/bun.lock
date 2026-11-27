@@ -16,6 +16,10 @@
         "@cyberbaser/publish": "file:../../packages/publish",
         "@cyberbaser/review-projection": "file:../../packages/review-projection",
         "@cyberbaser/trust": "file:../../packages/trust",
+        "@number0/iroh": "1.2.0",
+      },
+      "devDependencies": {
+        "jsqr": "1.4.0",
       },
     },
   },
@@ -41,6 +45,30 @@
     "@cyberbaser/review-projection": ["@cyberbaser/review-projection@file:../../packages/review-projection", {}],
 
     "@cyberbaser/trust": ["@cyberbaser/trust@file:../../packages/trust", { "dependencies": { "@cyberbaser/ofm": "file:../ofm", "js-yaml": "^4.1.0" }, "bin": { "cb-trust": "bin/cb-trust.js" } }],
+
+    "@number0/iroh": ["@number0/iroh@1.2.0", "", { "optionalDependencies": { "@number0/iroh-android-arm-eabi": "1.2.0", "@number0/iroh-android-arm64": "1.2.0", "@number0/iroh-darwin-arm64": "1.2.0", "@number0/iroh-linux-arm-gnueabihf": "1.2.0", "@number0/iroh-linux-arm-musleabihf": "1.2.0", "@number0/iroh-linux-arm64-gnu": "1.2.0", "@number0/iroh-linux-arm64-musl": "1.2.0", "@number0/iroh-linux-x64-gnu": "1.2.0", "@number0/iroh-linux-x64-musl": "1.2.0", "@number0/iroh-win32-arm64-msvc": "1.2.0", "@number0/iroh-win32-x64-msvc": "1.2.0" } }, "sha512-pZoVnL+8nK4DQG3owF5UQ/LcIjg7m2Ue1oeEUEhLsNt9RHtEFxiASNSPopOdsRfjRimJ/e6zjQ0k3iYE6N1hZQ=="],
+
+    "@number0/iroh-android-arm-eabi": ["@number0/iroh-android-arm-eabi@1.2.0", "", { "os": "android", "cpu": "arm" }, "sha512-T8Hp4G1ewh/7AUI8DBHi596Rlr9zZZzPA3CpN58XSSQBxUEpiqxtZoYmEa3w6QgVw1o5IQrEgAUxLN7ogBtnig=="],
+
+    "@number0/iroh-android-arm64": ["@number0/iroh-android-arm64@1.2.0", "", { "os": "android", "cpu": "arm64" }, "sha512-etoVzrsoPAij+XhD+BECISJKYUG6eW+XS43I5P4SD+nqAIJ6XnMTy/Brwayuj8ERoRaFLClL8bb++v5883TcrA=="],
+
+    "@number0/iroh-darwin-arm64": ["@number0/iroh-darwin-arm64@1.2.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-91oxmPrYiCnU0APp/Ky0mgNOxaIukQDFUvxth32TDq38vJs0lDX9ppAsWrkCA+4A/kJnAt1hc7YhIKcIGD3xOA=="],
+
+    "@number0/iroh-linux-arm-gnueabihf": ["@number0/iroh-linux-arm-gnueabihf@1.2.0", "", { "os": "linux", "cpu": "arm" }, "sha512-PTi5YyxjkLluzVec5Q0NJqRUaYcVT76sZ0SaM10HFGlwlTIniYO7DYUGTLs+XcByUBcE7Ph5xkyvoLmB1mOF4A=="],
+
+    "@number0/iroh-linux-arm-musleabihf": ["@number0/iroh-linux-arm-musleabihf@1.2.0", "", { "os": "linux", "cpu": "arm" }, "sha512-IwOPvWOEyX6ZMHjctDaZyWVV2kJSXx57DRN2l5Qg/cEQjY5zWO4IMFvjw075IKrQk+VpU6RrEEI++2w2Gci1dA=="],
+
+    "@number0/iroh-linux-arm64-gnu": ["@number0/iroh-linux-arm64-gnu@1.2.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-LEenFEMMWLnlyFy8++cYq+s7/nibFgFzs1kGDk7WvFDyxT3U2z0W0+hjENzDiS1iCtH8+zesdDdFxuQtxjJHYg=="],
+
+    "@number0/iroh-linux-arm64-musl": ["@number0/iroh-linux-arm64-musl@1.2.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-YgCWpz80VOTJRtAUsTKFgLYtd7tfWwrRCD0uk3/xG4z+AjiY5c49toeDFTJJ/3SF5Q8qmjWGjpcUk6B1E55D4w=="],
+
+    "@number0/iroh-linux-x64-gnu": ["@number0/iroh-linux-x64-gnu@1.2.0", "", { "os": "linux", "cpu": "x64" }, "sha512-SkZUe/dqv7J1kY3Af0Cu07ldfdstEDOz6F3yIKwMw/EpabhaE3fvdDbiDQoiMxbwgIiJMspChHRMZeC88Td3QQ=="],
+
+    "@number0/iroh-linux-x64-musl": ["@number0/iroh-linux-x64-musl@1.2.0", "", { "os": "linux", "cpu": "x64" }, "sha512-UnZHStWdFZgylftmX2IHF+VKkrkbEhK+amkOf7A9Z3JPrqkbF5em3UW3uyDK3qfhcc9Ijc3nnYKxym+BkOLPjQ=="],
+
+    "@number0/iroh-win32-arm64-msvc": ["@number0/iroh-win32-arm64-msvc@1.2.0", "", { "os": "win32", "cpu": "arm64" }, "sha512-2srn9OquRffLD1bQiCDRLr3T1yxmc9xc3k4oLgEMWU+lZnaMONRS2r46cTXN1b/bGsSc82TjGCO/urauXZjQcQ=="],
+
+    "@number0/iroh-win32-x64-msvc": ["@number0/iroh-win32-x64-msvc@1.2.0", "", { "os": "win32", "cpu": "x64" }, "sha512-3ltCadoaZzrRM9OmPcfwPpqwF/DBXlzhwsOIXITtpFEFfRISgvbqyhmMCaiumpyXxFeGTCfpwvUJ40i+sE0sVQ=="],
 
     "@types/debug": ["@types/debug@4.1.13", "", { "dependencies": { "@types/ms": "*" } }, "sha512-KSVgmQmzMwPlmtljOomayoR89W4FynCAi3E8PPs7vmDVPe84hT+vGPKkJfThkmXs0x0jAaa9U8uW8bbfyS2fWw=="],
 
@@ -93,6 +121,8 @@
     "js-yaml": ["js-yaml@4.3.1", "", { "dependencies": { "argparse": "^2.0.1" }, "bin": { "js-yaml": "bin/js-yaml.js" } }, "sha512-CY6crGq313MX8GkwvB7tzgp99vjQxY1++5y10/BKN/GUfHqWaOGQMNZkBvqSzsZKWk/ijwHlWzzkLulsGHhjWQ=="],
 
     "json-schema-traverse": ["json-schema-traverse@1.0.0", "", {}, "sha512-NM8/P9n3XjXhIZn1lLhkFaACTOURQXjWhV4BA/RnOv8xvgqtqpAX9IO4mRQxSx1Rlo4tqzeqb0sOlruaOy3dug=="],
+
+    "jsqr": ["jsqr@1.4.0", "", {}, "sha512-dxLob7q65Xg2DvstYkRpkYtmKm2sPJ9oFhrhmudT1dZvNFFTlroai3AWSpLey/w5vMcLBXRgOJsbXpdN9HzU/A=="],
 
     "katex": ["katex@0.16.47", "", { "dependencies": { "commander": "^8.3.0" }, "bin": { "katex": "cli.js" } }, "sha512-Eeo8Ys1doU1z+x8AZsPpQu+p/QcZBI5PeOo7QGQdy2x2m0MU/hYagBbGOmXwr5KVbEfVuWv9LpnQWeehogurjg=="],
 
@@ -220,9 +250,9 @@
 
     "zwitch": ["zwitch@2.0.4", "", {}, "sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A=="],
 
-    "@cyberbaser/account-free-intake/@cyberbaser/proposal": ["@cyberbaser/proposal@file:../../packages/proposal", {}],
+    "@cyberbaser/account-free-intake/@cyberbaser/proposal": ["@cyberbaser/proposal@file:../../packages/proposal", { "dependencies": { "@cyberbaser/correction": "file:../correction", "@cyberbaser/trust": "file:../trust" }, "devDependencies": { "ajv": "8.17.1", "ajv-formats": "3.0.1" } }],
 
-    "@cyberbaser/account-free-intake/@cyberbaser/trust": ["@cyberbaser/trust@file:../../packages/trust", {}],
+    "@cyberbaser/account-free-intake/@cyberbaser/trust": ["@cyberbaser/trust@file:../../packages/trust", { "dependencies": { "@cyberbaser/ofm": "file:../ofm", "js-yaml": "^4.1.0" }, "bin": { "cb-trust": "bin/cb-trust.js" } }],
 
     "@cyberbaser/projection/@cyberbaser/publish": ["@cyberbaser/publish@file:../../packages/publish", { "dependencies": { "js-yaml": "^4.1.0" } }],
 
@@ -250,6 +280,14 @@
 
     "@cyberbaser/trust/js-yaml": ["js-yaml@4.1.0", "", { "dependencies": { "argparse": "^2.0.1" }, "bin": { "js-yaml": "bin/js-yaml.js" } }, "sha512-wpxZs9NoxZaJESJGIZTyDEaYpl0FKSA+FB9aJiyemKhMwkxQg63h4T1KJgUGHpTqPDNRcmmYLugrRjJlBtWvRA=="],
 
+    "@cyberbaser/account-free-intake/@cyberbaser/proposal/@cyberbaser/correction": ["@cyberbaser/correction@file:../../packages/correction", {}],
+
+    "@cyberbaser/account-free-intake/@cyberbaser/proposal/@cyberbaser/trust": ["@cyberbaser/trust@file:../../packages/trust", { "dependencies": { "@cyberbaser/ofm": "file:../ofm", "js-yaml": "^4.1.0" }, "bin": { "cb-trust": "bin/cb-trust.js" } }],
+
+    "@cyberbaser/account-free-intake/@cyberbaser/trust/@cyberbaser/ofm": ["@cyberbaser/ofm@file:../../packages/ofm", { "dependencies": { "remark-frontmatter": "^5.0.0", "remark-gfm": "^4.0.1", "remark-math": "^6.0.0", "remark-parse": "^11.0.0", "remark-stringify": "^11.0.0", "unified": "^11.0.5" }, "bin": { "ofm-check": "bin/ofm-check.js" } }],
+
+    "@cyberbaser/account-free-intake/@cyberbaser/trust/js-yaml": ["js-yaml@4.1.0", "", { "dependencies": { "argparse": "^2.0.1" }, "bin": { "js-yaml": "bin/js-yaml.js" } }, "sha512-wpxZs9NoxZaJESJGIZTyDEaYpl0FKSA+FB9aJiyemKhMwkxQg63h4T1KJgUGHpTqPDNRcmmYLugrRjJlBtWvRA=="],
+
     "@cyberbaser/proposal-queue/@cyberbaser/proposal/@cyberbaser/correction": ["@cyberbaser/correction@file:../../packages/correction", {}],
 
     "@cyberbaser/proposal-queue/@cyberbaser/proposal/@cyberbaser/trust": ["@cyberbaser/trust@file:../../packages/trust", { "dependencies": { "@cyberbaser/ofm": "file:../ofm", "js-yaml": "^4.1.0" }, "bin": { "cb-trust": "bin/cb-trust.js" } }],
@@ -271,6 +309,10 @@
     "@cyberbaser/proposal/@cyberbaser/trust/@cyberbaser/ofm": ["@cyberbaser/ofm@file:../../packages/ofm", { "dependencies": { "remark-frontmatter": "^5.0.0", "remark-gfm": "^4.0.1", "remark-math": "^6.0.0", "remark-parse": "^11.0.0", "remark-stringify": "^11.0.0", "unified": "^11.0.5" }, "bin": { "ofm-check": "bin/ofm-check.js" } }],
 
     "@cyberbaser/proposal/@cyberbaser/trust/js-yaml": ["js-yaml@4.1.0", "", { "dependencies": { "argparse": "^2.0.1" }, "bin": { "js-yaml": "bin/js-yaml.js" } }, "sha512-wpxZs9NoxZaJESJGIZTyDEaYpl0FKSA+FB9aJiyemKhMwkxQg63h4T1KJgUGHpTqPDNRcmmYLugrRjJlBtWvRA=="],
+
+    "@cyberbaser/account-free-intake/@cyberbaser/proposal/@cyberbaser/trust/@cyberbaser/ofm": ["@cyberbaser/ofm@file:../../packages/ofm", { "dependencies": { "remark-frontmatter": "^5.0.0", "remark-gfm": "^4.0.1", "remark-math": "^6.0.0", "remark-parse": "^11.0.0", "remark-stringify": "^11.0.0", "unified": "^11.0.5" }, "bin": { "ofm-check": "bin/ofm-check.js" } }],
+
+    "@cyberbaser/account-free-intake/@cyberbaser/proposal/@cyberbaser/trust/js-yaml": ["js-yaml@4.1.0", "", { "dependencies": { "argparse": "^2.0.1" }, "bin": { "js-yaml": "bin/js-yaml.js" } }, "sha512-wpxZs9NoxZaJESJGIZTyDEaYpl0FKSA+FB9aJiyemKhMwkxQg63h4T1KJgUGHpTqPDNRcmmYLugrRjJlBtWvRA=="],
 
     "@cyberbaser/proposal-queue/@cyberbaser/proposal/@cyberbaser/trust/@cyberbaser/ofm": ["@cyberbaser/ofm@file:../../packages/ofm", { "dependencies": { "remark-frontmatter": "^5.0.0", "remark-gfm": "^4.0.1", "remark-math": "^6.0.0", "remark-parse": "^11.0.0", "remark-stringify": "^11.0.0", "unified": "^11.0.5" }, "bin": { "ofm-check": "bin/ofm-check.js" } }],
 

@@ -1,0 +1,914 @@
+{
+  "note": "Conformance vectors for @cyberbaser/signed-intent format v1. Regenerating changes the passkey cases (random P-256 key) but never the intent bytes.",
+  "publisher": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "intents": {
+    "publish": {
+      "intent": {
+        "v": 1,
+        "publisher": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "nonce": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+        "issuedAt": 1800000000000,
+        "expiresAt": 1800000600000,
+        "kind": "publish",
+        "keyId": "phone-1",
+        "target": {
+          "remote": "https://github.com/example/vault.git",
+          "branch": "main"
+        },
+        "base": "1111111111111111111111111111111111111111",
+        "commit": {
+          "author": {
+            "name": "Owner",
+            "email": "owner@example.invalid",
+            "time": 1800000000,
+            "tz": "+0000"
+          },
+          "committer": {
+            "name": "Owner",
+            "email": "owner@example.invalid",
+            "time": 1800000000,
+            "tz": "+0000"
+          },
+          "message": "Edit notes/a.md\n"
+        },
+        "changes": [
+          {
+            "path": "notes/a.md",
+            "before": {
+              "mode": "100644",
+              "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "after": {
+              "mode": "100644",
+              "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            }
+          },
+          {
+            "path": "notes/new.md",
+            "before": null,
+            "after": {
+              "mode": "100644",
+              "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+            }
+          }
+        ]
+      },
+      "bytesUtf8": "cyberbaser.publish-intent.v1\n{\"base\":\"1111111111111111111111111111111111111111\",\"changes\":[{\"after\":{\"mode\":\"100644\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"},\"before\":{\"mode\":\"100644\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"},\"path\":\"notes/a.md\"},{\"after\":{\"mode\":\"100644\",\"sha256\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"},\"before\":null,\"path\":\"notes/new.md\"}],\"commit\":{\"author\":{\"email\":\"owner@example.invalid\",\"name\":\"Owner\",\"time\":1800000000,\"tz\":\"+0000\"},\"committer\":{\"email\":\"owner@example.invalid\",\"name\":\"Owner\",\"time\":1800000000,\"tz\":\"+0000\"},\"message\":\"Edit notes/a.md\\n\"},\"expiresAt\":1800000600000,\"issuedAt\":1800000000000,\"keyId\":\"phone-1\",\"kind\":\"publish\",\"nonce\":\"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE\",\"publisher\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"target\":{\"branch\":\"main\",\"remote\":\"https://github.com/example/vault.git\"},\"v\":1}",
+      "digestHex": "226abb8c14923f15b7887e9b4ea4fcf921278a03debcc6ebd9ff22e3fa17a905"
+    },
+    "enroll": {
+      "intent": {
+        "v": 1,
+        "publisher": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "nonce": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+        "issuedAt": 1800000000000,
+        "expiresAt": 1800000600000,
+        "kind": "enroll",
+        "keyId": "phone-1",
+        "subject": {
+          "key": {
+            "keyId": "phone-1",
+            "type": "ed25519",
+            "publicKey": "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw",
+            "label": "Phone"
+          },
+          "proof": "4GWvnoeHL8Q7M3oWxN8kswhk1-uLToyq9nSnzpiylQA"
+        }
+      },
+      "bytesUtf8": "cyberbaser.publish-intent.v1\n{\"expiresAt\":1800000600000,\"issuedAt\":1800000000000,\"keyId\":\"phone-1\",\"kind\":\"enroll\",\"nonce\":\"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE\",\"publisher\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"subject\":{\"key\":{\"keyId\":\"phone-1\",\"label\":\"Phone\",\"publicKey\":\"6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw\",\"type\":\"ed25519\"},\"proof\":\"4GWvnoeHL8Q7M3oWxN8kswhk1-uLToyq9nSnzpiylQA\"},\"v\":1}",
+      "digestHex": "bee39d97d292a96341104cd492c30a663e3dd123bfeebd712f4b32e182a6e7aa"
+    },
+    "key-add": {
+      "intent": {
+        "v": 1,
+        "publisher": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "nonce": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+        "issuedAt": 1800000000000,
+        "expiresAt": 1800000600000,
+        "kind": "key-add",
+        "keyId": "phone-1",
+        "subject": {
+          "key": {
+            "keyId": "laptop-1",
+            "type": "ed25519",
+            "publicKey": "E5j2LG0aRXxRumpLXz29L2n8qTIWIY3ImX5Ba9F9k8o",
+            "label": "Work laptop"
+          }
+        }
+      },
+      "bytesUtf8": "cyberbaser.publish-intent.v1\n{\"expiresAt\":1800000600000,\"issuedAt\":1800000000000,\"keyId\":\"phone-1\",\"kind\":\"key-add\",\"nonce\":\"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE\",\"publisher\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"subject\":{\"key\":{\"keyId\":\"laptop-1\",\"label\":\"Work laptop\",\"publicKey\":\"E5j2LG0aRXxRumpLXz29L2n8qTIWIY3ImX5Ba9F9k8o\",\"type\":\"ed25519\"}},\"v\":1}",
+      "digestHex": "f2d957f3d4e13ccd83074a468c851bf0a23ae358bfd7144a1d8d413c283ff7d9"
+    },
+    "key-revoke": {
+      "intent": {
+        "v": 1,
+        "publisher": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "nonce": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+        "issuedAt": 1800000000000,
+        "expiresAt": 1800000600000,
+        "kind": "key-revoke",
+        "keyId": "phone-1",
+        "subject": {
+          "keyId": "laptop-1"
+        }
+      },
+      "bytesUtf8": "cyberbaser.publish-intent.v1\n{\"expiresAt\":1800000600000,\"issuedAt\":1800000000000,\"keyId\":\"phone-1\",\"kind\":\"key-revoke\",\"nonce\":\"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE\",\"publisher\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"subject\":{\"keyId\":\"laptop-1\"},\"v\":1}",
+      "digestHex": "77e5f1eac90ced192795505ce83ea094e75b1f44616845c5833f8f4e1430e9ad"
+    },
+    "recovery-reset": {
+      "intent": {
+        "v": 1,
+        "publisher": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "nonce": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+        "issuedAt": 1800000000000,
+        "expiresAt": 1800000600000,
+        "kind": "recovery-reset",
+        "keyId": "recovery",
+        "subject": {
+          "key": {
+            "keyId": "laptop-1",
+            "type": "ed25519",
+            "publicKey": "E5j2LG0aRXxRumpLXz29L2n8qTIWIY3ImX5Ba9F9k8o",
+            "label": "Work laptop"
+          },
+          "recoveryKey": null
+        }
+      },
+      "bytesUtf8": "cyberbaser.publish-intent.v1\n{\"expiresAt\":1800000600000,\"issuedAt\":1800000000000,\"keyId\":\"recovery\",\"kind\":\"recovery-reset\",\"nonce\":\"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE\",\"publisher\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"subject\":{\"key\":{\"keyId\":\"laptop-1\",\"label\":\"Work laptop\",\"publicKey\":\"E5j2LG0aRXxRumpLXz29L2n8qTIWIY3ImX5Ba9F9k8o\",\"type\":\"ed25519\"},\"recoveryKey\":null},\"v\":1}",
+      "digestHex": "ee1c32a205fae2dcd54fde266eb7cfff79b68e94546f8666472b99bd45773a7f"
+    }
+  },
+  "invalidIntents": [
+    {
+      "name": "unknown member",
+      "intent": {
+        "v": 1,
+        "publisher": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "nonce": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+        "issuedAt": 1800000000000,
+        "expiresAt": 1800000600000,
+        "kind": "publish",
+        "keyId": "phone-1",
+        "target": {
+          "remote": "https://github.com/example/vault.git",
+          "branch": "main"
+        },
+        "base": "1111111111111111111111111111111111111111",
+        "commit": {
+          "author": {
+            "name": "Owner",
+            "email": "owner@example.invalid",
+            "time": 1800000000,
+            "tz": "+0000"
+          },
+          "committer": {
+            "name": "Owner",
+            "email": "owner@example.invalid",
+            "time": 1800000000,
+            "tz": "+0000"
+          },
+          "message": "Edit notes/a.md\n"
+        },
+        "changes": [
+          {
+            "path": "notes/a.md",
+            "before": {
+              "mode": "100644",
+              "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "after": {
+              "mode": "100644",
+              "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            }
+          },
+          {
+            "path": "notes/new.md",
+            "before": null,
+            "after": {
+              "mode": "100644",
+              "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+            }
+          }
+        ],
+        "note": "x"
+      }
+    },
+    {
+      "name": "no changes",
+      "intent": {
+        "v": 1,
+        "publisher": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "nonce": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+        "issuedAt": 1800000000000,
+        "expiresAt": 1800000600000,
+        "kind": "publish",
+        "keyId": "phone-1",
+        "target": {
+          "remote": "https://github.com/example/vault.git",
+          "branch": "main"
+        },
+        "base": "1111111111111111111111111111111111111111",
+        "commit": {
+          "author": {
+            "name": "Owner",
+            "email": "owner@example.invalid",
+            "time": 1800000000,
+            "tz": "+0000"
+          },
+          "committer": {
+            "name": "Owner",
+            "email": "owner@example.invalid",
+            "time": 1800000000,
+            "tz": "+0000"
+          },
+          "message": "Edit notes/a.md\n"
+        },
+        "changes": []
+      }
+    },
+    {
+      "name": "lifetime over 15 minutes",
+      "intent": {
+        "v": 1,
+        "publisher": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "nonce": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+        "issuedAt": 1800000000000,
+        "expiresAt": 1800000900001,
+        "kind": "publish",
+        "keyId": "phone-1",
+        "target": {
+          "remote": "https://github.com/example/vault.git",
+          "branch": "main"
+        },
+        "base": "1111111111111111111111111111111111111111",
+        "commit": {
+          "author": {
+            "name": "Owner",
+            "email": "owner@example.invalid",
+            "time": 1800000000,
+            "tz": "+0000"
+          },
+          "committer": {
+            "name": "Owner",
+            "email": "owner@example.invalid",
+            "time": 1800000000,
+            "tz": "+0000"
+          },
+          "message": "Edit notes/a.md\n"
+        },
+        "changes": [
+          {
+            "path": "notes/a.md",
+            "before": {
+              "mode": "100644",
+              "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "after": {
+              "mode": "100644",
+              "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            }
+          },
+          {
+            "path": "notes/new.md",
+            "before": null,
+            "after": {
+              "mode": "100644",
+              "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "unsorted changes",
+      "intent": {
+        "v": 1,
+        "publisher": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "nonce": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+        "issuedAt": 1800000000000,
+        "expiresAt": 1800000600000,
+        "kind": "publish",
+        "keyId": "phone-1",
+        "target": {
+          "remote": "https://github.com/example/vault.git",
+          "branch": "main"
+        },
+        "base": "1111111111111111111111111111111111111111",
+        "commit": {
+          "author": {
+            "name": "Owner",
+            "email": "owner@example.invalid",
+            "time": 1800000000,
+            "tz": "+0000"
+          },
+          "committer": {
+            "name": "Owner",
+            "email": "owner@example.invalid",
+            "time": 1800000000,
+            "tz": "+0000"
+          },
+          "message": "Edit notes/a.md\n"
+        },
+        "changes": [
+          {
+            "path": "notes/new.md",
+            "before": null,
+            "after": {
+              "mode": "100644",
+              "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+            }
+          },
+          {
+            "path": "notes/a.md",
+            "before": {
+              "mode": "100644",
+              "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "after": {
+              "mode": "100644",
+              "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "path with ..",
+      "intent": {
+        "v": 1,
+        "publisher": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "nonce": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+        "issuedAt": 1800000000000,
+        "expiresAt": 1800000600000,
+        "kind": "publish",
+        "keyId": "phone-1",
+        "target": {
+          "remote": "https://github.com/example/vault.git",
+          "branch": "main"
+        },
+        "base": "1111111111111111111111111111111111111111",
+        "commit": {
+          "author": {
+            "name": "Owner",
+            "email": "owner@example.invalid",
+            "time": 1800000000,
+            "tz": "+0000"
+          },
+          "committer": {
+            "name": "Owner",
+            "email": "owner@example.invalid",
+            "time": 1800000000,
+            "tz": "+0000"
+          },
+          "message": "Edit notes/a.md\n"
+        },
+        "changes": [
+          {
+            "path": "notes/../x.md",
+            "before": {
+              "mode": "100644",
+              "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "after": {
+              "mode": "100644",
+              "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "path into .git",
+      "intent": {
+        "v": 1,
+        "publisher": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "nonce": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+        "issuedAt": 1800000000000,
+        "expiresAt": 1800000600000,
+        "kind": "publish",
+        "keyId": "phone-1",
+        "target": {
+          "remote": "https://github.com/example/vault.git",
+          "branch": "main"
+        },
+        "base": "1111111111111111111111111111111111111111",
+        "commit": {
+          "author": {
+            "name": "Owner",
+            "email": "owner@example.invalid",
+            "time": 1800000000,
+            "tz": "+0000"
+          },
+          "committer": {
+            "name": "Owner",
+            "email": "owner@example.invalid",
+            "time": 1800000000,
+            "tz": "+0000"
+          },
+          "message": "Edit notes/a.md\n"
+        },
+        "changes": [
+          {
+            "path": ".git/config",
+            "before": {
+              "mode": "100644",
+              "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "after": {
+              "mode": "100644",
+              "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "symlink mode",
+      "intent": {
+        "v": 1,
+        "publisher": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "nonce": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+        "issuedAt": 1800000000000,
+        "expiresAt": 1800000600000,
+        "kind": "publish",
+        "keyId": "phone-1",
+        "target": {
+          "remote": "https://github.com/example/vault.git",
+          "branch": "main"
+        },
+        "base": "1111111111111111111111111111111111111111",
+        "commit": {
+          "author": {
+            "name": "Owner",
+            "email": "owner@example.invalid",
+            "time": 1800000000,
+            "tz": "+0000"
+          },
+          "committer": {
+            "name": "Owner",
+            "email": "owner@example.invalid",
+            "time": 1800000000,
+            "tz": "+0000"
+          },
+          "message": "Edit notes/a.md\n"
+        },
+        "changes": [
+          {
+            "path": "notes/a.md",
+            "before": {
+              "mode": "100644",
+              "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "after": {
+              "mode": "120000",
+              "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "message without final newline",
+      "intent": {
+        "v": 1,
+        "publisher": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "nonce": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+        "issuedAt": 1800000000000,
+        "expiresAt": 1800000600000,
+        "kind": "publish",
+        "keyId": "phone-1",
+        "target": {
+          "remote": "https://github.com/example/vault.git",
+          "branch": "main"
+        },
+        "base": "1111111111111111111111111111111111111111",
+        "commit": {
+          "author": {
+            "name": "Owner",
+            "email": "owner@example.invalid",
+            "time": 1800000000,
+            "tz": "+0000"
+          },
+          "committer": {
+            "name": "Owner",
+            "email": "owner@example.invalid",
+            "time": 1800000000,
+            "tz": "+0000"
+          },
+          "message": "x"
+        },
+        "changes": [
+          {
+            "path": "notes/a.md",
+            "before": {
+              "mode": "100644",
+              "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "after": {
+              "mode": "100644",
+              "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            }
+          },
+          {
+            "path": "notes/new.md",
+            "before": null,
+            "after": {
+              "mode": "100644",
+              "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "float time",
+      "intent": {
+        "v": 1,
+        "publisher": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "nonce": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+        "issuedAt": 1.5,
+        "expiresAt": 1800000600000,
+        "kind": "publish",
+        "keyId": "phone-1",
+        "target": {
+          "remote": "https://github.com/example/vault.git",
+          "branch": "main"
+        },
+        "base": "1111111111111111111111111111111111111111",
+        "commit": {
+          "author": {
+            "name": "Owner",
+            "email": "owner@example.invalid",
+            "time": 1800000000,
+            "tz": "+0000"
+          },
+          "committer": {
+            "name": "Owner",
+            "email": "owner@example.invalid",
+            "time": 1800000000,
+            "tz": "+0000"
+          },
+          "message": "Edit notes/a.md\n"
+        },
+        "changes": [
+          {
+            "path": "notes/a.md",
+            "before": {
+              "mode": "100644",
+              "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "after": {
+              "mode": "100644",
+              "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            }
+          },
+          {
+            "path": "notes/new.md",
+            "before": null,
+            "after": {
+              "mode": "100644",
+              "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "recovery key signing a publish",
+      "intent": {
+        "v": 1,
+        "publisher": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "nonce": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+        "issuedAt": 1800000000000,
+        "expiresAt": 1800000600000,
+        "kind": "publish",
+        "keyId": "recovery",
+        "target": {
+          "remote": "https://github.com/example/vault.git",
+          "branch": "main"
+        },
+        "base": "1111111111111111111111111111111111111111",
+        "commit": {
+          "author": {
+            "name": "Owner",
+            "email": "owner@example.invalid",
+            "time": 1800000000,
+            "tz": "+0000"
+          },
+          "committer": {
+            "name": "Owner",
+            "email": "owner@example.invalid",
+            "time": 1800000000,
+            "tz": "+0000"
+          },
+          "message": "Edit notes/a.md\n"
+        },
+        "changes": [
+          {
+            "path": "notes/a.md",
+            "before": {
+              "mode": "100644",
+              "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "after": {
+              "mode": "100644",
+              "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            }
+          },
+          {
+            "path": "notes/new.md",
+            "before": null,
+            "after": {
+              "mode": "100644",
+              "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "enroll for another key",
+      "intent": {
+        "v": 1,
+        "publisher": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "nonce": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+        "issuedAt": 1800000000000,
+        "expiresAt": 1800000600000,
+        "kind": "enroll",
+        "keyId": "someone-else",
+        "subject": {
+          "key": {
+            "keyId": "phone-1",
+            "type": "ed25519",
+            "publicKey": "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw",
+            "label": "Phone"
+          },
+          "proof": "4GWvnoeHL8Q7M3oWxN8kswhk1-uLToyq9nSnzpiylQA"
+        }
+      }
+    }
+  ],
+  "approvals": [
+    {
+      "name": "ed25519 valid",
+      "digest": "226abb8c14923f15b7887e9b4ea4fcf921278a03debcc6ebd9ff22e3fa17a905",
+      "key": {
+        "type": "ed25519",
+        "publicKey": "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw"
+      },
+      "approval": {
+        "type": "ed25519",
+        "signature": "0yK_x4RjbwwhPzo62dXyHvrLNQz3sYL-r0mU67iE-5m2qZP1cyvrA7uTZUKjfnvhdak5zEXaahlWgF34BZwCBA"
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "ed25519 other intent",
+      "digest": "bdf64aadf043ebddf0bf60e577de0874be67529112504400068467146a6fdd24",
+      "key": {
+        "type": "ed25519",
+        "publicKey": "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw"
+      },
+      "approval": {
+        "type": "ed25519",
+        "signature": "0yK_x4RjbwwhPzo62dXyHvrLNQz3sYL-r0mU67iE-5m2qZP1cyvrA7uTZUKjfnvhdak5zEXaahlWgF34BZwCBA"
+      },
+      "expect": "bad-signature"
+    },
+    {
+      "name": "ed25519 s+L malleated",
+      "digest": "226abb8c14923f15b7887e9b4ea4fcf921278a03debcc6ebd9ff22e3fa17a905",
+      "key": {
+        "type": "ed25519",
+        "publicKey": "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw"
+      },
+      "approval": {
+        "type": "ed25519",
+        "signature": "0yK_x4RjbwwhPzo62dXyHvrLNQz3sYL-r0mU67iE-5mjfYlSjo79W5EwXeWBeFr2dak5zEXaahlWgF34BZwCFA"
+      },
+      "expect": "non-canonical-signature"
+    },
+    {
+      "name": "ed25519 truncated",
+      "digest": "226abb8c14923f15b7887e9b4ea4fcf921278a03debcc6ebd9ff22e3fa17a905",
+      "key": {
+        "type": "ed25519",
+        "publicKey": "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw"
+      },
+      "approval": {
+        "type": "ed25519",
+        "signature": "0yK_x4RjbwwhPzo62dXyHvrLNQz3sYL-r0mU67iE-5m2qZP1cyvrA7uTZUKjfnvhdak5zEXaahlWgF34BZwC"
+      },
+      "expect": "malformed"
+    },
+    {
+      "name": "ed25519 small-order key",
+      "digest": "226abb8c14923f15b7887e9b4ea4fcf921278a03debcc6ebd9ff22e3fa17a905",
+      "key": {
+        "type": "ed25519",
+        "publicKey": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "approval": {
+        "type": "ed25519",
+        "signature": "0yK_x4RjbwwhPzo62dXyHvrLNQz3sYL-r0mU67iE-5m2qZP1cyvrA7uTZUKjfnvhdak5zEXaahlWgF34BZwCBA"
+      },
+      "expect": "weak-key"
+    },
+    {
+      "name": "passkey valid synced (counter 0)",
+      "digest": "226abb8c14923f15b7887e9b4ea4fcf921278a03debcc6ebd9ff22e3fa17a905",
+      "key": {
+        "type": "webauthn",
+        "rpId": "localhost",
+        "origins": [
+          "http://localhost:4319"
+        ],
+        "counter": 0,
+        "publicKeySpki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAES97lvKpxVvjbekn-Ueiuv8SIAAon7USo14AG9l4yw_1Ynnxh31rHu1SP4-SCdRQl2dXV5SAXpwmil4nFXYWp2Q"
+      },
+      "approval": {
+        "type": "webauthn",
+        "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiSW1xN2pCU1NQeFczaUg2YlRxVDgtU0VuaWdQZXZNYnIyZjhpNF9vWHFRVSIsIm9yaWdpbiI6Imh0dHA6Ly9sb2NhbGhvc3Q6NDMxOSIsImNyb3NzT3JpZ2luIjpmYWxzZX0",
+        "authenticatorData": "SZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2MFAAAAAA",
+        "signature": "MEUCIFIg-HLBKRHPXyd67Q3UHrR1jAffxU8HVIS8Y0iD-FBCAiEA1zESbfmiy9SXG29suVfYK23W1f6z4CaaRJzE3GBsvro"
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "passkey other intent",
+      "digest": "bdf64aadf043ebddf0bf60e577de0874be67529112504400068467146a6fdd24",
+      "key": {
+        "type": "webauthn",
+        "rpId": "localhost",
+        "origins": [
+          "http://localhost:4319"
+        ],
+        "counter": 0,
+        "publicKeySpki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAES97lvKpxVvjbekn-Ueiuv8SIAAon7USo14AG9l4yw_1Ynnxh31rHu1SP4-SCdRQl2dXV5SAXpwmil4nFXYWp2Q"
+      },
+      "approval": {
+        "type": "webauthn",
+        "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiSW1xN2pCU1NQeFczaUg2YlRxVDgtU0VuaWdQZXZNYnIyZjhpNF9vWHFRVSIsIm9yaWdpbiI6Imh0dHA6Ly9sb2NhbGhvc3Q6NDMxOSIsImNyb3NzT3JpZ2luIjpmYWxzZX0",
+        "authenticatorData": "SZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2MFAAAAAA",
+        "signature": "MEUCIEap609xPrihjZhDhtHciOdTqUjAsBUCUsqMXU3LZM4ZAiEAxmSSCjqu1n6il5b8G_aC_naKm6K5x6juN6SIE4Q3Cxc"
+      },
+      "expect": "wrong-challenge"
+    },
+    {
+      "name": "passkey wrong origin",
+      "digest": "226abb8c14923f15b7887e9b4ea4fcf921278a03debcc6ebd9ff22e3fa17a905",
+      "key": {
+        "type": "webauthn",
+        "rpId": "localhost",
+        "origins": [
+          "http://localhost:4319"
+        ],
+        "counter": 0,
+        "publicKeySpki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAES97lvKpxVvjbekn-Ueiuv8SIAAon7USo14AG9l4yw_1Ynnxh31rHu1SP4-SCdRQl2dXV5SAXpwmil4nFXYWp2Q"
+      },
+      "approval": {
+        "type": "webauthn",
+        "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiSW1xN2pCU1NQeFczaUg2YlRxVDgtU0VuaWdQZXZNYnIyZjhpNF9vWHFRVSIsIm9yaWdpbiI6Imh0dHA6Ly9sb2NhbGhvc3Q6NDMxNyIsImNyb3NzT3JpZ2luIjpmYWxzZX0",
+        "authenticatorData": "SZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2MFAAAAAA",
+        "signature": "MEUCIQC2aQfYOcpnWIaxFepQzk4_JXoS5bUbek9uNnuD5AkCawIgfRYevqe22P5ZUFeDD0qWFb5iW76KJSacLFxdXNhSstw"
+      },
+      "expect": "wrong-origin"
+    },
+    {
+      "name": "passkey wrong rp",
+      "digest": "226abb8c14923f15b7887e9b4ea4fcf921278a03debcc6ebd9ff22e3fa17a905",
+      "key": {
+        "type": "webauthn",
+        "rpId": "localhost",
+        "origins": [
+          "http://localhost:4319"
+        ],
+        "counter": 0,
+        "publicKeySpki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAES97lvKpxVvjbekn-Ueiuv8SIAAon7USo14AG9l4yw_1Ynnxh31rHu1SP4-SCdRQl2dXV5SAXpwmil4nFXYWp2Q"
+      },
+      "approval": {
+        "type": "webauthn",
+        "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiSW1xN2pCU1NQeFczaUg2YlRxVDgtU0VuaWdQZXZNYnIyZjhpNF9vWHFRVSIsIm9yaWdpbiI6Imh0dHA6Ly9sb2NhbGhvc3Q6NDMxOSIsImNyb3NzT3JpZ2luIjpmYWxzZX0",
+        "authenticatorData": "nBgN4M1pnueIl8R8_bPn7h11kG4xt3RqR0fepTaQmDcFAAAAAA",
+        "signature": "MEYCIQCnfF54xNQU3uPI7NmW0lrc4b1p9HTi4wNMNOz_gNSzqwIhAP9gstSD3YZojJMYn5-bFmGbTAFfPdwL4EWmbbmUE3cj"
+      },
+      "expect": "wrong-rp"
+    },
+    {
+      "name": "passkey create not get",
+      "digest": "226abb8c14923f15b7887e9b4ea4fcf921278a03debcc6ebd9ff22e3fa17a905",
+      "key": {
+        "type": "webauthn",
+        "rpId": "localhost",
+        "origins": [
+          "http://localhost:4319"
+        ],
+        "counter": 0,
+        "publicKeySpki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAES97lvKpxVvjbekn-Ueiuv8SIAAon7USo14AG9l4yw_1Ynnxh31rHu1SP4-SCdRQl2dXV5SAXpwmil4nFXYWp2Q"
+      },
+      "approval": {
+        "type": "webauthn",
+        "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoiSW1xN2pCU1NQeFczaUg2YlRxVDgtU0VuaWdQZXZNYnIyZjhpNF9vWHFRVSIsIm9yaWdpbiI6Imh0dHA6Ly9sb2NhbGhvc3Q6NDMxOSIsImNyb3NzT3JpZ2luIjpmYWxzZX0",
+        "authenticatorData": "SZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2MFAAAAAA",
+        "signature": "MEUCIQDVyfCSAIzCe0tbM_OkHnJ1FLm27la9JbsvSHm_zoKWUwIgAPWJAVGy5UROqgUI3Ee2PbC_SPEreftt3fVqVxrqLkE"
+      },
+      "expect": "wrong-type"
+    },
+    {
+      "name": "passkey no user presence",
+      "digest": "226abb8c14923f15b7887e9b4ea4fcf921278a03debcc6ebd9ff22e3fa17a905",
+      "key": {
+        "type": "webauthn",
+        "rpId": "localhost",
+        "origins": [
+          "http://localhost:4319"
+        ],
+        "counter": 0,
+        "publicKeySpki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAES97lvKpxVvjbekn-Ueiuv8SIAAon7USo14AG9l4yw_1Ynnxh31rHu1SP4-SCdRQl2dXV5SAXpwmil4nFXYWp2Q"
+      },
+      "approval": {
+        "type": "webauthn",
+        "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiSW1xN2pCU1NQeFczaUg2YlRxVDgtU0VuaWdQZXZNYnIyZjhpNF9vWHFRVSIsIm9yaWdpbiI6Imh0dHA6Ly9sb2NhbGhvc3Q6NDMxOSIsImNyb3NzT3JpZ2luIjpmYWxzZX0",
+        "authenticatorData": "SZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2MEAAAAAA",
+        "signature": "MEUCIQD8Q5ukbB_CSb9luVNu4x86oP7d0EE-3vAqR3HLlinFrgIgDiin9H7yAP10x9uXguwsR8-Dam0M_ZZfenwCE51Vr9I"
+      },
+      "expect": "no-user-presence"
+    },
+    {
+      "name": "passkey no user verification",
+      "digest": "226abb8c14923f15b7887e9b4ea4fcf921278a03debcc6ebd9ff22e3fa17a905",
+      "key": {
+        "type": "webauthn",
+        "rpId": "localhost",
+        "origins": [
+          "http://localhost:4319"
+        ],
+        "counter": 0,
+        "publicKeySpki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAES97lvKpxVvjbekn-Ueiuv8SIAAon7USo14AG9l4yw_1Ynnxh31rHu1SP4-SCdRQl2dXV5SAXpwmil4nFXYWp2Q"
+      },
+      "approval": {
+        "type": "webauthn",
+        "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiSW1xN2pCU1NQeFczaUg2YlRxVDgtU0VuaWdQZXZNYnIyZjhpNF9vWHFRVSIsIm9yaWdpbiI6Imh0dHA6Ly9sb2NhbGhvc3Q6NDMxOSIsImNyb3NzT3JpZ2luIjpmYWxzZX0",
+        "authenticatorData": "SZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2MBAAAAAA",
+        "signature": "MEYCIQDsD-3HyYkLqStYlQeN7vnhcWDK-7wqMUX7G27uHtMegAIhAOxlgPvozGkTfXRrZEaZsexN5erQ7_NyyOrpJMRXl83R"
+      },
+      "expect": "no-user-verification"
+    },
+    {
+      "name": "security key counter advanced",
+      "digest": "226abb8c14923f15b7887e9b4ea4fcf921278a03debcc6ebd9ff22e3fa17a905",
+      "key": {
+        "type": "webauthn",
+        "rpId": "localhost",
+        "origins": [
+          "http://localhost:4319"
+        ],
+        "counter": 10,
+        "publicKeySpki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAES97lvKpxVvjbekn-Ueiuv8SIAAon7USo14AG9l4yw_1Ynnxh31rHu1SP4-SCdRQl2dXV5SAXpwmil4nFXYWp2Q"
+      },
+      "approval": {
+        "type": "webauthn",
+        "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiSW1xN2pCU1NQeFczaUg2YlRxVDgtU0VuaWdQZXZNYnIyZjhpNF9vWHFRVSIsIm9yaWdpbiI6Imh0dHA6Ly9sb2NhbGhvc3Q6NDMxOSIsImNyb3NzT3JpZ2luIjpmYWxzZX0",
+        "authenticatorData": "SZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2MFAAAACw",
+        "signature": "MEUCIQC1wbt2YItbGwfvobq_DWBjGI9JLY7aPfhyqYLx8tu1kwIgdaLCipjRM5d3VhMducj6SsZgZWa_v3GTxZn3p9d6GvU"
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "security key counter replayed",
+      "digest": "226abb8c14923f15b7887e9b4ea4fcf921278a03debcc6ebd9ff22e3fa17a905",
+      "key": {
+        "type": "webauthn",
+        "rpId": "localhost",
+        "origins": [
+          "http://localhost:4319"
+        ],
+        "counter": 10,
+        "publicKeySpki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAES97lvKpxVvjbekn-Ueiuv8SIAAon7USo14AG9l4yw_1Ynnxh31rHu1SP4-SCdRQl2dXV5SAXpwmil4nFXYWp2Q"
+      },
+      "approval": {
+        "type": "webauthn",
+        "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiSW1xN2pCU1NQeFczaUg2YlRxVDgtU0VuaWdQZXZNYnIyZjhpNF9vWHFRVSIsIm9yaWdpbiI6Imh0dHA6Ly9sb2NhbGhvc3Q6NDMxOSIsImNyb3NzT3JpZ2luIjpmYWxzZX0",
+        "authenticatorData": "SZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2MFAAAACg",
+        "signature": "MEUCIQDJwMcy3odS1rvjSpTNZC9LxSdIXkHyusxFzhDjbqq8aQIgakKVGkISfmcYKgEJymfCxZVo0Uhq2SGSvLqQnU7r8L4"
+      },
+      "expect": "counter-regressed"
+    }
+  ],
+  "enrollment": {
+    "secretHex": "0505050505050505050505050505050505050505",
+    "code": "0M2G-A185-0M2G-A185-0M2G-A185-0M2G-A185",
+    "key": {
+      "keyId": "phone-1",
+      "type": "ed25519",
+      "publicKey": "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw",
+      "label": "Phone"
+    },
+    "proof": "4GWvnoeHL8Q7M3oWxN8kswhk1-uLToyq9nSnzpiylQA",
+    "confirm": "DcuQxPyBqWznI2d0ld3OVoYXuaxHCucmlhB0zx0R9xM"
+  },
+  "recovery": {
+    "code": "0C1G-60R3-0C1G-60R3-0C1G-60R3",
+    "publicKey": "zJ-MvVv2K_3Ra5OLih3e-4d7I2qqA-L6SITFB9f33hQ"
+  }
+}

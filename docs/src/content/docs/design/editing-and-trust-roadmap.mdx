@@ -5,11 +5,11 @@ status: planning
 tags: [architecture, planning, security]
 ---
 
-**Status: proposal, 2026-11-19; three decisions recorded the same day** (custody amendment approved in its narrow form, public-suggestion TLS on owner hardware, owner-issued invites first; editor reach open). Synthesized from five research passes (invites and vouching, identity, hosting, contributor tiers, red-team) over the existing design pages and outside prior art. Nothing here is selected until the maintainer decides; each phase names its decisions. It extends [contribution trust and access](/cyberbaser/design/contribution-trust-and-access/) and [community system design](/cyberbaser/design/community-system-design/) rather than replacing them.
+**Status: proposal, 2026-11-19; all four decisions recorded the same day** (custody amendment approved in its narrow form, public-suggestion TLS on owner hardware, owner-issued invites first, editor reach through Iroh starting on n0's public relay). Synthesized from five research passes (invites and vouching, identity, hosting, contributor tiers, red-team) over the existing design pages and outside prior art. Nothing here is selected until the maintainer decides; each phase names its decisions. It extends [contribution trust and access](/cyberbaser/design/contribution-trust-and-access/) and [community system design](/cyberbaser/design/community-system-design/) rather than replacing them.
 
 ## The short version
 
-The editing core is built: an edit on the rendered page becomes an exact, byte-bound change, and the owner's Save turns it into one commit and a verified live page. What has never been chosen is how the live site reaches the editor from anywhere, and how people other than the owner earn the right to submit more with less friction. The plan answers both in five phases. One rule holds through all of them: **trust changes how much someone can submit and how much review a change needs, never who writes to the vault.** Approve and Apply stay owner acts.
+The editing core is built: an edit on the rendered page becomes an exact, byte-bound change, and the owner's Save turns it into one commit and a verified live page. The owner's primary clients are the workspace writing tool and Obsidian mobile; the public website is primarily for contributors. Iroh is selected for remote reach but has only been demonstrated in a local browser prototype. The plan answers both in five phases. One rule holds through all of them: **trust changes how much someone can submit and how much review a change needs, never who writes to the vault.** Approve and Apply stay owner acts.
 
 ## Architecture: build each layer once
 
@@ -21,7 +21,7 @@ The way to avoid ripping work up later is to fix the seams before choosing any o
 | **2. Command core** | What can be asked and who may ask it | Transport-neutral commands and queries (read page source, submit change set, list and decide proposals, apply, job status), each carrying a verified principal and checked against owner grants | Logic exists in domain modules; requests are parsed inside `server.js` | Nothing: this is the stable center |
 | **3. Identity** | Who is asking | A *principal* (id, method, freshness) from an adapter; grants (Save, Apply, Publish, Review, Invite) live in Cyberbaser policy, never in the sign-in system | Local bootstrap sessions | Bootstrap, Better Auth passkeys, later enrolled device keys |
 | **4. Reach (carriers)** | How a client gets a command to the owner node | Same messages over any carrier, with conformance tests: exact origin or peer identity, replay and CSRF protection, no identity from network membership | HTTP on a private numeric address | Private HTTPS, direct HTTPS, raw-TCP relay, Iroh (browser via a self-hosted relay) |
-| **5. Clients** | The editing experience | Calls commands through a small `Transport` interface; renders vault content on a non-privileged origin | Editor in the Quartz page posts to the owner app; owner pages are server-rendered | Server-rendered pages, a static editor client, contributor UI, agents |
+| **5. Clients** | The editing experience | Calls commands through a small `Transport` interface; renders vault content on a non-privileged origin | Editor in the Quartz page posts to the owner app; owner pages are server-rendered | Workspace plugin, Obsidian mobile, contributor web editor, agent clients |
 
 **Rules that make this hold:**
 
@@ -30,11 +30,97 @@ The way to avoid ripping work up later is to fix the seams before choosing any o
 - The publisher holding the push credential is its own process behind layer 1. The web-facing parts can ask for an effect, never use the credential.
 - Vault content (which may carry raw HTML) is rendered on a reader origin; privileged commands go to the owner origin or peer. This is the split the owner-direct Save already uses, and every carrier keeps it.
 
-**Iroh as a carrier.** In browsers, iroh's WebAssembly build connects only through a relay, end to end encrypted, so the relay cannot read traffic ([iroh docs](https://docs.iroh.computer/deployment/wasm-browser-support)). The owner node dials out to a relay the owner runs, so the home network opens no ports and its address is not published. Public n0 relays are for development only. Because browsers cannot reach the owner node over HTTP in this mode, the editor client must load from a static origin and send commands over the carrier: that is why layer 5 talks to a `Transport` interface instead of same-origin requests. The [Iroh carrier research](/cyberbaser/research/iroh-editor-carrier/) proves a connection-bound passkey assertion in a local browser fixture and proposes keeping ephemeral channel keys on a separate editor origin that runs no vault HTML. Hosted reach and production integration remain open.
+**Iroh as a carrier.** In browsers, iroh's WebAssembly build connects only through a relay, end to end encrypted, so the relay cannot read traffic ([iroh docs](https://docs.iroh.computer/deployment/wasm-browser-support)). The owner node dials out to a relay the owner runs, so the home network opens no ports and its address is not published. n0's public relays are documented for development and testing; the owner accepted starting on them (see Decisions) with self-hosting as a later configuration change. Because browsers cannot reach the owner node over HTTP in this mode, the editor client must load from a static origin and send commands over the carrier: that is why layer 5 talks to a `Transport` interface instead of same-origin requests. The [Iroh carrier research](/cyberbaser/research/iroh-editor-carrier/) proves a connection-bound passkey assertion in a local browser fixture and proposes keeping ephemeral channel keys on a separate editor origin that runs no vault HTML. Hosted reach and production integration remain open.
 
-**Build order (nothing thrown away):** (1) extract the command core and principal check from `server.js`, behavior unchanged; (2) isolate the publisher; (3) Better Auth passkey adapter plus the hosted-origin contract, deployed on private HTTPS; (4) a `Transport` interface in the in-page editor, first implementation the current HTTP requests; (5) Iroh carrier and a self-hosted relay as a second conformance-tested carrier, intended to give reach from supported browsers without opening inbound access to the home network; (6) contributor accounts and intake on the same principal, grants and carriers.
+**Build order:** The shared command core is in place. Isolate the publisher next. In parallel, establish which copy owns authoring history and what exact versions the writing tools can export. Rehearse the client commands with synthetic notes before selecting a plugin integration: prepare, review, request publication, look up the same job, and verify the public result. Then test an authorized writing client on a real phone, with an approved identity adapter and carrier. Iroh starts with n0's relay; it does not replace authentication. A standalone owner web editor is optional, not the first deliverable. Public suggestions and contributor accounts follow on the same core.
 
 **What would cause rework, so avoid it:** identity at a proxy or Cloudflare Access; grants stored as roles in the sign-in library; invites built on Better Auth's organization plugin (it redeems after sign-in); editor code that assumes same-origin HTTP; one process holding both the push credential and the web listener.
+
+### Publish from where you write
+
+**The first owner experience to dogfood is publishing from the writing tool**, especially a workspace plugin or Obsidian mobile. Editing the website itself remains useful, primarily as the contributor's way in. The choice of editor changes neither the trust tier nor who can publish. These plugin clients are planned, not installed or connected.
+
+| Entry point | What the person does | What reaches the owner node |
+|---|---|---|
+| Workspace plugin or Obsidian mobile | Write normally. See whether this note is selected, review this version, then deliberately Publish. Saving a draft does not publish it. | A reference to one mapped note and its exact observed version, the pinned delivery base and exact changes. The node independently checks the binding, permission and publication policy. |
+| Agent in the writing tool | Prepare an update for review under its own identity. | A proposal with the same source binding. A workspace role, PR author field or access to the owner's editor session is not a Publish grant. If edit-level authorship cannot be verified, report it as unknown. |
+| Public website | Suggest a correction at the page being read. | A proposal under the same exact-change and review rules. Visitor access gives no private note or owner job visibility. |
+
+**One command interface, independent of the carrier.** Clients ask for scoped publication status, prepare or propose an exact change set, and follow an authorized receipt. Only an owner-authorized action can start publication. Local HTTP is the existing binding; Iroh is a planned remote carrier, not a plugin permission or a source-sync service. Browser and mobile clients must each demonstrate compatibility.
+
+**Two signals in the tool, not one “published” switch:** *Selected for publication* describes policy for this note. *Live* requires a successful check of the public page for this version. A note can be selected and already live at an older version while the latest edits are still drafts. Show “Not verified” when the witness is missing; a push or a green build alone is not a live check. Do not disclose another note's status to an unauthorized caller.
+
+**Two entry points do not make two sources of truth.** If the editor reads the authoritative checkout, bind the edit to its exact base. If the workspace stores its own revisions, map one already-public note to the delivery path and review the captured workspace version against the pinned delivery revision. Do not mirror folders, assume filenames prove identity, or accept writes back into the delivery copy that would diverge from the authoring source. If either side changes, stop and prepare again. The [owner publication rehearsal](/cyberbaser/development/owner-publication-rehearsal/) already exercises capture, private review and deliberate Publish with synthetic data; it does not establish a real workspace mapping.
+
+**What a synced workspace changes (source review, 2026-11-21, not verified live).** A collaborative workspace that stores notes as converged text, with Git outside its sync boundary, is a second copy with no link to the delivery repository. Three consequences for the client contract:
+
+- **Read settled state, not a replica.** A plugin running in one browser tab or one device sees a copy that can lag. The version a publication binds to must come from the workspace's settled state, or be refused when the two disagree.
+- **Text identity is not byte identity.** Such a workspace identifies Markdown by a digest of its UTF-8 text; Git identifies bytes. Bind each prepared revision to both: the workspace's note identity, version and text digest, and the delivery repository's base commit and blob. The owner node derives the exact operations against the Git bytes. Where a delivery file cannot round-trip through text unchanged (mixed line endings, invalid UTF-8), refuse and say why. Never normalize a file as a side effect of publishing.
+- **Keys and attribution.** A device key must not live in synced plugin settings, which can be copied to other members. Where the workspace records which agent wrote a change, carry that record; where human edits leave none, report authorship as unknown.
+
+| Possible seam | Strength | Weakness |
+|---|---|---|
+| Plugin in the editor posts to the owner node | Works soonest; the person sees status where they write | Sees a replica; weakest key custody; needs a browser-reachable owner node |
+| Server-side companion with a read grant and a frozen manifest | Strongest binding to settled state | A new privileged capability needing its own security review |
+| Agent tool reading one file with its digest | Soonest for agents | Per-file only; not a frozen multi-file read |
+
+**Two refusals the owner node enforces whatever the client says (required, not built):**
+
+1. **Retired material stays retired.** Independently of the client and on top of default-deny publication selection, the node refuses any incoming path or content that matches a retired list of removed path prefixes and content digests. A stale or mistaken client cannot republish something the owner removed. Match content after line-ending normalization as well as exactly, exclude the empty-file digest, and treat a path match as the stronger test, since digests catch only the final version of a renamed note. **The list is private owner-node policy, never committed to a public repository, not even hashed.** Folder names are guessable, so plain digests of paths let anyone confirm what was removed, and content digests let someone holding an old copy prove a file was once published; a committed list is also permanent in history. The node is the only enforcer, so the list lives with the node's other private state, versioned and backed up there. A public vault carries nothing about it, not even a count, which would itself say how much was removed; the node detects its own drift. If a list ever has to travel with a vault, use keyed digests (HMAC-SHA-256) with a key held only by the owner node.
+2. **An unbound workspace cannot publish.** A workspace is publishable only once it is bound to a known base of the authoritative copy. An unbound or diverged workspace is refused with a reason the owner can read. It is never merged.
+
+The case these guard against is ordinary: a workspace seeded from an older copy of a vault, never linked to the repository, that still holds notes the owner has since removed from publication.
+
+**Decided 2026-11-21: the Git vault is the one authoritative copy.** A workspace is a place to write. It is refreshed from the vault at a known commit, and every publication is checked against the vault. Nothing flows from a workspace into the vault except through the owner node's exact-change route.
+
+#### Source snapshot contract (draft for review, not built)
+
+The smallest thing the owner node needs from any workspace reader, whichever seam supplies it. One call returns one mapped note:
+
+| Field | Meaning |
+|---|---|
+| `source` | Stable identifier of the workspace, matched against the owner's mapping. |
+| `path` | The note's path as the workspace names it. Only the mapped path; no listing. |
+| `text`, `byteLength` | The note's settled UTF-8 text. |
+| `textDigest` | SHA-256 of exactly those UTF-8 bytes. **This is the binding.** |
+| `version` | Advisory only. May be absent or zero; never used to decide freshness. |
+| `attribution` | References to the workspace's own agent audit records for this path, or `unknown`. Human edits are `unknown` unless the workspace can prove otherwise. |
+| `assets` | For each referenced attachment: identifier and SHA-256 of its exact bytes. |
+
+Guarantees the reader must give: the text and digest come from the same settled state (or the reader re-reads the digest after the content and reports `moved` on a difference); nothing mid-deletion is returned; scope is enforced where the data is produced, so unselected notes are never read and their existence, names and digests never appear. Failures are distinct and reveal nothing else: `not-found`, `moved`, `not-settled`, `pending-erasure`, `out-of-scope`, `unsupported-type`, `over-budget`.
+
+What the owner node then does, trusting none of it:
+
+1. **Baseline.** For each mapped note the node keeps the vault commit and text digest it was last bound at. The vault's current blob must still match that baseline, or the request is refused as stale.
+2. **Line endings (revised and built 2026-11-21).** Binding compares a *folded* text digest on both sides: strict UTF-8, leading BOM stripped, CRLF and lone CR to LF. The operation is still derived against exact vault bytes, so untouched lines keep their own terminators and publishing never normalizes a file. Invalid UTF-8 or a lone CR in the vault file is refused with `delivery-not-round-trippable`. A live measurement showed workspace and vault already differing only by line endings on unedited notes, which a strict no-CR rule would have refused.
+3. **Retired list and publication selection**, as above.
+4. **Exact operations** are derived by the node from the vault bytes and the snapshot text, then reviewed and authorized as any other change. After a verified publication the baseline advances.
+
+**Gap check against the workspace software's live build (source review, 2026-11-21).** The shape holds for one Markdown note. Corrections it forced:
+
+- **"Settled" can only mean "as one server peer held it at a moment, consistent with its own digest".** An edit still unsynced on a phone is invisible to any reader. `not-settled` is therefore dropped; `moved` is what can actually be detected. The phone client must show that an unsynced edit is not yet publishable.
+- **Mid-deletion is not excluded by today's tools.** There is a window in which a deleted note can still be read. The node-side retired list is the guarantee, not the reader.
+- **Attribution is `unknown` today** for every snapshot. Agent writes are recorded, but there is no reference to them that a publisher could carry.
+- **Assets** are found by the reader parsing the note, then fetched one by one with their digests.
+- **Scope is per workspace, not per path, and "not found" replies hint at neighbouring paths.** A publisher reader needs an exact-path grant with no hints. That is new work in the workspace project.
+- **Nothing makes a workspace equal the vault at a commit.** Notes can be bound one at a time when their text already matches; a whole-workspace refresh, and real removal of retired notes from it, need new operations there.
+
+The node computes the text digest itself over the returned text and never trusts a supplied one.
+
+A reader that returns only one file per call satisfies this for single-note publication. A frozen multi-note manifest is needed before several notes can be published as one reviewed unit. The current `readNote` adapter requires a positive integer `version`; that requirement has to relax to match this contract.
+
+No seam is selected. The owner node's reader interface (`readNote`: identity, path, version, digest, text) already fits all three, so the command core does not change with the choice.
+
+The first hands-on acceptance target is one mapped, already-public note: edit it in the preferred tool, see the draft differ from the live version, review and publish that exact revision, then see its confirmed live status **without leaving the tool**. First establish the actual source relationship; do not activate a plugin, change publication selection, or connect a real vault on the strength of this design.
+
+**Owner's answer on clients (2026-11-21):** agents and the Obsidian mobile app, both reaching the notes through the sync workspace. Because every client converges there, a reader bound to the workspace's settled state serves the phone and the agents with one integration, and the phone needs only a thin status-and-Publish client. That makes the server-side companion the leading candidate; it is still unselected because it is a new privileged capability in another project.
+
+**Built and tested locally, 2026-11-21:**
+
+- *Client commands.* `readPublicationStatus` (selected, last verified live version, latest attempt), `readPublicationReceipt`, and optional `expectedVersion`/`expectedDigest` on prepare. A headless test runs status, prepare, review, a repeated Publish across a simulated restart, and live verification through the command core alone. Status never reports a version as live from a push or build, returns no note text, and tells a caller without the publication grant nothing.
+- *Publisher process.* With a publisher socket configured, the app sends one job ID over a private Unix socket and advances only after the publisher records a matching push receipt. Only the publisher process runs `git push`; if it is down, the job stops for the owner with no in-process fallback; a restarted publisher answers a repeated request from its receipt without pushing twice. Without the setting, behavior and the policy revision are unchanged.
+
+Both processes ran as the same user in these tests, so this is **not yet credential isolation**: the shared checkout and job store are unprotected from a same-user compromise. The container follow-up must show that the app and renderer cannot read the push credential, forge publishable evidence, influence the Git configuration or hooks the publisher uses, or push directly. Still missing for a real client: an identity adapter for a device or agent, the carrier, and a durable record when a prepared note is unchanged. [Local publisher evidence](/cyberbaser/agent-context/zz-log/2026-11-21-owner-first-publisher/).
 
 ### Command core (implemented)
 
@@ -58,11 +144,17 @@ The way to avoid ripping work up later is to fix the seams before choosing any o
 
 ## Phases
 
-### Phase 0: owner editing from the owner's devices (days)
+### Phase 0: publish one selected revision from a writing tool
 
-Update the owner app to current, serve it at `edit.cybersader.com` over **private HTTPS** (split DNS to a local Caddy, certificate by ACME DNS-01, no inbound port), and point the public Edit icon there for the owner. Works on the owner's devices over the private network. No exposure, no new identity.
+Prove the loop first on a disposable already-public note. The mobile client must not require a Git binary, a push credential, a persistent background connection, or access outside the plugin API. Test closing the app immediately after confirming Publish: on reopening, look up the same request, recover its status without submitting twice, and show “Not verified” if the owner node is unreachable. Verify this on the target devices before claiming support.
 
-### Phase 1: always-on owner editor with passkey sign-in
+**Making a previously private note public is a second test**, not an ordinary edit. Preview exactly what would become public, including referenced assets; require a separate owner decision on selection. A draft save, frontmatter change or agent suggestion cannot itself expand the public set. If a change is refused or its outcome is unknown, do not display it as live.
+
+**Agents:** start with named, proposal-only actors. Publishing on someone's behalf would require a separately approved, scoped and revocable grant, independent of trust tier, with a durable record of the agent, authorizing owner, exact change and outcome. That delegated ability is neither implemented nor granted by this plan.
+
+### Phase 1: reach the owner node from the writing tool
+
+The goal is authenticated remote publication from the owner's preferred client. Validate the plugin's byte access, identity and key handling, network APIs and suspend/resume behavior; do not assume browser evidence proves mobile support. The following are owner-node requirements and, for web sign-in, browser-specific requirements. They do not require that the website become the owner's editor.
 
 - **Custody amendment** (decision, below) so a local account adapter may hold passkey bindings and sessions for its own deployment.
 - **Embedded Better Auth**, one owner principal enrolled from the host console, no public signup, no email reset. Better Auth verifies the person; Cyberbaser separately authorizes each Save, Apply and Publish against current policy and pinned source.
@@ -90,7 +182,7 @@ Ranked: (1) private HTTPS over the owner's network; (2) direct public HTTPS with
 ## Decisions
 
 1. **Custody amendment** (gates Phase 1). Proposed wording: an owner-operated, replaceable account adapter may, only in explicitly enabled local account mode, be the record of authority for its own deployment-local principals and persist only what is needed to verify, admit, revoke and recover them (account IDs and minimal contact data, WebAuthn public-credential bindings, expiring enrollment, invitation and recovery verifiers, revocable server-side sessions and their keys). No passwords, external tokens, federation, SSO or shared directory. No other component holds account credentials or session authority. Account state grants no source, review, application or publication authority.
-2. **Editor reach** (Phase 0/1): private network only, direct public HTTPS, or relay.
+2. **Editor reach** (Phase 0/1), decided 2026-11-19: **Iroh through a relay, starting on n0's public relay, self-hosted later.** The relay passes only end-to-end encrypted traffic and the passkey assertion is bound to the Iroh connection, so a public relay can deny or delay editing but cannot read or forge commands. Accepted costs: n0 documents its public relays as development and testing infrastructure with rate limits and no uptime promise, and n0 sees connection metadata (the owner's home IP, the browser's IP, timing and volume). The relay URL is configuration: moving to an owner-run `iroh-relay` on a small non-hyperscaler server, or a dedicated n0 relay, changes no code. The n0 relay is the one explicitly configured relay, never a silent fallback. Private-network HTTPS stays available at home.
 3. **Public-suggestion transport** (Phase 2): Cloudflare Tunnel accepted for public-page suggestions, or TLS kept off Cloudflare.
 4. **Invite policy** (Phase 3): owner-issued only at first, or sponsor invites from the start.
 

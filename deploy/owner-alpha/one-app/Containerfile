@@ -1,0 +1,52 @@
+# One local image, two services. The build context has no vault, lab code or
+# private renderer. Intermediate tarballs are not layers of the runtime image.
+ARG RUNTIME_BASE=runtime-tools
+FROM scratch AS archives
+COPY resources.tar quartz-seed.tar.zst /
+
+FROM registry.fedoraproject.org/fedora:44 AS runtime-tools
+RUN set -eu; \
+    dnf -y install --setopt=install_weak_deps=False git-core rsync util-linux bash tar zstd ca-certificates patch jq iproute findutils grep diffutils; \
+    dnf clean all; \
+    groupadd --gid 65530 cyberbaser-share; \
+    useradd --uid 65532 --gid 65530 --no-create-home --home-dir /var/lib/cyberbaser/home --shell /sbin/nologin cyberbaser; \
+    useradd --uid 65533 --gid 65530 --no-create-home --home-dir /var/lib/cyberbaser-publisher --shell /sbin/nologin cyberbaser-publisher; \
+    test "$(id -u cyberbaser):$(id -g cyberbaser)" = 65532:65530; \
+    test "$(id -u cyberbaser-publisher):$(id -g cyberbaser-publisher)" = 65533:65530; \
+    for tool in git curl rsync unshare bash tar zstd patch jq ip find cmp; do command -v "$tool" >/dev/null; done; \
+    find /usr -xdev -type f -perm /6000 -exec chmod a-s {} +
+
+FROM ${RUNTIME_BASE} AS release
+# An offline tools cache is allowed, but no prior application tree or launcher.
+RUN set -eu; \
+    test ! -e /opt/cyberbaser && test ! -e /etc/cyberbaser && test ! -e /usr/local/bin/cyberbaser-container-init; \
+    test "$(id -u cyberbaser):$(id -g cyberbaser)" = 65532:65530; \
+    test "$(id -u cyberbaser-publisher):$(id -g cyberbaser-publisher)" = 65533:65530; \
+    rpm -q git-core rsync util-linux bash tar zstd ca-certificates patch jq iproute findutils grep diffutils >/dev/null
+COPY cyberbaser /opt/cyberbaser/bin/cyberbaser
+COPY install.json /etc/cyberbaser/install.json
+COPY container-init.sh /usr/local/bin/cyberbaser-container-init
+COPY render-offline /opt/cyberbaser/libexec/render-offline
+RUN --mount=type=bind,from=archives,source=/,target=/mnt/archives,ro \
+    set -eu; \
+    tar --no-same-owner -C /opt/cyberbaser -xf /mnt/archives/resources.tar; \
+    mkdir -p /opt/cyberbaser/libexec /opt/cyberbaser/.workspace /opt/cyberbaser/vendor/quartz; \
+    tar --zstd --no-same-owner -C /opt/cyberbaser/vendor/quartz -xf /mnt/archives/quartz-seed.tar.zst; \
+    for name in node bun; do printf '#!/bin/sh\nBUN_BE_BUN=1 exec /opt/cyberbaser/bin/cyberbaser "$@"\n' > /opt/cyberbaser/libexec/$name; done; \
+    git init -q --template= /opt/cyberbaser; \
+    git config --system --add safe.directory /opt/cyberbaser; \
+    git config --system --add safe.directory /opt/cyberbaser/vendor/quartz; \
+    git config --system --add safe.directory /var/lib/cyberbaser-shared/mirror/notes.git; \
+    chmod -R a+rX,go-w /opt/cyberbaser; \
+    chmod 0755 /opt/cyberbaser/bin/cyberbaser /opt/cyberbaser/libexec/* /usr/local/bin/cyberbaser-container-init; \
+    chmod 0644 /etc/cyberbaser/install.json; \
+    install -d -m 0750 -o root -g cyberbaser-share /var/lib/cyberbaser-shared; \
+    mkdir -p /var/lib/cyberbaser/config /var/lib/cyberbaser-publisher /var/lib/cyberbaser-publisher-config /run/cyberbaser-publisher /run/cyberbaser; \
+    mkdir -p /var/lib/cyberbaser-shared/{workspace,notes,mirror}
+ENV PATH=/opt/cyberbaser/libexec:/usr/local/bin:/usr/bin:/bin \
+    CYBERBASER_SHARED_STORE=group \
+    TMPDIR=/tmp
+USER 65532:65530
+STOPSIGNAL SIGTERM
+ENTRYPOINT ["/usr/local/bin/cyberbaser-container-init"]
+CMD ["--help"]

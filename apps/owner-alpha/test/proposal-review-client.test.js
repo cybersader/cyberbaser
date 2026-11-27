@@ -40,8 +40,6 @@ import { canonicalJson } from '../src/json.js';
 
 const execFileAsync = promisify(execFile);
 const cleanup = [];
-const queues = [];
-const servers = [];
 const REPOSITORY = 'https://github.com/cybersader/cyberbase.git';
 const SOURCE_PATH = 'docs/example.md';
 const BASE = Buffer.from('---\ntitle: Example\n---\n\nA line about teh process.\n');
@@ -118,23 +116,29 @@ async function fixture() {
     idFactory: () => '00000000-0000-4000-8000-000000000001',
     resolveEvidence: async () => ({ baseBytes: BASE, policy }),
   });
-  queues.push(queue);
-  const accepted = await queue.enqueue({
-    proposalText,
-    baseBytes: BASE,
-    policy,
-    verifiedSubject: null,
-    carrier: {
-      lane: 'lane-b',
-      metadata: { bindingDigest: digest(2), pageId: 'docs/example' },
-    },
-    idempotency: {
-      scope: 'lane-b',
-      key: randomBytes(32).toString('base64url'),
-      requestDigest: digest(3),
-    },
-  });
-  const entry = await queue.review.load(accepted.receipt.queueId);
+  let entry;
+  try {
+    const accepted = await queue.enqueue({
+      proposalText,
+      baseBytes: BASE,
+      policy,
+      verifiedSubject: null,
+      carrier: {
+        lane: 'lane-b',
+        metadata: { bindingDigest: digest(2), pageId: 'docs/example' },
+      },
+      idempotency: {
+        scope: 'lane-b',
+        key: randomBytes(32).toString('base64url'),
+        requestDigest: digest(3),
+      },
+    });
+    entry = await queue.review.load(accepted.receipt.queueId);
+  } finally {
+    // Once evidence is loaded the client exercises the snapshot, not the writer.
+    // Release the real queue lock before running client requests or further Git reads.
+    await queue.close();
+  }
   const evidence = createReviewEvidence({
     queueId: entry.queueId,
     proposalText: entry.proposalText,
@@ -158,8 +162,6 @@ async function expectCode(action, code) {
 }
 
 afterEach(async () => {
-  await Promise.all(servers.splice(0).map((server) => new Promise((resolve) => server.close(resolve))));
-  await Promise.all(queues.splice(0).map((queue) => queue.close()));
   await Promise.all(cleanup.splice(0).map((target) => rm(target, { recursive: true, force: true })));
 });
 
@@ -236,7 +238,12 @@ describe('owner proposal review client', () => {
     const socketPath = path.join(runtime, 'review.sock');
     await mkdir(runtime, { mode: 0o700 });
     await chmod(runtime, 0o700);
+    const sockets = new Set();
+    let closing = false;
     const server = net.createServer((socket) => {
+      if (closing) { socket.destroy(); return; }
+      sockets.add(socket);
+      socket.once('close', () => sockets.delete(socket));
       socket.once('data', () => socket.end(artifactBytes({
         schemaVersion: 1,
         operation: 'list',
@@ -244,18 +251,29 @@ describe('owner proposal review client', () => {
         nextCursor: null,
       })));
     });
-    servers.push(server);
-    await new Promise((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(socketPath, resolve);
-    });
-    await chmod(socketPath, 0o600);
+    try {
+      await new Promise((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(socketPath, () => {
+          server.removeListener('error', reject);
+          resolve();
+        });
+      });
+      await chmod(socketPath, 0o600);
 
-    const client = createProposalReviewClient({ socketPath });
-    expect(await client.list()).toEqual({ entries: [], nextCursor: null });
+      const client = createProposalReviewClient({ socketPath });
+      expect(await client.list()).toEqual({ entries: [], nextCursor: null });
 
-    await chmod(runtime, 0o755);
-    await expectCode(() => client.list(), 'unsafe-review-socket');
+      await chmod(runtime, 0o755);
+      await expectCode(() => client.list(), 'unsafe-review-socket');
+    } finally {
+      // server.close() waits for accepted connections; don't depend on the peer.
+      closing = true;
+      for (const socket of sockets) socket.destroy();
+      if (server.listening) {
+        await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      }
+    }
   });
 });
 

@@ -1,5 +1,7 @@
 import { applyOwnerChangeSet, proveChangeSetOutsideBytes } from './change-set-operation.js';
 import { createHash } from 'node:crypto';
+import { parseFrontmatter } from '@cyberbaser/publish';
+import { findFrontmatter, findFrontmatterInText } from '../../../packages/correction/src/frontmatter.js';
 import {
   applyCorrection,
   CorrectionError,
@@ -35,7 +37,7 @@ function exactSessionString(value, label) {
   return value;
 }
 
-export function validateEditSession(session) {
+export function validateEditSession(session, { workspacePublication = false } = {}) {
   if (!isPlainObject(session)
     || session.schemaVersion !== EDIT_SESSION_SCHEMA_VERSION
     || session.artifactType !== EDIT_SESSION_ARTIFACT_TYPE
@@ -64,7 +66,7 @@ export function validateEditSession(session) {
     || Buffer.from(session.source.text, 'utf8').toString('base64') !== session.source.bytesBase64) {
     fail('edit-session-source-mismatch', 'session source text, bytes, length, and digest must identify one exact base');
   }
-  if (session.source.text.includes('\r')) {
+  if (!workspacePublication && session.source.text.includes('\r')) {
     fail('source-not-lf-only', 'owner-alpha browser MVP accepts LF-only Markdown source');
   }
   const detected = detectYamlFrontmatterRange(base);
@@ -137,20 +139,58 @@ function assertOperationBinding(session, operation) {
   }
 }
 
-function assertFrontmatterUnchanged(base, candidate, correction, frontmatter) {
-  if (frontmatter && correction.start < frontmatter.end) {
-    fail('frontmatter-edit-rejected', 'owner-alpha browser edits must not intersect YAML frontmatter');
+export function hasAdjacentFrontmatter(text, leading) {
+  const ends = new Set([leading.textRange.end, leading.legacyTextEnd ?? leading.textRange.end]);
+  for (const end of ends) {
+    const rest = text.slice(end).replace(/^(?:[ \t]*\r?\n)*/u, '');
+    const second = findFrontmatterInText(rest);
+    // A standalone thematic break is not a complete second block.
+    if (second.kind !== 'none' && second.reason !== 'unclosed') return true;
   }
+  return false;
+}
 
-  const candidateFrontmatter = detectYamlFrontmatterRange(candidate);
-  if (JSON.stringify(candidateFrontmatter) !== JSON.stringify(frontmatter)) {
-    fail('frontmatter-edit-rejected', 'owner-alpha browser edits must not add, remove, or resize YAML frontmatter');
+export function ownerPropertyEditsAllowed({ origin } = {}, workspacePublication = false) {
+  return origin === undefined || origin?.type === 'owner-direct'
+    || (origin?.type === 'owner-publication' && (workspacePublication || origin.reference?.mapping?.source?.kind === 'workspace'));
+}
+
+function intactProperties(bytes) {
+  const text = bytes.toString('utf8');
+  const leading = findFrontmatterInText(text);
+  return leading.kind === 'block' && !hasAdjacentFrontmatter(text, leading)
+    && !parseFrontmatter(text, { requireMapping: true }).error;
+}
+
+export function frontmatterEditFacts(base, candidate, spans, frontmatter = detectYamlFrontmatterRange(base)) {
+  const next = detectYamlFrontmatterRange(candidate);
+  return {
+    intersects: frontmatter !== null && spans.some(({ start }) => start < frontmatter.end),
+    resized: next?.end !== frontmatter?.end,
+    changed: frontmatter !== null && !candidate.subarray(0, frontmatter.end).equals(base.subarray(0, frontmatter.end)),
+  };
+}
+
+function assertFrontmatterEdit(base, candidate, spans, frontmatter, allowProperties) {
+  const { intersects, resized, changed } = frontmatterEditFacts(base, candidate, spans, frontmatter);
+  if (!intersects && !resized && !changed) {
+    if (allowProperties && frontmatter) {
+      const candidateText = candidate.toString('utf8');
+      const leading = findFrontmatterInText(candidateText);
+      if (leading.kind === 'block' && hasAdjacentFrontmatter(candidateText, leading)) {
+        fail('frontmatter-edit-rejected', 'an edit must not leave a second adjacent YAML block', { frontmatterKind: 'properties' });
+      }
+    }
+    return;
   }
-  if (frontmatter
-    && !candidate.subarray(frontmatter.start, frontmatter.end)
-      .equals(base.subarray(frontmatter.start, frontmatter.end))) {
-    fail('frontmatter-edit-rejected', 'owner-alpha browser edits must preserve exact YAML frontmatter bytes');
-  }
+  if (allowProperties && intactProperties(base) && intactProperties(candidate)) return;
+  const refuse = (message, bytes = base) => fail('frontmatter-edit-rejected', message, {
+    frontmatterKind: findFrontmatter(bytes).kind === 'block' ? 'properties' : 'fence-like',
+  });
+  if (allowProperties) refuse('owner property edits require one intact YAML mapping before and after', frontmatter ? base : candidate);
+  if (intersects) refuse('owner-alpha browser edits must not intersect YAML frontmatter');
+  if (resized) refuse('owner-alpha browser edits must not add, remove, or resize YAML frontmatter', frontmatter ? base : candidate);
+  refuse('owner-alpha browser edits must preserve exact YAML frontmatter bytes');
 }
 
 function proveOutsideBytesUnchanged(base, candidate, correction) {
@@ -169,14 +209,14 @@ function assertLfOnlyCandidate(candidate) {
   }
 }
 
-export function deriveEditorOperation({ session, editedText, config: configInput }) {
+export function deriveEditorOperation({ session, editedText, config: configInput, workspacePublication = false, ownerPublication = false }) {
   const config = validateOwnerAlphaConfig(configInput);
-  const { base, frontmatter } = validateEditSession(session);
+  const { base, frontmatter } = validateEditSession(session, { workspacePublication });
   if (computePolicyRevision(config) !== session.policyRevision) {
     fail('edit-session-policy-mismatch', 'current config policy revision differs from the edit session');
   }
   if (typeof editedText !== 'string') fail('invalid-editor-value', 'editedText must be a string');
-  if (editedText.includes('\r')) {
+  if (!workspacePublication && editedText.includes('\r')) {
     fail('editor-value-not-lf-only', 'owner-alpha browser MVP accepts LF-only edited Markdown');
   }
 
@@ -200,8 +240,10 @@ export function deriveEditorOperation({ session, editedText, config: configInput
   if (!candidate.equals(editedBytes)) {
     fail('candidate-editor-mismatch', 'derived exact operation did not reproduce the editor value');
   }
-  assertLfOnlyCandidate(candidate);
-  assertFrontmatterUnchanged(base, candidate, correction, frontmatter);
+  if (!workspacePublication) assertLfOnlyCandidate(candidate);
+  const allowProperties = config.owner.allowProperties === true && (!ownerPublication || workspacePublication)
+    && ownerPropertyEditsAllowed(session, workspacePublication);
+  assertFrontmatterEdit(base, candidate, [correction], frontmatter, allowProperties);
   proveOutsideBytesUnchanged(base, candidate, correction);
 
   const changedBytes = Math.max(
@@ -239,14 +281,18 @@ export function deriveEditorOperation({ session, editedText, config: configInput
   });
 }
 
-export function applyEditorOperation(session, operation) {
-  const { base, frontmatter } = validateEditSession(session);
+export function applyEditorOperation(session, operation, options = {}) {
+  // The pipeline independently validates this immutable owner authorization before effects.
+  const workspacePublication = operation?.operationType === 'offset' && (options.workspacePublication === true
+    || (session?.origin?.type === 'owner-publication' && session.origin.reference?.mapping?.source?.kind === 'workspace'));
+  const { base, frontmatter } = validateEditSession(session, { workspacePublication });
   assertOperationBinding(session, operation);
+  const allowProperties = options.allowProperties === true && ownerPropertyEditsAllowed(session, workspacePublication);
   if (operation.schemaVersion === 2) {
     if (!['approved-proposal', 'owner-direct'].includes(session.origin?.type)) fail('invalid-source-operation', 'multi-change operations require explicit owner provenance');
     const candidate = applyOwnerChangeSet(base, operation);
     assertLfOnlyCandidate(candidate);
-    for (const span of operation.proposal.changeSet.files[0].operations) assertFrontmatterUnchanged(base, candidate, span, frontmatter);
+    assertFrontmatterEdit(base, candidate, operation.proposal.changeSet.files[0].operations, frontmatter, allowProperties);
     proveChangeSetOutsideBytes(base, candidate, operation.proposal);
     return candidate;
   }
@@ -257,8 +303,8 @@ export function applyEditorOperation(session, operation) {
   } catch (error) {
     rethrowCorrection(error);
   }
-  assertLfOnlyCandidate(candidate);
-  assertFrontmatterUnchanged(base, candidate, correction, frontmatter);
+  if (!workspacePublication) assertLfOnlyCandidate(candidate);
+  assertFrontmatterEdit(base, candidate, [correction], frontmatter, allowProperties);
   proveOutsideBytesUnchanged(base, candidate, correction);
   return candidate;
 }

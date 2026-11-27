@@ -1,0 +1,17 @@
+{
+  "name": "@cyberbaser/signed-intent",
+  "version": "0.1.0",
+  "description": "The signed push intent the owner's device approves and the isolated publisher checks: canonical format v1, Ed25519 and WebAuthn providers, the publisher's admission and Git commit checks, and conformance vectors. Pure; no dependencies.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./intent": "./src/intent.js",
+    "./vectors.json": "./test/vectors.json"
+  },
+  "scripts": {
+    "test": "bun test test",
+    "vectors": "bun test/make-vectors.js"
+  }
+}

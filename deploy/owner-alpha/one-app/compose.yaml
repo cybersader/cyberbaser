@@ -1,0 +1,80 @@
+name: cyberbaser-one-app
+
+# Layout reference only: opt-in, loopback-only lab. Compose does not watch
+# config events. A host supervisor can call reconcile-publisher-config.sh;
+# there is no private setup-link handoff or remote owner access here.
+# Do not deploy this recipe. Use rehearse.sh for the isolated synthetic gate.
+x-common: &common
+  profiles: [manual-lab]
+  image: ${CYBERBASER_IMAGE:-localhost/cyberbaser-one-app:dev}
+  pull_policy: never
+  read_only: true
+  init: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  logging: { driver: none }
+  tmpfs: ["/tmp:rw,nosuid,nodev,mode=1777,size=2g"]
+x-volume: &volume { type: volume, volume: { nocopy: true } }
+
+services:
+  volumes-init:
+    <<: *common
+    network_mode: none
+    user: "0:0"
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    command: [init-volumes]
+    volumes:
+      - { <<: *volume, source: node-state, target: /var/lib/cyberbaser }
+      - { <<: *volume, source: node-config, target: /var/lib/cyberbaser/config }
+      - { <<: *volume, source: publisher-config, target: /var/lib/cyberbaser-publisher-config }
+      - { <<: *volume, source: workspace, target: /var/lib/cyberbaser-shared/workspace }
+      - { <<: *volume, source: notes, target: /var/lib/cyberbaser-shared/notes }
+      - { <<: *volume, source: mirror, target: /var/lib/cyberbaser-shared/mirror }
+      - { <<: *volume, source: publisher-state, target: /var/lib/cyberbaser-publisher }
+      - { <<: *volume, source: publisher-sockets, target: /run/cyberbaser-publisher }
+
+  node:
+    <<: *common
+    network_mode: none
+    user: "65532:65530"
+    environment:
+      HOME: /var/lib/cyberbaser/home
+      XDG_CACHE_HOME: /var/lib/cyberbaser/cache
+    command: [service-node]
+    depends_on:
+      volumes-init: { condition: service_completed_successfully }
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,mode=1777,size=2g
+      - /run/cyberbaser:rw,nosuid,nodev,uid=65532,gid=65530,mode=0700
+    volumes:
+      - { <<: *volume, source: node-state, target: /var/lib/cyberbaser }
+      - { <<: *volume, source: node-config, target: /var/lib/cyberbaser/config }
+      - { <<: *volume, source: workspace, target: /opt/cyberbaser/.workspace }
+      - { <<: *volume, source: notes, target: /var/lib/cyberbaser-shared/notes }
+      - { <<: *volume, source: mirror, target: /var/lib/cyberbaser-shared/mirror, read_only: true }
+      - { <<: *volume, source: publisher-sockets, target: /run/cyberbaser-publisher, read_only: true }
+
+  publisher:
+    <<: *common
+    network_mode: service:node
+    user: "65533:65530"
+    environment:
+      HOME: /var/lib/cyberbaser-publisher
+    command: [service-publisher]
+    volumes:
+      - { <<: *volume, source: publisher-state, target: /var/lib/cyberbaser-publisher }
+      - { <<: *volume, source: publisher-config, target: /var/lib/cyberbaser-publisher-config, read_only: true }
+      - { <<: *volume, source: workspace, target: /opt/cyberbaser/.workspace }
+      - { <<: *volume, source: notes, target: /var/lib/cyberbaser-shared/notes, read_only: true }
+      - { <<: *volume, source: mirror, target: /var/lib/cyberbaser-shared/mirror }
+      - { <<: *volume, source: publisher-sockets, target: /run/cyberbaser-publisher }
+
+volumes:
+  node-state: {}
+  node-config: {}
+  publisher-config: {}
+  workspace: {}
+  notes: {}
+  mirror: {}
+  publisher-state: {}
+  publisher-sockets: {}

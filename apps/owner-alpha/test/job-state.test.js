@@ -121,6 +121,7 @@ describe('one-Save job state machine', () => {
       'committing',
       'committed',
       'pushing',
+      'awaiting-approval',
       'pushed',
       'discovering-run',
       'run-bound',

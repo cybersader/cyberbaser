@@ -13,30 +13,33 @@ export function rehearsalOptions(environment = process.env) {
 
 /** Human-invoked launcher only. Automated rehearsal imports the fixture directly
  * and uses its own fresh headless Playwright context. No tokens reach stdout. */
-export async function runPublicationRehearsalLauncher() {
-  const options = rehearsalOptions();
-  const fixture = await createPublicationRehearsal({ port: options.port });
-  let browser; let opening = false; let stopping = false;
+export async function runPublicationRehearsalLauncher({
+  options = rehearsalOptions(), createFixture = createPublicationRehearsal, verifyOnly = false,
+} = {}) {
+  let fixture;
+  const starting = Promise.resolve().then(() => createFixture({ port: options.port }));
+  let browser; let opening; let stopping = false;
   let disposeInput = () => {};
   const stop = async (code = 0) => {
     if (stopping) return;
     stopping = true;
+    await opening?.catch(() => {});
     await browser?.close().catch(() => {});
     try {
-      await fixture.cleanup();
+      const owned = fixture ?? await starting.catch(() => null);
+      await owned?.cleanup();
       disposeInput();
-      process.stdout.write('Synthetic publication rehearsal stopped; owned listeners and temporary repositories removed.\n');
+      if (owned && !owned.instructions) process.stdout.write('Synthetic publication rehearsal stopped; owned listeners and temporary repositories removed.\n');
       process.exit(code);
     } catch {
-      process.stderr.write(`Synthetic rehearsal cleanup could not finish; no shared paths were removed. Owned temporary directory retained: ${fixture.root}\n`);
+      process.stderr.write(`Synthetic rehearsal cleanup could not finish; no shared paths were removed. Owned temporary directory retained: ${fixture?.root ?? 'unknown'}\n`);
       stopping = false;
       process.exitCode = 1;
     }
   };
   async function openSignIn() {
     if (opening || stopping) return;
-    opening = true;
-    try {
+    opening = (async () => {
       if (!browser) {
         const installed = path.resolve(import.meta.dir, '../../../docs/node_modules/playwright/index.js');
         const { chromium } = await import(pathToFileURL(installed).href);
@@ -44,17 +47,34 @@ export async function runPublicationRehearsalLauncher() {
         // a persistent userDataDir, a main browser profile, or a live origin.
         browser = await chromium.launch({ headless: false });
       }
+      if (stopping) return;
       const context = await browser.newContext({ viewport: null });
       await context.route('**/*', (route) => [fixture.ownerOrigin, fixture.readerOrigin].includes(new URL(route.request().url()).origin)
         ? route.continue() : route.abort());
       const page = await context.newPage();
       // Reuse the real one-time bootstrap route. Capability stays in memory.
       await page.goto(fixture.issueSignInUrl());
+      if (page.url() !== fixture.panelUrl) await page.goto(fixture.panelUrl);
       await page.waitForURL(fixture.panelUrl);
-    } finally { opening = false; }
+    })().finally(() => { opening = undefined; });
+    return opening;
   }
-  process.on('SIGINT', () => { void stop(); });
-  process.on('SIGTERM', () => { void stop(); });
+  const stopForSignal = () => { void stop(); };
+  process.on('SIGINT', stopForSignal);
+  process.on('SIGTERM', stopForSignal);
+  try {
+    fixture = await starting;
+    if (stopping) return;
+    if (verifyOnly) {
+      try { await fixture.verify(); } finally { await fixture.cleanup(); }
+      return;
+    }
+  } finally {
+    if (!fixture || verifyOnly) {
+      process.off('SIGINT', stopForSignal);
+      process.off('SIGTERM', stopForSignal);
+    }
+  }
   if (process.stdin.isTTY) {
     process.stdin.setEncoding('utf8'); process.stdin.resume();
     const onData = (chunk) => {
@@ -68,10 +88,12 @@ export async function runPublicationRehearsalLauncher() {
     process.stdin.on('data', onData);
     disposeInput = () => { process.stdin.off('data', onData); process.stdin.pause(); };
   }
-  process.stdout.write(`${fixture.label}\n`);
-  process.stdout.write(`Synthetic publication panel: ${fixture.panelUrl}\n`);
-  process.stdout.write(`Stop and clean up: Ctrl-C, q then Enter, or kill -TERM ${process.pid}\n`);
-  if (process.stdin.isTTY) process.stdout.write('Enter b to open a fresh isolated browser sign-in.\n');
+  for (const line of fixture.instructions ?? [
+    fixture.label,
+    `Synthetic publication panel: ${fixture.panelUrl}`,
+    `Stop and clean up: Ctrl-C, q then Enter, or kill -TERM ${process.pid}`,
+    ...(process.stdin.isTTY ? ['Enter b to open a fresh isolated browser sign-in.'] : []),
+  ]) process.stdout.write(`${line}\n`);
   if (options.openBrowser) {
     try { await openSignIn(); }
     catch { process.stderr.write('Isolated browser launch failed. No browser install/download was attempted.\n'); await stop(1); }

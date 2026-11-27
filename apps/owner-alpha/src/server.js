@@ -1,3 +1,4 @@
+import { ADDRESS_STYLES, DEFAULT_ADDRESS_STYLE, readAddressStyle } from '@cyberbaser/publish';
 import { createOwnerHandoffStore } from './owner-direct.js';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { constants } from 'node:fs';
@@ -15,22 +16,53 @@ import { documentProjection, segmentsWithinSpan } from '@cyberbaser/review-proje
 import { fail, OwnerAlphaError } from './errors.js';
 import { listDurableJobs, loadDurableJob, validateJobId } from './job-state.js';
 import { ensureOwnerSite } from './site.js';
-import { createEditSession as createSourceEditSession, liveUrlForSlug } from './source.js';
+import { createEditSession as createSourceEditSession, hasPendingStartupCheckout, liveUrlForSlug } from './source.js';
+import { configuredSiteBase, readSiteBase } from './site-base.js';
+import { readSiteFile } from './site-files.js';
+import { createUpstream } from './upstream.js';
 import { prepareStore, storeContextFromConfig } from './store.js';
 import { startSuggestionIntake, suggestionFormOrigin, suggestionChallengeOrigin } from './suggestions.js';
 import { createOwnerPublicationRuntime, createPublicationSourceGuard } from './owner-publication-runtime.js';
-import { publicationDisplay } from './publication-display.js';
+import { hasHiddenProposalSource, proposalDisplay, publicationDisplay } from './publication-display.js';
+import { excerptDocument, escapeHtml as escapeReviewHtml, FRAME_CSP, frameDocument, noticeShell, receiptShell, reviewModel, reviewShell } from './proposal-review-page.js';
+import { SITE_FRAME_CSP, SITE_REVIEW_REASONS, siteReviewFrame } from './site-review-page.js';
+import { rendererIdentity } from './renderer-slot.js';
+import { createBundlePreview } from './bundle-preview.js';
 
 import { createOwnerCommands, OwnerCommandPrecondition } from './core/commands.js';
-import { createBootstrapPrincipalAdapter } from './core/principal.js';
+import { createApprovalRelay, publisherSigningFromSocket } from './core/approvals.js';
+import { createJobApprovals, pendingStarterFile } from './core/job-approvals.js';
+import { openBundleDesk } from './core/bundle-desk.js';
+import { BUNDLE_FRAME_CSP, BUNDLE_IMAGE_HEADERS, bundleFramePage, bundleListPage, bundleShellPage, sniffedImageType } from './bundle-review-page.js';
+import { parsePageBundle } from '../../../packages/proposal/src/page-bundle.js';
+import { bundleGit } from './core/page-bundle.js';
+import { ownerRequest } from './publisher/owner-control.js';
+import { createBootstrapPrincipalAdapter, createDevicePrincipalAdapter } from './core/principal.js';
+import { PRIVATE_SITE_PROVIDER } from './deployment/private-site.js';
+import { confirmLivePage, confirmNewPagesLive } from './live-confirm.js';
+import { assertOutsideVault, loadDeviceKeyRegistry } from './core/device-key-files.js';
+import { openDeviceStore } from './core/device-store.js';
+import { createPairingManager } from './core/pairing.js';
+import { bindIrohNode, CMD_ALPN, irohAudience, loadNodeSecret, PAIR_ALPN, startIrohCarrier } from './iroh-carrier.js';
+import { qrMatrix, qrPath } from './qr.js';
+import { createNoteStatus } from './note-status.js';
+import { openNoteLinks } from './note-links.js';
 import { createMemoryEditSessionStore } from './core/edit-sessions.js';
+import { signedSocketAudience, startSignedRequestSocket } from './signed-request-socket.js';
+import { createForgeSetup, handleForgeSetup } from './forge-setup.js';
 
 export { createOwnerProposalReviewService, createMemoryEditSessionStore };
+
+// Shared with first-run setup so both servers answer with the same headers,
+// body limits and secret comparison.
+export function ownerHttpTools() {
+  return Object.freeze({ html, json, errorResponse, response, pageShell, readBoundedJson, sameSecret, exactToken, escapeHtml,
+    cookieHeader, requestCookie, token, staticResponse, ownerCsp: OWNER_CSP });
+}
 
 const COOKIE_NAME = 'owner_alpha_session';
 export const MAX_OWNER_SESSIONS = 64;
 const MAX_REVIEW_DECISION_BODY_BYTES = OWNER_DECISION_REASON_MAX_BYTES + 16 * 1024;
-const MAX_STATIC_BYTES = 64 * 1024 * 1024;
 const PUBLIC_ROOT = fileURLToPath(new URL('../public/', import.meta.url));
 const PROJECT_ROOT = path.resolve(fileURLToPath(new URL('../../../', import.meta.url)));
 const OWNER_CSP = [
@@ -48,6 +80,9 @@ const OWNER_CSP = [
   "script-src-attr 'none'",
   "style-src 'self'",
 ].join('; ');
+
+// Review pages embed exactly one thing: the owner-only, sandboxed page frame.
+const REVIEW_SHELL_CSP = OWNER_CSP.replace("default-src 'none'", "default-src 'none'; frame-src 'self'");
 
 const READER_CSP = [
   "default-src 'none'",
@@ -157,6 +192,35 @@ function errorResponse(status, code) {
   return json({ error: { code } }, status);
 }
 
+export const RECOVERY_IN_PROGRESS_MESSAGE = 'Finishing an earlier publish. Try again in a moment.';
+export const RECOVERY_FAILED_MESSAGE = 'An earlier publish could not be finished. Restart Cyberbaser to try again.';
+
+/**
+ * Startup recovery state for the runtime: recovering() is false once recovery
+ * settled cleanly, else 'running' or 'failed'. wrapAsync / wrapSync refuse an
+ * owner-act entry point until then; wrapSync keeps a synchronous return value
+ * (publication's startEdit hands back its durable acceptance at once).
+ */
+export function createRecoveryGate() {
+  let state = 'running';
+  const refuse = () => {
+    if (state === 'running') fail('recovery-in-progress', RECOVERY_IN_PROGRESS_MESSAGE);
+    if (state === 'failed') fail('recovery-failed', RECOVERY_FAILED_MESSAGE);
+  };
+  return Object.freeze({
+    recovering: () => (state === 'settled' ? false : state),
+    settle(ok) { state = ok ? 'settled' : 'failed'; },
+    wrapAsync: (action) => (typeof action !== 'function' ? action : async (...args) => { refuse(); return action(...args); }),
+    wrapSync: (action) => (...args) => { refuse(); return action(...args); },
+  });
+}
+
+function recoveryRefusal(state) {
+  return state === 'failed'
+    ? json({ error: { code: 'recovery-failed', message: RECOVERY_FAILED_MESSAGE } }, 503)
+    : json({ error: { code: 'recovery-in-progress', message: RECOVERY_IN_PROGRESS_MESSAGE } }, 409, { 'Retry-After': '30' });
+}
+
 function cookieHeader(processSession) {
   return `${COOKIE_NAME}=${processSession}; Path=/; HttpOnly; SameSite=Strict`;
 }
@@ -188,20 +252,24 @@ function textareaText(value) {
   return value.startsWith('\n') ? `\n${escaped}` : escaped;
 }
 
-function pageShell({ title, body, script = null, bodyClass = null }) {
-  const scriptTag = script ? `<script src="${script}" defer></script>` : '';
+function pageShell({ title, body, script = null, bodyClass = null, stylesheet = '/owner/assets/owner.css', inlineStyle = null, inlineScript = null }) {
+  const scriptTag = [script].flat().filter(Boolean).map((source) => `<script src="${source}" defer></script>`).join('\n');
   const bodyAttribute = bodyClass === null ? '' : ` class="${escapeHtml(bodyClass)}"`;
+  // Inline sources are trusted code constants, never page data. The caller
+  // must opt in with their exact hashes in the response's CSP.
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
-<link rel="stylesheet" href="/owner/assets/owner.css">
+${stylesheet === null ? '' : `<link rel="stylesheet" href="${stylesheet}">`}
+${inlineStyle === null ? '' : `<style>${inlineStyle}</style>`}
 ${scriptTag}
 </head>
 <body${bodyAttribute}>
 ${body}
+${inlineScript === null ? '' : `<script>${inlineScript}</script>`}
 </body>
 </html>
 `;
@@ -244,12 +312,15 @@ ${publicationEnabled ? '<a href="/owner/publication">Publish workspace page</a>'
   });
 }
 
+const NO_VISIBLE_CHANGE_COPY = 'Published, nothing visible changed';
+
 function publicJob(job) {
   const result = {
     jobId: job.jobId,
     state: job.state,
     revision: job.revision,
   };
+  if (job.liveKind === 'no-visible-change') result.liveCopy = NO_VISIBLE_CHANGE_COPY;
   if (typeof job.createdAt === 'string') result.createdAt = job.createdAt;
   if (typeof job.updatedAt === 'string') result.updatedAt = job.updatedAt;
   if (job.recovery && typeof job.recovery === 'object') {
@@ -322,36 +393,41 @@ const SAVE_STOPS = Object.freeze(Object.fromEntries(Object.entries(JOB_STOPS).ma
   step: state === 'completed' ? 3 : value.step === 0 ? 0 : value.step < 3 ? 1 : 2,
   copy: state === 'completed' ? 'Saved' : state === 'live-verification-failed' ? 'Updating the site' : 'The save did not finish. Open Details for what happened.',
 }])));
-function jobPage(job, readerOrigin) {
+function jobPage(job, readerHome, appearance = null) {
   const safe = publicJob(job);
   if (safe.origin?.type === 'owner-publication') return publicationJobPage(safe);
   const done = safe.state === 'completed';
   const stopped = Object.hasOwn(SAVE_STOPS, safe.state) && !done && safe.state !== 'live-verification-failed';
   const current = SAVE_STEPS.findIndex(step => step.states.includes(safe.state));
   const active = current === -1 ? SAVE_STOPS[safe.state]?.step ?? 0 : current;
-  const copy = SAVE_STOPS[safe.state]?.copy ?? SAVE_STEPS[active].label;
+  const copy = safe.liveCopy ?? SAVE_STOPS[safe.state]?.copy ?? SAVE_STEPS[active].label;
   const title = job.page?.title || safe.origin?.relativePath?.split('/').at(-1)?.replace(/\.md$/u, '') || 'Your page';
   const slug = job.page?.slug ?? safe.origin?.relativePath?.replace(/\.md$/u, '');
-  const view = slug ? liveUrlForSlug(`${readerOrigin}/cyberbase/`, slug) : `${readerOrigin}/cyberbase/`;
-  const edit = safe.origin?.relativePath && slug ? `/owner/in-place?relativePath=${encodeURIComponent(safe.origin.relativePath)}&slug=${encodeURIComponent(slug)}` : `${readerOrigin}/cyberbase/`;
+  const view = slug ? liveUrlForSlug(readerHome, slug) : readerHome;
+  const edit = safe.origin?.relativePath && slug ? `/owner/in-place?relativePath=${encodeURIComponent(safe.origin.relativePath)}&slug=${encodeURIComponent(slug)}` : readerHome;
   const steps = SAVE_STEPS.map((step, index) => {
     const status = done || index < active ? 'done' : index === active ? (stopped ? 'stopped' : 'current') : 'pending';
     return `<li class="job-step job-step-${status}" data-step="${step.key}" data-status="${status}">${step.label}</li>`;
   }).join('');
   const stages = escapeHtml(JSON.stringify({ steps: SAVE_STEPS, stops: SAVE_STOPS, technical: { steps: JOB_STEPS, stops: JOB_STOPS } }));
+  // Edit again reopens the owner's own edit. A proposal someone else sent is not
+  // the owner's draft, so it gets no such link.
+  const ownEdit = safe.origin?.type !== 'approved-proposal';
   return pageShell({
     title, script: '/owner/assets/job.js',
+    // The same colour scheme as the owner's site, as on the review page.
+    bodyClass: `save-page owner-scheme-${appearance?.colorScheme ?? 'system'}`,
     body: `<main class="owner-shell save-progress" id="owner-job" data-job-id="${escapeHtml(safe.jobId)}" data-stages="${stages}">
 <header class="owner-header"><h1 id="save-heading">${escapeHtml(title)}</h1></header>
 <section class="job-card" aria-live="polite"><p class="job-stage"><strong id="job-stage">${escapeHtml(copy)}</strong></p>
 <ol class="job-steps" id="job-steps"${done || stopped ? ' hidden' : ''}>${steps}</ol>
-<div class="save-result-links" id="save-result-links"${done ? '' : ' hidden'}><a class="save-view-page" href="${escapeHtml(view)}">View page</a><a href="${escapeHtml(edit)}">Edit again</a></div>
+<div class="save-result-links" id="save-result-links"${done ? '' : ' hidden'}><a class="save-view-page" href="${escapeHtml(view)}">View page</a>${ownEdit ? `<a href="${escapeHtml(edit)}">Edit again</a>` : ''}</div>
 </section>
 <details class="job-details" id="job-details"><summary>Details</summary><div id="job-rehearsal-details"></div>
 <p id="job-technical-stage">${escapeHtml(jobStageCopy(safe.state))}</p><p id="job-recovery" class="status">${escapeHtml(safe.recovery?.instruction ?? '')}</p>
 <p id="job-error" class="error">${safe.failure ? `Stopped (${escapeHtml(safe.failure.code)}).` : ''}</p>
 <p class="job-technical">Job <span id="job-id">${escapeHtml(safe.jobId)}</span> · state <span id="job-state">${escapeHtml(safe.state)}</span> · updated <span id="job-updated">${escapeHtml(safe.updatedAt ?? '')}</span></p></details>
-<p class="job-links">${safe.origin?.type === 'approved-proposal' ? `<a href="/owner/decisions/${encodeURIComponent(safe.origin.queueId)}">Back to the suggestion</a> · ` : ''}<a href="${escapeHtml(readerOrigin)}/cyberbase/">Return to Cyberbase</a></p></main>`,
+<p class="job-links">${safe.origin?.type === 'approved-proposal' ? `<a href="/owner/decisions/${encodeURIComponent(safe.origin.queueId)}">Back to the suggestion</a> · ` : ''}<a href="${escapeHtml(readerHome)}">Return to Cyberbase</a></p></main>`,
   });
 }
 
@@ -367,11 +443,11 @@ function compactReviewText(value, maximum = 160) {
 
 // Owners think in days, not minutes: show the date and keep the exact instant
 // on the element for anyone who needs it.
-function reviewTime(value) {
+function reviewTime(value, { relative = false } = {}) {
   const instant = new Date(value);
-  const visible = Number.isNaN(instant.getTime())
-    ? value
-    : new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeZone: 'UTC' }).format(instant);
+  const visible = Number.isNaN(instant.getTime()) ? value
+    : relative && instant.toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10) ? 'today'
+      : new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeZone: 'UTC' }).format(instant);
   return `<time datetime="${escapeHtml(value)}" title="${escapeHtml(value)}">${escapeHtml(visible)}</time>`;
 }
 
@@ -391,11 +467,15 @@ function proposalView(entry) {
   });
 }
 
-function changeInspection(entry) {
+function changeInspection(entry, { hiddenOperations = new Set(), hasHidden = false } = {}) {
   const view = proposalView(entry);
-  return `<section class="change-inspection" aria-label="Each exact change"><h2>${view.operations.length} ${view.operations.length === 1 ? 'change' : 'changes'}</h2>${view.operations.map((op, index) => {
+  return `<section class="change-inspection" aria-label="Each exact change"><h2>Exact changes</h2>${view.operations.map((op, index) => {
     const position = op.startPosition ? `Line ${op.startPosition.line}, column ${op.startPosition.column}` : `Bytes ${op.start}–${op.end}`;
-    return `<article class="inspected-change"><h3>Change ${index + 1} · ${escapeHtml(position)}</h3><p class="context-note">${escapeHtml(op.context?.before ?? '')}</p><div class="exact-change-grid"><div><h4>Before</h4><pre>${escapeHtml(op.expected)}</pre></div><div><h4>After</h4><pre>${escapeHtml(op.replacement)}</pre></div></div><p class="context-note">${escapeHtml(op.context?.after ?? '')}</p></article>`;
+    const context = (value) => hasHidden || hasHiddenProposalSource(value ?? '') ? '' : `<p class="context-note">${escapeHtml(value ?? '')}</p>`;
+    const hidden = hiddenOperations.has(index + 1) || hasHiddenProposalSource(op.expected + op.replacement);
+    const exact = hidden ? '<p>Hidden content · source not shown</p>'
+      : `${context(op.context?.before ?? (index === 0 ? view.prefix : ''))}<div class="exact-change-grid"><div><h4>Before</h4><pre>${escapeHtml(op.expected)}</pre></div><div><h4>After</h4><pre>${escapeHtml(op.replacement)}</pre></div></div>${context(op.context?.after ?? (index === 0 ? view.suffix : ''))}`;
+    return `<article class="inspected-change"><h3>Change ${index + 1} · ${escapeHtml(position)}</h3>${exact}</article>`;
   }).join('')}</section>`;
 }
 
@@ -504,6 +584,15 @@ function forgeOriginHtml(origin, { compact = false } = {}) {
   return `<span class="forge-origin">From <a href="${escapeHtml(origin.url)}" rel="noopener noreferrer">pull request #${origin.number}</a> on your forge${compact ? '' : account}</span>`;
 }
 
+function signedSubmitterHtml(entry) {
+  const carrier = entry.evidence?.carrier;
+  if (carrier?.lane !== 'lane-signed') return '';
+  const submitter = carrier.metadata.submitter;
+  const kind = submitter.kind === 'agent' ? 'Agent' : 'Owner device';
+  const key = submitter.keyId.length > 12 ? `${submitter.keyId.slice(0, 12)}…` : submitter.keyId;
+  return `<span class="proposal-submitter" title="Submitter ID: ${escapeHtml(submitter.id)}">Submitted by ${escapeHtml(kind)}: ${escapeHtml(submitter.label)} (key ${escapeHtml(key)})</span>`;
+}
+
 // Several heads of one request are one suggestion in the owner's eyes: the
 // newest is the row, earlier heads fold beneath it.
 function groupActionable(entries) {
@@ -534,28 +623,29 @@ function decisionLabel(decision, application) {
 }
 
 function reviewSummaryCard(entry, href, decision = null, application = null, earlier = []) {
-  const view = proposalView(entry);
-  const rationale = compactReviewText(entry.evidence.proposal.submission.rationale, 180);
-  const path = `<span class="proposal-row-path">${escapeHtml(entry.summary.source.path)}</span>`;
+  const count = proposalView(entry).operations.length;
   const label = decision === null ? null : decisionLabel(decision, application);
-  const origin = forgeOrigin(entry);
-  const forge = forgeOriginHtml(origin, { compact: true });
-  const meta = decision === null
-    ? `${path}<span>Received ${reviewTime(entry.summary.receivedAt)}</span><span>Expires ${reviewTime(entry.summary.expiresAt)}</span>${forge}${entry.summary.route === 'reject' ? '<span class="attention-note">Your policy suggests rejecting</span>' : ''}`
-    : `<span class="decision-label decision-${label.key}">${label.text}</span><span>${reviewTime(label.at)}</span>${path}${forge}<span class="proposal-row-note">\u201c${escapeHtml(compactReviewText(decision.reason, 120))}\u201d</span>`;
+  const title = escapeHtml(proposalTitle(entry));
+  const meta = `${proposalSender(entry, { link: false })} \u00b7 ${reviewTime(entry.summary.receivedAt, { relative: true })}`;
   const folded = earlier.length === 0
     ? ''
     : `<p class="earlier-versions">Earlier ${earlier.length === 1 ? 'version' : 'versions'} of this request: ${earlier.map((item) => `<a href="/owner/review/${encodeURIComponent(item.summary.queueId)}">received ${reviewTime(item.summary.receivedAt)}</a>`).join(', ')}</p>`;
   return `<article class="proposal-row">
 <a class="proposal-row-link" href="${escapeHtml(href)}">
-<span class="proposal-row-change">${changeSummaryHtml(view, { compact: true })}</span>
-<span class="proposal-row-rationale">${escapeHtml(rationale)}</span>
-<span class="proposal-row-meta">${meta}</span>
+<span class="proposal-row-text"><strong class="proposal-row-title" title="${title}">${title}</strong><small>${meta}</small></span>
+<span class="proposal-row-count">${label === null ? `${count} ${count === 1 ? 'change' : 'changes'}` : `<span class="decision-label decision-${label.key}">${label.text}</span>`}</span>
 </a>
 ${folded}</article>`;
 }
 
-function reviewListPage({ overlay, nextCursor }) {
+// One quiet line where publishing depends on GitHub; nothing when it is reachable.
+export function upstreamNotice(upstream) {
+  const state = typeof upstream?.current === 'function' ? upstream.current() : null;
+  if (state?.state !== 'unreachable') return '';
+  return '<p class="rv-note rv-upstream" role="status">Can\'t reach GitHub. You can still review; publishing waits until it is back.</p>';
+}
+
+function reviewListPage({ overlay, nextCursor, upstream = null }) {
   const actionable = overlay.actionable.length === 0
     ? '<p class="empty-state">Nothing is waiting for you.</p>'
     : groupActionable(overlay.actionable).map(({ entry, earlier }) => reviewSummaryCard(
@@ -581,12 +671,13 @@ function reviewListPage({ overlay, nextCursor }) {
   const decided = overlay.history.length === 0 ? '' : `<span class="section-count">${overlay.history.length} shown</span>`;
   return pageShell({
     title: 'Proposals',
-    bodyClass: 'proposal-review-page',
-    body: `<main class="owner-shell review-shell" id="owner-review-list">
-<header class="owner-header review-list-header">
+    script: '/owner/assets/review.js',
+    stylesheet: '/owner/assets/review.css',
+    bodyClass: 'rv-doc rv-inbox',
+    body: `<header class="rv-topbar"><b>Cyberbaser</b><span class="rv-priv">private to you</span></header>
+<main class="rv-inbox-main" id="owner-review-list">
 <h1>Proposals</h1>
-<p class="lede">Suggested changes to your pages. Open one to read it in place and decide; deciding changes nothing on the page itself.</p>
-</header>
+${upstreamNotice(upstream)}
 <section class="review-section" id="needs-review" aria-labelledby="actionable-heading">
 <div class="section-heading"><h2 id="actionable-heading">Needs review</h2><span class="section-count">${waiting}</span></div>
 <div class="proposal-list">${actionable}</div>
@@ -595,9 +686,9 @@ ${next}
 <section class="review-section decided-section" id="decided" aria-labelledby="history-heading">
 <div class="section-heading"><h2 id="history-heading">Decided</h2>${decided}</div>
 <div class="proposal-list">${history}</div>
-${overlay.historyTruncated ? '<p class="status">Only the newest decisions are shown here.</p>' : ''}
+${overlay.historyTruncated ? '<p class="rv-note">Only the newest decisions are shown here.</p>' : ''}
 </section>
-<p class="review-return"><a href="/">Return to Cyberbase</a></p>
+<p class="review-return"><a href="/">Return to your site</a></p>
 </main>`,
   });
 }
@@ -853,13 +944,14 @@ function publicationJobPage(safe) {
   const uncertain = ['failed', 'manual-intervention', 'cancelled'].includes(safe.state);
   const steps = JOB_STEPS.map((step, index) => {
     const status = uncertain ? 'unknown' : done || index < current ? 'done' : index === current ? (stopped ? 'stopped' : 'current') : 'pending';
+    const stepCopy = step.key === 'live' && safe.liveCopy ? safe.liveCopy : step.label;
     const label = { done: 'Done', current: 'In progress', stopped: 'Stopped', pending: 'Waiting', unknown: 'See record' }[status];
-    return `<li class="job-step job-step-${status}" data-step="${step.key}" data-status="${status}"><span>${escapeHtml(step.label)}</span><span class="publication-step-status">${label}</span></li>`;
+    return `<li class="job-step job-step-${status}" data-step="${step.key}" data-status="${status}"><span>${escapeHtml(stepCopy)}</span><span class="publication-step-status">${label}</span></li>`;
   }).join('');
   return pageShell({ title: `${title} · Publication`, bodyClass: 'publication-page', script: '/owner/assets/publication.js',
     body: `${publicationHeader(true)}<main class="publication-shell publication-job" id="owner-job" data-job-id="${escapeHtml(safe.jobId)}" data-stages="${escapeHtml(JSON.stringify(stages))}">
 <header class="publication-heading"><h1>${escapeHtml(title)}</h1></header>
-<section aria-label="Publication progress" aria-live="polite"><h2 id="job-stage">${escapeHtml(PUBLICATION_STOPS[safe.state]?.copy ?? stages.activeCopy)}</h2>
+<section aria-label="Publication progress" aria-live="polite"><h2 id="job-stage">${escapeHtml(safe.liveCopy ?? PUBLICATION_STOPS[safe.state]?.copy ?? stages.activeCopy)}</h2>
 <p class="publication-explanation" id="publication-job-note" data-complete-copy="The reviewed version completed its publication checks.">${done ? 'The reviewed version completed its publication checks.' : 'This runs in the background. You can close this page and return to follow its progress.'}</p>
 <ol class="job-steps" id="job-steps">${steps}</ol><p id="job-error" class="error" role="alert">${safe.failure ? `Stopped (${escapeHtml(safe.failure.code)}).` : ''}</p></section>
 <details class="technical-evidence"><summary>Details for the record</summary><div class="publication-record">
@@ -867,7 +959,7 @@ function publicationJobPage(safe) {
 <p id="job-recovery">${escapeHtml(safe.recovery?.instruction ?? '')}</p></div></details></main>` });
 }
 
-function publicationLanding(config, csrfToken, readerOrigin) {
+function publicationLanding(config, csrfToken, readerHome) {
   const mapping = config.ownerPublication.mappings[0];
   const title = publicationTitle(mapping.relativePath);
   const publicUrl = liveUrlForSlug(config.live.baseUrl, mapping.slug);
@@ -877,7 +969,7 @@ function publicationLanding(config, csrfToken, readerOrigin) {
 <dl class="publication-destination"><dt>Public address</dt><dd><a href="${escapeHtml(publicUrl)}" rel="noreferrer">${escapeHtml(publicUrl)}</a></dd></dl></section>
 <form id="publication-form" data-action="prepare" data-mapping-id="${escapeHtml(mapping.id)}" data-csrf="${escapeHtml(csrfToken)}">
 <div class="publication-action"><p>Your next step is a private review.</p><button type="submit">Review changes</button></div><p id="publication-status" class="status" role="status"></p></form>
-<p class="publication-local-link"><a href="${escapeHtml(readerOrigin)}/cyberbase/">Browse the local site</a></p></main>` });
+<p class="publication-local-link"><a href="${escapeHtml(readerHome)}">Browse the local site</a></p></main>` });
 }
 
 function publicationBlock(block, text, tracked = null) {
@@ -912,12 +1004,25 @@ function publicationIcon(name) {
   return `<svg class="publication-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths[name]}</svg>`;
 }
 
-function publicationDocument(display, text, { previous = false } = {}) {
+function publicationDocument(display, text, { previous = false, proposal = false, repeatedTitle = null } = {}) {
   if (display.exactOnly) return `<div class="publication-exact-document"><p class="publication-source-label">Exact source</p><pre>${escapeHtml(text)}</pre></div>`;
   const rows = previous ? display.file.current.blocks.filter((block) => block.kind !== 'gap').map((block) => ({ block })) : display.tracked.rows;
   return rows.map((row) => {
-    const content = row.block ? publicationBlock(row.deleted ? { ...row.block, start: 0, end: row.previous[0].length } : row.block,
-      row.deleted ? row.previous[0] : text, row.tracked) : `<p class="publication-removal">${row.removed ? 'Text removed at this position.' : 'Whitespace changed at this position.'}</p>`;
+    if (row === repeatedTitle) return '';
+    const kind = row.tracked?.kind;
+    const content = row.hidden ? '<p class="publication-source-label">Hidden content · source not shown</p>' : row.block
+      ? publicationBlock(row.deleted ? { ...row.block, start: 0, end: row.previous[0].length } : row.block,
+        row.deleted ? row.previous[0] : text, row.tracked)
+      : `<p class="publication-removal">${row.removed ? 'Text removed at this position.' : 'Whitespace changed at this position.'}</p>`;
+    if (proposal) {
+      const anchors = (display.anchors.get(row) ?? []).map((number) => `<span class="proposal-change-anchor" data-change="${number}" tabindex="-1" aria-label="Change ${number}"></span>`).join('');
+      const mark = (tag, label, html) => `<${tag} class="publication-${tag} proposal-block-mark" aria-label="${label}">${html}</${tag}>`;
+      const old = row.baseBlock && ['block', 'exact'].includes(kind) ? row.previous[0] : null;
+      const reading = row.hidden ? content : row.deleted ? mark('del', 'Removed block', content) : kind === 'added' || old !== null
+        ? `${old === null ? '' : mark('del', 'Removed block', publicationBlock({ ...row.baseBlock, start: 0, end: old.length }, old))}${mark('ins', 'Added block', content)}`
+        : content;
+      return `<section class="publication-block${row.changed ? ' proposal-changed-block' : ''}">${anchors}${reading}</section>`;
+    }
     const label = row.tracked && row.tracked.kind !== 'inline' ? `<p class="publication-change-label">${escapeHtml(row.tracked.reason)}</p>` : row.tracked?.note ? `<p class="publication-change-label">${escapeHtml(row.tracked.note)}</p>` : '';
     return `<section class="publication-block${row.mark ? ' publication-change' : ''}${row.deleted ? ' publication-deleted-block' : ''}${row.tracked?.kind === 'added' ? ' publication-added-block' : ''}"${row.mark ? ` id="publication-change-${row.mark}" tabindex="-1" data-change="${row.mark}"` : ''}>${row.mark ? `<span class="publication-margin-mark" aria-label="Change ${row.mark}">${row.mark}</span>` : ''}${label}${content}${row.changed && row.tracked?.kind !== 'inline' && row.previous?.some((part) => part.length) ? `<details class="publication-previous-fragment"><summary aria-label="Previous exact source${row.mark ? ` for change ${row.mark}` : ''}">${publicationIcon('previousSource')} Previous</summary><pre>${escapeHtml(row.previous.join('\n'))}</pre></details>` : ''}</section>`;
   }).join('');
@@ -977,9 +1082,9 @@ function publicationReviewPage(draft, job, modeKey, csrfToken, publishAvailable)
     body: `${publicationHeader(true)}<main class="publication-review-app" data-marks-visible="${marksVisible}"><header class="publication-toolbar" aria-label="Document review controls"><div class="publication-toolbar-title"><h1>${escapeHtml(title)}</h1></div><div class="publication-review-controls">${display.available && trackedCount > 0 ? `<div class="publication-change-controls" aria-label="Change navigation">${iconControl('previous-change', 'Previous change', 'previous')}<output id="publication-change-count" aria-hidden="true">${trackedCount} ${trackedCount === 1 ? 'change' : 'changes'}</output>${iconControl('next-change', 'Next change', 'next')}</div>` : ''}${display.available ? iconControl('toggle-marks', 'Show changes', 'eye', `aria-pressed="${marksVisible}"`, marksVisible ? 'Changes shown' : 'Changes hidden') : ''}<button type="button" id="publication-toggle-details" aria-expanded="false" aria-controls="publication-details-dialog" aria-haspopup="dialog" hidden>${publicationIcon('panel')}<span>Details</span></button></div><div class="publication-toolbar-publish">${action}</div><span id="publication-review-announcement" class="publication-sr-only" role="status" aria-live="polite" aria-atomic="true">${trackedCount} ${trackedCount === 1 ? 'change' : 'changes'}. ${marksVisible ? 'Changes shown.' : 'Changes hidden.'}</span></header><div class="publication-document-scroll" id="publication-document-scroll" tabindex="0" aria-label="Reviewed document"><div class="publication-document-content">${display.coarse ? '<aside class="publication-coarse" role="note">Whole-document review</aside>' : ''}<article class="publication-reviewed-document" aria-label="Proposed document">${primary}</article><details id="publication-review-fallback"${secondary ? ' open' : ''}><summary>Details</summary>${detailsContent}</details></div></div></main>${detailsDialog}${dialog}` });
 }
 
-function technicalEvidence(entry, { decision = null, queueRetained = null, title = 'Technical evidence' } = {}) {
+function technicalEvidence(entry, { decision = null, queueRetained = null, title = 'Technical evidence', disclosure = true } = {}) {
   const { evidence, summary, sourceVerification } = entry;
-  const trust = evidence.classification.classification;
+  const { classification: trust, verifiedSubject } = evidence.classification;
   const trustReasons = trust.reasons.length === 0
     ? '<p class="empty-state">No classification reason codes were recorded.</p>'
     : `<ul class="trust-reasons">${trust.reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join('')}</ul>`;
@@ -996,9 +1101,8 @@ function technicalEvidence(entry, { decision = null, queueRetained = null, title
 <div><dt>Queue copy</dt><dd>${escapeHtml(retained)}</dd></div>
 </dl></section>`;
   }
-  return `<details class="technical-evidence">
-<summary>${escapeHtml(title)}</summary>
-<div class="technical-evidence-body">
+  const submitter = evidence.carrier?.lane === 'lane-signed' ? evidence.carrier.metadata.submitter : null;
+  const report = `<div class="technical-evidence-body">
 <section><h3>Source binding</h3><dl class="technical-facts">
 <div><dt>Path</dt><dd>${escapeHtml(summary.source.path)}</dd></div>
 <div><dt>Repository</dt><dd>${escapeHtml(summary.source.repository)}</dd></div>
@@ -1014,102 +1118,110 @@ function technicalEvidence(entry, { decision = null, queueRetained = null, title
 <div><dt>Review evidence</dt><dd>${escapeHtml(summary.reviewEvidenceDigest)}</dd></div>
 <div><dt>Received</dt><dd>${escapeHtml(summary.receivedAt)}</dd></div>
 <div><dt>Expires</dt><dd>${escapeHtml(summary.expiresAt)}</dd></div>
+${submitter ? `<div><dt>Submitter ID</dt><dd>${escapeHtml(submitter.id)}</dd></div><div><dt>Submitter key ID</dt><dd>${escapeHtml(submitter.keyId)}</dd></div>` : ''}
 </dl></section>
 <section><h3>Trust classification</h3><dl class="technical-facts">
 <div><dt>Tier</dt><dd>${escapeHtml(summary.tier)}</dd></div>
 <div><dt>Lane</dt><dd>${escapeHtml(summary.lane)}</dd></div>
 <div><dt>Route</dt><dd>${escapeHtml(summary.route)}</dd></div>
-<div><dt>Verified subject</dt><dd>${escapeHtml(evidence.classification.verifiedSubject ?? 'none')}</dd></div>
+<div><dt>Verified subject</dt><dd>${escapeHtml(verifiedSubject?.author ?? 'none')}${verifiedSubject?.authorType ? ` (${escapeHtml(verifiedSubject.authorType)})` : ''}</dd></div>
 <div><dt>Policy status</dt><dd>${escapeHtml(evidence.classification.policyStatus)}</dd></div>
 <div><dt>Policy digest</dt><dd>${escapeHtml(evidence.classification.policyDigest ?? 'none')}</dd></div>
 </dl><h4>Reason codes</h4>${trustReasons}</section>
 ${decisionFacts}
-</div>
-</details>`;
+</div>`;
+  return disclosure ? `<details class="technical-evidence"><summary>${escapeHtml(title)}</summary>${report}</details>` : report;
 }
 
-function reviewIdentityHeader(entry, view) {
-  const { summary } = entry;
-  const proposal = entry.evidence.proposal;
-  const rationale = proposal.submission.rationale;
-  const references = proposal.submission.evidence;
-  // The contributor's own words are the most useful thing on the page after
-  // the change itself, so they are shown rather than hidden behind a
-  // disclosure. Only an unusually long note folds.
-  const note = rationale.length <= 320
-    ? `<p class="contributor-rationale">${escapeHtml(rationale).replaceAll('\n', '<br>')}</p>`
-    : `<p class="contributor-rationale">${escapeHtml(compactReviewText(rationale, 320))}</p>
-<details class="identity-details"><summary>Read the whole note</summary><p class="contributor-rationale">${escapeHtml(rationale).replaceAll('\n', '<br>')}</p></details>`;
-  const links = references.length === 0
-    ? ''
-    : `<p class="identity-references">References: ${references.map((url, index) => `<a href="${escapeHtml(url)}" rel="noopener noreferrer">${escapeHtml(new URL(url).hostname)}${references.length > 1 ? ` (${index + 1})` : ''}</a>`).join(', ')}</p>`;
-  return `<header class="owner-header review-detail-header">
-<a class="back-link" href="/owner/review">Back to Proposals</a>
-<h1>${escapeHtml(changeName(view))}</h1>
-<div class="identity-meta">
-<span class="identity-path">${escapeHtml(summary.source.path)}</span>
-<span>Received ${reviewTime(summary.receivedAt)}</span>
-<span>Expires ${reviewTime(summary.expiresAt)}</span>
-${forgeOriginHtml(forgeOrigin(entry))}
-</div>
-<div class="contributor-note">
-<p class="section-kicker">Why the contributor suggests it</p>
-${note}
-${links}
-</div>
-</header>`;
+function proposalTitle(entry, display) {
+  const heading = display?.tracked?.rows.find((row) => !row.hidden && !row.deleted && row.block?.kind === 'heading');
+  const projected = heading?.block.tokens.map((token) => token.text).join('').trim();
+  const source = entry.document?.baseText ?? '';
+  const withoutHidden = hasHiddenProposalSource(source) ? '' : source;
+  const firstHeading = /^#{1,6}[^\S\r\n]+([^\r\n]+)$/mu.exec(withoutHidden)?.[1]?.replace(/\s+#+\s*$/u, '').trim();
+  const filename = path.posix.basename(entry.summary.source.path).replace(/\.md$/iu, '').replace(/[-_]+/gu, ' ').trim();
+  return projected || firstHeading || (filename ? filename[0].toUpperCase() + filename.slice(1) : 'Proposed change');
 }
 
-function decisionStep({ entry, csrfToken, view }) {
-  const { summary } = entry;
-  const advisory = summary.route === 'reject'
-    ? '<p class="policy-advisory">Your policy recommends rejecting this one. Read the wording and references first.</p>'
-    : '';
-  const change = escapeHtml(changeName(view));
-  const sourcePath = escapeHtml(summary.source.path);
-  // One sticky bar with the two real actions, and one sheet that asks the only
-  // question the owner has to answer. The boundary is stated once, in the sheet,
-  // in plain words, and again on the receipt.
-  return `<aside class="decision-bar" aria-label="Your decision">
-<div class="decision-bar-inner">
-<p class="decision-bar-change"><strong>${change}</strong><span>${sourcePath}</span></p>
-<div class="decision-actions">
-<button type="button" data-action="reject" class="decision-reject">${view.version === 2 ? 'Reject all' : 'Reject'}</button>
-<button type="button" data-action="approve" class="decision-approve">${view.version === 2 ? 'Approve all' : 'Approve'}</button>
-</div>
-<noscript><p class="decision-noscript">Recording a decision needs scripting enabled in this browser.</p></noscript>
-</div>
-</aside>
-<dialog id="decision-dialog" aria-labelledby="decision-dialog-title">
-<form id="review-decision-form" class="decision-sheet" data-queue-id="${escapeHtml(summary.queueId)}" data-review-evidence-digest="${escapeHtml(summary.reviewEvidenceDigest)}" data-csrf="${escapeHtml(csrfToken)}" data-max-reason-bytes="${OWNER_DECISION_REASON_MAX_BYTES}" data-suggestion-label="${change}" data-proposal-version="${view.version}">
-<h2 id="decision-dialog-title">Approve this suggestion?</h2>
-<p class="dialog-suggestion" id="decision-dialog-suggestion"><strong>${change}</strong><span>${sourcePath}</span></p>
-${advisory}
-<label for="decision-reason">Why?</label>
-<p class="field-help" id="decision-note-help">A short note, kept with your decision.</p>
-<textarea class="decision-reason" id="decision-reason" name="reason" rows="3" maxlength="${OWNER_DECISION_REASON_MAX_BYTES}" aria-describedby="decision-note-help decision-byte-count" required></textarea>
-<span id="decision-byte-count" class="byte-count" aria-live="polite"></span>
-<p id="decision-status" class="status" role="status" aria-live="polite" tabindex="-1"></p>
-<p id="decision-dialog-copy" class="decision-boundary">This records your decision and nothing else. The page stays exactly as it is.</p>
-<div class="dialog-actions"><button type="button" class="dialog-back" data-dialog-cancel>Cancel</button><button type="button" id="decision-confirm" data-action="approve">Approve suggestion</button></div>
-</form>
-</dialog>`;
+function proposalSender(entry, { link = true } = {}) {
+  const origin = forgeOrigin(entry);
+  if (origin !== null) return link ? forgeOriginHtml(origin) : `From pull request #${origin.number} on your forge`;
+  const carrier = entry.evidence.carrier;
+  if (carrier?.lane !== 'lane-signed') return link ? 'From <b>a visitor</b>, not signed in.' : 'From a visitor';
+  const { label, kind } = carrier.metadata.submitter;
+  const whose = kind === 'agent' ? 'one of your agents' : 'one of your devices';
+  return link ? `From <b>${escapeHtml(label)}</b>, ${whose}.` : `From ${escapeHtml(label)}, ${whose}`;
 }
 
-function reviewDetailPage({ entry, csrfToken, mode = REVIEW_MODE_KEYS[0] }) {
+function contributorReferences(entry) {
+  const { rationale, evidence } = entry.evidence.proposal.submission;
+  const fullNote = rationale.length > 180 ? `<blockquote>${escapeHtml(rationale)}</blockquote>` : '';
+  const links = evidence.length === 0 ? '' : `<p class="identity-references">References: ${evidence.map((url, index) => `<a href="${escapeHtml(url)}" rel="noopener noreferrer">${escapeHtml(new URL(url).hostname)}${evidence.length > 1 ? ` (${index + 1})` : ''}</a>`).join(', ')}</p>`;
+  return fullNote + links;
+}
+
+// The pinned note, its exact operations, and what each one means to the owner.
+function reviewDisplay(entry) {
   const view = proposalView(entry);
-  return pageShell({
-    title: `Review ${changeName(view)}`,
-    script: '/owner/assets/review.js',
-    bodyClass: 'proposal-review-page',
-    body: `<main class="owner-shell review-shell" id="owner-review-detail">
-${reviewIdentityHeader(entry, view)}
-${changeInspection(entry)}
-${comparisonPanel(entry, mode)}
-${technicalEvidence(entry, { title: 'Details for the record' })}
-</main>
-${decisionStep({ entry, csrfToken, view })}`,
+  const document = entry.document ?? null;
+  const operations = view.operations.map(({ start, end, expected, replacement }) => ({
+    path: view.path, start, end, oldText: expected, replacementText: replacement,
+  }));
+  const display = document?.reason === null ? proposalDisplay({ path: view.path, ...document, operations }) : null;
+  const hiddenUnavailable = document?.reason === 'hidden-content' || (!display?.available
+    && [document?.baseText, document?.candidateText].some((text) => typeof text === 'string' && hasHiddenProposalSource(text)));
+  const model = reviewModel({ operations, display, document, hiddenUnavailable });
+  const title = proposalTitle(entry, display);
+  const firstBody = display?.tracked?.rows.find((row) => row.block?.kind !== 'frontmatter');
+  // A plain, unchanged opening heading already appears as the page title.
+  const repeatedTitle = firstBody?.block?.kind === 'heading' && firstBody.block.level === 1 && !firstBody.changed && !firstBody.hidden
+    && firstBody.block.uninterpreted?.length === 0 && firstBody.block.tokens.every((token) => token.type === 'text')
+    && firstBody.block.tokens.map((token) => token.text).join('') === title ? firstBody : null;
+  return { view, document, operations, display, hiddenUnavailable, model, title, repeatedTitle };
+}
+
+function reviewFramePage(entry, appearance) {
+  const { document, display, hiddenUnavailable, model, title, repeatedTitle } = reviewDisplay(entry);
+  const note = hiddenUnavailable ? 'Hidden content · source not shown'
+    : document?.reason ? `This page can’t be shown here: ${document.reason}. Every change is listed in the panel.`
+      : display && !display.available ? 'This page can’t be shown here. Every change is listed in the panel.' : null;
+  return frameDocument({ model, display, document, title, sourcePath: entry.summary.source.path,
+    colorScheme: appearance.colorScheme, repeatedTitle, note });
+}
+
+function frameResponse(body, status = 200, csp = FRAME_CSP) {
+  return response(body, status, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Content-Security-Policy': csp,
+    'X-Frame-Options': 'SAMEORIGIN',
   });
+}
+
+function reviewPage({ title, body, script = null, appearance, receipt = false }) {
+  return pageShell({ title, body, script, stylesheet: '/owner/assets/review.css',
+    bodyClass: `rv-doc rv-scheme-${appearance.colorScheme}${receipt ? ' rv-doc-receipt' : ''}` });
+}
+
+function reviewDetailPage({ entry, csrfToken, mode = REVIEW_MODE_KEYS[0], appearance, detailsOpen = false, siteReason = null }) {
+  const { model, title, hiddenUnavailable, operations, display } = reviewDisplay(entry);
+  const hasHidden = hiddenUnavailable || display?.hasHidden || operations.some((op) => hasHiddenProposalSource(op.oldText + op.replacementText));
+  const hiddenOperations = hiddenUnavailable ? new Set(operations.map((_, index) => index + 1)) : display?.hiddenOperations;
+  // One quiet line when the note is not shown on the site's own page.
+  const siteNote = siteReason === null ? '' : `<p class="rv-note rv-site-note">${escapeReviewHtml(SITE_REVIEW_REASONS[siteReason])}</p>`;
+  const details = `<section id="publication-review-details">${siteNote}${changeInspection(entry, { hasHidden, hiddenOperations })}${contributorReferences(entry)}
+${technicalEvidence(entry, { disclosure: false })}
+${display?.available && !hasHidden ? `<details${mode === 'changes' ? '' : ' open'}><summary>Compare full versions</summary>${comparisonPanel(entry, mode)}</details>` : ''}</section>`;
+  const advisory = entry.summary.route === 'reject' ? '<p class="rv-note">Your policy recommends rejecting this one.</p>' : '';
+  return reviewPage({ title: `${title} · Proposal`, appearance, script: '/owner/assets/review.js',
+    body: reviewShell({ model, entry, title, siteTitle: appearance.siteTitle, senderHtml: proposalSender(entry),
+      frameUrl: `/owner/review/${encodeURIComponent(entry.summary.queueId)}/page`, csrfToken,
+      maxReasonBytes: OWNER_DECISION_REASON_MAX_BYTES, version: proposalView(entry).version, advisory, detailsHtml: details, detailsOpen }) });
+}
+
+// The server's half of "must see before Approve": a proposal with changes the
+// page cannot show is approved only with an explicit acknowledgement.
+function requiresAcknowledgement(entry) {
+  return reviewDisplay(entry).model.mustSee.length > 0;
 }
 
 const STALE_REASON_COPY = Object.freeze({
@@ -1131,107 +1243,81 @@ const UNAPPLICABLE_REASON_COPY = Object.freeze({
   'attempt-limit': 'Too many attempts have been made on this suggestion.',
   'derivation-failed': 'The change could not be prepared for the page pipeline.',
 });
-// The step after approval, in the owner's words: whether the change can go on
-// the page now, why not, or how far along it is. One button, one sheet.
-function applicationStep({ application, view, summary, csrfToken, entry = null }) {
-  const change = escapeHtml(changeName(view));
+// After a decision, in the owner's words: what was decided, whether the
+// change can go on the page now, why not, or how far along it is.
+function applicationPanel({ application, summary, csrfToken, entry = null }) {
   const sourcePath = escapeHtml(summary.source.path);
-  const jobLink = (attempt) => `<a class="application-job-link" href="/owner/jobs/${encodeURIComponent(attempt.jobId)}">Follow it</a>`;
+  const jobLink = (attempt) => `<a class="rv-link application-job-link" href="/owner/jobs/${encodeURIComponent(attempt.jobId)}">Follow it</a>`;
+  const note = (text) => `<p class="rv-note">${text}</p>`;
   if (application === null) {
-    return `<section class="application-step application-unavailable" aria-labelledby="application-heading">
-<h2 id="application-heading">Putting it on the page</h2>
-<p>Not available in this setup. Your approval is recorded; the page is unchanged.</p>
-</section>`;
+    return `<h1 id="application-heading">Approved</h1>${note('The page has not changed. Putting it on the page isn’t available in this setup.')}`;
   }
   const { state } = application;
   if (state === 'applied') {
     const latest = application.latest;
+    const live = latest.jobState === 'completed';
     const origin = entry === null ? null : forgeOrigin(entry);
-    const forgeFollowUp = origin === null
-      ? ''
-      : `<p class="forge-followup"><a href="${escapeHtml(origin.url)}" rel="noopener noreferrer">Pull request #${origin.number}</a> on your forge is still open. Close it there; this app never writes to your forge.</p>`;
-    return `<section class="application-step application-applied" aria-labelledby="application-heading">
-<h2 id="application-heading">On its way to the page</h2>
-<p class="application-stage"><strong>${escapeHtml(jobStageCopy(latest.jobState))}</strong> ${jobLink(latest)}</p>
-<p class="application-meta">Applied ${reviewTime(latest.appliedAt)}${latest.attempt > 1 ? ` · attempt ${latest.attempt}` : ''}</p>
-${forgeFollowUp}</section>`;
+    const forgeFollowUp = origin === null ? ''
+      : note(`<a href="${escapeHtml(origin.url)}" rel="noopener noreferrer">Pull request #${origin.number}</a> on your forge is still open. Close it there; this app never writes to your forge.`);
+    return `<h1 id="application-heading">${live ? 'Live on the page' : 'Applying'}</h1>
+<p class="rv-note application-stage"><strong>${escapeHtml(jobStageCopy(latest.jobState))}</strong> ${jobLink(latest)}</p>
+<p class="rv-meta">Applied ${reviewTime(latest.appliedAt)}${latest.attempt > 1 ? ` · attempt ${latest.attempt}` : ''}</p>${forgeFollowUp}`;
   }
-  const earlier = application.attempts.length === 0
-    ? ''
-    : `<p class="application-meta">An earlier attempt stopped before changing the page. ${jobLink(application.attempts.at(-1))}</p>`;
-  if (state === 'stale') {
-    return `<section class="application-step application-blocked" aria-labelledby="application-heading">
-<h2 id="application-heading">Cannot be applied as it is</h2>
-<p>${escapeHtml(STALE_REASON_COPY[application.reason] ?? 'The page is no longer exactly what you reviewed.')}</p>
-<p>Your approval stays recorded. To make this change now, edit the page yourself.</p>
-${earlier}</section>`;
-  }
-  if (state === 'unapplicable') {
-    return `<section class="application-step application-blocked" aria-labelledby="application-heading">
-<h2 id="application-heading">The page pipeline cannot apply this yet</h2>
-<p>${escapeHtml(UNAPPLICABLE_REASON_COPY[application.reason] ?? 'The change could not be prepared for the page pipeline.')}</p>
-<p>Your approval stays recorded. To make this change now, edit the page yourself.</p>
-${earlier}</section>`;
+  const earlier = application.attempts.length === 0 ? ''
+    : note(`An earlier attempt stopped before changing the page. ${jobLink(application.attempts.at(-1))}`);
+  if (state === 'stale' || state === 'unapplicable') {
+    const copy = state === 'stale'
+      ? STALE_REASON_COPY[application.reason] ?? 'The page is no longer exactly what you reviewed.'
+      : UNAPPLICABLE_REASON_COPY[application.reason] ?? 'The change could not be prepared for the page pipeline.';
+    return `<h1 id="application-heading" class="rv-blocked">${state === 'stale' ? 'Approved, but the page has moved on' : 'Approved, but it can’t be applied'}</h1>
+${note(escapeHtml(copy))}${note('Your approval stays recorded. To make this change now, edit the page yourself.')}${earlier}`;
   }
   if (state === 'eligible') {
-    return `<section class="application-step application-ready" aria-labelledby="application-heading">
-<h2 id="application-heading">Put it on the page</h2>
-<p>The page is still exactly as you reviewed it. Applying changes <span class="identity-path">${sourcePath}</span>, commits it, pushes it, and publishes it, the same way your own saves do.</p>
-<div class="application-actions"><button type="button" class="decision-approve" data-apply>Apply to page</button></div>
-<noscript><p class="decision-noscript">Applying needs scripting enabled in this browser.</p></noscript>
-${earlier}</section>
+    return `<h1 id="application-heading">Approved</h1>
+${note('The page has not changed. Applying is a separate step.')}
+<div class="rv-act"><button type="button" class="rv-pri" data-apply>Apply to page</button></div>
+<noscript><p class="rv-note">Applying needs scripting enabled in this browser.</p></noscript>${earlier}
 <dialog id="decision-dialog" aria-labelledby="apply-dialog-title">
 <form id="apply-form" class="decision-sheet" data-queue-id="${escapeHtml(summary.queueId)}" data-csrf="${escapeHtml(csrfToken)}">
-<h2 id="apply-dialog-title">Apply this suggestion to the page?</h2>
-<p class="dialog-suggestion"><strong>${change}</strong><span>${sourcePath}</span></p>
+<h2 id="apply-dialog-title">Apply to the page?</h2>
+<p class="dialog-suggestion"><span>${sourcePath}</span></p>
 <p id="apply-status" class="status" role="status" aria-live="polite" tabindex="-1"></p>
-<p class="decision-boundary">This changes the page and publishes it. It runs in the background, and the next screen follows it step by step.</p>
-<div class="dialog-actions"><button type="button" class="dialog-back" data-dialog-cancel>Cancel</button><button type="button" id="apply-confirm" class="decision-approve">Apply to page</button></div>
+<p class="decision-boundary">This changes the page, commits and pushes it, and publishes it, the same way your own saves do. The next screen follows it step by step.</p>
+<div class="dialog-actions"><button type="button" class="dialog-back" data-dialog-cancel>Cancel</button><button type="button" id="apply-confirm" class="rv-pri">Apply to page</button></div>
 </form>
 </dialog>`;
   }
-  return `<section class="application-step application-blocked" aria-labelledby="application-heading">
-<h2 id="application-heading">Putting it on the page</h2>
-<p>Could not check the page just now${application.reason ? ` (${escapeHtml(application.reason)})` : ''}. Reload to try again.</p>
-</section>`;
+  return `<h1 id="application-heading">Approved</h1>${note(`The page has not changed. Couldn’t check whether it can be applied just now${application.reason ? ` (${escapeHtml(application.reason)})` : ''}. Reload to try again.`)}`;
 }
 
-function decisionDetailPage({ decision, summary, queueRetained, application = null, csrfToken = '' }) {
+// A decided proposal, with the pinned page text while the queue still holds it
+// (display only; the decision record itself never keeps page text).
+function decidedEntry({ decision, summary, document = null }) {
   const entry = decisionEntry(decision, summary);
-  const view = proposalView(entry);
+  return document === null ? entry : Object.freeze({ ...entry, document });
+}
+
+function decisionDetailPage({ decision, summary, queueRetained, application = null, csrfToken = '', appearance, firstAnchor = null }) {
+  const entry = decisionEntry(decision, summary);
+  const title = proposalTitle(entry);
   const approved = decision.action === 'approve';
-  const applied = approved && application?.state === 'applied';
-  const consequence = approved
-    ? 'Nothing on the page changed when you approved. Putting it on the page is the separate step below.'
-    : 'Nothing on the page changed and nothing was published or scheduled.';
-  const boundary = applied
-    ? `<div class="source-unchanged source-applied"><strong>Applied</strong><span>Approving changed nothing. The change reached the page through the step below, by your own action.</span></div>`
-    : `<div class="source-unchanged"><strong>Source unchanged</strong><span>${consequence}</span></div>`;
-  return pageShell({
-    title: approved ? 'Suggestion approved' : 'Suggestion rejected',
-    bodyClass: 'proposal-review-page',
-    script: application?.state === 'eligible' ? '/owner/assets/apply.js' : null,
-    body: `<main class="owner-shell review-shell" id="owner-decision-detail">
-<header class="owner-header decision-receipt-header">
-<a class="back-link" href="/owner/review">Back to Proposals</a>
-<h1>${approved ? 'You approved this suggestion' : 'You rejected this suggestion'}</h1>
-<p class="decision-time">${reviewTime(decision.decidedAt)}</p>
-</header>
-<section class="decision-result ${approved ? 'decision-approved' : 'decision-rejected'}" aria-label="Your decision">
-<p class="context-copy">${changeSummaryHtml(view)}</p>
-<p class="receipt-path">${escapeHtml(summary.source.path)}</p>
-<blockquote class="decision-note">${escapeHtml(decision.reason)}</blockquote>
-${boundary}
-</section>
-${view.version === 2 ? changeInspection(entry) : ''}
-${approved ? applicationStep({ application, view, summary, csrfToken, entry }) : ''}
-${technicalEvidence(entry, {
-  decision,
-  queueRetained,
-  title: 'Details for the record',
-})}
-</main>`,
-  });
+  const panel = approved
+    ? applicationPanel({ application, summary, csrfToken, entry })
+    : '<h1 id="application-heading">Rejected</h1><p class="rv-note">Nothing changed. The page is exactly as it was.</p>';
+  const note = `<p class="rv-meta">${approved ? 'Approved' : 'Rejected'} ${reviewTime(decision.decidedAt)}. Your note: <q class="decision-note">${escapeHtml(decision.reason)}</q></p>`;
+  return reviewPage({ title: approved ? 'Proposal approved' : 'Proposal rejected', appearance, receipt: true,
+    script: ['/owner/assets/review.js', ...(application?.state === 'eligible' ? ['/owner/assets/apply.js'] : [])],
+    body: receiptShell({ siteTitle: appearance.siteTitle, title,
+      frameUrl: `/owner/decisions/${encodeURIComponent(summary.queueId)}/page`, firstAnchor,
+      senderHtml: proposalSender(entry), panelHtml: `${panel}${note}`,
+      detailsHtml: `${changeInspection(entry)}${contributorReferences(entry)}${technicalEvidence(entry, { decision, queueRetained, disclosure: false })}` }) });
+}
+
+function decisionFramePage({ decision, summary, document = null }, appearance) {
+  const entry = decisionEntry(decision, summary);
+  return excerptDocument({ operations: proposalView(entry).operations, title: proposalTitle(entry),
+    sourcePath: summary.source.path, colorScheme: appearance.colorScheme,
+    baseText: document?.reason === null && typeof document.baseText === 'string' ? document.baseText : null });
 }
 
 function optionalQueryObject(url, allowed) {
@@ -1325,8 +1411,10 @@ function reviewQueueId(encoded) {
 function validateDecisionBody(value, routeQueueId) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
   const required = ['queueId', 'reviewEvidenceDigest', 'action', 'reason', 'csrf'];
-  const keys = Object.keys(value);
+  // The one optional field: an explicit "I've seen the changes the page can't show".
+  const keys = Object.keys(value).filter((key) => key !== 'acknowledgedInvisible');
   if (keys.length !== required.length || !required.every((key) => keys.includes(key))) return null;
+  if (Object.hasOwn(value, 'acknowledgedInvisible') && (value.acknowledgedInvisible !== true || value.action !== 'approve')) return null;
   if (value.queueId !== routeQueueId
     || !['approve', 'reject'].includes(value.action)
     || !exactToken(value.csrf)
@@ -1400,63 +1488,19 @@ function safePathSegments(encodedPath, { directoryIndex = true } = {}) {
   return segments;
 }
 
-function contained(root, candidate) {
-  const relative = path.relative(root, candidate);
-  return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
-}
-
 async function readSafeStatic(rootInput, encodedPath, { directoryIndex = true } = {}) {
   const root = path.resolve(rootInput);
   const segments = safePathSegments(encodedPath, { directoryIndex });
-  let rootReal;
   try {
-    const rootMetadata = await lstat(root);
-    if (rootMetadata.isSymbolicLink() || !rootMetadata.isDirectory()) return { status: 404 };
-    rootReal = await realpath(root);
-  } catch {
-    return { status: 404 };
-  }
-  if (rootReal !== root) return { status: 404 };
-
-  let current = root;
-  for (const segment of segments) {
-    current = path.join(current, segment);
-    let metadata;
-    try {
-      metadata = await lstat(current);
-    } catch (error) {
-      if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') return { status: 404 };
-      return { status: 500 };
-    }
-    if (metadata.isSymbolicLink()) return { status: 404 };
-  }
-
-  let candidateReal;
-  try {
-    candidateReal = await realpath(current);
-  } catch {
-    return { status: 404 };
-  }
-  if (candidateReal !== current || !contained(rootReal, candidateReal)) return { status: 404 };
-
-  let handle;
-  try {
-    handle = await open(current, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-    const metadata = await handle.stat();
-    if (!metadata.isFile() || metadata.nlink !== 1) return { status: 404 };
-    if (metadata.size > MAX_STATIC_BYTES) return { status: 413 };
-    const realMetadata = await stat(candidateReal);
-    if (metadata.dev !== realMetadata.dev || metadata.ino !== realMetadata.ino) return { status: 404 };
     return {
       status: 200,
-      bytes: await handle.readFile(),
-      contentType: CONTENT_TYPES[path.extname(current).toLowerCase()] ?? 'application/octet-stream',
+      bytes: await readSiteFile(root, segments),
+      contentType: CONTENT_TYPES[path.extname(segments.at(-1)).toLowerCase()] ?? 'application/octet-stream',
     };
   } catch (error) {
-    if (error?.code === 'ELOOP' || error?.code === 'ENOENT') return { status: 404 };
+    if (['ELOOP', 'ENOENT', 'ENOTDIR', 'EINVAL'].includes(error?.code)) return { status: 404 };
+    if (error?.code === 'EFBIG') return { status: 413 };
     return { status: 500 };
-  } finally {
-    await handle?.close();
   }
 }
 
@@ -1483,7 +1527,7 @@ async function staticResponse(root, encodedPath, request, options = {}) {
   if (result.status !== 200) return errorResponse(result.status, result.status === 404 ? 'not-found' : 'static-unavailable');
   const bytes = result.bytes;
   const csp = options.csp ?? (options.reader === true ? READER_CSP : OWNER_CSP);
-  const headers = securityHeaders({ cache: 'private, max-age=0, must-revalidate', csp });
+  const headers = securityHeaders({ cache: options.reader === true ? 'private, no-store' : 'private, max-age=0, must-revalidate', csp });
   headers.set('Content-Type', result.contentType);
   headers.set('Content-Length', String(bytes.length));
   return new Response(request.method === 'HEAD' ? null : bytes, { status: 200, headers });
@@ -1493,8 +1537,16 @@ export function createReaderHandler({
   config: configInput,
   projectRoot = PROJECT_ROOT,
   siteRoot,
+  // The base path the site is built for (site-base.js); by default from live.baseUrl.
+  siteBase = null,
+  hasOwnerSession = () => false,
+  witnessToken = null,
 } = {}) {
   const config = validateOwnerAlphaConfig(configInput);
+  const base = siteBase ?? configuredSiteBase(config);
+  if (typeof base !== 'string' || !/^\/(?:[A-Za-z0-9._~-]+\/)*$/u.test(base) || /\/\.{1,2}\//u.test(base)) {
+    throw new TypeError('siteBase must be "/" or "/a/b/"');
+  }
   const expectedHost = `${config.listen.host}:${config.listen.readerPort}`;
   const expectedOrigin = `http://${expectedHost}`;
   const resolvedSiteRoot = siteRoot ?? path.resolve(projectRoot, config.workspace.site);
@@ -1513,6 +1565,10 @@ export function createReaderHandler({
       return errorResponse(400, 'invalid-url');
     }
     if (url.origin !== expectedOrigin) return errorResponse(421, 'invalid-host');
+    // Cookies are host-scoped, not port-scoped. Use the owner listener's live
+    // session store, never a second login or a capability in an asset URL.
+    const witness = witnessToken !== null && sameSecret(request.headers.get('x-cyberbaser-reader-witness'), witnessToken);
+    if (!witness && !hasOwnerSession(request)) return errorResponse(403, 'owner-session-required');
     const redirect = (location) => {
       const headers = securityHeaders({ csp });
       headers.set('Location', location);
@@ -1526,16 +1582,16 @@ export function createReaderHandler({
       if (!acceptsHtml) return errorResponse(404, 'not-found');
       const headers = securityHeaders({ csp });
       headers.set('Content-Type', 'text/html; charset=utf-8');
-      return new Response(request.method === 'HEAD' ? null : '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Page not found</title><main><h1>Page not found</h1><p>This page is not available. <a href="/cyberbase/">Go to the site home</a>.</p></main></html>', { status: 404, headers });
+      return new Response(request.method === 'HEAD' ? null : `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Page not found</title><main><h1>Page not found</h1><p>This page is not available. <a href="${escapeHtml(base)}">Go to the site home</a>.</p></main></html>`, { status: 404, headers });
     };
-    if (url.pathname === '/') return response(null, 302, { Location: '/cyberbase/' });
-    if (url.pathname === '/cyberbase') {
+    if (base !== '/' && url.pathname === '/') return response(null, 302, { Location: base });
+    if (base !== '/' && url.pathname === base.slice(0, -1)) {
       if (url.search !== '') return errorResponse(400, 'unexpected-query');
-      return redirect('/cyberbase/');
+      return redirect(base);
     }
-    if (!url.pathname.startsWith('/cyberbase/')) return notFound();
+    if (!url.pathname.startsWith(base)) return notFound();
     if (url.search !== '') return errorResponse(400, 'unexpected-query');
-    const encodedPath = url.pathname.slice('/cyberbase/'.length);
+    const encodedPath = url.pathname.slice(base.length);
     const options = { cleanHtml: true, reader: true, csp };
     const original = await staticResponse(resolvedSiteRoot, encodedPath, request, options);
     if (original.status !== 404) return original;
@@ -1549,7 +1605,7 @@ export function createReaderHandler({
         const canonicalPath = segments.map((segment) => encodeURIComponent(segment)).join('/') + (directory ? '/' : '');
         if (canonicalPath !== encodedPath) {
           const recovered = await staticResponse(resolvedSiteRoot, canonicalPath, request, options);
-          if (recovered.status === 200) return redirect(`/cyberbase/${canonicalPath}`);
+          if (recovered.status === 200) return redirect(`${base}${canonicalPath}`);
         }
       } catch {
         // Unsafe or malformed extra encodings remain a miss, never a redirect.
@@ -1589,6 +1645,172 @@ function commandGate(commands, grant, principal) {
   }
 }
 
+// How the owner's site looks, for the review frame and its site line: only a
+// title and a colour scheme. Anything else falls back to the quiet default.
+const REVIEW_SCHEMES = Object.freeze(['light', 'dark', 'system']);
+function validReviewAppearance(value, config) {
+  const fallbackTitle = path.posix.basename(new URL(config.repository.remote.url).pathname).replace(/\.git$/u, '') || 'Your site';
+  const siteTitle = typeof value?.siteTitle === 'string' && value.siteTitle.trim().length > 0 && value.siteTitle.length <= 80
+    && !/\p{Cc}/u.test(value.siteTitle) ? value.siteTitle.trim() : fallbackTitle[0].toUpperCase() + fallbackTitle.slice(1);
+  const colorScheme = REVIEW_SCHEMES.includes(value?.colorScheme) ? value.colorScheme : 'light';
+  const addressStyle = value?.addressStyle === undefined ? DEFAULT_ADDRESS_STYLE
+    : ADDRESS_STYLES.includes(value.addressStyle) ? value.addressStyle : null;
+  return Object.freeze({ siteTitle, colorScheme, addressStyle });
+}
+
+/** The vault's own `.cyberbaser/site.yml` title and colour scheme, when it is a regular file. */
+export async function readReviewAppearance(config) {
+  try {
+    const file = path.join(config.repository.checkout, '.cyberbaser', 'site.yml');
+    const info = await lstat(file);
+    if (!info.isFile() || info.size > 64 * 1024) return null;
+    const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+    let text;
+    try { text = await handle.readFile('utf8'); } finally { await handle.close(); }
+    const parsed = Bun.YAML.parse(text);
+    // The address style the renderer uses (null: one this code does not know; review pages then fall back).
+    const addresses = readAddressStyle(text);
+    return { siteTitle: parsed?.site?.title, colorScheme: parsed?.appearance?.colorScheme, addressStyle: addresses.ok ? addresses.style : null };
+  } catch {
+    return null;
+  }
+}
+
+const KIND_LABELS = Object.freeze({ agent: 'Agent', 'owner-device': 'Phone or computer' });
+const ACCESS_LABELS = Object.freeze({ propose: 'Suggest changes', review: 'Review and suggest', full: 'Everything you can do' });
+
+function grantSummary(kind, grants) {
+  const set = new Set(grants);
+  if (set.size === 1 && set.has('propose')) return 'Suggests changes for you to review';
+  if (['read', 'review', 'propose'].every((grant) => set.has(grant)) && set.size === 3) return 'Reviews and suggests changes';
+  if (set.size === 7) return 'Everything you can do';
+  return grants.join(', ');
+}
+
+function deviceRow(device) {
+  const kind = KIND_LABELS[device.kind] ?? device.kind;
+  return `<li class="device-row${device.revoked ? ' is-revoked' : ''}" data-key-id="${escapeHtml(device.keyId)}">
+<div class="device-name"><strong>${escapeHtml(device.label)}</strong><span>${escapeHtml(kind)} · ${escapeHtml(grantSummary(device.kind, device.grants))}</span></div>
+${device.revoked ? '<span class="device-state">Revoked</span>' : `<button type="button" class="quiet-danger" data-revoke="${escapeHtml(device.keyId)}">Revoke</button>`}
+</li>`;
+}
+
+function segmented(name, legend, options, checked) {
+  return `<fieldset class="segmented" data-field="${name}"><legend>${escapeHtml(legend)}</legend><div class="segmented-track">${options.map(([value, label]) => `<label class="segment"><input type="radio" name="${name}" value="${escapeHtml(value)}"${value === checked ? ' checked' : ''}><span>${escapeHtml(label)}</span></label>`).join('')}</div></fieldset>`;
+}
+
+// The pairing form shared by Devices and first-run setup. A fixed kind
+// renders as a hidden field, so setup asks only what matters for that step.
+// `access` is the preselected choice for a phone or computer.
+export function pairFormHtml({ kind = null, label = 'My agent', access = null } = {}) {
+  const kindField = kind === null
+    ? segmented('kind', 'What is it?', [['agent', 'Agent'], ['owner-device', 'Phone or computer']], 'agent')
+    : `<input type="hidden" name="kind" value="${escapeHtml(kind)}">`;
+  const accessField = kind === 'agent'
+    ? '<input type="hidden" name="access" value="propose">'
+    : segmented('access', 'What may it do?', Object.entries(ACCESS_LABELS), access ?? (kind === 'owner-device' ? 'review' : 'propose'));
+  return `<form id="pair-form" class="pair-form">
+${kindField}
+${accessField}
+<p class="access-note" id="access-note"${kind === 'owner-device' ? ' hidden' : ''}>Agents can only suggest changes. You review each one.</p>
+<label class="field" for="pair-label">Name<input id="pair-label" name="label" maxlength="64" autocomplete="off" value="${escapeHtml(label)}" required></label>
+<div class="pair-actions"><button type="submit">${kind === 'agent' ? 'Get pairing line' : kind === 'owner-device' ? 'Show QR code' : 'Get pairing code'}</button></div>
+<p class="status" id="pair-status" role="status" aria-live="polite"></p>
+</form>
+<div id="pair-live" class="pair-live" hidden aria-live="polite"></div>`;
+}
+
+function devicesPage({ csrfToken, devices, reachable, linking = false }) {
+  const active = devices.filter((device) => !device.revoked);
+  const revoked = devices.filter((device) => device.revoked);
+  const list = active.length === 0
+    ? '<p class="devices-empty">Nothing paired yet. Pair an agent or phone below.</p>'
+    : `<ul class="device-list" id="device-list">${active.map(deviceRow).join('')}</ul>`;
+  return pageShell({
+    title: 'Devices and agents',
+    script: '/owner/assets/devices.js',
+    bodyClass: 'devices-page',
+    body: `<main class="owner-shell devices-shell" id="devices" data-csrf="${escapeHtml(csrfToken)}">
+<header class="owner-header"><h1>Devices and agents</h1><p class="lede">Each one can do only what you picked when you paired it. Revoke takes effect at once.</p></header>
+<section class="devices-section" aria-labelledby="paired-heading"><h2 id="paired-heading">Paired</h2><div id="device-list-slot">${list}</div>
+${revoked.length ? `<details class="revoked-list"><summary>Revoked (${revoked.length})</summary><ul class="device-list">${revoked.map(deviceRow).join('')}</ul></details>` : ''}</section>
+<section class="devices-section" aria-labelledby="pair-heading"><h2 id="pair-heading">Pair a new one</h2>
+${reachable ? pairFormHtml() : '<p class="devices-empty">Pairing needs Iroh reach turned on for this node.</p>'}
+<noscript><p>Pairing and Revoke need scripting enabled in this browser.</p></noscript>
+</section>
+${linking ? `<section class="devices-section" id="link-notes" aria-labelledby="link-heading" hidden><h2 id="link-heading">Notes to link</h2>
+<p class="section-note">A device sent a note this node could not place in your vault. Pick the vault file it belongs to. It links only if both texts match.</p>
+<div id="link-list"></div><datalist id="vault-paths"></datalist></section>` : ''}
+</main>`,
+  });
+}
+
+function parseDevicesBody(fields) {
+  return (text) => {
+    const value = JSON.parse(text);
+    if (!value || typeof value !== 'object' || Array.isArray(value)
+      || Object.keys(value).sort().join(',') !== [...fields, 'csrf'].sort().join(',') || !exactToken(value.csrf)) throw new Error('fields');
+    return value;
+  };
+}
+
+/**
+ * Routes under /owner/devices, shared by the owner app and first-run setup.
+ * Returns null for any other path. `page` renders the full Devices page.
+ */
+export async function handleDeviceRoutes({ request, url, csrfToken, devices, page = true }) {
+  if (url.pathname !== '/owner/devices' && !url.pathname.startsWith('/owner/devices/')) return null;
+  if (devices === null) return errorResponse(404, 'devices-unavailable');
+  const { store, pairing } = devices;
+  if (url.search !== '') return errorResponse(400, 'unexpected-query');
+  if (url.pathname === '/owner/devices') {
+    if (!page) return errorResponse(404, 'not-found');
+    if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
+    return html(request.method === 'HEAD' ? null : devicesPage({ csrfToken, devices: store.list(), reachable: pairing.available(),
+      linking: Boolean(devices.links) }));
+  }
+  if (url.pathname === '/owner/devices/state') {
+    if (request.method !== 'GET') return response(null, 405, { Allow: 'GET' });
+    return json({ devices: store.list(), pairings: pairing.list() });
+  }
+  if (url.pathname === '/owner/devices/links') {
+    // Owner session only: paths the devices reported and the published
+    // vault paths to pick from. Never note text.
+    if (request.method !== 'GET') return response(null, 405, { Allow: 'GET' });
+    if (!devices.links) return errorResponse(404, 'not-found');
+    let paths = [];
+    try { paths = await devices.noteStatus.publishedPaths(); } catch { /* picker stays empty */ }
+    return json({ requests: devices.links.list(), paths });
+  }
+  const action = { '/owner/devices/pair': ['kind', 'access', 'label'], '/owner/devices/confirm': ['enrollmentId', 'words'],
+    '/owner/devices/cancel': ['enrollmentId'], '/owner/devices/revoke': ['keyId'],
+    ...(devices.links ? { '/owner/devices/link': ['requestId', 'vaultPath'], '/owner/devices/link-dismiss': ['requestId'] } : {}) }[url.pathname];
+  if (!action) return errorResponse(404, 'not-found');
+  if (request.method !== 'POST') return response(null, 405, { Allow: 'POST' });
+  let body;
+  try { body = await readBoundedJson(request, 2048, parseDevicesBody(action)); }
+  catch (error) { return errorResponse(error?.status ?? 400, 'invalid-devices-body'); }
+  if (!sameSecret(body.csrf, csrfToken)) return errorResponse(403, 'invalid-csrf');
+  try {
+    if (url.pathname === '/owner/devices/pair') {
+      const started = pairing.start({ kind: body.kind, access: body.access, label: typeof body.label === 'string' ? body.label.trim() : null });
+      // A phone camera opens obsidian://cyberbaser-pair?code=… straight into pairing.
+      const link = `obsidian://cyberbaser-pair?code=${encodeURIComponent(started.code)}`;
+      const matrix = qrMatrix(link);
+      return json({ ok: true, ...started, link, qr: { size: matrix.size + 8, path: qrPath(matrix) } });
+    }
+    if (url.pathname === '/owner/devices/link') {
+      try { return json({ ok: true, ...(await devices.links.confirm({ requestId: body.requestId, vaultPath: body.vaultPath })) }); }
+      catch (error) { return json({ ok: false, reason: error instanceof OwnerAlphaError ? error.code : 'link-refused' }, 409); }
+    }
+    if (url.pathname === '/owner/devices/link-dismiss') { devices.links.dismiss(body.requestId); return json({ ok: true }); }
+    if (url.pathname === '/owner/devices/confirm') return json({ ok: true, ...(await pairing.confirm({ enrollmentId: body.enrollmentId, words: body.words })) });
+    if (url.pathname === '/owner/devices/cancel') { pairing.cancel(body.enrollmentId); return json({ ok: true }); }
+    await store.revoke(body.keyId);
+    return json({ ok: true });
+  } catch { return errorResponse(409, 'devices-refused'); }
+}
+
 export function createOwnerAlphaHandler({
   config: configInput,
   projectRoot = PROJECT_ROOT,
@@ -1604,8 +1826,47 @@ export function createOwnerAlphaHandler({
   ownerPublication = null,
   createToken = token,
   createJobId = () => `OA-${randomUUID()}`,
+  // The private reader's base path (site-base.js); by default from live.baseUrl.
+  siteBase = null,
+  reviewAppearance = null,
+  // The owner-private site build whose pages a proposal is shown on. Null
+  // shows every proposal on the simplified rendering.
+  reviewSiteRoot = null,
+  // New pages from bundles on the site's own design (bundle-preview.js). By
+  // default only with a configured renderer; null keeps the simplified page.
+  bundlePreview = undefined,
+  // { store, pairing } when Iroh reach is on: the Devices and agents page.
+  devices = null,
+  // Publishing to GitHub: relays to the publisher's forge control, never a credential.
+  forgeSetup = null,
+  // { sessionToken, csrfToken } the first-run setup in this same process
+  // already gave the owner's browser, so setup ends signed in. Never on disk.
+  adoptSession = null,
+  // { current() -> { state: 'reachable' | 'unreachable' | 'unknown' } }: whether
+  // the publisher last reached GitHub. Shown quietly where publishing needs it.
+  upstream = null,
+  // () -> false, or 'running' / 'failed' while startup job recovery has not
+  // settled cleanly. Owner actions that
+  // could conflict with a recovering job are refused until it settles; signing
+  // in and reading stay available.
+  recovering = () => false,
 } = {}) {
   const config = validateOwnerAlphaConfig(configInput);
+  if (typeof recovering !== 'function') throw new TypeError('recovering must be a function');
+  const appearance = validReviewAppearance(reviewAppearance, config);
+  const previewBundle = bundlePreview === undefined ? createBundlePreview({ config, projectRoot }) : bundlePreview;
+  if (previewBundle !== null && typeof previewBundle !== 'function') throw new TypeError('bundlePreview must be null or a function');
+  if (reviewSiteRoot !== null && (typeof reviewSiteRoot !== 'string' || !path.isAbsolute(reviewSiteRoot))) {
+    throw new TypeError('reviewSiteRoot must be null or one absolute path');
+  }
+  // The site page with its changes, or why the simplified rendering is shown.
+  async function siteReview(entry) {
+    if (reviewSiteRoot === null) return { html: null, reason: null };
+    const { document, operations, model } = reviewDisplay(entry);
+    return siteReviewFrame({ siteRoot: reviewSiteRoot, sourcePath: entry.summary.source.path, revision: entry.summary.source.revision,
+      document, operations, model, colorScheme: appearance.colorScheme, rendererName: rendererIdentity(config).name,
+      addressStyle: appearance.addressStyle });
+  }
   if (typeof createEditSession !== 'function'
     || typeof saveEdit !== 'function'
     || typeof lookupJob !== 'function'
@@ -1631,6 +1892,7 @@ export function createOwnerAlphaHandler({
   const commands = createOwnerCommands({
     config, projectRoot, principalAdapter, createEditSession, editSessions, handoffs, directEdits,
     saveEdit, lookupJob, createJobId, proposalReview, publication: bindPublication(ownerPublication),
+    bundleDesk: devices?.bundleDesk ?? null,
   });
   // Each consumed bootstrap capability becomes one device session with its own
   // cookie and CSRF token, so one captured device secret is not every device's
@@ -1687,11 +1949,22 @@ export function createOwnerAlphaHandler({
     return found;
   }
 
+  if (adoptSession !== null) {
+    const { sessionToken, csrfToken } = adoptSession ?? {};
+    if (!exactToken(sessionToken) || !exactToken(csrfToken) || sessionToken === csrfToken) {
+      throw new TypeError('adoptSession needs two distinct 32-byte base64url tokens');
+    }
+    issuedTokens.add(sessionToken);
+    issuedTokens.add(csrfToken);
+    sessions.set(sessionToken, { csrfToken, principal: principalAdapter.fromSession({
+      id: config.owner.identity, sessionId: randomUUID(), authenticatedAt: Date.now() }) });
+  }
   issueBootstrap();
   const initialBootstrapToken = outstanding.bootstrapToken;
   const expectedHost = `${config.listen.host}:${config.listen.port}`;
   const expectedOrigin = `http://${expectedHost}`;
   const readerOrigin = `http://${config.listen.host}:${config.listen.readerPort}`;
+  const readerHome = `${readerOrigin}${siteBase ?? configuredSiteBase(config)}`;
   const maximumBodyBytes = Math.min(
     config.limits.maxArtifactBytes,
     config.limits.maxSourceBytes + 16 * 1024,
@@ -1747,7 +2020,7 @@ export function createOwnerAlphaHandler({
       const sessionToken = query ? consumeBootstrap(query.token) : null;
       if (sessionToken === null) return errorResponse(403, 'invalid-bootstrap');
       return response(null, 303, {
-        Location: config.ownerPublication.enabled ? '/owner/publication' : `${readerOrigin}/cyberbase/`,
+        Location: config.ownerPublication.enabled ? '/owner/publication' : readerHome,
         'Set-Cookie': cookieHeader(sessionToken),
       });
     }
@@ -1775,7 +2048,7 @@ export function createOwnerAlphaHandler({
       // same reader page in visitor mode. Fixed reader origin, so no open redirect.
       const query = queryObject(url, ['relativePath', 'slug']);
       if (query && typeof query.slug === 'string' && query.slug.length > 0 && query.slug.length <= 1024 && !query.slug.split('/').some((part) => part === '' || part === '.' || part === '..')) {
-        return response(null, 303, { Location: `${liveUrlForSlug(`${readerOrigin}/cyberbase/`, query.slug)}#edit` });
+        return response(null, 303, { Location: `${liveUrlForSlug(readerHome, query.slug)}#edit` });
       }
     }
     if (deviceSession === null) {
@@ -1785,10 +2058,16 @@ export function createOwnerAlphaHandler({
     if (request.method === 'POST' && request.headers.get('origin') !== expectedOrigin) {
       return errorResponse(403, 'invalid-origin');
     }
+    // Every signed-in owner POST starts or records an owner act. While an
+    // earlier job is still being resumed, none may run beside it.
+    if (request.method === 'POST') {
+      const recovery = recovering();
+      if (recovery) return recoveryRefusal(recovery);
+    }
 
     if (url.pathname === '/') {
       if (request.method !== 'GET' && request.method !== 'HEAD') return response(null, 405, { Allow: 'GET, HEAD' });
-      return response(null, 302, { Location: config.ownerPublication.enabled ? '/owner/publication' : `${readerOrigin}/cyberbase/` });
+      return response(null, 302, { Location: config.ownerPublication.enabled ? '/owner/publication' : readerHome });
     }
 
     const asset = {
@@ -1798,13 +2077,23 @@ export function createOwnerAlphaHandler({
       '/owner/assets/review.js': 'review.js',
       '/owner/assets/apply.js': 'apply.js',
       '/owner/assets/publication.js': 'publication.js',
+      '/owner/assets/devices.js': 'devices.js',
+      '/owner/assets/github.js': 'github.js',
       '/owner/assets/owner.css': 'owner.css',
+      '/owner/assets/review.css': 'review.css',
     }[url.pathname];
     if (asset) {
       if (request.method !== 'GET' && request.method !== 'HEAD') return response(null, 405, { Allow: 'GET, HEAD' });
       if (url.search !== '') return errorResponse(400, 'unexpected-query');
       return staticResponse(publicRoot, asset, request, { directoryIndex: false });
     }
+
+    const forgeResponse = await handleForgeSetup({ request, url, csrfToken, setup: forgeSetup,
+      tools: { html, json, errorResponse, response, pageShell, readBoundedJson, sameSecret } });
+    if (forgeResponse !== null) return forgeResponse;
+
+    const devicesResponse = await handleDeviceRoutes({ request, url, csrfToken, devices });
+    if (devicesResponse !== null) return devicesResponse;
 
     if (url.pathname === '/owner/publication' || url.pathname.startsWith('/owner/publication/')
       || url.pathname.startsWith('/api/publication/')) {
@@ -1813,7 +2102,7 @@ export function createOwnerAlphaHandler({
       if (url.pathname === '/owner/publication') {
         if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405, { Allow: 'GET, HEAD' });
         if (url.search) return errorResponse(400, 'invalid-publication-query');
-        return html(request.method === 'HEAD' ? null : publicationLanding(config, csrfToken, readerOrigin));
+        return html(request.method === 'HEAD' ? null : publicationLanding(config, csrfToken, readerHome));
       }
       const current = /^\/owner\/publication\/current\/([0-9a-f]{64})$/u.exec(url.pathname);
       if (current) {
@@ -1874,6 +2163,60 @@ export function createOwnerAlphaHandler({
       }
     }
 
+    // Route C for new pages and images (core/bundle-desk.js).
+    const bundleMatch = /^\/owner\/bundles(?:\/(bundle-[0-9a-f-]{36})(?:\/(page|image|approve|decline)(?:\/(\d))?)?)?$/u.exec(url.pathname);
+    if (bundleMatch && devices?.bundleDesk) {
+      const denied = commandGate(commands, 'review', principal);
+      if (denied) return denied;
+      const desk = devices.bundleDesk;
+      const [, bundleId, part, index] = bundleMatch;
+      try {
+        if (bundleId === undefined) {
+          if (request.method !== 'GET') return response(null, 405, { Allow: 'GET' });
+          return html(bundleListPage({ records: await desk.list() }));
+        }
+        if (part === 'approve' || part === 'decline') {
+          if (request.method !== 'POST' || index !== undefined) return response(null, 405, { Allow: 'POST' });
+          const body = await readBoundedJson(request, 4096, (text) => Object.fromEntries(new URLSearchParams(text)), 'application/x-www-form-urlencoded');
+          if (!sameSecret(body.csrf ?? '', csrfToken)) return errorResponse(403, 'invalid-csrf');
+          await commands[part === 'approve' ? 'approveBundle' : 'declineBundle']({ bundleId }, principal);
+          return response(null, 303, { Location: `/owner/bundles/${bundleId}` });
+        }
+        if (request.method !== 'GET') return response(null, 405, { Allow: 'GET' });
+        const record = await desk.load(bundleId);
+        if (part === undefined) return html(bundleShellPage({ record, csrfToken, colorScheme: appearance.colorScheme }), 200, { 'Content-Security-Policy': REVIEW_SHELL_CSP });
+        if (index === undefined) return errorResponse(404, 'bundle-not-found');
+        const bundle = parsePageBundle(record.bundleText);
+        if (part === 'image') {
+          const image = record.images[Number(index)];
+          if (!image) return errorResponse(404, 'bundle-not-found');
+          const { bytes } = await desk.readImage(bundleId, image.path);
+          const type = sniffedImageType(bytes);
+          if (type === null || type !== image.mediaType) return errorResponse(415, 'asset-type-refused');
+          return response(bytes, 200, { ...BUNDLE_IMAGE_HEADERS, 'Content-Type': type });
+        }
+        const addition = record.publicAdditions[Number(index)];
+        const note = addition && bundle.files.find((file) => file.path === addition.path && file.kind === 'create');
+        if (!note) return errorResponse(404, 'bundle-not-found');
+        if (previewBundle !== null) {
+          const site = await previewBundle({ bundleId, index: Number(index), bundle, record, colorScheme: appearance.colorScheme,
+            readImage: (imagePath) => desk.readImage(bundleId, imagePath) });
+          if (typeof site === 'string') return frameResponse(site, 200, SITE_FRAME_CSP);
+          // The renderer would not put the page at the address shown: refuse the bundle.
+          if (site?.refused === 'address-mismatch') {
+            await desk.markStale(bundleId, 'address-mismatch');
+            return errorResponse(409, 'address-mismatch');
+          }
+        }
+        const images = new Map();
+        for (const image of record.images) images.set(image.path, await desk.readImage(bundleId, image.path));
+        return frameResponse(bundleFramePage({ path: note.path, text: note.text, address: addition.address, images }), 200, BUNDLE_FRAME_CSP);
+      } catch (error) {
+        if (error?.status) return errorResponse(error.status, 'invalid-request-body');
+        return errorResponse(error?.code === 'bundle-not-found' ? 404 : 409, error instanceof OwnerAlphaError ? error.code : 'bundle-failed');
+      }
+    }
+
     if (url.pathname === '/owner/review' || url.pathname === '/api/review') {
       const denied = commandGate(commands, 'review', principal);
       if (denied) return denied;
@@ -1905,7 +2248,7 @@ export function createOwnerAlphaHandler({
         });
       }
       if (request.method === 'HEAD') return html(null);
-      return html(reviewListPage({ overlay: review, nextCursor: review.nextCursor }));
+      return html(reviewListPage({ overlay: review, nextCursor: review.nextCursor, upstream }));
     }
 
     const reviewDecisionMatch = url.pathname.match(/^\/api\/review\/([^/]+)\/decision$/u);
@@ -1925,6 +2268,19 @@ export function createOwnerAlphaHandler({
       const intent = validateDecisionBody(body, queueId);
       if (intent === null) return errorResponse(400, 'invalid-decision-request');
       if (!sameSecret(intent.csrf, csrfToken)) return errorResponse(403, 'invalid-csrf');
+      if (intent.action === 'approve' && intent.acknowledgedInvisible !== true) {
+        // Changes the page can't show must be seen before Approve. Recording
+        // still reloads and checks the evidence exactly as before.
+        let pending;
+        try {
+          pending = await commands.readProposal({ queueId }, principal);
+        } catch (error) {
+          return errorResponse(reviewErrorStatus(error), error instanceof OwnerAlphaError ? error.code : 'decision-record-failed');
+        }
+        if (pending.decision === null && pending.entry && requiresAcknowledgement(pending.entry)) {
+          return errorResponse(409, 'unseen-changes-not-acknowledged');
+        }
+      }
       try {
         const recorded = await commands.recordDecision({
           queueId,
@@ -1987,6 +2343,37 @@ export function createOwnerAlphaHandler({
       }
     }
 
+    const reviewFrameMatch = url.pathname.match(/^\/owner\/(review|decisions)\/([^/]+)\/page$/u);
+    if (reviewFrameMatch) {
+      const denied = commandGate(commands, 'review', principal);
+      if (denied) return denied;
+      if (request.method !== 'GET' && request.method !== 'HEAD') return response(null, 405, { Allow: 'GET, HEAD' });
+      if (url.search !== '') return errorResponse(400, 'unexpected-query');
+      const queueId = reviewQueueId(reviewFrameMatch[2]);
+      if (queueId === null) return errorResponse(400, 'invalid-queue-id');
+      const unavailable = (status) => frameResponse(request.method === 'HEAD' ? null
+        : '<!doctype html><html lang="en"><meta charset="utf-8"><title>Not available</title><p>This page isn’t available.</p></html>\n', status);
+      try {
+        if (reviewFrameMatch[1] === 'review') {
+          const loaded = await commands.readProposal({ queueId }, principal);
+          if (loaded.decision !== null || !loaded.entry) return unavailable(409);
+          const site = await siteReview(loaded.entry);
+          if (site.html !== null) return frameResponse(request.method === 'HEAD' ? null : site.html, 200, SITE_FRAME_CSP);
+          return frameResponse(request.method === 'HEAD' ? null : reviewFramePage(loaded.entry, appearance));
+        }
+        const history = await commands.readDecision({ queueId }, principal);
+        // While the queue still holds the page text and the private build
+        // matches, the decided proposal stays on the site's own page, read-only.
+        if (history.document) {
+          const site = await siteReview(decidedEntry(history));
+          if (site.html !== null) return frameResponse(request.method === 'HEAD' ? null : site.html, 200, SITE_FRAME_CSP);
+        }
+        return frameResponse(request.method === 'HEAD' ? null : decisionFramePage(history, appearance));
+      } catch (error) {
+        return unavailable(error instanceof OwnerCommandPrecondition && error.code === 'decision-not-found' ? 404 : reviewErrorStatus(error));
+      }
+    }
+
     const reviewDetailMatch = url.pathname.match(/^\/(owner\/review|api\/review)\/([^/]+)$/u);
     if (reviewDetailMatch) {
       const denied = commandGate(commands, 'review', principal);
@@ -2006,7 +2393,18 @@ export function createOwnerAlphaHandler({
       try {
         loaded = await commands.readProposal({ queueId }, principal);
       } catch (error) {
-        return errorResponse(reviewErrorStatus(error), error instanceof OwnerAlphaError ? error.code : 'review-load-failed');
+        const code = error instanceof OwnerAlphaError ? error.code : 'review-load-failed';
+        const status = reviewErrorStatus(error);
+        if (reviewDetailMatch[1] === 'owner/review' && ['review-expired', 'review-revision-unreachable'].includes(code)) {
+          const expired = code === 'review-expired';
+          const title = expired ? 'This proposal expired' : 'This proposal’s base is no longer available';
+          const message = expired
+            ? 'It can no longer be approved or rejected. If the change is still wanted, the sender can propose it again.'
+            : 'The version it was written against is no longer on your branch, so it can’t be reviewed as it is. A new proposal must use the current page.';
+          return html(request.method === 'HEAD' ? null : reviewPage({ title, appearance,
+            body: noticeShell({ siteTitle: appearance.siteTitle, heading: title, message }) }), status, { 'Content-Security-Policy': REVIEW_SHELL_CSP });
+        }
+        return errorResponse(status, code);
       }
       if (loaded.decision !== null) {
         if (reviewDetailMatch[1] === 'owner/review') {
@@ -2023,7 +2421,10 @@ export function createOwnerAlphaHandler({
         return json(apiEntry);
       }
       if (request.method === 'HEAD') return html(null);
-      return html(reviewDetailPage({ entry: loaded.entry, csrfToken, mode: reviewMode }));
+      // Choosing a comparison mode reopens Details where the owner left it.
+      const site = await siteReview(loaded.entry);
+      return html(reviewDetailPage({ entry: loaded.entry, csrfToken, mode: reviewMode, appearance, detailsOpen: url.search !== '', siteReason: site.reason }), 200,
+        { 'Content-Security-Policy': REVIEW_SHELL_CSP });
     }
 
     const decisionDetailMatch = url.pathname.match(/^\/(owner\/decisions|api\/decisions)\/([^/]+)$/u);
@@ -2043,10 +2444,16 @@ export function createOwnerAlphaHandler({
       }
       if (decisionDetailMatch[1] === 'api/decisions') {
         if (request.method === 'HEAD') return json(null);
-        return json(history);
+        const { document: _decidedDocument, ...apiHistory } = history;
+        return json(apiHistory);
       }
       if (request.method === 'HEAD') return html(null);
-      return html(decisionDetailPage({ ...history, csrfToken }));
+      let firstAnchor = proposalView(decisionEntry(history.decision, history.summary)).operations.length > 0 ? 1 : null;
+      if (history.document) {
+        const entry = decidedEntry(history);
+        if ((await siteReview(entry)).html !== null) firstAnchor = reviewDisplay(entry).model.anchors[0] ?? null;
+      }
+      return html(decisionDetailPage({ ...history, csrfToken, appearance, firstAnchor }), 200, { 'Content-Security-Policy': REVIEW_SHELL_CSP });
     }
 
     if (url.pathname === '/owner/in-place') {
@@ -2055,7 +2462,7 @@ export function createOwnerAlphaHandler({
       if (!query) return errorResponse(400, 'invalid-edit-query');
       try {
         const session = await commands.readPageSource(query, principal);
-        const target = liveUrlForSlug(`${readerOrigin}/cyberbase/`, session.slug);
+        const target = liveUrlForSlug(readerHome, session.slug);
         return response(null, 303, { Location: `${target}#owner-edit` });
       } catch (error) { return errorResponse(400, error?.code ?? 'edit-session-failed'); }
     }
@@ -2066,7 +2473,7 @@ export function createOwnerAlphaHandler({
       if (url.search) return errorResponse(400, 'unexpected-query');
       try {
         const { session, operation, editId, operationCount } = await commands.inspectOwnerDirect({ stageId: staged[1] }, principal);
-        const back = `${liveUrlForSlug(`${readerOrigin}/cyberbase/`, session.slug)}#owner-edit`;
+        const back = `${liveUrlForSlug(readerHome, session.slug)}#owner-edit`;
         const cards = operation.proposal.changeSet.files[0].operations.map((op, index) => {
           const base = Buffer.from(session.source.bytesBase64, 'base64');
           // Escaped text only. No source HTML or reader scripts enter this origin.
@@ -2181,7 +2588,7 @@ export function createOwnerAlphaHandler({
         return json(publicJob(job));
       }
       if (request.method === 'HEAD') return html(null);
-      return html(jobPage(job, readerOrigin));
+      return html(jobPage(job, readerHome, appearance));
     }
 
     return errorResponse(404, 'not-found');
@@ -2189,8 +2596,10 @@ export function createOwnerAlphaHandler({
   Object.defineProperties(handler, {
     bootstrapToken: { value: initialBootstrapToken, enumerable: false },
     issueBootstrap: { value: issueBootstrap, enumerable: false },
+    hasOwnerSession: { value: (request) => resolveSession(requestCookie(request)) !== null, enumerable: false },
     ownerOrigin: { value: expectedOrigin, enumerable: false },
     readerOrigin: { value: readerOrigin, enumerable: false },
+    readerHome: { value: readerHome, enumerable: false },
   });
   return handler;
 }
@@ -2268,7 +2677,21 @@ async function loadPipelineAdapter(options) {
     startEdit: typeof created.startEdit === 'function' ? created.startEdit : null,
     resumeJob: typeof created.resumeJob === 'function' ? created.resumeJob : null,
     getJob: typeof created.getJob === 'function' ? created.getJob : null,
+    trackBundle: typeof created.trackBundle === 'function' ? created.trackBundle : null,
   };
+}
+
+/**
+ * The commands a paired device reaches over Iroh. lookupJob is required: a
+ * device follows its page bundle through the bundle's own job record
+ * (readPageBundle), and without it that answer could never move past
+ * Publishing. Missing it stops startup instead.
+ */
+export function createDeviceCommands({ config, projectRoot, verifier, proposalReview = null, lookupJob, publication = null,
+  noteStatus = null, noteLinks = null, approvals = null, bundleDesk = null }) {
+  if (typeof lookupJob !== 'function') throw new TypeError('device commands need lookupJob to read job records');
+  return createOwnerCommands({ config, projectRoot, devicePrincipalAdapter: verifier, proposalReview, lookupJob,
+    publication, noteStatus, noteLinks, approvals, bundleDesk });
 }
 
 export async function recoverOwnerAlphaJobs({
@@ -2300,6 +2723,9 @@ export async function runOwnerAlphaServer({
   rebuildSite = ensureOwnerSite,
   loadPipeline = loadPipelineAdapter,
   createHandler = createOwnerAlphaHandler,
+  // createBundlePreview({ config, projectRoot }) by default; one preview serves
+  // the review page and the check before a bundle is offered.
+  createPreview = createBundlePreview,
   createReader = createReaderHandler,
   startServers = startOwnerAlphaServers,
   listJobs = listDurableJobs,
@@ -2311,6 +2737,16 @@ export async function runOwnerAlphaServer({
   recordDecision = recordProposalDecision,
   startSuggestions = startSuggestionIntake,
   readAuthoringNote,
+  createPublication = createOwnerPublicationRuntime,
+  adoptSession = null,
+  createUpstreamStatus = createUpstream,
+  // The publisher's signing verbs ({ challenge, enroll }) relayed to paired
+  // signing devices. Null until the publisher offers them: devices then get
+  // a plain "signing-unavailable".
+  publisherSigning = null,
+  // The starter publish.yml commit first-run setup prepared, handed over in
+  // the same process; kept on disk until the owner's device approves it.
+  pendingStarter = null,
 } = {}) {
   if (typeof rebuildSite !== 'function'
     || typeof loadPipeline !== 'function'
@@ -2328,11 +2764,66 @@ export async function runOwnerAlphaServer({
     throw new TypeError('site, pipeline, handlers, servers, review, recovery, and suggestion dependencies are required');
   }
   const config = await loadOwnerAlphaConfig(configFile);
+  const loaded = await loadDeviceKeyRegistry(config, { withInput: true });
+  let registry = loaded.registry;
+  let devices = null;
+  if (config.iroh?.enabled) {
+    // Paired devices live in an owner-only directory outside the vault and
+    // change at runtime; both carriers verify against the same live registry.
+    try {
+      await assertOutsideVault(config, config.iroh.stateDirectory);
+      const store = await openDeviceStore({ directory: path.join(config.iroh.stateDirectory, 'devices'),
+        ownerId: config.owner.identity, staticInput: loaded.input, parentDirectory: config.iroh.stateDirectory });
+      registry = store.registry;
+      devices = { store, pairing: createPairingManager({ ownerId: config.owner.identity, store }) };
+    } catch {
+      fail('iroh-state-invalid', 'Iroh state must be an owner-only directory outside the vault holding valid device records.');
+    }
+  }
   const storeContext = storeContextFromConfig(config, projectRoot);
   await prepareStore(storeContext);
+  // With a publisher mirror: ask the publisher for GitHub's latest and bring a
+  // clean checkout up to it. Unreachable GitHub is a state, not a failure.
+  const upstream = config.publisher?.mirror ? createUpstreamStatus({ config }) : null;
+  await upstream?.refresh();
+  // The private reader serves the site at the path it is built for (site-base.js).
+  const siteBase = await readSiteBase(config);
   // The site build retains the publication binding the form needs, so the
   // intake starts after it and before anything reads the review socket.
-  await rebuildSite({ config, projectRoot });
+  // A vault that publishes nothing yet (no publish.yml, or setup's starter
+  // still waiting for the owner's phone) has no preview to build. The node
+  // starts anyway: sign-in, devices and the phone's approvals need it. The
+  // preview is built once the starter lands, or by the next job.
+  try {
+    await rebuildSite({ config, projectRoot });
+  } catch (error) {
+    if (!(error instanceof OwnerAlphaError)) throw error;
+    if (error.code === 'site-publication-empty') {
+      console.error('Owner alpha: nothing is published yet, so the private preview waits until publish.yml lists notes.');
+    } else if (error.code === 'checkout-not-at-origin-branch' && config.publisher) {
+      const { matchesPendingPublication } = await import('./pipeline.js');
+      const pending = await hasPendingStartupCheckout(config, (checkout) => matchesPendingPublication({
+        ...checkout, config, context: storeContext, listJobs,
+      })).catch(() => false);
+      if (!pending) throw error;
+      // Leave the published reader untouched. Normal recovery exposes the
+      // pending job again, and its signed publication rebuilds the site.
+      console.error('Owner alpha: a saved change waits for approval; keeping the last published preview.');
+    } else {
+      throw error;
+    }
+  }
+  // Publication recovery must check the actual served bytes even without a
+  // signed-in owner. This separate process-local credential is read-only and
+  // can never authenticate to the owner listener. Do not follow redirects.
+  const witnessToken = config.workflow.provider === PRIVATE_SITE_PROVIDER ? token() : null;
+  const readerOrigin = `http://${config.listen.host}:${config.listen.readerPort}`;
+  const witnessDependencies = { fetch: (url, init) => {
+    if (new URL(url).origin !== readerOrigin || init?.method !== 'GET') throw new Error('invalid reader witness request');
+    const headers = new Headers(init.headers);
+    headers.set('x-cyberbaser-reader-witness', witnessToken);
+    return fetch(url, { ...init, headers, redirect: 'manual', proxy: null });
+  } };
   const suggestions = await startSuggestions({ config, projectRoot });
   let pipeline;
   try {
@@ -2340,11 +2831,26 @@ export async function runOwnerAlphaServer({
     // silently become ordinary edits if a reader or config is no longer present.
     const publicationGuard = createPublicationSourceGuard({ config, context: storeContext, readNote: readAuthoringNote });
     pipeline = await loadPipeline({ config, projectRoot, context: storeContext,
-      dependencies: { revalidateSource: publicationGuard } });
+      dependencies: { revalidateSource: publicationGuard, ...(witnessToken === null ? {} : {
+        confirmLivePage: (input) => confirmLivePage(input, witnessDependencies),
+        confirmNewPages: (input) => confirmNewPagesLive(input, witnessDependencies),
+      }) } });
   } catch (error) {
     await suggestions?.close().catch(() => {});
     throw error;
   }
+  // Startup recovery runs in the background so the owner can sign in at once.
+  // Until it settles, every entry that starts an owner act (Save, Apply,
+  // Publish, decisions; from the browser, a paired device or the signed
+  // socket) is refused with one plain message. Recovery itself uses
+  // pipeline.resumeJob and recoverDecisions, which are not gated. A failed
+  // recovery keeps the gate closed: earlier the whole app stopped instead.
+  const recoveryGate = createRecoveryGate();
+  const { recovering } = recoveryGate;
+  const gate = recoveryGate.wrapAsync;
+  const recoveringPipeline = pipeline;
+  pipeline = Object.freeze({ ...recoveringPipeline, saveEdit: gate(recoveringPipeline.saveEdit?.bind(recoveringPipeline)),
+    ...(typeof recoveringPipeline.startEdit === 'function' ? { startEdit: recoveryGate.wrapSync(recoveringPipeline.startEdit.bind(recoveringPipeline)) } : {}) });
   const lookupJob = pipeline.getJob ?? ((jobId) => loadDurableJob(storeContext, jobId, {
     maxBytes: config.limits.maxArtifactBytes,
   }));
@@ -2360,7 +2866,7 @@ export async function runOwnerAlphaServer({
       context: storeContext,
       source,
       recoverDecisions,
-      recordDecision,
+      recordDecision: gate(recordDecision),
       application: {
         saveEdit: pipeline.saveEdit,
         createJobId: () => `OA-${randomUUID()}`,
@@ -2369,41 +2875,135 @@ export async function runOwnerAlphaServer({
       },
     });
   }
+  // One publication runtime: the owner pages and paired devices see the same
+  // drafts, views and publish lock.
+  const ownerPublication = config.ownerPublication.enabled
+    ? createPublication({ config, context: storeContext, readNote: readAuthoringNote, pipeline }) : null;
+  // The publisher's owner-control socket when one is configured; a test or
+  // rehearsal may pass its own. Approval offers are in memory only; durable
+  // jobs still waiting for approval are offered on demand after restart.
+  const signingPublisher = publisherSigning ?? (config.publisher
+    ? publisherSigningFromSocket({ socketPath: config.publisher.socketPath, ownerRequest }) : null);
+  const starterFile = devices === null ? null : pendingStarterFile(config.iroh.stateDirectory);
+  if (starterFile !== null && pendingStarter !== null) await starterFile.save(pendingStarter);
+  // New notes and images: bundles wait here for review or for the signature.
+  const bundleGitRunner = bundleGit(config.repository.checkout);
+  const bundleDesk = devices === null ? null : await openBundleDesk({ config, git: bundleGitRunner,
+    directory: path.join(config.iroh.stateDirectory, 'bundles'),
+    branchHead: async () => (await bundleGitRunner(['rev-parse', '--verify', `refs/heads/${config.repository.branch}^{commit}`])).toString('utf8').trim() });
+  if (devices !== null) devices.bundleDesk = bundleDesk;
+  // With a configured renderer, a bundle is built once before it is offered, to
+  // confirm its page lands at the address shown (bundle-preview.js).
+  const bundlePreview = config.renderer ? createPreview({ config, projectRoot, dependencies: { log: (line) => console.error(`Owner alpha: ${line}`) } }) : null;
+  const bundleCheck = devices === null ? null : bundlePreview;
+  const jobApprovals = devices === null ? null : createJobApprovals({ config, context: storeContext, pipeline: recoveringPipeline,
+    bundles: bundleDesk,
+    checkBundle: bundleCheck === null ? null : async (record) => {
+      const bundle = parsePageBundle(record.bundleText);
+      for (const [index] of record.publicAdditions.entries()) {
+        const site = await bundleCheck({ bundleId: record.bundleId, index, bundle, record, colorScheme: 'light',
+          readImage: (imagePath) => bundleDesk.readImage(record.bundleId, imagePath) });
+        if (site?.refused === 'address-mismatch') return 'address-mismatch';
+      }
+      return 'ok';
+    },
+    publishBundle: config.publisher ? ({ commit, record }) => ownerRequest({ socketPath: config.publisher.socketPath,
+      op: 'publish-bundle', commit, record }) : null,
+    log: (line) => console.error(`Owner alpha: ${line}`), starter: starterFile,
+    afterStarter: () => rebuildSite({ config, projectRoot }),
+    publishStarter: config.publisher ? ({ commit, record }) => ownerRequest({ socketPath: config.publisher.socketPath,
+      op: 'publish-starter', commit, record }) : null });
+  const approvals = devices === null ? null : createApprovalRelay({ publisher: signingPublisher,
+    refresh: () => jobApprovals.refresh(approvals) });
+  if (devices !== null) {
+    // Status for every note the site publishes, and the owner's note links.
+    devices.noteStatus = createNoteStatus({ config, context: storeContext });
+    devices.links = await openNoteLinks({ directory: config.iroh.stateDirectory, config, noteStatus: devices.noteStatus,
+      publication: ownerPublication, readMappingNote: typeof readAuthoringNote === 'function' ? readAuthoringNote : null });
+  }
   const ownerFetch = createHandler({
     config,
     projectRoot,
+    siteBase,
     saveEdit: pipeline.saveEdit,
     lookupJob,
     proposalReview,
-    ownerPublication: config.ownerPublication.enabled
-      ? createOwnerPublicationRuntime({ config, context: storeContext, readNote: readAuthoringNote, pipeline }) : null,
+    reviewAppearance: config.proposalReview.enabled ? await readReviewAppearance(config) : null,
+    reviewSiteRoot: path.resolve(projectRoot, config.workspace.site),
+    ownerPublication,
+    devices,
+    bundlePreview,
+    forgeSetup: createForgeSetup({ config, configFile: configFile instanceof URL ? fileURLToPath(configFile) : configFile }),
+    ...(adoptSession === null ? {} : { adoptSession }),
+    upstream,
+    recovering,
   });
-  const readerFetch = createReader({ config, projectRoot });
+  const readerFetch = createReader({ config, projectRoot, siteBase, hasOwnerSession: ownerFetch.hasOwnerSession, witnessToken });
   let runtime;
+  let signed;
+  let iroh;
   try {
     runtime = startServers({ config, ownerFetch, readerFetch, serve });
+    if (config.signedRequestSocket !== undefined) {
+      const socketPath = config.signedRequestSocket;
+      const verifier = createDevicePrincipalAdapter({ registry, audience: signedSocketAudience(socketPath) });
+      const commands = createOwnerCommands({ config, projectRoot, devicePrincipalAdapter: verifier, proposalReview });
+      signed = await startSignedRequestSocket({ socketPath, commands, verifier });
+    }
+    if (devices !== null) {
+      const secretKey = await loadNodeSecret(config.iroh.stateDirectory);
+      // The trusted appliance recipe controls reach on both setup and restart
+      // without rewriting owner policy or changing the publisher's copy.
+      const reachOverride = process.env.CYBERBASER_CONTAINER_REACH;
+      const irohConfig = reachOverride === undefined ? config.iroh : { ...config.iroh, reach: reachOverride };
+      const binding = await bindIrohNode({ secretKey, config: irohConfig, alpns: [CMD_ALPN, PAIR_ALPN] })
+        .finally(() => secretKey.fill(0));
+      const nodeId = binding.endpoint.id().toString();
+      const verifier = createDevicePrincipalAdapter({ registry, audience: irohAudience(nodeId), requireChannelBinding: true });
+      const commands = createDeviceCommands({ config, projectRoot, verifier, proposalReview, lookupJob,
+        publication: ownerPublication, noteStatus: devices.noteStatus, noteLinks: devices.links, approvals, bundleDesk });
+      iroh = startIrohCarrier({ ...binding, commands, verifier, pairing: devices.pairing });
+      devices.store.setRevokeListener((key) => { if (key.irohNodeId) iroh.closePeer(key.irohNodeId); });
+      devices.pairing.attachNode({ nodeId, ticket: iroh.ticket });
+    }
   } catch (error) {
+    await iroh?.close().catch(() => {});
+    await signed?.close().catch(() => {});
+    runtime?.stop(true);
     await suggestions?.close().catch(() => {});
     throw error;
   }
+  // Later checks only ask the publisher, so the quiet notice clears when GitHub is back.
+  const upstreamTimer = upstream === null ? null : setInterval(() => { upstream.refresh({ sync: false }).catch(() => {}); }, 5 * 60_000);
+  upstreamTimer?.unref?.();
   const recovery = Promise.resolve().then(async () => {
     await recoverDecisions(storeContext);
     return recoverJobs({
       config,
       context: storeContext,
-      pipeline,
+      pipeline: recoveringPipeline,
       listJobs,
     });
-  });
+  }).then((results) => { recoveryGate.settle(true); return results; },
+    (error) => { recoveryGate.settle(false); throw error; });
   return Object.freeze({
     ...runtime,
     suggestions: suggestions === null
       ? null
       : Object.freeze({ formOrigin: suggestions.formOrigin, forge: suggestions.forge }),
     recovery,
+    readerHome: `${runtime.readerOrigin}${siteBase}`,
+    iroh: iroh === undefined ? null : Object.freeze({ nodeId: iroh.nodeId, ticket: iroh.ticket }),
+    // request({ intent, files, askedBy }) for the publish path; null without Iroh.
+    approvals,
+    upstream,
     stop(closeActiveConnections) {
+      if (upstreamTimer !== null) clearInterval(upstreamTimer);
       runtime.stop?.(closeActiveConnections);
-      return suggestions?.close() ?? Promise.resolve(null);
+      const carriers = [signed, iroh].filter(Boolean);
+      return carriers.length === 0
+        ? suggestions?.close() ?? Promise.resolve(null)
+        : Promise.allSettled(carriers.map((carrier) => carrier.close())).then(() => suggestions?.close() ?? null);
     },
   });
 }
@@ -2487,16 +3087,21 @@ if (import.meta.main) {
   process.once('SIGINT', () => { void stopForSignal(); });
 
   try {
+    const { rendererLauncher } = await import('./renderer-isolation.js');
+    await rendererLauncher();
     runtime = await runOwnerAlphaServer({ configFile });
-    await runtime.recovery;
-    if (readyFile) await writeOwnerAlphaReadyMarker(readyFile);
-    console.log(`Owner alpha reader: ${runtime.readerOrigin}/cyberbase/`);
+    if (runtime.upstream?.current().state === 'unreachable') console.log('GitHub: cannot reach it now; serving your notes as last copied.');
+    // The sign-in link is printed before job recovery finishes: a job waiting
+    // on a deployment check can take 15 minutes offline. Owner acts that would
+    // conflict are refused by the runtime until recovery settles. The ready
+    // marker (the container health check) still waits for recovery.
+    console.log(`Owner alpha reader: ${runtime.readerHome}`);
     if (runtime.suggestions === null) {
       console.log('Suggestions: off (turn them on under "suggestions" in the owner config)');
     } else {
       console.log(runtime.suggestions.formOrigin === null
         ? 'Suggestions: form off'
-        : `Suggestions: form on for pages served from ${runtime.readerOrigin}/cyberbase/`);
+        : `Suggestions: form on for pages served from ${runtime.readerHome}`);
       console.log(runtime.suggestions.forge === null
         ? 'Suggestions: no forge watched'
         : `Suggestions: watching ${runtime.suggestions.forge} for pull requests`);
@@ -2511,8 +3116,19 @@ if (import.meta.main) {
         issueBootstrap: runtime.issueBootstrap,
       });
     }
+    runtime.recovery.then(async () => {
+      if (readyFile) await writeOwnerAlphaReadyMarker(readyFile);
+    }, () => {
+      console.error('Owner alpha: an earlier publish could not be finished. Owner actions stay paused; restart to try again.');
+    }).catch((error) => {
+      console.error(`Owner alpha ready marker failed: ${error instanceof OwnerAlphaError ? error.code : 'unexpected-error'}`);
+      void stop(1);
+    });
   } catch (error) {
     await stop(1);
-    console.error(`Owner alpha startup failed: ${error instanceof OwnerAlphaError ? error.code : 'unexpected-error'}`);
+    const reason = error instanceof OwnerAlphaError ? error.code : 'unexpected-error';
+    const detail = ['device-registry-invalid', 'signed-socket-unsafe', 'signed-socket-requires-review-and-keys',
+      'signed-socket-path-conflict'].includes(reason) ? `: ${error.message}` : '';
+    console.error(`Owner alpha startup failed: ${reason}${detail}`);
   }
 }

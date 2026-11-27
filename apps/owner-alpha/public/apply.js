@@ -21,6 +21,7 @@ if (form && status && dialog && confirmButton && cancelButton && applyButton) {
 
   function recoveryMessage(code) {
     if (code === 'lock-busy') return 'Another owner action is finishing. Wait a moment, then try again.';
+    if (code === 'recovery-in-progress') return 'Finishing an earlier publish. Try again in a moment.';
     if (code === 'application-stale') return 'The page changed since you reviewed this. Nothing was changed. Reload to see why.';
     if (code === 'application-unapplicable') return 'The page pipeline cannot apply this change. Nothing was changed. Reload to see why.';
     if (code === 'checkout-not-clean' || code === 'checkout-not-at-origin-branch') {

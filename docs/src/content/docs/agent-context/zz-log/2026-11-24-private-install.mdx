@@ -1,0 +1,40 @@
+---
+title: Private-only install with the site's own renderer (container-rehearsed)
+description: The installer can now take a site's own renderer and set up a private-only site, where Live means the node's own private site serves the change. Rehearsed end to end in the disposable container on copies of the Cyberchief vault and renderer, 55 of 55 checks. Not yet installed for real.
+status: log
+---
+
+## Why
+
+Owner decision (relayed by the Cyberchief project lead): for the next step, "Real install, private (Recommended)": two private GitHub repositories, Cyberbaser installed on the owner's machine with the phone paired, nothing public, cyberchief.me untouched, the 17 sample pages kept out. Three things blocked that install: the installer could only use the bundled renderer, every publish waited on a GitHub Pages deployment that a private site never has, and nobody had run the flow through the installed, hardened services with a real renderer.
+
+## What now works
+
+**Install with the site's own renderer.** `cyberbaser install --renderer <dir> --renderer-name <name> --renderer-quartz-commit <sha> --renderer-fingerprint <a,b,c | @file>` checks the assembled renderer (one real directory, an executable `build`, no link that leaves it, every fingerprinted entry present, a Quartz checkout on the pinned commit), copies it to `/var/lib/cyberbaser/renderers/<name>`, gives it to the node account and removes every group and other write bit. It is outside every checkout and the program, and the publisher account cannot read it. The layout file carries the renderer section, so setup writes it into the node config. A bad renderer stops install before anything changes.
+
+**The node may build offline in the hardened service.** The node unit now allows only user and network namespaces (`RestrictNamespaces=user net`), which the renderer slot needs for its no-network build (`unshare --user --net`). The publisher keeps `RestrictNamespaces=yes`. `patch` and `unshare` are checked at install when a renderer is given. The Cyberchief renderer's `build` (bash, `node` as the program's own runtime, `patch`) ran inside the service with no network.
+
+**Private-only publication.** `workflow.provider: "private-site"` (with only `branch`). The repository stays a GitHub repository and the GitHub App still holds the push credential. After the publisher pushes, the deployment is the node rebuilding its private site from that exact commit (`provider: private-site`, `publication.site: private`), and the live check reads the page from the node's own reader on its private address. The evidence keeps its usual shape and is marked `evidence: private-site-live`. `live.baseUrl` is the page identity only (the vault's declared `site.baseUrl` when it has one, so link checks and addresses agree with the renderer). Nothing calls a Pages, Actions or deployment API.
+
+**Setup offers it.** With `install --site private`, the website step says the site stays on this machine, shows the private address, and offers **Keep it private** first, with "Use a public website instead" beside it. The finished config has no Pages workflow.
+
+**The plugin says so.** A bundle's progress carries `site: "private"` and the node's private link; the checklist's last step and the Live notice read "Live on your private site", and View on site opens the private address.
+
+## Evidence
+
+- Container: `packaging/test/container/private-e2e.sh` on copies of the Cyberchief vault (`9ae8fdd`) and its assembled renderer, `RESULT pass=55 fail=0`. Install with the renderer and `--site private`; setup against the stand-in GitHub with `cybersader/cyberchief` as a private repository; Keep it private; phone paired (the plugin's own code) and enrolled with the publisher's code; the node built the private site with the cyberchief renderer; no sample note's text anywhere on it and sample addresses answer 404; a New post with a cover photo sent from the phone, approved on it (the card showed "Patch the edge first" at `/threats-and-response/patch-the-edge-first`), pushed as one commit holding exactly the note and its cover; the phone's progress read Live with `site: private` and `http://127.0.0.1:4318/threats-and-response/patch-the-edge-first`; the node served the page; the job's evidence is `private-site` / `private-site-live`; the stand-in GitHub saw only device sign-in, installation listing and Git. `systemd-analyze security` for the node unit: 3.2 OK.
+- Unit tests: `apps/owner-alpha/test/private-site.test.js` (config, deployment binding, reader live check, pipeline to Live, setup page and config), `packaging/test/renderer-install.test.js` (fingerprint parsing, copy ownership and modes, refusals, unit namespaces), one plugin test for the private label.
+
+## Found on the way
+
+- The phone works out new public pages from its own vault's `publish.yml` and `.cyberbaser/site.yml`. Without them it refuses to approve a new post (`approval-public-unknown`), so the phone vault must hold those two files.
+- This worktree's `apps/owner-alpha/node_modules` held a stale copy of `@cyberbaser/proposal` (no `page-bundle.js`); `bun install --frozen-lockfile` fixed it. The install script runs it before building.
+- The container harness did not copy the plugin's `js-yaml`, so its headless phone could not start; fixed in `run.sh` (this also affects `setup-e2e.sh`).
+- Covers are not shown on the Cyberchief post page (feed cards only), so the check is the image itself, confirmed byte for byte by the live check.
+
+## Not done
+
+- Not installed on the real machine; the GitHub App is not registered. Owner steps: `.workspace/real-install/cyberchief-steps.md` (local), installer wrapper `install-cyberchief.sh`.
+- Re-running install with a new `--renderer` after setup copies the renderer but does not rewrite the node config's renderer section.
+- How the desktop vault follows the repository after a publish (the post exists locally and arrives again in the pushed commit) is not settled.
+- Pre-apply checks for owner edits still render with the bundled renderer.

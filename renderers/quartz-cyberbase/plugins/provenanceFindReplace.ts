@@ -101,7 +101,7 @@ import { convert } from "unist-util-is";
  * @returns {undefined}
  *   Nothing.
  */
-export function findAndReplace(tree, list, options) {
+export function findAndReplace(tree, list, options?) {
   const settings = options || {};
   const ignored = convert(settings.ignore || []);
   const pairs = toPairs(list);

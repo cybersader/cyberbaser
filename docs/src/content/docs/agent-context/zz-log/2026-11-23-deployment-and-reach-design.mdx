@@ -1,0 +1,75 @@
+---
+title: Deployment and reach design
+description: Design for the one-app install with Iroh reach, QR pairing and GitHub access given once, written after the owner chose to wait for these before the first real install. Includes a check that n0's JavaScript Iroh bindings work under Bun, through n0's relay, and inside one compiled binary.
+status: log
+---
+
+## What happened
+
+The owner decided the first real install waits for Iroh reach and a one-app setup, so it is the install regular users would get. A design pass produced [Deployment and reach](/cyberbaser/design/deployment-and-reach/) and phone-sized first-run mockups for the owner (`.workspace/deploy-design/setup-flow.html`, not tracked).
+
+## Evidence gathered
+
+- `@number0/iroh` 1.2.0 (released 2026-10-22, N-API) installed under Bun 1.3.14. In a scratch directory: a loopback connection exchanged a stream and reported the authenticated peer ID under both Bun and Node 22; a dial by endpoint ID and n0 relay URL connected in about 350 ms and then selected a direct path; `bun build --compile` produced a 131 MB binary that ran the loopback check from an empty directory.
+- The bindings' `Connection` has `remoteId()` but no TLS exporter. The design binds signed requests to the authenticated peer ID plus a node nonce through the existing `forChannel` verifier instead.
+- GitHub App user tokens via device flow: 8-hour tokens, 6-month refresh tokens, limited to repositories where the app is installed and the user has access. Fine-grained tokens: one repository, Contents write, expiry up to 366 days or none.
+
+## Not done
+
+No code changed. Nothing was installed against the real vault. Obsidian mobile WASM, phone key custody, the workflow-file refusal for an app token without the Workflows permission, and macOS or Windows builds were not tested.
+
+## Owner decisions the same day
+
+GitHub App sign-in (with a searchable, better-looking repository picker than the mockup), an admin-once background service with the publisher under its own account, words plus Confirm for every pairing, and Linux plus home-server container first. Next build: Iroh inside the node and code-based pairing for an agent on this machine, on a synthetic vault.
+
+## Build step 1 built (later the same day)
+
+Iroh reach and agent pairing now run inside the owner node, tested on synthetic vaults only.
+
+- **Turned on by config, off by default.** A new `iroh` section (`enabled`, an owner-only `stateDirectory` outside the vault, `relay`: `n0`, `none` or one https URL). `n0` is the explicit default when enabled and is never a fallback. The node's Iroh key lives in that directory and stays out of the policy revision, logs and responses. `@number0/iroh` is pinned at exactly 1.2.0.
+- **Same requests, bound to the connection.** The node accepts the same signed proposal envelopes as the local socket, one per stream, with the same size cap, deadline and single refusal. Each request needs a fresh challenge the node issued on that connection, and the signature covers the node ID, the authenticated client endpoint ID and that challenge. A paired key names its Iroh endpoint; any other endpoint is refused.
+- **Paired devices change at runtime.** Enrolments and revocations are create-once private files; revocation takes effect at once and survives restarts. Agents can only hold `propose`.
+- **Pairing.** The new Devices and agents page (owner session plus CSRF) issues a five-minute, one-use code. `bun apps/owner-alpha/bin/cyberbaser-pair.js <code>` makes the agent's keys, connects over Iroh and prints four words; the page shows the same words and Confirm. `agent-propose.js` can now send with `iroh` instead of a socket path.
+- **Tests.** Unit tests cover replay on another connection, another endpoint, missing or reused challenges, durable enrol and revoke, expiry, reuse, wrong secret, wrong words, no Confirm and grant tampering. A loopback test pairs the real CLI, confirms, submits into the queue, revokes and is refused. The opt-in relay test (`CYBERBASER_IROH_RELAY_TEST=1`) passed once through n0's public relay: about 1.4 s from code to words, 0.6 s per submission.
+
+**Still missing:** a QR image (the code is plain text, to avoid a new dependency), the phone client, a shared proposal budget across carriers (today a key gets one budget per carrier), and any real-vault install.
+
+## Build step 2 built: the Obsidian plugin (later the same day)
+
+The owner can now pair Obsidian with their node, see whether the open note is live, send an edit for review, and publish the node's page, all over Iroh. Tested in a disposable browser with Obsidian's mobile layout, not on a phone.
+
+- **Iroh in the plugin.** No official browser package exists, so `apps/obsidian-cyberbaser/carrier` compiles the `iroh` 1.2.0 crate to WebAssembly (2.6 MB, 0.95 MB gzipped), embedded in a 3.5 MB `main.js`. A first probe loaded it inside Obsidian 1.12.7 in the OpenClast harness and reached the owner node's real carrier: about 1.0 s through a loopback relay, 0.4 s through n0's public relay.
+- **Where the key lives.** In the app's IndexedDB on the device, never in `data.json` (which is a vault file and syncs). The signing key is a non-extractable WebCrypto key. The harness run checked both.
+- **New node commands, no HTTP.** `submitCapture` (propose grant) lets the node bind a phone's note to the committed vault text and queue a proposal, sharing the agent budget. `readNoteStatus` (publication grant) reports the configured page's live version. The Iroh carrier also accepts the existing prepare, publish and receipt commands, with small fixed result projections and a fixed list of refusal reasons.
+- **Tests.** 7 new node tests and 7 plugin tests (including byte-for-byte checks against the node's envelope, binding and pairing code, and a pairing plus capture against the real node carrier); the required node suites passed (1077 pass, 10 skipped, 0 fail). The harness acceptance (`test/harness/phone-step.mjs`) passed 11 assertions on loopback and, opt-in, through n0's public relay (1.0 s to words, 6.0 s from Publish to *Live*, 0.6 s per send). Screenshots are in `.workspace/phone-step/` (not tracked).
+
+**Still missing:** a real-phone run, a QR image, live status for notes outside the one configured page, and a production screen for binding the workspace baseline.
+
+## Real-phone test deferred (owner decision)
+
+The owner chose to wait for QR pairing and the installer before the first test on their real phone. Next: QR pairing with an `obsidian://` link, status for every published note, the note-linking screen, the GitHub App sign-in, then the one-app installer.
+
+## QR pairing, status for every note, and note linking (later the same day)
+
+Built on synthetic vaults; still no real-phone run.
+
+- **QR pairing.** Starting a phone pairing on the Devices page now shows a QR image beside the text code. It carries `obsidian://cyberbaser-pair?code=…`, which the plugin already handled; words plus Confirm still decide. The encoder is our own small one (no runtime dependency); its output is decoded in tests by jsQR, a dev-only dependency, from version 1 up to version 38 (a 2,000-character link) and with all eight masks, and once from a real browser screenshot of the Devices page. The agent CLI accepts the code or the link.
+- **Status for every published note.** The node answers from the vault's own publication rules (the site's selector) at the branch head, cached per commit, plus the newest deployment it verified. A device hears only about the path it asked for. Devices that may only propose get the public part (public or not, live version), nothing about drafts, jobs or proposals.
+- **Linking.** A Send the node cannot place now answers "link it on your node". The Devices page lists those notes with a searchable picker of published vault paths; Link records only when both texts match after line-ending folding, otherwise it reports how many lines differ and records nothing. Owner session plus CSRF; devices have no route to it.
+- **Quieter plugin (owner feedback on the green "Live" pill).** Nothing shows while a note matches the site. A theme-coloured icon appears only when the note has changes the site lacks; the full status, with its time, is in the note menu and the command palette; a setting turns the mark off.
+
+**Limits.** Camera to Obsidian is not proven on a phone (the harness opens the decoded link through Obsidian's own handler). *Live* for ordinary notes depends on a deployment this node verified. Link requests live in memory for 30 minutes. Publishing still covers only the one configured page.
+
+## Build step 3 built: GitHub sign-in in the publisher (later the same day)
+
+Built and tested against a local fake GitHub only. No GitHub App is registered yet and nothing contacted github.com.
+
+- **What the owner sees.** A "Publishing to GitHub" page in the owner app (owner session plus CSRF): **Connect GitHub** shows an eight-character code with Copy and an Open GitHub button, waits, then shows a searchable list of only the repositories the app was installed on (name, public or private, last update; arrow keys and Enter, or tap). Repositories the app may not use stay in the list with the reason. Picking one asks once, then shows "Publishing to owner/name" and that access renews by itself, with Change repository and Disconnect. Removed access says so and offers Connect again.
+- **Where the token lives.** Only in the publisher, behind a vendor-neutral `ForgeAccess` interface with two providers: `github-app` (device flow, refresh, one repository, exactly Contents write plus Metadata read, anything broader refused) and `token` (a pasted fine-grained token, entered through the publisher command, never the web page). State is one owner-only file in an owner-only directory. For each push the publisher fetches a fresh credential and hands it to that one Git process through its environment and an inline credential helper. The owner app talks to the publisher over a second owner-only socket that carries operation names, the user code and plain status, never a token.
+- **Picking a repository changes policy.** The owner app rewrites its config with the new repository and the GitHub fields derived from it, which changes the policy revision. A different repository takes effect after a restart; the page says so.
+- **No client secret.** GitHub documents that device flow needs only the client ID and that refreshing a device-flow token needs no secret ([user tokens](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app), [refresh](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/refreshing-user-access-tokens)). The client ID is configuration (`forgeAccess.clientId`); the fake refuses any request that carries a secret.
+- **Tests.** 23 new: device flow (pending, slow down, expired, denied, disabled), pagination over 208 repositories, over-broad and multi-repository installations refused, refresh and rotation, revocation noticed, six-month expiry, private state, the pasted-token path, and the control socket's strict frames. One end-to-end test runs the fake GitHub, the publisher and the owner app as three processes over a real Git smart-HTTP server: connect, pick, push, token refresh, push, disconnect, refused push, pick another repository. Canary: the minted tokens never appear in the owner app's responses or heap snapshot, the store, the config, the vault or any log. Required suites: 1119 pass, 10 skipped, 0 fail. Screenshots at 390 and 1280 px are in `.workspace/github-step/` (not tracked).
+
+**Registering the real app (owner, later).** A name (for example "Cyberbaser"); the docs site as homepage URL; permissions: Repository contents read and write only (Metadata read is added automatically), nothing else; "Enable Device Flow" ticked; "Expire user authorization tokens" left on; no webhook; installable by any account. Then put its client ID in the config. No client secret or private key is needed.
+
+**Limits.** Not run against real GitHub, so the refusal of `.github/workflows` changes without the Workflows permission is still untested. A different repository needs a restart and a matching local clone (step 4). The owner app's own `git ls-remote` on a private repository still uses the machine's Git setup. The pasted-token path checks only push access, since GitHub does not report a fine-grained token's other permissions. The app must be installed on that one repository only; an installation on several is refused.

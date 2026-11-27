@@ -1,0 +1,28 @@
+---
+title: New post form from the vault's site model
+description: The Obsidian plugin now reads a vault's .cyberbaser/model.yml and offers a New post form (type, fields in model order, folder picker with new sub-folders, tag chips, cover photo, Draft on), writes the note with safe frontmatter, and turns Draft off inside the signed publish. Checked in real Obsidian in the harness on a copy of Cyberchief's content; open model questions listed.
+status: log
+---
+
+## What happened
+
+Following the owner's decisions of 2026-11-24 (Cyberbaser is the gate, and owns a small site model file "for now", with authoring and developer experience kept easy), the plugin gained a New post form driven by the vault's own `.cyberbaser/model.yml`. Cyberchief's draft model, written by the Cyberchief project, was the first test case. The model decides fields and locations only; `publish.yml` still decides what is public.
+
+## Built
+
+- `apps/obsidian-cyberbaser/src/core/site-model.js`: reads and validates the model with plain error messages; an unknown field type names the field.
+- `apps/obsidian-cyberbaser/src/core/new-note.js`: plans and writes the note. Properties follow model order, references are quoted wikilinks, and hostile titles cannot add properties or close the block (19 cases tested).
+- `apps/obsidian-cyberbaser/src/new-post.js`: the form, command, ribbon button (only in vaults with a model) and a device-only "Your author note" setting.
+- Publish on a draft turns `draft: true` off inside the bytes the owner signs; the vault note changes only after the node accepts.
+
+Commits `18862ac`, `c67088f`, `d0038ff`, `bfd1b7b`. Plugin tests 44 pass; acceptance suites 1,351 pass with the known `proposal-fixtures` missing-module error.
+
+## Evidence
+
+Real Obsidian in the OpenClast plugin harness, synthetic copy of Cyberchief content, desktop (39-step check) and phone width (390×844 emulation). The harness cannot write binary files, so copying a cover photo is covered by core tests only.
+
+## Open
+
+- A cover photo named only in a property was refused at publish (`asset-unreferenced`). Fixed the same day by counting any property that names an existing image by its exact vault path (see `2026-11-24-property-images.mdx`), not by reading the model.
+- Model questions sent to the Cyberchief project: youtube URL versus ID, date at creation versus first publish, slug rule, KB pages directly in `kb/`, plain tags without a group.
+- Obsidian's own Properties panel still shows above the body; hiding it is an Obsidian setting.

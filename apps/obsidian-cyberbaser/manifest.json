@@ -1,0 +1,9 @@
+{
+  "id": "cyberbaser",
+  "name": "Cyberbaser",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Pair with your Cyberbaser node, see whether a note is live, and send it for review or publish it.",
+  "author": "cybersader",
+  "isDesktopOnly": false
+}

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "state": "container",
+  "accounts": { "node": "cyberbaser", "publisher": "cyberbaser-publisher" },
+  "group": "cyberbaser-share",
+  "appRoot": "/opt/cyberbaser",
+  "port": 4317,
+  "publication": "private-site",
+  "reach": "direct"
+}

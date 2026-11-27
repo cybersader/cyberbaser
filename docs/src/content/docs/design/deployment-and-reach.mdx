@@ -1,0 +1,232 @@
+---
+title: Deployment and reach (one app, Iroh, QR pairing)
+description: "How a regular person installs Cyberbaser: one app on an always-on machine, GitHub access given once, phones and agents paired by QR code, and Iroh connecting them from anywhere without ports, domains or certificates. Covers how the Bun owner node gets an Iroh endpoint (the official N-API bindings, checked under Bun), the pairing protocol on the existing device-key registry, the GitHub access options, packaging per platform, how publisher isolation survives each form, the risks, the build order and the owner's open decisions."
+status: planning
+tags: [architecture, planning, security, deployment]
+---
+
+**Status: design, 2026-11-23. Build steps 1 (Iroh in the node, agent pairing) and 2 (the Obsidian plugin) are built and tested on synthetic vaults; step 2 has not been tried on a real phone; step 4 (one program, Linux install with two accounts) is built and tested in disposable containers only; the rest is not built.** It answers the owner's decision that the first real install waits for Iroh reach and a one-app setup ([decision log](https://github.com/cybersader/cyberbaser/blob/main/.claude/41-QUESTIONS-RESOLVED.md)). Settled matters are linked, not repeated: the five layers and Iroh-via-n0-relay choice are in the [editing roadmap](/cyberbaser/design/editing-and-trust-roadmap/), the passkey-over-Iroh evidence is in the [Iroh carrier research](/cyberbaser/research/iroh-editor-carrier/), and the container identities are in the [container deployment guide](/cyberbaser/development/owner-alpha-container-deployment/).
+
+## The recommendation
+
+1. **Iroh lives inside the owner node.** n0's official JavaScript bindings (`@number0/iroh`) load under Bun and connected both directly and through n0's relay in a check on this machine, and they compile into a single executable. No Rust sidecar is needed for phones and agents.
+2. **Pairing is a QR code that holds a five-minute, one-use enrollment secret.** The phone or agent proves it holds that secret and its own new key, both screens show the same short code, and the owner taps Confirm. The device then lands in the existing device-key registry with exactly the grants picked on screen. Revoke is one tap.
+3. **GitHub access is given once, through the owner's own Cyberbaser GitHub App,** which setup creates from a manifest (the owner clicks Create, Install and Authorize on GitHub; no form, no key file), installed on one repository with only "Contents: write". The app's client secret and the token live only with the publisher; its private key is discarded at creation. A hand-registered app with device sign-in still works. A pasted fine-grained token remains the fallback, and Forgejo uses the same slot.
+4. **The app is one compiled program** that runs as a background service, opens its setup page in the browser, and starts its publisher half as a separate process under a separate account. A container image covers home servers. A tray icon comes later.
+
+## What a regular person does
+
+1. Download and open Cyberbaser on the machine that stays on (a desktop, a mini PC, a NAS).
+2. **Sign in to GitHub:** the app shows an eight-character code; enter it on github.com and choose the one repository holding the vault.
+3. **Pick the vault:** the app lists that repository's folders that look like vaults and its live site address; confirm.
+4. **Pair a phone:** pick what this phone may do, scan the QR code with the phone camera, check the two short codes match, tap Confirm.
+5. **Pair an agent:** same screen, kind "agent" (propose only), and paste the pairing line into the agent's setup or run `cyberbaser pair <code>`.
+
+No port forwarding, domain, certificate, account on a Cyberbaser server, or password. The mockups are in `.workspace/deploy-design/setup-flow.html` (owner review copy, shown in the chat thread).
+
+## 1. Giving the node an Iroh endpoint
+
+| Option | State today | Verdict |
+|---|---|---|
+| **Official N-API bindings `@number0/iroh`** in the Bun process | v1.2.0, released 2026-10-22, from [n0-computer/iroh-ffi](https://github.com/n0-computer/iroh-ffi) (not archived; 1.0.0 in June, 1.1.0 in July). Prebuilt binaries for Linux x64/arm64 (glibc and musl), macOS arm64 only (no Intel), Windows x64/arm64, Android ([iroh JavaScript docs](https://docs.iroh.computer/languages/javascript)). The docs name Node 20.3+, not Bun. | **Recommended.** Checked here: under Bun 1.3.14 and Node 22, a loopback connection exchanged a stream with the authenticated peer ID; under Bun, a dial by endpoint ID plus n0 relay URL connected in about 350 ms and then upgraded to a direct path. `bun build --compile` embedded the addon: the 131 MB binary ran from an empty directory. |
+| Small Rust sidecar on a local socket | Rust `iroh` is at 1.5.0 ([docs.rs](https://docs.rs/iroh/1.5.0/iroh/)); the spike already wraps 1.0.3. | Keep as the fallback. It adds a second binary, a second build toolchain per platform, and a local socket that must itself be authenticated. Worth it only if the bindings stall or a missing feature becomes required. |
+| Rewrite the node in Rust | | No. The command core, publisher and tests are JavaScript and work. |
+
+**One gap in the bindings:** the JavaScript `Connection` exposes the authenticated remote ID but not `export_keying_material` (checked in the 1.2.0 type definitions). The TLS exporter is what the [research fixture](/cyberbaser/research/iroh-editor-carrier/#c-authenticate-the-person-on-this-connection) used to bind a passkey to the connection. The design below does not need it, because a signed request is bound to the peer's authenticated endpoint ID plus a fresh node nonce. If the exporter is wanted later, it is a small upstream addition to iroh-ffi or the sidecar fallback.
+
+**Endpoint settings.** Start from the minimal preset, set the relay explicitly to the configured n0 relay URL (`RelayMode.customFromUrls`), no discovery publishing, one stable node secret key stored owner-only in the node's state. The relay URL is configuration, as already decided; nothing silently falls back. Native clients may upgrade to a direct path (both peers then learn each other's address; they are the owner's own devices). Browser and Obsidian-mobile clients use the WASM build, which only ever goes through the relay ([Iroh WASM support](https://docs.iroh.computer/deployment/wasm-browser-support)).
+
+**How the existing envelopes ride on it unchanged.** Two ALPNs: `cyberbaser/pair/1` (enrollment, below) and `cyberbaser/cmd/1`.
+
+- On each new command connection the node sends a 32-byte random nonce on the first stream.
+- The client sets `channelBinding = SHA-256("cyberbaser.iroh-binding.v1" ‖ nodeId ‖ clientEndpointId ‖ nonce)` in the [signed request](https://github.com/cybersader/cyberbaser/blob/main/apps/owner-alpha/src/core/signed-request.js) it already builds. The audience becomes `cyberbaser.owner.iroh.v1:<nodeId>`.
+- The node computes the same value from `connection.remoteId()` (authenticated by Iroh's TLS, never read from JSON) and calls the existing `verifier.forChannel(binding)` with `requireChannelBinding: true`. Replay window, nonce cache, revocation and expiry checks are the same code.
+- One bidirectional stream per request, canonical JSON, the same 512 KiB cap, five-second read deadline and command allowlist as the [local signed socket](https://github.com/cybersader/cyberbaser/blob/main/apps/owner-alpha/src/signed-request-socket.js). A conformance test runs the same traces over the Unix socket and Iroh and compares outcomes.
+
+A replayed envelope fails on another connection because the nonce differs, and on another endpoint because the peer ID differs. The device signing key and the Iroh endpoint key stay separate keys: the endpoint key may be per-session; the device key is the enrolled identity.
+
+**Phone and browser side.** The Obsidian plugin (and any browser client) bundles the Iroh WASM build from the spike and talks only through the relay. Obsidian plugins can register an `obsidian://` handler ([`registerObsidianProtocolHandler`](https://docs.obsidian.md/Reference/TypeScript+API/Plugin/registerObsidianProtocolHandler)), so a QR code scanned by the phone camera can open Obsidian straight into pairing. Per the roadmap's [workspace findings](/cyberbaser/design/editing-and-trust-roadmap/#publish-from-where-you-write), the device key must not live in synced plugin settings; keep it in per-device app storage and treat this custody as the item to test on a real phone.
+
+## 2. Pairing by QR
+
+Built on the existing [device-key registry](https://github.com/cybersader/cyberbaser/blob/main/apps/owner-alpha/src/core/device-keys.js) (Ed25519 keys, actor kind `owner-device` or `agent`, grants from `read, save, review, apply, publication, publish, propose`, agents limited to `propose`, `notBefore`/`notAfter`, `revoked`).
+
+**Owner starts it.** On the node's setup page (or an already paired owner phone holding `review`), the owner picks the kind, a name and the grants. The node creates an enrollment record `{enrollmentId, secretHash, kind, label, grants, expiresAt = now + 5 min, used: false}`.
+
+**The QR contains** `cb1:<nodeId>:<relayUrl>:<enrollmentId>:<secret>` (32-byte secret, base32), wrapped as `obsidian://cyberbaser-pair?c=…` for phones. Nothing in it is a password or account; the node ID is not secret but should not be published.
+
+**The device enrolls.**
+1. It creates its device key (Ed25519) and a fresh Iroh endpoint key, and dials the node ID through the given relay with ALPN `cyberbaser/pair/1`.
+2. It sends `{enrollmentId, devicePublicKey, label, mac, signature}` where `mac = HMAC(secret, transcript)` and `signature` is the device key over the same transcript. The transcript includes the node ID, the authenticated client endpoint ID, the enrollment ID and the device public key. The secret itself never crosses the wire.
+3. The node marks the enrollment used on the first attempt, valid or not, checks the MAC and signature, and derives a short comparison code (four words) from the transcript hash. Both screens show it.
+4. The owner taps **Confirm** on the node's screen. Only then does the registry gain `{keyId, publicKey, actor, grants: exactly those picked, notBefore: now, notAfter: now + 1 year, revoked: false}`. The device receives its key ID and starts using `cyberbaser/cmd/1`.
+
+**Revocation.** The devices list shows each key's name, kind, grants and last use. Revoke sets `revoked: true`, persists it, reloads the registry and closes that key's open connections; the verifier already refuses revoked keys on every request. Rotating the node key invalidates every pairing (re-pair). Lost phone: revoke that one key; keys are per device, never synced.
+
+**Someone photographs the QR.** For at most five minutes, and only until the real device uses it, they can attempt a pairing. They cannot finish without the owner's Confirm, and a mismatched or unexpected comparison code tells the owner to cancel. After use or expiry the photo is worthless. The node ID and relay it reveals let them try to connect, which the node refuses; the relay operator already sees connection metadata, as decided.
+
+**Code change this needs:** the registry is built once from config today. It needs a small persisted store the node can append to and revoke from, with an atomic write and reload. The verification path stays as is.
+
+## 3. GitHub access, once
+
+| Option | Steps for a non-developer | Scope | Expiry, revocation | Fit |
+|---|---|---|---|---|
+| **Cyberbaser GitHub App, device sign-in** | Enter a code on github.com, install the app on one repository | Contents: write (plus the mandatory metadata read); user token limited to repos where the app is installed *and* the user has access ([GitHub](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app)) | 8-hour token, 6-month refresh token, refreshed by the publisher; revoke by uninstalling or revoking in GitHub settings | **Recommended.** No copy-paste of secrets; device flow needs no client secret, so no Cyberbaser server. Without the Workflows permission the token should not be able to change `.github/workflows` (to test). |
+| Fine-grained personal access token | Open a pre-filled GitHub link, pick the repo, copy, paste | One repo, Contents read/write ([GitHub](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)) | Default 30 days, up to 366 or none; delete in settings | **Fallback**, and the model for Forgejo tokens. |
+| Deploy key | Create SSH key, paste it in repo settings, tick write | One repo | Never expires | No: more steps, SSH handling, no expiry. |
+| **Owner's own GitHub App, created from a manifest** (built 2026-11-24) | Click Create, then Install (Only select repositories, one repository), then Authorize, all on github.com | Same as the first row: Contents write plus metadata read, one repository | Same expiring user token; the sign-in code exchange and refresh use the app's client secret, held by the publisher only | **Current default.** Nothing for the project to register or keep, nothing for the owner to type. The app's private key is never needed (user tokens only), so it is dropped unread at creation. |
+
+**Where it lives.** Only the publisher process stores the refresh token, owner-only in publisher state, and hands Git a short-lived token through its existing credential helper. The web-facing node never sees it. Behind a vendor-neutral `ForgeAccess` provider interface (`github-app`, `token`, later `forgejo`) with a conformance test: can push to the one repo, cannot read another, refresh works, revocation is noticed. This follows the project's [protocol-driven controls](/cyberbaser/getting-started/principles/) preference.
+
+**Cost of a shared app:** the project would register and keep one public GitHub App. The manifest path (current default) avoids that: each owner's app is private to their account, and losing it means running setup's GitHub step again.
+
+## 4. One app
+
+| Form | What the user sees | Publisher isolation |
+|---|---|---|
+| **Compiled single binary**, one per platform (Linux x64/arm64, macOS arm64) | Double-click or install package; a browser tab opens on the local setup page | The same binary runs `cyberbaser node` and `cyberbaser publisher` as two processes. Installed as a system service, it creates two service accounts (`cyberbaser`, `cyberbaser-publisher`); the publisher's state and token are unreadable to the node. **Recommended.** |
+| Container image for a NAS or home server | The NAS app catalogue, then a setup link printed in the logs | Two users inside the container, as already designed in the [container guide](/cyberbaser/development/owner-alpha-container-deployment/). **Recommended for servers.** |
+| Per-user app without admin rights | Same, no password prompt | Two processes, same user: not credential isolation. Must be labelled. |
+| Small desktop shell with a tray icon (for example Tauri) | Tray icon with status | Adds a Rust and webview toolchain per platform. **Later**, wrapping the same binary. |
+
+**First run** is the five steps above, served on loopback (`127.0.0.1`) with a one-time setup token opened automatically, which is how the [bootstrap console](https://github.com/cybersader/cyberbaser/blob/main/apps/owner-alpha/src/bootstrap-console.js) already works. On a NAS the setup link comes from the container log.
+
+### First-run setup, as built (2026-11-23)
+
+A short guided flow in the owner app, shown only until setup is finished. It opens from a one-time link the app prints when it starts (`127.0.0.1` only, works once, for 15 minutes; a restart prints a new one). After setup, the normal owner sign-in applies.
+
+1. **Welcome:** one sentence on what Cyberbaser does, and Start.
+2. **Connect GitHub:** the same sign-in code and searchable repository list as the Publishing to GitHub page. During setup the publisher can sign in, list and pick a repository, but it cannot push.
+3. **Your notes:** the publisher fetches the repository (private ones too) into its mirror and the node copies it from there, with a calm progress line and then how many notes it copied. If the repository has no `publish.yml`, it says nothing will be published without one and offers **Publish nothing yet** or **Choose public folders**: a checklist of the top-level folders, none checked, a sentence that says exactly what will become public, the file itself behind **Show the file**, and **Publish this file**. That button is the owner's approval of one exact change, and the publisher pushes it only if it is byte for byte that starter file added on top of the current head. If this machine cannot build the private preview, it says so and continues.
+4. **Your website:** found from the repository's own Pages workflow or `CNAME` file when they exist; otherwise one address field and **Skip for now**.
+5. **Pair your phone:** the Devices pairing with QR code and matching words, or **Pair later**.
+6. **Pair an agent:** optional; shows the one-line `cyberbaser pair` command, or **Skip**.
+7. **Done:** "Changes your agents and visitors suggest will appear in Proposals", with links to Proposals and Devices.
+
+Each step is saved to an owner-only file, so a restart resumes at the same step. Every action needs the setup session and its CSRF token and names the step on screen, so a stale click does nothing. The only thing published during setup is the starter `publish.yml` the owner approved. At Done the setup server writes the node config, stops (its links stop working) and starts the node in the same process on the same address, adopting the owner's browser session in memory; the owner lands in Proposals signed in.
+
+**Not yet:** a custom website address is recorded, but live checks still use the GitHub Pages address. Pairing during setup has not run against a real Iroh endpoint. Setup does not write `.cyberbaser/trust.yml`; without one the owner's approved proposals stop at the trust check ("full-review is not allowed").
+
+**Cross-builds.** Bun cross-compiles with `--target` and can embed `.node` addons, but each target needs that platform's addon package installed ([Bun executables](https://bun.com/docs/compiler/executables)), so build per platform in CI. No macOS Intel binding exists.
+
+### One program and the Linux install, as built (2026-11-23)
+
+**What a Linux user runs:** download one file and run `cyberbaser install --quartz-seed quartz-seed-v4.5.2.tar.zst`. It asks for the admin password once (pkexec on a desktop, sudo in a terminal, and says which), installs a background service, and prints one line: the local setup address with its one-time token. `cyberbaser status` shows what runs; `cyberbaser uninstall` removes the program and services and keeps the notes and keys unless `--purge`. Running install again updates in place; it refuses to touch a setup it did not make.
+
+**The program.** `packaging/build.js` compiles one 130 MB Linux x64 executable with `bun build --compile`. The Iroh addon is inside it: pairing loads it from an empty folder with no network. It starts in about 0.1 s. Its modes wrap the existing entry points unchanged: `node`, `publisher`, `intake` (the node starts it through the same program), `pair`, `install`, `uninstall`, `status`. Each refuses root, and on an installed machine refuses any account but its own. The web pages, renderer files and the sources the site-identity check hashes (2.7 MB) are embedded and written to `/opt/cyberbaser` at install.
+
+**The site builder.** The pinned Quartz runs on the program's own runtime: `node` and `bun` in the install are two-line scripts that start the same program as Bun. No Node.js is needed. With no network at all, a private build of a small vault took 1.1 s under Bun against 1.5 s under Node 22; the pages differ only in whitespace inside serialized functions and a source-map path. Quartz and its locked dependencies (465 MB installed) ship as one archive, 107 MB with zstd, whose SHA-256 the program pins; install checks the digest, unpacks it, and the renderer's own setup checks origin, tag, commit and lockfile again.
+
+**Renderer output is staging.** On Linux x64, the installed node and container use the same launcher, requiring Landlock ABI 6 (Linux 6.12 or newer) and the required seccomp/procfs access. The renderer can write its build workspace and disposable output, but not the candidate or live tree. After the build, the launcher kills and reaps the renderer tree before returning. The node copies regular, singly linked files into a new private tree and validates and hashes only that copy before promotion. Private asset reads resolve each component through a pinned directory handle without following symlinks. The native package provides the launcher from `bun packaging/build.js`; the compiler is needed to build the package, not to install it.
+
+**Two accounts.** `cyberbaser` runs the node and the intake; `cyberbaser-publisher` runs the publisher; both have the group `cyberbaser-share` as their primary group.
+
+| Place | Owner, mode | Who can read it |
+|---|---|---|
+| `/var/lib/cyberbaser` (config, Iroh keys, setup state) | `cyberbaser`, 0700 | the node only |
+| `/var/lib/cyberbaser-publisher` (forge key, push repository, its copy of the config) | `cyberbaser-publisher`, 0700 | the publisher only |
+| `/var/lib/cyberbaser-shared/workspace` (job store, seen at `/opt/cyberbaser/.workspace`) | node, group share, 0770; job records 0640 | both; the publisher adds its push receipt |
+| `/var/lib/cyberbaser-shared/notes` (the notes copy) | node, group share, 0770 | both; the publisher reads commits |
+| `/var/lib/cyberbaser-shared/mirror` (the publisher's plain copy of the repository) | publisher, group share, 0750 | both; only the publisher writes or fetches |
+| `/run/cyberbaser-publisher` (publisher sockets) | publisher, group share, 0710; sockets 0660 | the node may connect, not list or write |
+
+The units use `ProtectSystem=strict`, `NoNewPrivileges`, `PrivateTmp`, `ProtectHome`, `ProtectProc=invisible`, no capabilities, and only the paths above as writable; each unit cannot see the other's private folder at all. Before the publisher starts, root copies the node's config into the publisher's own 0600 file (refusing links and any file not the node's own), and a path unit restarts the publisher when that config changes.
+
+**Two small code changes made this possible, both off unless the installed service turns them on.** The publisher was written as a separate process under the same user: its sockets accepted only its own account, and the job store was owner-only. Now the publisher takes a socket group (`--socket-group`: directory 0710, sockets 0660), and `CYBERBASER_SHARED_STORE=group` makes only the job records under `jobs/` group-shared (directories 0770, files 0640; the store root 0710). Everything else in the store stays owner-only; the node's other checks require that.
+
+**Evidence** (`packaging/test/container/run.sh`, a disposable Fedora 44 container running systemd under rootless Podman, 61 checks, all pass): install in about 2 s and the setup link printed; the node cannot list the publisher's folder, read a stand-in forge key or the publisher's config, read the publisher's environment or memory maps, or list or write the socket folder, but can connect to the socket; an unrelated user cannot connect or read the shared store; the publisher cannot read the node's keys or config; inside the running node service the publisher folder is an empty locked stub and the program files are read-only even for root. One synthetic job ran end to end across accounts: the node applied and committed, the publisher pushed that exact commit to a local bare repository, and its receipt was group-readable only. Uninstall kept data, reinstall and update reused the same accounts, and install refused an unknown `/opt/cyberbaser` and an unknown `cyberbaser-publisher` account. `systemd-analyze security` rates both units 2.9 ("OK"). A separate test runs the program with no network in a private namespace: the node built its private site, started the intake and Iroh, and answered its health check in 3.5 to 5.5 s.
+
+**Home server.** `deploy/owner-alpha/one-app/` builds a local image from the same program (1.07 GB: Fedora base, program, renderer bundle) with the same layout as two containers: node as uid 65532 and publisher as 65533, sharing group 65530; only the publisher container mounts the publisher volume. Checked: the node container prints the setup link, refuses to run as the publisher, and cannot list the publisher volume. Not yet run end to end with a push; the earlier image and its guide are unchanged.
+
+### Install and first run as one thing (2026-11-23)
+
+**Publisher before config.** The publisher service always starts. Until its copy of the node config exists it runs in setup mode: GitHub device sign-in, the repository list, the mirror, and one starter file, never a job push. When setup writes the config, the path unit restarts it in normal mode; nothing is reinstalled. `install` takes an optional `--github-client-id` (a hand-registered app, device sign-in; without it setup creates the owner's app from a manifest) and, for tests or GitHub Enterprise, `--github-origin`; `--iroh-relay` sets the node's relay.
+
+**Private repositories, with no credential on the node's side.** The publisher fetches the bound repository into `/var/lib/cyberbaser-shared/mirror/notes.git`, a bare repository whose config names no remote, URL or helper; the token reaches only the one Git child that fetches, through its environment. The node clones its working copy from the mirror, sets its remote to the plain `https://github.com/owner/name.git`, and later fast-forwards from the mirror after asking the publisher to fetch. After each push the publisher adopts the pushed commit into the mirror from the pack it already checked.
+
+**Start without network.** With a mirror in its config the node reads the remote branch from the mirror instead of asking GitHub, so it starts offline. Where publishing depends on GitHub, Proposals shows one quiet line: "Can't reach GitHub. You can still review; publishing waits until it is back." The node asks again every five minutes.
+
+**Paired agents.** The suggestion intake now also runs for paired agents alone (form and forge watcher off), and the private site build retains the publication binding their signed proposals bind to. The private site no longer needs a home page, so a site that publishes only some folders builds.
+
+**Evidence.** `packaging/test/container/run.sh setup-e2e.sh` (opt-in through `packaging/test/container-setup.test.js`): a disposable systemd container with no network but loopback and a stand-in GitHub inside it, 48 checks, all pass. Install printed the setup link with the publisher already in setup mode; sign-in, the picker and a private repository the stand-in refuses without a token; the publisher mirrored it and the node copied it; the starter `publish.yml` was pushed as one commit adding exactly that file with only the folder picked; at Done the owner reached Proposals with the setup cookie and the setup link stopped answering; the publisher switched to normal mode; one synthetic agent proposal over the local signed socket was approved and applied, and the publisher pushed exactly the node's commit. A canary search as the node account over the whole disk, every readable process environment and command line, the node service's private temporary folders, the notes copy, the mirror, their Git config and reflog, and the journal found no token, while the publisher's state held it. With the stand-in GitHub stopped and both services restarted, the publisher started, and the node said it cannot reach GitHub and answered on the owner address and the reader site. `apps/owner-alpha/test/mirror.test.js` covers the mirror, starter refusals (an all-public file, an extra changed file, unsorted folders, a second starter) and offline readiness against the fake GitHub.
+
+**What still does not hold up.**
+- After an offline restart the sign-in link prints only after job recovery. A job waiting on its deployment check keeps retrying GitHub for up to `networkTimeoutMs` (15 minutes in the setup config), so for that long the owner has no way to sign in. The order (recovery, ready marker, then the link) is deliberate and tested, so changing it needs a decision.
+- A compromised node still owns the job store, so it can ask the publisher to push any commit to the one repository. What the split protects is the key itself: the node can never read or copy it, and revoking it is immediate.
+- The renderer bundle is a separate 107 MB download; the program does not fetch it yet.
+
+### Other platforms (evaluation, 2026-11-23)
+
+**Cross-compiling, checked here.** `bun build --compile --target` produced a Windows x64 `.exe`, a macOS arm64 executable and a Linux arm64 executable from this machine in about 1.5 s each. n0 publishes the Iroh addon for win32-x64, win32-arm64 and darwin-arm64 (version 1.2.0; darwin-x64 does not exist, npm returns 404). With the target's addon package unpacked beside the others, the builds embed it (Windows 120 MB, macOS 77 MB); without it they build but carry no Iroh. None of these was run: there is no Windows or Mac here. Running is not enough anyway: the publisher's repository import refuses any platform but Linux (it reads objects through `/proc/self/fd`), and the node and publisher call `flock`, which Windows lacks. Those two need a port before Windows works; macOS has neither `/proc` nor `flock(1)` by default either.
+
+**Desktop shell.**
+
+| Option | Reuses our web UI | Installers | Cost | Verdict |
+|---|---|---|---|---|
+| No shell: service plus the browser | Yes, as is | Linux built here; per-OS installers to build | None beyond the installers | **First.** What is built now. |
+| Tauri 2 | Yes: a webview showing the local page | `.msi`/NSIS `.exe`, `.dmg`/`.app`, `.deb`/`.rpm`/AppImage from one config; ships our program as a sidecar | Rust toolchain and signing per platform; the webview differs by OS | **Later**, as the tray and installer wrapper around the same program. |
+| GPUI (Zed's Rust UI) | No: a second, native UI written in Rust | None of its own | Rebuild every screen; young, mainly tested on macOS and Linux | **No.** |
+
+The Tauri row is from its documentation, not built here.
+
+**The publisher's own account on each OS** (design, not built).
+- **Windows:** two Windows services, each under its own virtual service account (`NT SERVICE\CyberbaserNode`, `NT SERVICE\CyberbaserPublisher`). The publisher's folder under `ProgramData` gets an ACL for the publisher service only; the socket becomes a named pipe whose ACL admits only the node service. Admin once: the MSI asks through UAC. Not equivalent: administrators can still take ownership of anything, and the code's Unix checks (owner, mode bits, `flock`, `/proc`) need Windows versions.
+- **macOS:** two launchd daemons in `/Library/LaunchDaemons` with `UserName` set to two hidden role accounts the installer creates, state under `/Library/Application Support/Cyberbaser` with the same modes; Unix sockets work as on Linux. Admin once: the `.pkg` installer's password prompt. The Keychain is not a better home for the key: the publisher daemon has no login keychain, and the System keychain is shared with root processes. Same strength as Linux except `/proc`-based code, which needs a macOS path.
+- **Without admin rights** on any OS: two processes under one user, not credential isolation, and labelled so.
+
+**Sockets on Windows.** Today: Unix sockets with owner and mode checks, `chmod`/`chown`, a `flock` ownership lock, and `lstat` inode fingerprints. On Windows: named pipes (`\\.\pipe\…`, which Bun's `net` supports) with an ACL instead of modes, a lock file opened exclusively instead of `flock`, and no inode fingerprint. These checks should sit behind one small socket interface per platform; Linux keeps today's code.
+
+## 5. What is genuinely hard or risky
+
+- **The private-site renderer is not a single file.** Review renders the vault with the pinned Quartz toolchain (Node packages and an esbuild binary). The binary must either download a pinned, digest-checked renderer bundle on first run or ship beside it. This is the largest packaging item.
+- **External programs.** The node calls `git` and `flock`. Linux has both; macOS needs Git (Xcode tools prompt); Windows has no `flock`. Linux first, macOS next, Windows after a port.
+- **Isolation on desktops** needs an admin install. A no-admin install is weaker and must say so.
+- **Phone key custody and background limits** in Obsidian mobile are untested. A phone app that is closed cannot hold a connection; every command must be a single request with a receipt to look up later, which the command core already supports.
+- **n0's public relay** is development infrastructure with no uptime promise (accepted); the relay URL must stay one setting.
+- **The bindings are young** (1.x since June 2026) and not documented for Bun. Pin the version, keep the loopback and relay checks as tests, keep the sidecar as the fallback.
+- **The GitHub App** is a registration the project must maintain, and its exact refusal of workflow-file pushes needs a real test.
+
+## Build order
+
+1. **Iroh carrier in the node, agent on this machine.** `@number0/iroh` pinned, `cyberbaser/cmd/1` with the nonce binding, the persisted device store, `cyberbaser/pair/1` with the QR screen and Confirm, and a `cyberbaser pair` command for an agent. Test: an agent on this machine pairs by code, submits a proposal over Iroh through the n0 relay, and is refused after revoke. Same conformance traces as the Unix socket. Synthetic vault only. Roughly a few focused days.
+
+   **Built (2026-11-23).** Off unless the config's `iroh` section enables it. `@number0/iroh` 1.2.0 pinned; `cyberbaser/cmd/1` accepts only signed proposal submission, bound to the authenticated client endpoint plus a one-use node challenge; paired keys name their Iroh endpoint; enrolments and revocations are private create-once files that take effect at once; a Devices and agents page in the owner app starts pairing, shows the four words and Confirm, and revokes; `bin/cyberbaser-pair.js` pairs an agent and `agent-propose.js ... iroh` submits. A loopback test runs pair, submit, revoke, refuse with the real CLI; an opt-in test did the same once through n0's public relay (about 1.4 s to words, 0.6 s per submission). **Limits:** the code is shown as text, not a QR image (a QR encoder would add a dependency); each agent keeps one stable Iroh endpoint key named in its record, not a per-session one; proposal rate limits are counted per carrier; the Unix socket and Iroh share behaviour through matching tests, not one shared trace file; nothing ran against the real vault.
+2. **Phone.** Thin Obsidian plugin with the WASM build: scan, confirm, status, propose or publish within its grants. Test on the owner's real phone.
+
+   **Built (2026-11-23), tested in a disposable browser only.** `apps/obsidian-cyberbaser` is a plain JavaScript Obsidian plugin with Iroh compiled to WebAssembly from the `iroh` 1.2.0 crate (n0 publishes no ready-made browser package). The WASM is 2.6 MB (0.95 MB gzipped) and is embedded in the 3.5 MB `main.js`, loaded only when the plugin first connects. It ran inside Obsidian 1.12.7's own page and content security policy in the OpenClast harness.
+   - **Pair:** a command, a settings button and an `obsidian://cyberbaser-pair?code=…` link (so a QR code can open it later). The owner pastes the code from the Devices page; the plugin shows the four words; the owner confirms on the node. The signing key is a non-extractable WebCrypto key and the Iroh secret is 32 random bytes, both kept in the app's own IndexedDB on that device, one record per vault. Nothing goes into `data.json`, which lives in the vault and syncs. Unpair deletes the record (revoke on the node as well).
+   - **Status:** for the open note: *Live*, *Live, older version*, *Public, not confirmed yet*, *Not public*, *Not paired*, *Can't reach your node*, or *Status needs full access*. A status-bar item on desktop; a short label in the note header on mobile.
+   - **Send to Cyberbaser:** the note's path and text go to a new signed node command, `submitCapture`. The node, not the phone, binds them to the committed vault text with the same folding and line-ending spelling as the agent path, and queues an ordinary proposal under the `propose` grant and the same per-key budget as `submitProposal`. A device with full access on the node's publication page also gets **Publish to your site**, which runs the existing `preparePublication` (with the phone's text digest as `expectedDigest`) and `publish` commands.
+   - **Node side:** the Iroh carrier now accepts six signed commands (`submitProposal`, `submitCapture`, `readNoteStatus`, `preparePublication`, `publish`, `readPublicationReceipt`), each through the command core with its existing grant; no HTTP route was added. After a request verifies, a refusal may name one fixed reason (for example "no committed copy of this note"); signature, key, grant and binding failures stay one generic refusal. The pairing reply now tells the device its grants. A relay may be `http://127.0.0.1:<port>/` for local tests.
+   - **Evidence:** `apps/obsidian-cyberbaser/test/harness/phone-step.mjs` pairs, checks status, publishes, edits one word and sends it, all at a 390×844 viewport with Obsidian's mobile layout. Loopback relay: 0.4 to 3.5 s from code to words, 4.5 s from Publish to *Live*, 0.2 s per send. n0's public relay: 1.0 s to words, 0.6 s for a status, 6.0 s from Publish to *Live*, 0.6 s per send.
+
+   **Limits at first build.** Not tried on a real phone. "Public" meant only the one configured publication page; a propose-only phone got no status; there was no screen to link a note to the vault, and no QR image.
+
+   **Added (2026-11-23, still not on a real phone).**
+   - **QR pairing.** For a phone, the Devices page shows the pairing code as a QR image beside the text code. The QR carries `obsidian://cyberbaser-pair?code=…`, so the phone camera opens Obsidian with the code filled in; matching words and Confirm are still required. The encoder is a small local one (`apps/owner-alpha/src/qr.js`, byte mode, level M, all versions), no new runtime dependency; tests decode its output with an independent decoder (jsQR, dev-only). `cyberbaser-pair.js` accepts the code or the link.
+   - **Status for every published note.** The node runs the vault's own publication rules (the same `@cyberbaser/publish` selector the site build uses) on its checkout at the branch head, cached per commit. *Live* means the note's text matches the newest commit whose deployment the node verified; *Live, older version* means it was published but the text differs; *Not public* means the selector excludes it (an unknown path looks the same). A device learns only about the path it asked for.
+   - **Propose-only devices** get the public part of status (public or not, and the live version), never drafts, jobs or proposals.
+   - **Linking a note.** When a phone sends a note the node cannot place (no file at that path, or the publication page not yet bound), the reply says to link it on the node. The Devices page then lists it under *Notes to link*: the path the phone reported, a searchable picker of published vault paths, and Link. It links only when both texts match after line-ending folding (the publication page uses the existing baseline binding); otherwise it says how many lines differ and records nothing.
+   - **Quieter plugin.** No standing badge. A theme-coloured icon appears only when the open note has changes the site does not have; the full status, with the time it was confirmed, is in the note menu (*Cyberbaser: status*) and the command palette. A setting turns the mark off.
+
+   **Limits now.** Still no real-phone run, so the camera-to-Obsidian hand-off, phone storage and backgrounding are unproven (the harness opens the decoded link the way Obsidian's link handler receives it). *Live* for notes other than the publication page rests on the newest verified deployment the node itself ran; a site deployed some other way shows *Public, not confirmed yet*. Link requests are held in memory for 30 minutes and lost on restart. Linking an ordinary note compares the text the phone sent with the vault; it records a path link only, since publishing still covers the one configured page.
+3. **GitHub once.** Register the app, device flow and refresh in the publisher behind `ForgeAccess`, token fallback.
+
+   **Built (2026-11-23), against a local fake GitHub only; no app registered yet.** The owner app's "Publishing to GitHub" page shows the sign-in code, then a searchable list of the repositories the app was installed on, then "Publishing to owner/name" with Change repository and Disconnect. Only the publisher holds the token: `ForgeAccess` providers `github-app` (device flow and refresh with the client ID alone, one repository, exactly Contents write plus Metadata read) and `token` (fine-grained, pasted through the publisher command). Each push gets a fresh credential through that push's own Git process; the owner app reaches the publisher over a second owner-only socket that never carries a token. Picking a repository rewrites the config and so changes the policy revision; a different repository applies after a restart. A three-process test (fake GitHub, publisher, owner app, real Git smart HTTP) runs connect, pick, push, refresh, push, disconnect and a refused push, and finds no token in the owner app's responses, heap, files or logs.
+
+   **The app is created by setup (2026-11-24).** With no client ID, setup's GitHub step offers "Create Cyberbaser's GitHub App": a page that posts a manifest (private app, Contents write plus Metadata read, no webhook or events, return addresses on the setup page's own `127.0.0.1` port) to `github.com/settings/apps/new?state=…`. GitHub returns with a one-hour code; the publisher, not the node, converts it (`POST /app-manifests/{code}/conversions`) and keeps the app id, slug, client ID and client secret in its owner-only state, recording it as created by manifest. The private key and webhook secret in that answer are dropped before anything is stored; the received bytes are zeroed. Then "Install on your repository" opens GitHub's install page; GitHub returns to the setup URL, and setup continues to GitHub's authorize page with a one-use state and a PKCE challenge. The publisher exchanges the returned code with the client secret and the PKCE verifier for the same expiring user token as before. Install-time OAuth is not used because GitHub documents no state for it. GitHub's returns carry no session cookie (it is `SameSite=Strict`), so each is accepted only with the publisher's one-use, short-lived state, and ends on a page that navigates back to setup. If the app sits on exactly one usable repository, setup picks it. Device sign-in remains for a hand-registered app (`--github-client-id`). **Limits:** untested against real GitHub (including the refusal of workflow-file pushes); a different repository needs a restart and a local clone; the app must sit on that one repository only.
+4. **One app.** Compiled binary with node and publisher modes, Linux service install with two accounts, renderer bundle, container refresh.
+
+   **Built (2026-11-23), tested in disposable containers only.** One compiled program (`packaging/`) with all modes; `cyberbaser install` for Linux with systemd, two accounts, hardened units, uninstall that keeps data, and refusal of unknown setups; the pinned Quartz bundle as one 107 MB archive running on the program's own runtime; a home-server image from the same program as two containers. The cross-account push worked in a systemd container. Details and limits are in [One program and the Linux install](#one-program-and-the-linux-install-as-built-2026-11-23). **Not yet:** first-run setup and the publisher are not wired together (setup needs the publisher before a config exists), the node needs network to start, the bundle is not downloaded for the user, and nothing was installed on the owner's machine. Windows and macOS builds compile but were not run.
+5. **First real install** on the owner's machine, as decided.
+
+## Decisions for the owner
+
+1. **GitHub access:** a Cyberbaser GitHub App with device sign-in (recommended: nothing to copy, short-lived tokens, but the project maintains one app registration) or a pasted fine-grained token (no registration, but copy-paste and expiry within a year).
+2. **Install on a desktop:** a system service that asks for the admin password once and keeps the publishing key under a separate account (recommended) or a no-admin app with weaker, labelled isolation.
+3. **Pairing confirmation:** every pairing needs the matching short code and a Confirm tap (recommended; stops a photographed QR) or agents limited to proposing may pair from the QR alone.
+4. **Platforms first:** Linux desktop and home-server container first, then macOS, Windows later (recommended) or all three before the first install.
+
+## Decisions taken (2026-11-23)
+
+The owner chose: the Cyberbaser GitHub App for publishing access; a background service installed with the admin password once, with the publisher under its own account; matching words plus a Confirm tap for every pairing; Linux desktop and a home-server container first. On the setup screens they asked for a searchable, polished repository picker: the mocked checkboxes "look really crappy", while the approach itself is right. See `.claude/41-QUESTIONS-RESOLVED.md`.

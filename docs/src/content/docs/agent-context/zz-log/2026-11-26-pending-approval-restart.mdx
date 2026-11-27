@@ -1,0 +1,17 @@
+---
+title: A saved change can wait for approval across node restart
+description: Exact pending jobs survive node recreation without a push or a reader rebuild from unsigned content.
+status: log
+---
+
+## What changed
+
+The startup site check required the checkout to equal the publisher mirror before the job recovery code could run. A normal unsigned Save is intentionally one local commit ahead of that mirror, so restarting with the job in `awaiting-approval` stopped the node with `checkout-not-at-origin-branch`.
+
+Startup can now continue if the checkout is clean and exactly one current-policy `awaiting-approval` job records its HEAD. The commit must have the mirror head as its sole parent, and its tree must reproduce the durable exact source edit. The node leaves the last published reader output untouched, and ordinary recovery leaves an unsigned job waiting for an explicit signature. No checkout reset or push is performed by the startup exception. Other divergence still fails with the same error, and new edits and site builds still require a checkout at the configured branch head.
+
+## Evidence and limits
+
+- The regression reproduced the startup refusal with real local Git, a bare mirror and a Save job parked after an unsigned publisher refusal. The fixed run kept the commit, worktree, job, and mirror unchanged and sent no new publication request. Negative cases cover unrecorded and extra commits, a moved mirror, a dirty checkout, a cancelled job, and a record whose commit has the wrong tree.
+- 166 targeted Bun tests passed across 12 files. The relay-only, networkless one-app lab passed 26 check groups including cleanup. It recreated both real roles before signing, verified the identical pending job and local commit, and served the previous reader manifest and note with no forge push. The separately enrolled fixture viewer then signed the same commit. Exactly one authenticated push changed the fake forge and mirror; further recreations served that revision without a duplicate push.
+- This was a local image and a synthetic forge, not a restart of the desktop install or a test of a real phone, relay, or home server. No real repository or running install was touched.
