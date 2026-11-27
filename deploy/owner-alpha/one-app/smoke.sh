@@ -641,6 +641,7 @@ metadata "$node" "$renderer" 65532:65530:700
 metadata "$node" "$renderer/build" 65532:65530:700
 dep "$node" "${curl_flags[@]}" -f "$fake/_control/report" >/dev/null
 active_start=$(started_at)
+if [[ $engine == docker ]]; then active_restart=$(docker inspect --format '{{.RestartCount}}' "$publisher"); fi
 "$engine" exec "$node" bash -euc '
   umask 0077
   jq --arg dir "$2" --arg pin "$3" ".renderer = {name:\"one-app-fixture\",directory:\$dir,quartzCommit:\$pin,fingerprint:[\"build\"]}" "$1" > "$1.lab-next"
@@ -652,6 +653,7 @@ if [[ $engine == docker ]]; then
   wait_for_normal_publisher
   active_start=$(started_at)
   active_count=$(docker inspect --format '{{.RestartCount}}' "$publisher")
+  [[ $active_count == "$((active_restart + 1))" ]]
   sleep 3
   [[ $(started_at) == "$active_start" ]]
   [[ $(docker inspect --format '{{.RestartCount}}' "$publisher") == "$active_count" ]]

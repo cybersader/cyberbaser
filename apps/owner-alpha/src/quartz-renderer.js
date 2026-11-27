@@ -173,10 +173,11 @@ export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, 
   const launcher = await rendererLauncher();
   const seedEnvironment = await offlineSeedEnvironment();
   await mkdir(workspace, { recursive: true });
-  // The invocation parent and bootstrap seed are never writable by the
-  // renderer. In particular no trusted Git/npm command ever runs in a tree
-  // that a previous renderer could have populated.
+  // Give setup/build a disposable working tree. Keep online bootstrap even
+  // outside the parent cache workspace, so a concurrent configured renderer
+  // cannot write the directory used by trusted Git/npm.
   const invocation = await mkdtemp(path.join(workspace, 'quartz-build-'));
+  let bootstrap;
   try {
     const buildWorkspace = path.join(invocation, 'build');
     const quartzDir = path.join(buildWorkspace, 'quartz');
@@ -189,9 +190,10 @@ export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, 
       ...seedEnvironment,
     });
     if (setupEnvironment.QUARTZ_OFFLINE === '0') {
-      const seed = path.join(invocation, 'seed');
+      bootstrap = await mkdtemp(path.join(path.dirname(workspace), '.quartz-bootstrap-'));
+      const seed = path.join(bootstrap, 'seed');
       await runFixed([SETUP_SCRIPT, seed], {
-        cwd: invocation, env: { ...setupEnvironment, QUARTZ_BOOTSTRAP_ONLY: '1' },
+        cwd: bootstrap, env: { ...setupEnvironment, QUARTZ_BOOTSTRAP_ONLY: '1' },
       }, 'quartz-setup-failed');
       setupEnvironment.QUARTZ_SEED_DIR = seed;
       setupEnvironment.QUARTZ_OFFLINE = '1';
@@ -243,6 +245,6 @@ export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, 
       },
     };
   } finally {
-    await rm(invocation, { recursive: true, force: true });
+    await Promise.all([invocation, bootstrap].filter(Boolean).map((root) => rm(root, { recursive: true, force: true })));
   }
 }
