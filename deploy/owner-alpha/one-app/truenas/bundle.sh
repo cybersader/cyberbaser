@@ -37,9 +37,15 @@ docker compose -f "$out/compose.yaml" config --quiet
 install -m 0600 "$here/OPERATE.md" "$here/paths.tsv" "$out/"
 archive="$out/image.tar"
 docker image save --platform linux/amd64 -o "$archive" "$tag"
-platform_id=$(docker image inspect --platform linux/amd64 --format '{{.Id}}' "$tag")
+platform_id=$(docker image inspect --platform linux/amd64 --format '{{.Id}}' "$image")
+# A single-platform Docker save may omit the descriptor platform. Verify the
+# hashed config's platform below either way, and reject contradictory metadata.
 exported_manifest=$(tar --occurrence=1 -xOf "$archive" index.json | jq -er '
-  .manifests | select(length == 1) | .[0] | select(.platform.os == "linux" and .platform.architecture == "amd64") | .digest')
+  .manifests | select(type == "array" and length == 1) | .[0]
+  | select(.mediaType == "application/vnd.oci.image.manifest.v1+json" or
+           .mediaType == "application/vnd.docker.distribution.manifest.v2+json")
+  | select((has("platform") | not) or (.platform.os == "linux" and .platform.architecture == "amd64"))
+  | .digest')
 [[ $exported_manifest =~ ^sha256:[a-f0-9]{64}$ ]]
 manifest_path="blobs/sha256/${exported_manifest#sha256:}"
 manifest=$(tar --occurrence=1 -xOf "$archive" "$manifest_path" | tee "$out/manifest.json" | sha256sum)
