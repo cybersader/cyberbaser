@@ -2,7 +2,7 @@
 
 > Update when direction changes, milestones complete, or priorities shift.
 
-**Private renderer workspaces hardened, 2026-11-26:** bundled and configured renderers build in disposable copies; source-only dependency bootstrap and native upgrade probing stay outside renderer write grants and run before touching installed services. Store, site and cache must be disjoint. Native assembled Quartz and targeted tests passed locally. The release and appliance gates are separate. Record: `agent-context/zz-log/2026-11-26-renderer-workspace-isolation.mdx`.
+**Private renderer workspaces hardened, 2026-11-26:** bundled and configured renderers build in disposable copies; source-only dependency bootstrap and native upgrade probing stay outside renderer write grants and run before touching installed services. Store, site and cache must be disjoint. Native assembled Quartz and targeted tests passed. TrueNAS image `1dee514` passed the rootful local relay-only rehearsal, including manifest-bound private reads, restart recovery, one signed fixture push and the assembled renderer. The appliance preflight remains unrun. Record: `agent-context/zz-log/2026-11-26-renderer-workspace-isolation.mdx`.
 
 **Private site renderer handoff hardened, 2026-11-26:** native and container builds reap the renderer tree before the node copies bounded regular files to private inodes for validation and promotion. Private reads use pinned directory descriptors. Historical local fixture checkpoint: `agent-context/zz-log/2026-11-26-renderer-output-handoff.mdx`.
 
