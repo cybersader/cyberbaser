@@ -65,7 +65,7 @@ async function site() {
 }
 
 test('reader: default stays at /cyberbase/', async () => {
-  const fetch = createReaderHandler({ config: await config(), siteRoot: await site() });
+  const fetch = createReaderHandler({ hasOwnerSession: () => true, config: await config(), siteRoot: await site() });
   expect((await get(fetch, '/')).headers.get('location')).toBe('/cyberbase/');
   expect((await get(fetch, '/cyberbase')).headers.get('location')).toBe('/cyberbase/');
   expect(await (await get(fetch, '/cyberbase/notes/page')).text()).toBe('<h1>Page</h1>');
@@ -74,7 +74,7 @@ test('reader: default stays at /cyberbase/', async () => {
 
 test('reader: a derived base path serves there and nowhere else', async () => {
   const siteRoot = await site();
-  const nested = createReaderHandler({ config: await config(), siteRoot, siteBase: '/field-notes/' });
+  const nested = createReaderHandler({ hasOwnerSession: () => true, config: await config(), siteRoot, siteBase: '/field-notes/' });
   expect((await get(nested, '/')).headers.get('location')).toBe('/field-notes/');
   expect((await get(nested, '/field-notes')).headers.get('location')).toBe('/field-notes/');
   expect(await (await get(nested, '/field-notes/notes/page')).text()).toBe('<h1>Page</h1>');
@@ -83,7 +83,7 @@ test('reader: a derived base path serves there and nowhere else', async () => {
   expect(missing.status).toBe(404);
   expect(await missing.text()).toContain('href="/field-notes/"');
 
-  const root = createReaderHandler({ config: await config(), siteRoot, siteBase: '/' });
+  const root = createReaderHandler({ hasOwnerSession: () => true, config: await config(), siteRoot, siteBase: '/' });
   expect(await (await get(root, '/')).text()).toBe('<h1>Home</h1>');
   expect(await (await get(root, '/notes/page')).text()).toBe('<h1>Page</h1>');
   expect((await get(root, '/cyberbase/')).status).toBe(404);
@@ -95,6 +95,6 @@ test('reader: a derived base path serves there and nowhere else', async () => {
 
   const c = await config();
   for (const bad of ['cyberbase', '/cyberbase', '/a/../', '/./', '//']) {
-    expect(() => createReaderHandler({ config: c, siteRoot, siteBase: bad })).toThrow(TypeError);
+    expect(() => createReaderHandler({ hasOwnerSession: () => true, config: c, siteRoot, siteBase: bad })).toThrow(TypeError);
   }
 });

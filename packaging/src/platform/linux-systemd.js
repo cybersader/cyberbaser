@@ -25,6 +25,7 @@ import path from 'node:path';
 import { DEFAULT_ACCOUNTS, INSTALL_RECORD, groupEntry, readInstallRecord, userEntry } from '../accounts.js';
 import { resolveReach } from '../../../apps/owner-alpha/src/core/reach.js';
 import { CONTAINER_CONFIG } from './container-config.js';
+import { validEnrollUid } from '../../../apps/owner-alpha/src/publisher/owner-control.js';
 
 export const LAYOUT = Object.freeze({
   appRoot: '/opt/cyberbaser',
@@ -250,7 +251,7 @@ async function installProgram(programPath, seed) {
   }
 }
 
-async function installState(ids, { port, clientId, relay, reach, renderer = null, publication = null }) {
+async function installState(ids, { port, clientId, relay, reach, renderer = null, publication = null, enrollUid = null }) {
   // The node's checks expect its directories in its own (primary) group.
   await ensureDirectory(LAYOUT.nodeHome, { owner: ids.node, group: ids.share, mode: 0o700 });
   for (const name of ['home', 'cache', 'config', 'iroh', 'setup', 'renderers']) {
@@ -287,6 +288,7 @@ async function installState(ids, { port, clientId, relay, reach, renderer = null
   // What first-run setup needs to write the node config (see bin/cyberbaser-setup.js).
   const layout = {
     listen: { host: '127.0.0.1', port },
+    enrollPort: enrollUid === null ? null : enrollPagePort(port),
     reviewSocket: path.join(LAYOUT.nodeRun, 'review.sock'),
     irohStateDirectory: path.join(LAYOUT.nodeHome, 'iroh'),
     forgeStateDirectory: path.join(LAYOUT.publisherHome, 'forge'),
@@ -322,7 +324,7 @@ export function enrollPagePort(port) { return port + 2; }
 // Signed publish: as the publisher account, open the first-device window and
 // make the recovery code, then print both here, on the administrator's
 // terminal. The node never sees them.
-function printEnrollment(ids, port) {
+function printEnrollment(ids, port, enrollUid) {
   const result = spawnSync('setpriv', ['--reuid', String(ids.publisher), '--regid', String(ids.share), '--clear-groups', '--',
     LAYOUT.program, 'publisher', 'enroll-code'], { stdio: ['ignore', 'inherit', 'inherit'], cwd: LAYOUT.publisherHome,
     env: { PATH: '/usr/bin:/bin', HOME: LAYOUT.publisherHome } });
@@ -330,7 +332,7 @@ function printEnrollment(ids, port) {
     say('The publishing setup code could not be made; run "cyberbaser publisher enroll-code" as administrator.');
     return;
   }
-  say(`The same code is shown on this computer at http://127.0.0.1:${enrollPagePort(port)}/enroll (not to the web app).`);
+  if (enrollUid !== null) say(`The same code is shown on this computer at http://127.0.0.1:${enrollPagePort(port)}/enroll (not to the web app).`);
 }
 
 function setupLink(since) {
@@ -420,11 +422,18 @@ export async function install(args, { programPath, compiled }) {
   try { resolveReach(reach); }
   catch (error) { process.stderr.write(`Invalid install record: ${error.message}\n`); return 1; }
   const updating = record?.state === 'installed';
+  // The privileged installer records the invoking desktop account, not the
+  // process making a subsequent network request. An unattended root install
+  // without an invoking account leaves the browser route closed.
+  const caller = process.env.PKEXEC_UID ?? process.env.SUDO_UID;
+  const proposedUid = record?.enrollUid ?? (/^[1-9]\d*$/u.test(caller ?? '') ? Number(caller) : null);
+  const enrollUid = desktopEnrollUid(proposedUid);
+
   // Recorded before the first change, so an install that stops part-way is
   // recognised as this installer's own on the next run.
   if (record === null) {
     await writeRecord({ version: 1, state: 'installing', accounts: { node: ACCOUNTS.node, publisher: ACCOUNTS.publisher },
-      group: ACCOUNTS.group, appRoot: LAYOUT.appRoot, port: options.port, reach, ...(relay ? { irohRelay: relay } : {}),
+      group: ACCOUNTS.group, appRoot: LAYOUT.appRoot, port: options.port, enrollUid, reach, ...(relay ? { irohRelay: relay } : {}),
       startedAt: new Date().toISOString() });
   }
   const since = new Date().toISOString().replace('T', ' ').slice(0, 19);
@@ -440,16 +449,16 @@ export async function install(args, { programPath, compiled }) {
     say(`Renderer "${renderer.name}" copied to ${renderer.directory}.`);
     if (exists(LAYOUT.config)) say('Setup already finished: the node config keeps its renderer section; edit it to switch renderers.');
   }
-  await installState(ids, { port: options.port, clientId, relay, reach, renderer, publication });
+  await installState(ids, { port: options.port, clientId, relay, reach, renderer, publication, enrollUid });
   const units = await unitTexts();
   for (const [name, text] of Object.entries(units)) await writeOwned(path.join(LAYOUT.unitDir, name), text);
   await writeRecord({ version: 1, state: 'installed', accounts: { node: ACCOUNTS.node, publisher: ACCOUNTS.publisher },
-    group: ACCOUNTS.group, appRoot: LAYOUT.appRoot, port: options.port, reach,
+    group: ACCOUNTS.group, appRoot: LAYOUT.appRoot, port: options.port, enrollUid, reach,
     github: { ...(clientId ? { clientId } : {}), ...(githubOrigin ? { origin: githubOrigin } : {}) }, ...(relay ? { irohRelay: relay } : {}),
     ...(publication ? { publication } : {}), ...(renderer ? { renderer } : {}), installedAt: record?.installedAt ?? new Date().toISOString(),
     updatedAt: new Date().toISOString() });
   systemctl('daemon-reload');
-  printEnrollment(ids, options.port);
+  printEnrollment(ids, options.port, enrollUid);
   const enabled = systemctl('enable', '--now', 'cyberbaser-node.service', 'cyberbaser-config.path');
   // The publisher runs from the start: in setup mode (sign-in, repository
   // choice, the mirror, the starter publish.yml) until the node config exists.
@@ -542,16 +551,22 @@ export function publisherServiceMode(record = readInstallRecord()) {
     mirror: LAYOUT.mirror, checkout: path.join(LAYOUT.notes, 'notes'), github, ...signed };
 }
 
-export async function runPublisherService({ appRoot, signal = null, privateEnrollment = false }) {
-  const plan = publisherServiceMode();
+export function desktopEnrollUid(uid, node = userEntry(ACCOUNTS.node), publisher = userEntry(ACCOUNTS.publisher)) {
+  return validEnrollUid(uid) && uid !== 0 && uid !== node?.id && uid !== publisher?.id ? uid : null;
+}
+
+export async function runPublisherService({ appRoot, signal = null }) {
+  const record = readInstallRecord();
+  const plan = publisherServiceMode(record);
   const { groupId } = await import('../accounts.js');
   const socketGroup = groupId(ACCOUNTS.group);
   const { createGithubHttp } = await import('../../../apps/owner-alpha/src/publisher/forge-access.js');
   const http = plan.github.origin ? createGithubHttp({ apiBaseUrl: plan.github.origin, webBaseUrl: plan.github.origin }) : undefined;
   const publisherCli = await import('../../../apps/owner-alpha/bin/owner-alpha-publisher.js');
   // Signed publish, enforced: the owner-key list is the publisher's own state.
+  const enrollUid = record?.state === 'container' ? process.getuid() : desktopEnrollUid(record?.enrollUid);
   const owners = { directory: plan.owners, mode: 'enforce', enrollPort: plan.enrollPort,
-    nodeUid: userEntry(ACCOUNTS.node)?.id ?? null, privateEnrollment };
+    authorizedUids: enrollUid === null ? [] : [enrollUid] };
   if (plan.mode === 'publisher') {
     await publisherCli.runPublisherCli({ configFile: plan.configFile, socketPath: plan.socketPath, repository: plan.repository,
       projectRoot: appRoot, socketGroup, owners, signal, ...(http ? { forgeOptions: { http } } : {}) });

@@ -42,7 +42,7 @@ services:
 
   publisher:
     <<: *role
-    network_mode: host
+    # Default Compose bridge; outbound forge only, no published ports.
     user: "65533:65530"
     mem_limit: 256m
     memswap_limit: 256m

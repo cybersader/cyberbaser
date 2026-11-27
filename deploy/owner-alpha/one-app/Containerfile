@@ -1,9 +1,10 @@
 # One local image, two services. The build context has no vault, lab code or
 # private renderer. Intermediate tarballs are not layers of the runtime image.
+ARG RUNTIME_BASE=runtime-tools
 FROM scratch AS archives
 COPY resources.tar quartz-seed.tar.zst /
 
-FROM registry.fedoraproject.org/fedora:44
+FROM registry.fedoraproject.org/fedora:44 AS runtime-tools
 RUN set -eu; \
     dnf -y install --setopt=install_weak_deps=False git-core rsync util-linux bash tar zstd ca-certificates patch jq iproute findutils grep diffutils; \
     dnf clean all; \
@@ -14,6 +15,14 @@ RUN set -eu; \
     test "$(id -u cyberbaser-publisher):$(id -g cyberbaser-publisher)" = 65533:65530; \
     for tool in git curl rsync unshare bash tar zstd patch jq ip find cmp; do command -v "$tool" >/dev/null; done; \
     find /usr -xdev -type f -perm /6000 -exec chmod a-s {} +
+
+FROM ${RUNTIME_BASE} AS release
+# An offline tools cache is allowed, but no prior application tree or launcher.
+RUN set -eu; \
+    test ! -e /opt/cyberbaser && test ! -e /etc/cyberbaser && test ! -e /usr/local/bin/cyberbaser-container-init; \
+    test "$(id -u cyberbaser):$(id -g cyberbaser)" = 65532:65530; \
+    test "$(id -u cyberbaser-publisher):$(id -g cyberbaser-publisher)" = 65533:65530; \
+    rpm -q git-core rsync util-linux bash tar zstd ca-certificates patch jq iproute findutils grep diffutils >/dev/null
 COPY cyberbaser /opt/cyberbaser/bin/cyberbaser
 COPY install.json /etc/cyberbaser/install.json
 COPY container-init.sh /usr/local/bin/cyberbaser-container-init

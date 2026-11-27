@@ -27,7 +27,7 @@ export const RENDERER_NAME_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/u;
 export const RENDERER_BUILD_FILE = 'build';
 export const MAX_RENDERER_FINGERPRINT_ENTRIES = 64;
 // The network namespace tool, at a fixed path: never looked up on PATH.
-import { CONTAINER_RENDERER_LAUNCHER, containerRendererIsolation } from './renderer-isolation.js';
+import { CONTAINER_RENDERER_LAUNCHER, containerRendererIsolation, withContainerRenderer } from './renderer-isolation.js';
 
 export const OFFLINE_LAUNCHER = '/usr/bin/unshare';
 const MAX_COMMAND_OUTPUT_BYTES = 64 * 1024 * 1024;
@@ -158,17 +158,15 @@ export function createConfiguredRenderer(renderer, { launcher } = {}) {
       const args = filtered ? [build, content, output] : ['--user', '--map-root-user', '--net', '--', build, content, output];
       let result;
       try {
-        result = await execFileAsync(launcher ?? (filtered ? CONTAINER_RENDERER_LAUNCHER : OFFLINE_LAUNCHER), args, {
-          cwd: workspace,
-          encoding: 'utf8',
-          maxBuffer: MAX_COMMAND_OUTPUT_BYTES,
-          env: buildEnvironment({
-            CYBERBASER_SOURCE_PROVENANCE: 'enabled',
-            CYBERBASER_EDIT_LINK_MODE: 'owner',
-            CYBERBASER_OWNER_ORIGIN: ownerOrigin,
-            ...reportEnvironment,
-          }),
+        const env = buildEnvironment({
+          CYBERBASER_SOURCE_PROVENANCE: 'enabled', CYBERBASER_EDIT_LINK_MODE: 'owner',
+          CYBERBASER_OWNER_ORIGIN: ownerOrigin, ...reportEnvironment,
         });
+        const options = { cwd: workspace, encoding: 'utf8', maxBuffer: MAX_COMMAND_OUTPUT_BYTES, env };
+        result = filtered
+          ? await withContainerRenderer({ workspace, output, env }, (policy, isolatedEnv) =>
+            execFileAsync(CONTAINER_RENDERER_LAUNCHER, [...policy, ...args], { ...options, env: isolatedEnv }))
+          : await execFileAsync(launcher ?? OFFLINE_LAUNCHER, args, options);
       } catch (error) {
         fail('renderer-build-failed', `${identity.name} build failed`, {
           exitCode: Number.isSafeInteger(error?.code) ? error.code : null,

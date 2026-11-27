@@ -91,7 +91,9 @@ SHIM
 chmod 0755 /usr/local/bin/git
 
 echo "== install"
-$PROGRAM install --quartz-seed "$SEED" --github-client-id "$CLIENT_ID" --github-origin "http://127.0.0.1:$FAKE_PORT" --iroh-relay "$RELAY" | tee /tmp/install.out
+useradd --no-create-home --uid 21001 fixture-owner
+as_owner() { setpriv --reuid=21001 --regid=21001 --clear-groups -- "$@"; }
+SUDO_UID=21001 $PROGRAM install --quartz-seed "$SEED" --github-client-id "$CLIENT_ID" --github-origin "http://127.0.0.1:$FAKE_PORT" --iroh-relay "$RELAY" | tee /tmp/install.out
 LINK=$(sed -n 's/^Open this to finish setup: //p' /tmp/install.out)
 [ -n "$LINK" ] && pass "install printed one setup link" || fail "install printed one setup link"
 check "publisher service runs before any config" wait_active cyberbaser-publisher.service
@@ -102,10 +104,12 @@ ENROLL=$(sed -n 's/^  Code: \([0-9A-Z-]*\).*/\1/p' /tmp/install.out | head -1)
 RECOVERY=$(sed -n '/If you ever lose every device/{n;s/^  //p}' /tmp/install.out | head -1)
 [ -n "$ENROLL" ] && [ -n "$RECOVERY" ] && pass "install printed a first-device code and a recovery code" || fail "install printed codes"
 journalctl --no-pager -o cat | grep -qF "$RECOVERY" && fail "the journal holds the recovery code" || pass "the recovery code is nowhere in the journal"
+journalctl --no-pager -o cat | grep -qF "$ENROLL" && fail "the journal holds the enrollment code" || pass "the enrollment code is nowhere in the journal"
 refused "the node cannot read the publisher's owner keys" as_node ls /var/lib/cyberbaser-publisher/owners
-curl -fs http://127.0.0.1:4319/enroll | grep -qF "$ENROLL" && pass "the publisher's own page shows the code on this computer" || fail "enroll page"
+as_owner curl -fs http://127.0.0.1:4319/enroll | grep -qF "$ENROLL" && pass "the publisher's own page shows the code on this computer" || fail "enroll page"
+refused "that page also refuses unlisted root" curl -fs -o /dev/null http://127.0.0.1:4319/enroll
 refused "that page refuses the node account" as_node curl -fs -o /dev/null http://127.0.0.1:4319/enroll
-curl -fs -H 'Origin: http://127.0.0.1:4317' http://127.0.0.1:4319/enroll >/dev/null && fail "a script from the web app read the code" || pass "a script from the web app cannot read the code"
+as_owner curl -fs -H 'Origin: http://127.0.0.1:4317' http://127.0.0.1:4319/enroll >/dev/null && fail "a script from the web app read the code" || pass "a script from the web app cannot read the code"
 
 echo "== setup in the owner's browser: GitHub, the private repository, public folders"
 browser setup-to-phone "$LINK" /tmp/owner.cookie | tee /tmp/setup.out

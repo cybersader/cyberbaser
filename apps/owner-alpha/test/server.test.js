@@ -234,7 +234,7 @@ async function readerFixture({ siteRoot, config: configInput } = {}) {
   const config = configInput ?? await exampleConfig();
   return {
     config,
-    fetch: createReaderHandler({ config, siteRoot }),
+    fetch: createReaderHandler({ config, siteRoot, hasOwnerSession: () => true }),
   };
 }
 
@@ -1251,11 +1251,19 @@ describe('owner-alpha runtime startup', () => {
       'recover-jobs',
     ]);
 
-    const browsed = await readerFetch(readerRequest('/cyberbase/'));
+    for (const method of ['GET', 'HEAD']) {
+      const absent = await readerFetch(readerRequest('/cyberbase/', { method }));
+      expect(absent.status).toBe(403);
+      const bad = await readerFetch(readerRequest('/cyberbase/', { method, headers: { Cookie: `owner_alpha_session=${'z'.repeat(43)}` } }));
+      expect(bad.status).toBe(403);
+      expect(await bad.text()).not.toContain('Runtime Cyberbase');
+    }
+    const opened = await openEdit(ownerFetch);
+    const browsed = await readerFetch(readerRequest('/cyberbase/', { headers: { Cookie: opened.cookie } }));
     expect(browsed.status).toBe(200);
+    expect(browsed.headers.get('cache-control')).toContain('no-store');
     expect(await browsed.text()).toContain('Runtime Cyberbase');
 
-    const opened = await openEdit(ownerFetch);
     expect(opened.response.status).toBe(200);
     expect(opened.body).toContain('# Runtime source');
 

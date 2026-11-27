@@ -177,7 +177,7 @@ export async function main(argv) {
           controller.abort();
         } });
       }
-      process.exitCode = await runPublisherService({ appRoot: appRoot(), signal: controller.signal, privateEnrollment: args.length > 0 });
+      process.exitCode = await runPublisherService({ appRoot: appRoot(), signal: controller.signal });
     } catch (error) { process.stderr.write(`cyberbaser publisher failed${error?.code ? `: ${error.code}` : ''}\n`); process.exitCode = 1; }
     finally { dispose?.(); }
     return;

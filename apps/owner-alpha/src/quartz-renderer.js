@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { fail } from './errors.js';
 import { validatePrivateNetworkHttpOrigin } from './network.js';
-import { CONTAINER_RENDERER_LAUNCHER, containerRendererIsolation } from './renderer-isolation.js';
+import { CONTAINER_RENDERER_LAUNCHER, containerRendererIsolation, withContainerRenderer } from './renderer-isolation.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -68,15 +68,13 @@ async function offlineSeedEnvironment() {
   }
 }
 
-async function runFixed(command, args, options, code) {
+async function runFixed(command, args, options, code, workspace, output) {
   try {
-    const isolated = containerRendererIsolation();
-    const result = await execFileAsync(isolated ? CONTAINER_RENDERER_LAUNCHER : command,
-      isolated ? ['/usr/bin/bash', ...args] : args, {
-      encoding: 'utf8',
-      maxBuffer: MAX_COMMAND_OUTPUT_BYTES,
-      ...options,
-    });
+    const execOptions = { encoding: 'utf8', maxBuffer: MAX_COMMAND_OUTPUT_BYTES, ...options };
+    const result = containerRendererIsolation()
+      ? await withContainerRenderer({ workspace, output, env: options.env }, (policy, env) =>
+        execFileAsync(CONTAINER_RENDERER_LAUNCHER, [...policy, '/usr/bin/bash', ...args], { ...execOptions, env }))
+      : await execFileAsync(command, args, execOptions);
     return {
       stdout: String(result.stdout ?? ''),
       stderr: String(result.stderr ?? ''),
@@ -190,7 +188,7 @@ export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, 
           : {}),
       }),
     },
-    'quartz-setup-failed',
+    'quartz-setup-failed', workspace, output,
   );
   const build = await runFixed(
     'bash',
@@ -208,7 +206,7 @@ export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, 
         ...reportEnvironment,
       }),
     },
-    'quartz-build-failed',
+    'quartz-build-failed', workspace, output,
   );
   const provenanceSkipped = await readProvenanceReport(reportEnvironment);
 

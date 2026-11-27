@@ -10,6 +10,16 @@ TAG="${1:-localhost/cyberbaser-one-app:dev}"
 STAGE="$(mktemp -d "${TMPDIR:-/tmp}/cyberbaser-one-app.XXXXXX")"
 trap 'rm -rf -- "$STAGE"' EXIT
 mkdir -p "$STAGE/source/packaging/dist" "$STAGE/context"
+install_cmd=(bun)
+build_policy=()
+if [[ -n ${CYBERBASER_OFFLINE_TOOLS_IMAGE:-} ]]; then
+  # Local content ID only. No registry reference or mutable tag is accepted.
+  tools=$CYBERBASER_OFFLINE_TOOLS_IMAGE
+  [[ "$tools" =~ ^sha256:[0-9a-f]{64}$ ]]
+  [[ $(podman image inspect --format '{{.Id}} {{.Os}}/{{.Architecture}}' "$tools") == "${tools#sha256:} linux/amd64" ]]
+  install_cmd=(unshare --user --map-root-user --net -- bun)
+  build_policy=(--network none --build-arg "RUNTIME_BASE=$tools" --label "org.cyberbaser.offline-tools=$tools")
+fi
 SRC="$STAGE/source"
 CTX="$STAGE/context"
 
@@ -30,7 +40,7 @@ expected="$(cd "$SRC" && bun -e 'import { QUARTZ_SEED } from "./packaging/src/qu
 # Dependencies are installed from the committed lock, not a pre-existing
 # node_modules (which may contain live workspace symlinks). Skip all npm scripts.
 for app in owner-alpha account-free-intake; do
-  (cd "$SRC/apps/$app" && bun install --frozen-lockfile --ignore-scripts --production --prefer-offline) >&2
+  (cd "$SRC/apps/$app" && "${install_cmd[@]}" install --frozen-lockfile --ignore-scripts --production --prefer-offline) >&2
 done
 # Some release entry points import package source directly; give those modules
 # the same locked resolution as owner-alpha without copying host dependencies.
@@ -60,7 +70,8 @@ cc -std=c11 -O2 -Wall -Wextra -Werror -fPIE -pie -fstack-protector-strong \
   -Wl,-z,relro,-z,now "$PACK/render-offline.c" -o "$CTX/render-offline"
 # Only the allowlisted build artifacts are sent to the container builder.
 # Neither the snapshot, lab fixture files nor the host checkout enters it.
-podman build --pull=never --force-rm --layers=false --label "org.opencontainers.image.revision=$revision" \
+podman build --pull=never --force-rm --layers=false --skip-unused-stages \
+  --memory 2g --cpu-period 100000 --cpu-quota 200000 "${build_policy[@]}" --label "org.opencontainers.image.revision=$revision" \
   -t "$TAG" --iidfile "$STAGE/image-id" -f "$CTX/Containerfile" "$CTX" >&2
 id=$(<"$STAGE/image-id")
 [[ "$id" =~ ^(sha256:)?[0-9a-f]{64}$ ]]

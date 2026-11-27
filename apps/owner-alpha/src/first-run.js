@@ -572,11 +572,14 @@ function deviceList(e, dev, kind) {
 function enrolBlock(e, enrolPort, state) {
   const starter = state.notes.publishYml === 'awaiting-approval'
     ? ' Your <code>publish.yml</code> then waits on the phone under <strong>Cyberbaser: Approvals waiting</strong>.' : '';
+  const handoff = enrolPort === null
+    ? '<p>Get the publishing setup code or QR from your administrator in a private terminal. You can do this later; nothing is published until you do.</p>'
+    : `<iframe class="setup-enrol-frame" src="http://127.0.0.1:${e(enrolPort)}/enroll" title="Publishing setup code from the publisher" sandbox="" referrerpolicy="no-referrer" loading="eager"></iframe>
+<p class="setup-aside">This code comes from the publisher, not from this page. You can also do this later; nothing is published until you do.</p>`;
   return `<section class="setup-decision setup-enrol" aria-labelledby="enrol-heading">
 <h2 id="enrol-heading">Let this phone approve publishing</h2>
-<p>Nothing reaches your website unless you approve it on your phone. In Obsidian, scan this code with the phone you just paired, then check that both screens show the same four groups.${starter}</p>
-<iframe class="setup-enrol-frame" src="http://127.0.0.1:${e(enrolPort)}/enroll" title="Publishing setup code from the publisher" sandbox="" referrerpolicy="no-referrer" loading="eager"></iframe>
-<p class="setup-aside">This code comes from the publisher, not from this page. You can also do this later; nothing is published until you do.</p>
+<p>Nothing reaches your website unless you approve it on your phone. In Obsidian, scan the publishing QR or type the code on the phone you just paired, then check that both screens show the same four groups.${starter}</p>
+${handoff}
 </section>`;
 }
 
@@ -645,7 +648,7 @@ ${field}`;
       ? `<div id="devices" class="setup-devices" data-csrf="${e(csrfToken)}" data-pair-command="${e(pairCommand)}">${pairFormHtml({ kind, label: step === 'phone' ? 'My phone' : 'My agent', ...(step === 'phone' ? { access: 'full' } : {}) })}</div>`
       : '<p class="setup-note">Pairing needs Cyberbaser\'s connection, which is not running yet. You can pair later from Devices.</p>';
     const skip = step === 'phone' ? 'Pair later' : 'Skip';
-    const approve = step === 'phone' && paired && enrolPort !== null ? enrolBlock(e, enrolPort, state) : '';
+    const approve = step === 'phone' && paired ? enrolBlock(e, enrolPort, state) : '';
     return `${intro}
 ${paired}
 ${approve}

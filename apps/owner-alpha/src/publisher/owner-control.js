@@ -156,9 +156,8 @@ export function ownerRequest({ socketPath, op, record, commit, timeoutMs = op.st
 //
 // The publisher serves the code (QR and text) on 127.0.0.1:<port>. The node
 // must not learn it, or it could enroll its own key, so:
-//   - a connection from the node's account is refused (the peer socket's
-//     owner is read from /proc/net/tcp, which the connecting process cannot
-//     fake);
+//   - only explicitly authorized local UIDs may see the code, using the
+//     established client socket's full tuple in the kernel tables;
 //   - the Host header must be the loopback address itself (no DNS rebinding);
 //   - no CORS headers, and fetch/XHR requests are refused, so a page the node
 //     serves can show the code in an <img> or <iframe> but cannot read it.
@@ -166,22 +165,64 @@ export function ownerRequest({ socketPath, op, record, commit, timeoutMs = op.st
 // needs the real code, and the device trusts the publisher key only after the
 // publisher proves it holds the same code (README, "Enrollment").
 
-function hexPort(value) { return Number.parseInt(value, 16); }
+// procfs prints each 32-bit address word in the kernel's native endianness.
+const littleEndian = new Uint8Array(new Uint32Array([1]).buffer)[0] === 1;
+const mapped = '00000000000000000000FFFF';
+export function validEnrollUid(uid) {
+  return Number.isInteger(uid) && uid >= 0 && uid < 0xffffffff && uid !== 65534;
+}
 
-/** The uid owning the client end of a loopback TCP connection, or null. */
-export async function loopbackPeerUid({ clientPort, serverPort, read = (file) => readFile(file, 'utf8') }) {
-  for (const file of ['/proc/net/tcp', '/proc/net/tcp6']) {
-    let text;
-    try { text = await read(file); } catch { continue; }
-    for (const line of text.split('\n').slice(1)) {
-      const fields = line.trim().split(/\s+/u);
-      if (fields.length < 8) continue;
-      const local = fields[1].split(':');
-      const remote = fields[2].split(':');
-      if (hexPort(local.at(-1)) === clientPort && hexPort(remote.at(-1)) === serverPort && /^\d+$/u.test(fields[7])) return Number(fields[7]);
+function addressHex(address) {
+  const family = net.isIP(address);
+  const v4 = (value) => Buffer.from(value.split('.').map(Number)).toString('hex').toUpperCase();
+  if (family === 4) return v4(address);
+  if (family !== 6 || address.includes('%')) return null;
+  let hex;
+  try {
+    // WHATWG URL canonicalizes dotted IPv4-mapped tails to hex groups.
+    const host = new URL(`http://[${address}]/`).hostname.slice(1, -1);
+    const [left, right] = host.split('::');
+    const before = left ? left.split(':') : [];
+    const after = right ? right.split(':') : [];
+    const groups = right === undefined ? before : [...before, ...Array(8 - before.length - after.length).fill('0'), ...after];
+    hex = groups.map((part) => part.padStart(4, '0')).join('').toUpperCase();
+  } catch { return null; }
+  return hex.startsWith(mapped) ? hex.slice(mapped.length) : hex;
+}
+
+/** The unique established client socket's UID in this netns, or null. */
+export async function loopbackPeerUid({ clientAddress, clientPort, serverAddress, serverPort, read = (file) => readFile(file, 'utf8') }) {
+  const client = addressHex(clientAddress);
+  const server = addressHex(serverAddress);
+  const loopback = (address) => address !== null && (address.length === 8 ? address.startsWith('7F') : address === '00000000000000000000000000000001');
+  if (!loopback(client) || !loopback(server) || client.length !== server.length
+      || ![clientPort, serverPort].every((p) => Number.isInteger(p) && p > 0 && p <= 65535)) return null;
+  const endpoint = (address, port, length) => {
+    const hex = length === 32 && address.length === 8 ? mapped + address : address;
+    if (hex.length !== length) return null;
+    const words = hex.match(/.{8}/gu).map((word) => littleEndian ? word.match(/../gu).reverse().join('') : word);
+    return `${words.join('')}:${port.toString(16).toUpperCase().padStart(4, '0')}`;
+  };
+  try {
+    const [v4, v6, overflowText] = await Promise.all([
+      read('/proc/net/tcp'), read('/proc/net/tcp6'), read('/proc/sys/kernel/overflowuid'),
+    ]);
+    const overflow = overflowText.trim();
+    if (!/^\d+$/u.test(overflow) || Number(overflow) >= 0xffffffff) return null;
+    const matches = [];
+    for (const [text, length] of [[v4, 8], [v6, 32]]) {
+      const local = endpoint(client, clientPort, length);
+      const remote = endpoint(server, serverPort, length);
+      if (local === null || remote === null) continue;
+      for (const line of text.split('\n').slice(1)) {
+        const fields = line.trim().split(/\s+/u);
+        if (fields[1] === local && fields[2] === remote && fields[3] === '01') matches.push(fields[7]);
+      }
     }
-  }
-  return null;
+    if (matches.length !== 1 || !/^\d+$/u.test(matches[0] ?? '')) return null;
+    const uid = Number(matches[0]);
+    return validEnrollUid(uid) && uid !== Number(overflow) ? uid : null;
+  } catch { return null; }
 }
 
 function page(display) {
@@ -198,7 +239,11 @@ function page(display) {
     + `<p style="color:#555">Shown by the publisher itself, not by the web app. Valid until ${until} UTC, for one device.</p></body>`;
 }
 
-export async function startEnrollPage({ ownerKeys, port, host = '127.0.0.1', nodeUid = null, peerUid = loopbackPeerUid }) {
+export async function startEnrollPage({ ownerKeys, port, host = '127.0.0.1', authorizedUids = [], peerUid = loopbackPeerUid }) {
+  if (!Array.isArray(authorizedUids) || !authorizedUids.every(validEnrollUid)) {
+    throw new TypeError('enrollment requires an explicit list of valid local UIDs');
+  }
+  const allowed = new Set(authorizedUids);
   if (!Number.isSafeInteger(port) || port < 1 || port > 65535 || !['127.0.0.1', 'localhost'].includes(host)) {
     fail('publisher-unsafe-socket', 'the enrollment page binds one loopback port');
   }
@@ -209,10 +254,11 @@ export async function startEnrollPage({ ownerKeys, port, host = '127.0.0.1', nod
       if (request.method !== 'GET' || !hosts.has(request.headers.host ?? '')) return deny(421);
       const mode = request.headers['sec-fetch-mode'];
       if (request.headers.origin !== undefined || mode === 'cors' || mode === 'same-origin') return deny(403);
-      if (nodeUid !== null) {
-        const uid = await peerUid({ clientPort: request.socket.remotePort, serverPort: port });
-        if (uid === null || uid === nodeUid) return deny(403);
-      }
+      if (allowed.size === 0) return deny(403);
+      const socket = request.socket;
+      const uid = await peerUid({ clientAddress: socket.remoteAddress, clientPort: socket.remotePort,
+        serverAddress: socket.localAddress, serverPort: socket.localPort });
+      if (!validEnrollUid(uid) || !allowed.has(uid)) return deny(403);
       const url = new URL(request.url, `http://127.0.0.1:${port}`);
       if (!['/enroll', '/enroll.svg'].includes(url.pathname) || url.search !== '') return deny(404);
       const display = await ownerKeys.enrollmentDisplay();

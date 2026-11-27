@@ -53,8 +53,7 @@ async function setup({ mode = 'enforce' } = {}) {
   const services = await startOwnerServices({ owners: { directory: path.join(root, 'owners'), mode }, socketPath, uid: process.getuid(),
     log: (line) => lines.push(line) });
   closers.push(() => services.close());
-  const code = lines.map((line) => /code \(valid for one hour\): (\S+)$/u.exec(line)?.[1]).find(Boolean);
-  const uri = lines.map((line) => /scan: (\S+)$/u.exec(line)?.[1]).find(Boolean);
+  const { code, uri } = await services.ownerKeys.enrollmentDisplay();
   return { root, socketPath, services, lines, code, uri, repo: gitRepo(root) };
 }
 
@@ -68,10 +67,12 @@ async function refusedWith(promise, code) {
 }
 
 describe('first device', () => {
-  test('the publisher prints a one-time code on its own log; the device enrolls with it once', async () => {
+  test('the publisher keeps the one-time code out of its logs and the device enrolls with it once', async () => {
     const fx = await setup();
     expect(fx.code).toMatch(/^[0-9A-Z]{4}(-[0-9A-Z]{4}){7}$/u);
     expect(fx.uri).toContain(`publisher=${fx.services.ownerKeys.publisher}&`);
+    expect(fx.lines.join("\n")).not.toContain(fx.code);
+    expect(fx.lines.join("\n")).not.toContain(fx.uri);
     const status = await ownerRequest({ socketPath: fx.socketPath, op: 'status' });
     expect(status).toMatchObject({ devices: 0, enrollmentOpen: true });
     expect(JSON.stringify(status)).not.toContain(fx.code);
@@ -267,16 +268,16 @@ describe('the first-device page', () => {
       request.end();
     });
   }
-  async function page(nodeUid) {
+  async function page(authorizedUids) {
     const fx = await setup();
     const port = 20000 + Math.floor(Math.random() * 20000);
-    const server = await startEnrollPage({ ownerKeys: fx.services.ownerKeys, port, nodeUid });
+    const server = await startEnrollPage({ ownerKeys: fx.services.ownerKeys, port, authorizedUids });
     closers.push(() => server.close());
     return { ...fx, port };
   }
 
   test('shows the code to a browser, never to a script or the node account', async () => {
-    const fx = await page(process.getuid() + 1);
+    const fx = await page([process.getuid()]);
     const shown = await get(fx.port);
     expect(shown.status).toBe(200);
     expect(shown.body).toContain(fx.code);
@@ -293,17 +294,36 @@ describe('the first-device page', () => {
     expect(after.body).not.toContain(fx.code);
   });
 
-  test('a connection from the node account is refused', async () => {
-    const fx = await page(process.getuid());
+  test('an otherwise valid connection from any unlisted account is refused', async () => {
+    const fx = await page([process.getuid() + 1]);
     const refused = await get(fx.port);
     expect(refused.status).toBe(403);
     expect(refused.body).not.toContain(fx.code);
   });
 
-  test('peer lookup reads the socket owner from the kernel table', async () => {
-    const table = '  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n'
-      + '   0: 0100007F:9C40 0100007F:10E1 01 00000000:00000000 00:00000000 00000000   977        0 1 1 0000000000000000 20 4 30 10 -1\n';
-    expect(await loopbackPeerUid({ clientPort: 0x9c40, serverPort: 0x10e1, read: async (file) => (file.endsWith('tcp') ? table : '') })).toBe(977);
-    expect(await loopbackPeerUid({ clientPort: 1, serverPort: 2, read: async () => table })).toBeNull();
+  const tuple = { clientAddress: '127.0.0.1', clientPort: 0x9c40, serverAddress: '127.0.0.1', serverPort: 0x10e1 };
+  const kernelRow = (local, remote, state, uid) => `   0: ${local} ${remote} ${state} 0000:0000 00:0000 0000 ${uid} 0 1\n`;
+  const v4 = (uid, state = '01') => kernelRow('0100007F:9C40', '0100007F:10E1', state, uid);
+  const mapped = (uid) => kernelRow('0000000000000000FFFF00000100007F:9C40', '0000000000000000FFFF00000100007F:10E1', '01', uid);
+  const native = (uid) => kernelRow('00000000000000000000000001000000:9C40', '00000000000000000000000001000000:10E1', '01', uid);
+  const procfs = (tcp, tcp6 = '', overflow = '65534') => async (file) => file.endsWith('overflowuid') ? overflow :
+    `sl local_address rem_address st queues tr retransmits uid\n${file.endsWith('tcp6') ? tcp6 : tcp}`;
+
+  test('peer lookup ignores TIME_WAIT and same-port decoys and returns the actual UID', async () => {
+    const decoy = kernelRow('0300007F:9C40', '0200007F:10E1', '06', 0);
+    const other = kernelRow('0300007F:9C40', '0200007F:10E1', '01', 501);
+    const read = procfs(decoy + v4(0, '06') + other + v4(977));
+    expect(await loopbackPeerUid({ ...tuple, read })).toBe(977);
+    expect(await loopbackPeerUid({ ...tuple, clientAddress: '127.0.0.2', read })).toBeNull();
+    expect(await loopbackPeerUid({ ...tuple, read: procfs(decoy + other) })).toBeNull();
+  });
+
+  test('peer lookup supports IPv6 and mapped IPv4 and refuses ambiguous or unknown UIDs', async () => {
+    expect(await loopbackPeerUid({ ...tuple, clientAddress: '::1', serverAddress: '0::1', read: procfs('', native(977)) })).toBe(977);
+    expect(await loopbackPeerUid({ ...tuple, clientAddress: '::ffff:127.0.0.1', read: procfs('', mapped(977)) })).toBe(977);
+    for (const rows of [[v4(977) + v4(977)], [v4(977), mapped(501)], [v4(65534)], [v4(4294967295)], [v4('bad')], [v4(501), '', '501']]) {
+      expect(await loopbackPeerUid({ ...tuple, read: procfs(...rows) })).toBeNull();
+    }
+    expect(await loopbackPeerUid({ ...tuple, read: async () => { throw new Error('unavailable'); } })).toBeNull();
   });
 });

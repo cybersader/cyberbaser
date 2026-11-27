@@ -113,7 +113,7 @@ function rejectionCode(error) {
   return REJECTION_CODES.includes(error.code) ? error.code : 'publisher-failed';
 }
 
-// owners (signed publish, owner-services.js): { directory, mode, enrollPort, nodeUid }.
+// owners (signed publish, owner-services.js): { directory, mode, enrollPort, authorizedUids }.
 // Its directory is the publisher's own state, given here and never read from config.
 export async function startPublisher({ config, context, socketPath, repository, forgeAccess, forgeOptions, socketGroup = null, mirrorOptions = null,
   owners = null, log = undefined } = {}) {

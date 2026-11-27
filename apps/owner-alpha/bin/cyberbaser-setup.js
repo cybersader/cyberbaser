@@ -68,9 +68,9 @@ if (import.meta.main) {
     pairing.attachNode({ nodeId: carrier.nodeId, ticket: carrier.ticket });
     return { store, pairing };
   };
-  // The publisher serves its own first-device code on port + 2 (packaging layout).
+  // Only a native install with a selected desktop UID offers the embedded page.
   const setup = await runFirstRun({ stateDirectory: path.resolve(stateDirectory), port: Number(portText), publisherSocket, reach,
-    checkout, mirror: layout.mirror ?? null, enrolPort: layout.enrollPort ?? Number(portText) + 2,
+    checkout, mirror: layout.mirror ?? null, enrolPort: layout.enrollPort ?? null,
     // Installer --site private: the website step offers the private site first.
     publication: layout.publication === 'private-site' ? 'private-site' : null,
     readerAddress: `http://${layout.listen?.host ?? '127.0.0.1'}:${(layout.listen?.port ?? Number(portText)) + 1}/` });

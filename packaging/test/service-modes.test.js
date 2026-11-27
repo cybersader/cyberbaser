@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { UNIT_TEXTS } from '../src/units.js';
-import { LAYOUT, nodeServiceArgs, publisherServiceMode } from '../src/platform/linux-systemd.js';
+import { LAYOUT, desktopEnrollUid, nodeServiceArgs, publisherServiceMode } from '../src/platform/linux-systemd.js';
 
 // The installed services choose their mode from what exists: setup until the
 // node config (and the publisher's copy of it) exists, then the normal modes.
@@ -28,4 +28,12 @@ test('the publisher unit always starts, in its own mode, and may write only its 
   expect(unit).toContain('ExecStart=/opt/cyberbaser/bin/cyberbaser service-publisher');
   expect(unit).toContain('ReadWritePaths=/var/lib/cyberbaser-publisher /var/lib/cyberbaser-shared/mirror');
   expect(unit).toContain('InaccessiblePaths=-/var/lib/cyberbaser');
+});
+
+
+test('native enrollment supports only a selected desktop UID, never either service account', () => {
+  for (const uid of [undefined, 0, 100, 101, 65534, 0xffffffff, '1000']) {
+    expect(desktopEnrollUid(uid, { id: 100 }, { id: 101 })).toBeNull();
+  }
+  expect(desktopEnrollUid(1000, { id: 100 }, { id: 101 })).toBe(1000);
 });

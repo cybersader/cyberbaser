@@ -1,0 +1,12 @@
+---
+title: TrueNAS owner app release hardening
+description: Tightened publisher enrollment, renderer isolation, and reader authentication before appliance installation.
+---
+
+The TrueNAS release review found three boundaries that needed enforcement before installation: the publisher must not disclose first-device secrets to other local principals, the offline renderer must not write or inspect another process's memory under the node UID, and loopback alone does not authorize a private reader.
+
+- **Enrollment:** The publisher requires a single established client socket with exact local and remote addresses and ports plus an allowlisted UID. Other accounts, ambiguous or missing rows, and overflow UID mappings are refused. A native install may record the invoking desktop UID in the privileged install record. TrueNAS keeps the publisher on its own bridge and delivers the code only through an independent admin handoff. Service logs omit codes in both forms.
+- **Rendering:** The container launcher requires Landlock ABI 6, confines writes to the build workspace, output and per-invocation scratch, and applies its existing socket filter after Landlock. Filesystem metadata writes not mediated by Landlock are separately refused. Reads needed for the render remain available; this is not a general confidentiality sandbox for arbitrary renderers.
+- **Reader:** Both listener ports use the node's process-local owner sessions. The same browser cookie reaches the reader after sign-in; it is invalid after restart. A separate in-memory read credential lets the publication pipeline check exact served output during recovery without an interactive browser session. It authorizes no owner action.
+
+The operator handoff includes a read-only preflight of appliance kernel and container profiles, host UID and mount conflicts, ACLs, share scope, and publisher-state exclusion from automated copies. Apply the preflight to the actual appliance before choosing whether to install. No appliance contact, live GitHub operation, or release publication is implied by this source change.

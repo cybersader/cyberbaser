@@ -37,6 +37,8 @@ import { parsePageBundle } from '../../../packages/proposal/src/page-bundle.js';
 import { bundleGit } from './core/page-bundle.js';
 import { ownerRequest } from './publisher/owner-control.js';
 import { createBootstrapPrincipalAdapter, createDevicePrincipalAdapter } from './core/principal.js';
+import { PRIVATE_SITE_PROVIDER } from './deployment/private-site.js';
+import { confirmLivePage, confirmNewPagesLive } from './live-confirm.js';
 import { assertOutsideVault, loadDeviceKeyRegistry } from './core/device-key-files.js';
 import { openDeviceStore } from './core/device-store.js';
 import { createPairingManager } from './core/pairing.js';
@@ -1565,7 +1567,7 @@ async function staticResponse(root, encodedPath, request, options = {}) {
   if (result.status !== 200) return errorResponse(result.status, result.status === 404 ? 'not-found' : 'static-unavailable');
   const bytes = result.bytes;
   const csp = options.csp ?? (options.reader === true ? READER_CSP : OWNER_CSP);
-  const headers = securityHeaders({ cache: 'private, max-age=0, must-revalidate', csp });
+  const headers = securityHeaders({ cache: options.reader === true ? 'private, no-store' : 'private, max-age=0, must-revalidate', csp });
   headers.set('Content-Type', result.contentType);
   headers.set('Content-Length', String(bytes.length));
   return new Response(request.method === 'HEAD' ? null : bytes, { status: 200, headers });
@@ -1577,6 +1579,8 @@ export function createReaderHandler({
   siteRoot,
   // The base path the site is built for (site-base.js); by default from live.baseUrl.
   siteBase = null,
+  hasOwnerSession = () => false,
+  witnessToken = null,
 } = {}) {
   const config = validateOwnerAlphaConfig(configInput);
   const base = siteBase ?? configuredSiteBase(config);
@@ -1601,6 +1605,10 @@ export function createReaderHandler({
       return errorResponse(400, 'invalid-url');
     }
     if (url.origin !== expectedOrigin) return errorResponse(421, 'invalid-host');
+    // Cookies are host-scoped, not port-scoped. Use the owner listener's live
+    // session store, never a second login or a capability in an asset URL.
+    const witness = witnessToken !== null && sameSecret(request.headers.get('x-cyberbaser-reader-witness'), witnessToken);
+    if (!witness && !hasOwnerSession(request)) return errorResponse(403, 'owner-session-required');
     const redirect = (location) => {
       const headers = securityHeaders({ csp });
       headers.set('Location', location);
@@ -2628,6 +2636,7 @@ export function createOwnerAlphaHandler({
   Object.defineProperties(handler, {
     bootstrapToken: { value: initialBootstrapToken, enumerable: false },
     issueBootstrap: { value: issueBootstrap, enumerable: false },
+    hasOwnerSession: { value: (request) => resolveSession(requestCookie(request)) !== null, enumerable: false },
     ownerOrigin: { value: expectedOrigin, enumerable: false },
     readerOrigin: { value: readerOrigin, enumerable: false },
     readerHome: { value: readerHome, enumerable: false },
@@ -2844,6 +2853,17 @@ export async function runOwnerAlphaServer({
       throw error;
     }
   }
+  // Publication recovery must check the actual served bytes even without a
+  // signed-in owner. This separate process-local credential is read-only and
+  // can never authenticate to the owner listener. Do not follow redirects.
+  const witnessToken = config.workflow.provider === PRIVATE_SITE_PROVIDER ? token() : null;
+  const readerOrigin = `http://${config.listen.host}:${config.listen.readerPort}`;
+  const witnessDependencies = { fetch: (url, init) => {
+    if (new URL(url).origin !== readerOrigin || init?.method !== 'GET') throw new Error('invalid reader witness request');
+    const headers = new Headers(init.headers);
+    headers.set('x-cyberbaser-reader-witness', witnessToken);
+    return fetch(url, { ...init, headers, redirect: 'manual', proxy: null });
+  } };
   const suggestions = await startSuggestions({ config, projectRoot });
   let pipeline;
   try {
@@ -2851,7 +2871,10 @@ export async function runOwnerAlphaServer({
     // silently become ordinary edits if a reader or config is no longer present.
     const publicationGuard = createPublicationSourceGuard({ config, context: storeContext, readNote: readAuthoringNote });
     pipeline = await loadPipeline({ config, projectRoot, context: storeContext,
-      dependencies: { revalidateSource: publicationGuard } });
+      dependencies: { revalidateSource: publicationGuard, ...(witnessToken === null ? {} : {
+        confirmLivePage: (input) => confirmLivePage(input, witnessDependencies),
+        confirmNewPages: (input) => confirmNewPagesLive(input, witnessDependencies),
+      }) } });
   } catch (error) {
     await suggestions?.close().catch(() => {});
     throw error;
@@ -2955,7 +2978,7 @@ export async function runOwnerAlphaServer({
     upstream,
     recovering,
   });
-  const readerFetch = createReader({ config, projectRoot, siteBase });
+  const readerFetch = createReader({ config, projectRoot, siteBase, hasOwnerSession: ownerFetch.hasOwnerSession, witnessToken });
   let runtime;
   let signed;
   let iroh;

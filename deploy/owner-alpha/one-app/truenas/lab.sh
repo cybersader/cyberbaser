@@ -1,5 +1,5 @@
 # Sourced by smoke.sh only. The real Compose recipe is unchanged except for
-# the fixture namespace, a fake forge record and the synthetic Git rewrite.
+# separate networkless fixture namespaces, a fake forge record and a Git rewrite.
 compose() {
   CYBERBASER_IMAGE=$image CYBERBASER_DATA=$work/data CYBERBASER_REACH=$reach docker compose \
     --project-name "$pod" --file "$HERE/truenas/compose.yaml" --file "$work/fixture.yaml" "$@"
@@ -7,6 +7,12 @@ compose() {
 
 truenas_lab_init() {
   mkdir -- "$work/data"
+  mkdir -m 0777 -- "$work/relay"
+  # Verify the release topology before swapping its egress for a lab-only relay.
+  CYBERBASER_IMAGE=$image CYBERBASER_DATA=$work/data docker compose \
+    --project-name "$pod" --file "$HERE/truenas/compose.yaml" config --format json | jq -e '
+      .services.node.network_mode == "host" and .services.publisher.network_mode == null
+      and (.services.publisher.networks | keys) == ["default"] and .services.publisher.ports == null' >/dev/null
   docker run --rm --init --pull never --network none --read-only --cap-drop ALL \
     --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER --user 0:0 --security-opt no-new-privileges \
     --memory 64m --memory-swap 64m --cpus 1 --pids-limit 32 \
@@ -26,11 +32,11 @@ truenas_lab_init() {
       chown 0:0 /lab-record'
   # JSON is YAML but does not need Compose/YAML quoting of host paths.
   jq -n --arg node "$node" --arg publisher "$publisher" --arg fixture "$fixture" \
-    --arg record "$work/install.json" --arg git "$work/git" '
+    --arg forge_net "$forge_net" --arg record "$work/install.json" --arg git "$work/git" '
     def ro($src; $dst): {type:"bind", source:$src, target:$dst, read_only:true, bind:{create_host_path:false}};
-    def role($name): {container_name:$name, network_mode:("container:" + $fixture),
+    def role($name; $ns): {container_name:$name, network_mode:("container:" + $ns),
       volumes:[ro($record; "/etc/cyberbaser/install.json")]};
-    {services:{node: role($node), publisher:(role($publisher) |
+    {services:{node: role($node; $fixture), publisher:(role($publisher; $forge_net) |
       .volumes += [ro($git; "/usr/local/bin/git")])}}' > "$work/fixture.yaml"
   compose config --quiet
 }
@@ -38,7 +44,10 @@ truenas_lab_init() {
 truenas_lab_cleanup() {
   local rc=0
   if [[ -s "$work/fixture.yaml" ]]; then compose down >/dev/null 2>&1 || rc=1; fi
-  if docker container inspect "$fixture" >/dev/null 2>&1; then docker rm -f "$fixture" >/dev/null 2>&1 || rc=1; fi
+  local owned
+  for owned in "$forge_net" "$fixture"; do
+    if docker container inspect "$owned" >/dev/null 2>&1; then docker rm -f "$owned" >/dev/null 2>&1 || rc=1; fi
+  done
   if [[ -d "$work/data" ]]; then
     # Unlink files in this synthetic, bound root only. Its children are owned
     # by container UIDs and the invoking lab user cannot traverse them.

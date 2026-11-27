@@ -103,7 +103,11 @@ case "$QUARTZ_OFFLINE" in
         ;;
     esac
     echo "==> materializing verified offline Quartz seed"
-    rsync -a --delete --chmod=u+rwX "$QUARTZ_SEED_DIR/" "$QUARTZ_DIR/"
+    if [ "${CYBERBASER_RESTRICTED_RENDER:-0}" = 1 ]; then
+      node "$HERE/copy-render-tree.mjs" "$QUARTZ_SEED_DIR" "$QUARTZ_DIR" mirror
+    else
+      rsync -a --delete --chmod=u+rwX "$QUARTZ_SEED_DIR/" "$QUARTZ_DIR/"
+    fi
     verify_checkout "$QUARTZ_DIR" \
       || { echo "ERROR: materialized Quartz dependencies are incomplete." >&2; exit 1; }
     ;;
@@ -113,16 +117,26 @@ case "$QUARTZ_OFFLINE" in
     ;;
 esac
 
+copy_renderer() {
+  if [ "${CYBERBASER_RESTRICTED_RENDER:-0}" = 1 ]; then
+    node "$HERE/copy-render-tree.mjs" "$1" "$2" merge
+  elif [ -d "$1" ]; then
+    cp -R "$1/." "$2/"
+  else
+    cp "$1" "$2"
+  fi
+}
+
 echo "==> copying renderer config over Quartz defaults"
-cp "$HERE/quartz.config.ts" "$QUARTZ_DIR/quartz.config.ts"
-cp "$HERE/quartz.layout.ts" "$QUARTZ_DIR/quartz.layout.ts"
+copy_renderer "$HERE/quartz.config.ts" "$QUARTZ_DIR/quartz.config.ts"
+copy_renderer "$HERE/quartz.layout.ts" "$QUARTZ_DIR/quartz.layout.ts"
 
 # Theme stylesheet. Quartz's componentResources emitter imports
 # quartz/styles/custom.scss and appends it after every component stylesheet,
 # which is what lets equal-specificity rules in it override upstream.
 if [ -f "$HERE/styles/custom.scss" ]; then
   echo "==> copying custom.scss into quartz/styles/"
-  cp "$HERE/styles/custom.scss" "$QUARTZ_DIR/quartz/styles/custom.scss"
+  copy_renderer "$HERE/styles/custom.scss" "$QUARTZ_DIR/quartz/styles/custom.scss"
 fi
 
 # Cyberbaser-local transformer plugins. Placed under quartz/cyberbase/ so their
@@ -130,7 +144,9 @@ fi
 if [ -d "$HERE/plugins" ]; then
   echo "==> copying transformer plugins into quartz/cyberbase/"
   mkdir -p "$QUARTZ_DIR/quartz/cyberbase"
-  cp "$HERE"/plugins/*.ts "$QUARTZ_DIR/quartz/cyberbase/"
+  for f in "$HERE"/plugins/*.ts; do
+    copy_renderer "$f" "$QUARTZ_DIR/quartz/cyberbase/$(basename "$f")"
+  done
 fi
 
 # Cyberbaser-local components and their helpers. They import Quartz internals by
@@ -142,19 +158,19 @@ if [ -d "$HERE/components" ]; then
   for f in "$HERE"/components/*.ts "$HERE"/components/*.tsx; do
     [ -e "$f" ] || continue
     echo "    + $(basename "$f")"
-    cp "$f" "$QUARTZ_DIR/quartz/components/"
+    copy_renderer "$f" "$QUARTZ_DIR/quartz/components/$(basename "$f")"
   done
   if [ -d "$HERE/components/challenge" ]; then
     echo "    + challenge/ (registry and provider modules)"
     mkdir -p "$QUARTZ_DIR/quartz/components/challenge"
-    cp -R "$HERE/components/challenge/." "$QUARTZ_DIR/quartz/components/challenge/"
+    copy_renderer "$HERE/components/challenge" "$QUARTZ_DIR/quartz/components/challenge"
   fi
   if [ -d "$HERE/components/scripts" ]; then
     mkdir -p "$QUARTZ_DIR/quartz/components/scripts"
     for f in "$HERE"/components/scripts/*.inline.ts; do
       [ -e "$f" ] || continue
       echo "    + scripts/$(basename "$f")"
-      cp "$f" "$QUARTZ_DIR/quartz/components/scripts/"
+      copy_renderer "$f" "$QUARTZ_DIR/quartz/components/scripts/$(basename "$f")"
     done
   fi
 fi
@@ -164,7 +180,7 @@ mkdir -p "$QUARTZ_DIR/quartz/static"
 for asset in "$HERE"/vendor/source-editor.*.js; do
   [ -f "$asset" ] || { echo "ERROR: vendored source editor is missing." >&2; exit 1; }
   ( cd "$HERE/vendor" && sha256sum --check "$(basename "$asset").sha256" )
-  cp "$asset" "$QUARTZ_DIR/quartz/static/"
+  copy_renderer "$asset" "$QUARTZ_DIR/quartz/static/$(basename "$asset")"
 done
 
 # Verify/apply only in the separate materialized checkout, never in the seed.

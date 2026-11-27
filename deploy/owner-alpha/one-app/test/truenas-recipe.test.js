@@ -13,10 +13,11 @@ const rows = Object.fromEntries((await read('paths.tsv')).trim().split('\n').fil
 const source = (v) => v.source.split('}/').at(-1);
 const access = (role) => Object.fromEntries(role.volumes.map((v) => [v.target, `${source(v)}:${v.read_only ? 'ro' : 'rw'}`]));
 
-test('TrueNAS app relies on host loopback identity and does not publish or proxy a port', () => {
+test('TrueNAS app keeps the publisher off host networking and publishes no ports', () => {
   expect(Object.keys(services).sort()).toEqual(['config-reconciler', 'node', 'publisher']);
   expect(services.node.network_mode).toBe('host');
-  expect(services.publisher.network_mode).toBe('host');
+  expect(services.publisher.network_mode).toBeUndefined();
+  expect(services.publisher.networks).toBeUndefined();
   expect(services['config-reconciler'].network_mode).toBe('none');
   for (const role of Object.values(services)) {
     expect(role.ports).toBeUndefined();

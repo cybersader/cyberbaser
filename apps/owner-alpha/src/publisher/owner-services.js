@@ -2,11 +2,11 @@
 // approval gate before every push, the owner control socket, and (when asked)
 // the loopback page that shows the first-device code.
 //
-// owners: { directory, mode = 'enforce', enrollPort = null, nodeUid = null }
+// owners: { directory, mode = 'enforce', enrollPort = null, authorizedUids = [] }
 //   directory   publisher-owned state (a start argument, never node config)
 //   mode        'enforce' or 'report' (rollout only)
 //   enrollPort  loopback port for the first-device page, or null
-//   nodeUid     the node account's uid, refused by that page
+//   authorizedUids  the only local UIDs that can read that page
 import { createApprovalGate } from './approval-gate.js';
 import { startEnrollPage, startOwnerControl } from './owner-control.js';
 import { createOwnerKeys } from './owner-keys.js';
@@ -25,17 +25,13 @@ export async function startOwnerServices({ owners, socketPath, uid, socketGroup 
   const opened = [];
   try {
     opened.push(await startOwnerControl({ socketPath, ownerKeys, uid, socketGroup, publishStarter, publishBundle }));
-    // Nobody can approve yet: open (or keep) the first-device window and say so
-    // on the publisher's own log, which the node cannot read.
-    const window = await ownerKeys.ensureEnrollment();
-    if (window?.created && !owners.privateEnrollment) {
-      log(`No device can publish yet. Set one up with this code (valid for one hour): ${window.code}`);
-      log(`  or scan: ${window.uri}`);
-    } else if (window !== null) {
+    // Only the independent administrative handoff or authorized loopback page
+    // may display enrollment material. Never put it in service logs.
+    if (await ownerKeys.ensureEnrollment() !== null) {
       log('No device can publish yet. A setup code is open; "cyberbaser publisher enroll-code" (as administrator) shows a new one.');
     }
     if (owners.enrollPort !== null && owners.enrollPort !== undefined) {
-      opened.push(await startEnrollPage({ ownerKeys, port: owners.enrollPort, nodeUid: owners.nodeUid ?? null }));
+      opened.push(await startEnrollPage({ ownerKeys, port: owners.enrollPort, authorizedUids: owners.authorizedUids }));
     }
   } catch (error) {
     for (const item of opened.reverse()) await item.close().catch(() => {});

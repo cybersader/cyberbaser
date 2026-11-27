@@ -136,7 +136,7 @@ describe('provider-owned private reader CSP', () => {
     const siteRoot = await mkdtemp(path.join(os.tmpdir(), 'owner-challenge-csp-'));
     cleanup.push(siteRoot);
     await writeFile(path.join(siteRoot, 'index.html'), '<h1>Synthetic private reader</h1>');
-    const handler = createReaderHandler({ config, siteRoot });
+    const handler = createReaderHandler({ config, siteRoot, hasOwnerSession: () => true });
     const response = await handler(new Request('http://127.0.0.1:4318/cyberbase/', { headers: { Host: '127.0.0.1:4318' } }));
     expect(response.status).toBe(200);
     return response.headers.get('Content-Security-Policy');
@@ -161,7 +161,7 @@ describe('provider-owned private reader CSP', () => {
   test('an unknown provider fails closed before a reader handler is returned', async () => {
     const raw = await rawConfig();
     raw.suggestions.form.challenge.provider = 'not-registered';
-    expect(() => createReaderHandler({ config: raw })).toThrow(/registered/);
+    expect(() => createReaderHandler({ hasOwnerSession: () => true, config: raw })).toThrow(/registered/);
   });
 });
 

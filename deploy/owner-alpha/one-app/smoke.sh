@@ -53,7 +53,7 @@ trap 'printf "FAIL %s (line %s)\n" "$stage" "$LINENO" >&2' ERR
 pass() { printf 'PASS %s\n' "$*"; }
 wait_for() { local i; for ((i=0;i<80;i++)); do "$@" >/dev/null 2>&1 && return 0; sleep .25; done; return 1; }
 
-node="$pod-node" publisher="$pod-publisher" fixture="$pod-fixture"
+node="$pod-node" publisher="$pod-publisher" fixture="$pod-fixture" forge_net="$pod-forge-net"
 state=/var/lib/cyberbaser pubstate=/var/lib/cyberbaser-publisher shared=/var/lib/cyberbaser-shared
 node_config_dir=$state/config pub_config_dir=/var/lib/cyberbaser-publisher-config
 node_config=$node_config_dir/owner-alpha.json pub_config=$pub_config_dir/owner-alpha.json
@@ -68,7 +68,7 @@ site=$jobs/owner-alpha/site/owner-alpha-site-manifest.json
 canaries='gh[ur]_CANARY|cbsCANARY|whsCANARY|FAKEPEMCANARY'
 mkdir -m 0755 "$work/fixture"
 mkdir -m 0700 "$work/supervisor"
-install -m 0644 "$REPO/apps/owner-alpha/test/fake-github.js" "$REPO/packaging/test/container/owner-browser.mjs" "$work/fixture/"
+install -m 0644 "$REPO/apps/owner-alpha/test/fake-github.js" "$REPO/packaging/test/container/owner-browser.mjs" "$HERE/test/forge-relay.mjs" "$work/fixture/"
 bun build "$HERE/test/publication.mjs" --target=bun --outfile="$work/fixture/publication.mjs" >/dev/null
 chmod 0644 "$work/fixture/publication.mjs"
 jq --arg fake "$fake" --arg reach "$reach" --argjson port "$base_port" \
@@ -132,9 +132,16 @@ if [[ $engine == podman ]]; then
 fi
 
 stage='start fake GitHub with one private note'
+relay_mount=()
+if [[ $engine == docker ]]; then
+  relay_mount=(-v "$work/relay:/lab-relay:rw")
+  docker run -d --network none --name "$forge_net" "${base[@]}" --user 65531:65530 \
+    -v "$work/fixture:/fixture:ro" "${relay_mount[@]}" --entrypoint /opt/cyberbaser/libexec/bun "$image" \
+    /fixture/forge-relay.mjs to-unix >/dev/null
+fi
 "$engine" run -d "${fixture_net[@]}" --name "$fixture" "${base[@]}" --user 65531:65530 --workdir /tmp \
   -e HOME=/tmp -e FAKE_GITHUB_PORT=48080 -e "ONE_APP_TEST_PORT=$base_port" -v "$work/fixture:/fixture:$fixture_label" \
-  -v "$(vol notes "$notes" ro)" -v "$(vol publisher-sockets "$sock" ro)" --entrypoint /usr/bin/bash "$image" -euc '
+  -v "$(vol notes "$notes" ro)" -v "$(vol publisher-sockets "$sock" ro)" "${relay_mount[@]}" --entrypoint /usr/bin/bash "$image" -euc '
   git init -q -b main /tmp/src
   mkdir -p /tmp/src/{Garden,.cyberbaser} /tmp/forge/lab-owner
   printf "allow:\n  - Garden\n" > /tmp/src/publish.yml
@@ -144,6 +151,7 @@ stage='start fake GitHub with one private note'
   git -C /tmp/src -c user.name=Synthetic -c user.email=synthetic@example.invalid commit -qm fixture
   git clone --quiet --bare /tmp/src "$1"
   git -C "$1" remote remove origin
+  if [[ -d /lab-relay ]]; then bun /fixture/forge-relay.mjs to-tcp & fi
   exec bun /fixture/fake-github.js /tmp/forge
 ' bash "$hosted" >/dev/null
 curl_flags=(curl -sS --noproxy '*' --max-time 3)
@@ -172,10 +180,20 @@ create_node() {
     -v "$(vol node-state "$state")" -v "$(vol node-config "$node_config_dir")" -v "$(vol workspace "$jobs")" \
     -v "$(vol notes "$notes")" -v "$(vol mirror "$mirror" ro)" -v "$(vol publisher-sockets "$sock" ro)" "$image" service-node >/dev/null
 }
-ready_publisher() { dep "$publisher" test -S "$sock/publisher.sock.forge" && dep "$fixture" "${curl_flags[@]}" -f -o /dev/null "$enroll"; }
+publisher_http_status() { dep "$publisher" "${curl_flags[@]}" -o /dev/null -w '%{http_code}' "$enroll"; }
+ready_publisher() { dep "$publisher" test -S "$sock/publisher.sock.forge" && [[ $(publisher_http_status) == 200 ]]; }
+node_cannot_enroll() {
+  local status
+  if [[ $engine == docker ]]; then
+    status=$(dep "$node" "${curl_flags[@]}" -o /dev/null -w '%{http_code}' "$enroll" 2>/dev/null) || [[ $? == 7 ]]
+    [[ $status == 000 ]]
+  else
+    [[ $(dep "$node" "${curl_flags[@]}" -o /dev/null -w '%{http_code}' "$enroll") == 403 ]]
+  fi
+}
 normal_publisher() {
   dep "$publisher" test -S "$sock/publisher.sock" && dep "$publisher" test -S "$sock/publisher.sock.forge" &&
-    [[ $(dep "$fixture" "${curl_flags[@]}" -o /dev/null -w '%{http_code}' "$enroll") == 410 ]] &&
+    [[ $(publisher_http_status) == 410 ]] &&
     "$engine" logs "$publisher" 2>&1 | /usr/bin/grep -Fx 'owner-alpha publisher ready' >/dev/null
 }
 wait_for_normal_publisher() {
@@ -222,7 +240,14 @@ for container in "$node" "$publisher" "$fixture"; do
   /usr/bin/grep -Ex 'Seccomp:\s+2' <<<"$flags" >/dev/null
   dep "$container" findmnt -n -o OPTIONS -T / | /usr/bin/grep -Eq '^ro(,|$)'
 done
-[[ $(dep "$node" readlink /proc/1/ns/net) == "$(dep "$publisher" readlink /proc/1/ns/net)" ]]
+if [[ $engine == docker ]]; then
+  [[ $(dep "$node" readlink /proc/1/ns/net) != "$(dep "$publisher" readlink /proc/1/ns/net)" ]]
+  [[ $(dep "$publisher" readlink /proc/1/ns/net) == "$(dep "$forge_net" readlink /proc/1/ns/net)" ]]
+  [[ $(dep "$node" readlink /proc/1/ns/net) == "$(dep "$fixture" readlink /proc/1/ns/net)" ]]
+  [[ -z $(dep "$forge_net" ip -4 route show) && -z $(dep "$forge_net" ip -6 route show) ]]
+else
+  [[ $(dep "$node" readlink /proc/1/ns/net) == "$(dep "$publisher" readlink /proc/1/ns/net)" ]]
+fi
 [[ $(dep "$node" readlink /proc/1/ns/pid) != "$(dep "$publisher" readlink /proc/1/ns/pid)" ]]
 [[ $(dep "$node" id -u):$(dep "$node" id -g) == 65532:65530 ]]
 [[ $(dep "$publisher" id -u):$(dep "$publisher" id -g) == 65533:65530 ]]
@@ -237,7 +262,9 @@ assert_mounts() {
   if [[ $engine == docker ]]; then type=bind; fi
   [[ $(mounts "$node") == "$(expected_mounts "$state:$type:rw" "$node_config_dir:$type:rw" "$jobs:$type:rw" "$notes:$type:rw" "$mirror:$type:ro" "$sock:$type:ro" "$record:bind:ro")" ]]
   [[ $(mounts "$publisher") == "$(expected_mounts "$pubstate:$type:rw" "$pub_config_dir:$type:ro" "$jobs:$type:rw" "$notes:$type:ro" "$mirror:$type:rw" "$sock:$type:rw" "$record:bind:ro" '/usr/local/bin/git:bind:ro')" ]]
-  [[ $(mounts "$fixture") == "$(expected_mounts '/fixture:bind:ro' "$notes:$type:ro" "$sock:$type:ro")" ]]
+  local -a extras=()
+  if [[ $engine == docker ]]; then extras+=('/lab-relay:bind:rw'); fi
+  [[ $(mounts "$fixture") == "$(expected_mounts '/fixture:bind:ro' "$notes:$type:ro" "$sock:$type:ro" "${extras[@]}")" ]]
   if [[ $engine == docker ]]; then
     local reconciler=$(compose ps -q config-reconciler)
     [[ $(mounts "$reconciler") == "$(expected_mounts "$node_config_dir:bind:ro" "$pub_config_dir:bind:rw")" ]]
@@ -260,7 +287,7 @@ metadata "$node" "$sock/publisher.sock.forge" 65533:65530:660
 metadata "$node" "$sock/publisher.sock.owners" 65533:65530:660
 dep "$node" test ! -S "$sock/publisher.sock"  # not the normal publishing service yet
 if dep "$node" "${curl_flags[@]}" --connect-timeout 2 -o /dev/null https://github.com 2>/dev/null; then false; fi
-pass 'confined services, shared isolated loopback, no published ports or GitHub egress; exact mount and account separation'
+pass 'confined services, no published ports or GitHub egress; exact network, mount and account separation'
 
 stage='verify setup-mode sockets and distinct enrollment identities'
 owner_status() {
@@ -272,9 +299,15 @@ owner_status() {
   ' "$sock/publisher.sock.owners" | jq -ce 'select(.ok and .result.devices == 0 and .result.enrollmentOpen) | .result'
 }
 status=$(owner_status)
-[[ $(dep "$node" "${curl_flags[@]}" -o /dev/null -w '%{http_code}' "$enroll") == 403 ]]
-dep "$fixture" "${curl_flags[@]}" -f "$enroll" | /usr/bin/grep -E 'Or type this code: <strong[^>]*>[A-Z0-9-]+</strong>' >/dev/null
-pass 'real setup forge/owner controls; node UID denied enrollment, distinct viewer received a code'
+node_cannot_enroll
+[[ $(publisher_http_status) == 200 ]]
+if [[ $engine == docker ]]; then
+  [[ $(dep "$forge_net" "${curl_flags[@]}" -o /dev/null -w '%{http_code}' "$enroll") == 403 ]]
+else
+  [[ $(dep "$fixture" "${curl_flags[@]}" -o /dev/null -w '%{http_code}' "$enroll") == 403 ]]
+fi
+pass 'publisher loopback denied the unlisted fixture UID; the node could not read the enrollment page'
+
 
 blockers=0
 ipv4=$(dep "$node" "$program" validate-reach "$reach")
@@ -287,7 +320,8 @@ check_listeners() {
   while read -r _ _ _ socket_addr _; do
     [[ -n "$socket_addr" ]] || continue
     case "$socket_addr" in
-      "127.0.0.1:$base_port"|"127.0.0.1:$((base_port+1))"|"127.0.0.1:$((base_port+2))"|127.0.0.1:48080) ;;
+      "127.0.0.1:$base_port"|"127.0.0.1:$((base_port+1))"|127.0.0.1:48080) ;;
+      "127.0.0.1:$((base_port+2))") [[ $engine != docker ]] || return 1 ;;
       *) printf 'FAIL %s: unexpected TCP listener %s\n' "$phase" "$socket_addr" >&2; return 1 ;;
     esac
   done <<< "$rows"
@@ -345,7 +379,7 @@ dep "$publisher" /usr/bin/grep -Eq 'ghr_CANARY' "$token"
 pass 'manifest Create/Install/Authorize and replay refusal; private site chosen; exact checkout and read-only credential-free mirror'
 
 stage='open the phone page without pairing'
-dep "$fixture" bun /fixture/owner-browser.mjs phone-page /tmp/owner.cookie | jq -e '.ok and .frameAllowed and (.paired | not)' >/dev/null
+dep "$fixture" bun /fixture/owner-browser.mjs phone-page /tmp/owner.cookie | jq -e '.ok and (.frameAllowed | not) and (.enrolFrame | not) and (.paired | not)' >/dev/null
 check_listeners phone
 node_key=$(dep "$node" sha256sum "$state/iroh/iroh-node.json")
 
@@ -386,13 +420,14 @@ dep "$fixture" "${curl_flags[@]}" -f "$fake/_control/report" | jq -e '
 dep "$fixture" "${curl_flags[@]}" -f "$fake/_control/report" | jq -e '.pushes == [] and (.denied | all(.receive == false)) and (.fetches | length > 0)' >/dev/null
 pass 'restart kept phone step, exact checkout, owner identity, enrollment window and forge credentials; no push or changed remote ref'
 
-stage='enroll one signing device through the independent fixture viewer'
+stage='enroll one signing device through the independent admin handoff'
 viewer() { timeout 60 "$engine" exec "$fixture" bun /fixture/publication.mjs "$@"; }
-viewer enroll | jq -e '.ok' >/dev/null
+dep "$publisher" "$program" publisher enroll-code | /usr/bin/grep -oE '^[[:space:]]+Code: [A-Z0-9-]+' | \
+  cut -d ' ' -f 4 | timeout 60 "$engine" exec -i "$fixture" bun /fixture/publication.mjs enroll | jq -e '.ok' >/dev/null
 viewer status | jq -e '.ok' >/dev/null
 metadata "$fixture" /tmp/one-app-device.json 65531:65530:600
 publisher_key=$(dep "$publisher" sha256sum "$pubstate/owners/publisher-key.json")
-pass 'the separate viewer enrolled a synthetic key from the real page; its private seed stays on that device'
+pass 'the separate viewer enrolled through publisher admin stdout only; the fixture seed stayed on that device'
 
 stage='finish setup and reconcile the config event'
 browser() { dep "$fixture" bun /fixture/owner-browser.mjs "$@" /tmp/new.cookie; }
@@ -410,7 +445,7 @@ node_config_hash() { dep "$node" sha256sum "$node_config" | cut -d' ' -f1; }
 pub_config_hash() { dep "$publisher" sha256sum "$pub_config" | cut -d' ' -f1; }
 [[ $(pub_config_hash) == "$(node_config_hash)" ]]
 if [[ $engine == podman ]]; then [[ $(<"$work/supervisor/applied") == "$(pub_config_hash)" ]]; fi
-[[ $(dep "$node" "${curl_flags[@]}" -o /dev/null -w '%{http_code}' "$enroll") == 403 ]]
+node_cannot_enroll
 viewer status | jq -e '.ok' >/dev/null
 pass 'atomic config handoff activated the normal publisher with its enrolled key retained'
 
@@ -452,7 +487,16 @@ site_at() {
   dep "$node" jq -e --arg head "$1" --arg build "$2" --arg pin "$quartz_pin" \
     '.source.head == $head and .renderer.name == $build and .renderer.revision == $pin and .site.htmlPages > 0' "$site" >/dev/null
 }
-reader_note() { dep "$fixture" "${curl_flags[@]}" -fL "$reader/Garden/Note" | /usr/bin/grep -F "$1" >/dev/null; }
+reader_note() {
+  dep "$fixture" bash -euc 'curl -fsS --max-time 3 -H "Cookie: $(< /tmp/new.cookie)" "$1"' bash "$reader/Garden/Note" \
+    | /usr/bin/grep -F "$1" >/dev/null
+}
+reader_refusals() {
+  [[ $(dep "$fixture" "${curl_flags[@]}" -o /dev/null -w '%{http_code}' "$reader/Garden/Note") == 403 ]]
+  [[ $(dep "$fixture" "${curl_flags[@]}" -H "Cookie: owner_alpha_session=$(printf '%043d' 0)" \
+    -o /dev/null -w '%{http_code}' "$reader/Garden/Note") == 403 ]]
+}
+reader_refusals
 wait_for_site() {
   local i
   for ((i=0;i<180;i++)); do site_at "$1" "$2" 2>/dev/null && reader_note "$3" 2>/dev/null && return 0; sleep .5; done
@@ -464,7 +508,7 @@ prior_note='This is a synthetic public-to-the-fixture note.'
 signed_note='This is the signed synthetic update.'
 wait_for_site "$commit" quartz-cyberbase "$prior_note"
 [[ $(dep "$node" sha256sum "$state/iroh/iroh-node.json") == "$node_key" ]]
-pass 'stock pinned Quartz built from the copied commit offline and served its note on P+1'
+pass 'stock Quartz served its offline build with the owner cookie; absent and bad cookies were refused'
 if [[ $engine == docker ]]; then memory_peak quartz; fi
 
 stage='check unsigned publication refusal from the normal publisher'
@@ -499,6 +543,16 @@ recreate_services() {
   wait_for_normal_publisher
   create_node
   wait_for_runtime
+  # The old cookie must not survive recreation. Redeem a new link without
+  # printing the synthetic link or storing it in process arguments.
+  [[ $(dep "$fixture" bash -euc 'curl -sS --max-time 3 -H "Cookie: $(< /tmp/new.cookie)" -o /dev/null -w "%{http_code}" "$1"' bash "$reader/Garden/Note") == 403 ]]
+  "$engine" logs "$node" 2>&1 | /usr/bin/grep -oE "^Owner alpha bootstrap: http://127\.0\.0\.1:$base_port/owner/bootstrap\?token=[A-Za-z0-9_-]+$" | cut -d' ' -f4 | \
+    "$engine" exec -i "$fixture" bash -euc '
+      umask 0077
+      read -r link
+      [[ $(curl -fsS --max-time 3 -c /tmp/reader.jar -o /dev/null -w "%{http_code}" "$link") == 303 ]]
+      /usr/bin/grep -E "^#HttpOnly_" /tmp/reader.jar | cut -f6,7 | tr "\t" "=" > /tmp/new.cookie
+    '
   [[ $("$engine" inspect --format '{{.Id}}' "$node") != "$first_node" ]]
   [[ $("$engine" inspect --format '{{.Id}}' "$publisher") != "$first_publisher" ]]
   assert_mounts
@@ -597,7 +651,7 @@ recreate_services
 wait_for_site "$next_commit" one-app-fixture "$signed_note"
 [[ $(dep "$node" sha256sum "$site") == "$manifest_hash" ]]
 check_listeners recreated-custom-runtime
-[[ $(dep "$node" "${curl_flags[@]}" -o /dev/null -w '%{http_code}' "$enroll") == 403 ]]
+node_cannot_enroll
 dep "$node" test ! -e /tmp/one-app-device.json
 dep "$publisher" test ! -e /tmp/one-app-device.json
 dep "$fixture" "${curl_flags[@]}" -f "$fake/_control/report" | jq -e '
@@ -632,8 +686,43 @@ stage='offline renderer gate'
 if [[ $engine == docker ]]; then
   probe="$HERE/test/socket-denial.mjs"
   dep -i "$node" bun - < "$probe"
-  dep -i "$node" /opt/cyberbaser/libexec/render-offline /opt/cyberbaser/libexec/bun - --restricted < "$probe"
+  dep -i "$node" bash -euc '
+    work=$(mktemp -d /opt/cyberbaser/.workspace/offline-probe.XXXXXXXX)
+    trap '\''rm -rf -- "$work"'\'' EXIT
+    mkdir "$work/output" "$work/tmp"
+    TMPDIR=$work/tmp /opt/cyberbaser/libexec/render-offline "$work" "$work/output" -- /opt/cyberbaser/libexec/bun - --restricted
+  ' < "$probe"
   pass 'renderer kernel filter refused AF_INET, AF_INET6, AF_NETLINK, AF_UNIX and connect; the unfiltered node could open all four families'
+  dep "$node" bash -euc '
+    launcher=/opt/cyberbaser/libexec/render-offline
+    [ "${HOME:?}" = /var/lib/cyberbaser/home ]
+    [ ! -e "$HOME/.gitconfig" ]
+    work=$(mktemp -d /opt/cyberbaser/.workspace/landlock-probe.XXXXXXXX)
+    trap '\''rm -rf -- "$work"; rm -f -- "$HOME/.gitconfig"'\'' EXIT
+    mkdir "$work/build" "$work/output" "$work/build/tmp"
+    (set -o noclobber; printf "synthetic config\n" > "$HOME/.gitconfig")
+    [ -w "$HOME/.gitconfig" ]
+    gitconfig=$HOME/.gitconfig
+    TMPDIR=$work/build/tmp "$launcher" "$work/build" "$work/output" -- /usr/bin/bash -euc '\''
+      parent=$1 build=$2 output=$3 gitconfig=$4
+      : > /dev/null
+      # These destinations contain only disposable fixture data. Never read or
+      # alter the parent memory; only check that an RDWR open is refused.
+      if ( : <>"/proc/$parent/mem" ) 2>/dev/null; then exit 21; fi
+      if ( : >"$gitconfig" ) 2>/dev/null; then exit 22; fi
+      if ( chmod 0777 "$gitconfig" ) 2>/dev/null; then exit 23; fi
+      if ( : >/tmp/renderer-shared-tmp-probe ) 2>/dev/null; then exit 24; fi
+      : > "$build/wrote"; : > "$output/wrote"; : > "$TMPDIR/wrote"
+    '\'' probe "$$" "$work/build" "$work/output" "$gitconfig"
+    [ "$(< "$gitconfig")" = "synthetic config" ]
+    [ -f "$work/build/wrote" ] && [ -f "$work/output/wrote" ] && [ -f "$work/build/tmp/wrote" ]
+    [ ! -e /tmp/renderer-shared-tmp-probe ]
+    ln -s -- "$HOME" "$work/alias"
+    result=0
+    "$launcher" "$work/alias" "$work/output" -- /usr/bin/true 2>/dev/null || result=$?
+    [ "$result" = 125 ]
+  '
+  pass 'Landlock under default Docker seccomp allowed build/output/private temp writes and refused parent-memory open, node Git config and shared /tmp writes; symlink rule failed closed'
   if dep "$node" /usr/bin/unshare --user --map-root-user --net -- /usr/bin/true > "$work/unshare" 2>&1; then
     printf 'NOTICE local Docker allowed the unused nested namespace launcher.\n'
   else

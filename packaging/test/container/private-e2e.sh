@@ -163,7 +163,7 @@ echo "== the private site: built by the cyberchief renderer, offline, samples he
 for _ in $(seq 1 600); do [ -f "$SITE/owner-alpha-site-manifest.json" ] && break; sleep 1; done
 grep -q '"name": *"cyberchief"' "$SITE/owner-alpha-site-manifest.json" 2>/dev/null && pass "the node built its private site with the cyberchief renderer" \
   || { fail "private site build"; journalctl -u cyberbaser-node.service --no-pager -o cat | grep -iE 'renderer|site|build' | tail -20; }
-curl -fs "$READER/" -H 'Host: 127.0.0.1:4318' -o /tmp/home.html && grep -q 'Cyberchief' /tmp/home.html && pass "the node serves it at $READER/" || fail "reader home"
+curl -fs "$READER/" -H "Cookie: $(< /tmp/owner.cookie)" -o /tmp/home.html && grep -q 'Cyberchief' /tmp/home.html && pass "the node serves it at $READER/" || fail "reader home"
 SAMPLE_SEEN=0
 while IFS= read -r sample; do
   [ -n "$sample" ] || continue

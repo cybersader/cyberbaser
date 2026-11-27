@@ -1,3 +1,4 @@
+import { createOwnerKeys } from '../src/publisher/owner-keys.js';
 import { afterEach, expect, test } from 'bun:test';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -462,7 +463,8 @@ async function signedFixture() {
   const fx = await fixture();
   const owners = path.join(fx.root, 'owners');
   const publisher = await runPublisher(fx, { owners });
-  const code = /code \(valid for one hour\): (\S+)/u.exec(publisher.stdout)?.[1];
+  const { code } = await (await createOwnerKeys({ directory: owners })).enrollmentDisplay();
+  expect(publisher.stdout).not.toContain(code);
   expect(code).toBeTruthy();
   return { ...fx, publisher, code };
 }

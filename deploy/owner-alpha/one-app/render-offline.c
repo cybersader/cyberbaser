@@ -1,17 +1,22 @@
-// Linux/amd64 renderer launcher. Adds to, never replaces, the container's
-// seccomp filter. Only standard I/O survives (including Bun's anonymous
-// Unix stream pairs to its own child). No renderer can open a new socket or
-// acquire one through another task, io_uring, SCM_RIGHTS or namespace changes.
+// Linux/amd64 renderer launcher. Landlock restricts filesystem writes and
+// cross-domain process access before we add a renderer-only seccomp filter.
+// Only standard I/O survives (including Bun's anonymous Unix stream pairs).
 #define _GNU_SOURCE
 #include <errno.h>
+#include <fcntl.h>
 #include <linux/audit.h>
 #include <linux/filter.h>
+#include <linux/landlock.h>
+#include <linux/openat2.h>
 #include <linux/seccomp.h>
+#include <stdint.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/sysmacros.h>
 #include <sys/un.h>
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -33,8 +38,68 @@ static int anonymous_stdio_pair(int fd) {
         && local_len == offsetof(struct sockaddr_un, sun_path) && peer_len == local_len;
 }
 
+static int add_path(int ruleset, int fd, uint64_t access) {
+    struct landlock_path_beneath_attr path = { .allowed_access = access, .parent_fd = fd };
+    return syscall(SYS_landlock_add_rule, ruleset, LANDLOCK_RULE_PATH_BENEATH, &path, 0U);
+}
+
+static int writable_tree(int ruleset, const char *dir, uint64_t access) {
+    if (dir[0] != '/' || dir[1] == '\0') return -1;
+    // Refuse all symlink components, not merely the final component. Hold the
+    // opened inode while adding the rule instead of looking up the path again.
+    struct open_how how = { .flags = O_PATH | O_DIRECTORY | O_CLOEXEC, .resolve = RESOLVE_NO_SYMLINKS };
+    int fd = syscall(SYS_openat2, AT_FDCWD, dir, &how, sizeof(how));
+    if (fd < 0) return -1;
+    int result = add_path(ruleset, fd, access);
+    close(fd);
+    return result;
+}
+
+static int allow_null_sink(int ruleset) {
+    // Shell and Git reopen /dev/null. Allow the actual null device only,
+    // not general writes to device nodes or anything under /dev.
+    int fd = open("/dev/null", O_PATH | O_NOFOLLOW | O_CLOEXEC);
+    if (fd < 0) return -1;
+    struct stat st;
+    int result = -1;
+    if (fstat(fd, &st) == 0 && S_ISCHR(st.st_mode) && major(st.st_rdev) == 1 && minor(st.st_rdev) == 3) {
+        result = add_path(ruleset, fd, LANDLOCK_ACCESS_FS_WRITE_FILE | LANDLOCK_ACCESS_FS_TRUNCATE);
+    }
+    close(fd);
+    return result;
+}
+
+static int restrict_renderer(const char *workspace, const char *output) {
+    // v3 covers truncate; v6 adds cross-domain signal and abstract socket
+    // scoping. Landlock also denies ptrace across the boundary (including
+    // procfs task-memory access), independently of the Yama setting.
+    int abi = syscall(SYS_landlock_create_ruleset, NULL, 0U, LANDLOCK_CREATE_RULESET_VERSION);
+    if (abi < 6) return -1;
+    const uint64_t write_tree = LANDLOCK_ACCESS_FS_WRITE_FILE | LANDLOCK_ACCESS_FS_REMOVE_DIR
+        | LANDLOCK_ACCESS_FS_REMOVE_FILE | LANDLOCK_ACCESS_FS_MAKE_DIR | LANDLOCK_ACCESS_FS_MAKE_REG
+        | LANDLOCK_ACCESS_FS_MAKE_FIFO | LANDLOCK_ACCESS_FS_MAKE_SYM | LANDLOCK_ACCESS_FS_REFER
+        | LANDLOCK_ACCESS_FS_TRUNCATE;
+    const struct landlock_ruleset_attr attr = {
+        .handled_access_fs = write_tree | LANDLOCK_ACCESS_FS_MAKE_CHAR | LANDLOCK_ACCESS_FS_MAKE_BLOCK
+            | LANDLOCK_ACCESS_FS_MAKE_SOCK | LANDLOCK_ACCESS_FS_IOCTL_DEV,
+        .scoped = LANDLOCK_SCOPE_SIGNAL | LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET,
+    };
+    const size_t abi6_size = offsetof(struct landlock_ruleset_attr, scoped) + sizeof(attr.scoped);
+    int ruleset = syscall(SYS_landlock_create_ruleset, &attr, abi6_size, 0U);
+    if (ruleset < 0) return -1;
+    int result = -1;
+    if (writable_tree(ruleset, workspace, write_tree) == 0 && writable_tree(ruleset, output, write_tree) == 0
+        && allow_null_sink(ruleset) == 0) {
+        result = syscall(SYS_landlock_restrict_self, ruleset, 0U);
+    }
+    close(ruleset);
+    return result;
+}
+
 int main(int argc, char **argv) {
-    if (argc < 2 || argv[1][0] != '/') return 125;
+    // The trusted node supplies the exact build and output directories.
+    // TMPDIR is a fresh child of the workspace; never grant the node's /tmp.
+    if (argc < 5 || strcmp(argv[3], "--") != 0 || argv[4][0] != '/') return 125;
     for (int fd = 0; fd < 3; fd++) {
         struct stat st;
         if (fstat(fd, &st) != 0) {
@@ -49,6 +114,10 @@ int main(int argc, char **argv) {
         }
     }
     if (syscall(SYS_close_range, 3U, ~0U, 0U) != 0) return 125;
+    if (prctl(PR_SET_NO_NEW_PRIVS, 1L, 0L, 0L, 0L) != 0 || restrict_renderer(argv[1], argv[2]) != 0) {
+        fputs("Could not enforce renderer Landlock isolation (ABI 6 and default-profile syscall access required).\n", stderr);
+        return 125;
+    }
 
     struct sock_filter rules[] = {
         BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, arch)),
@@ -80,14 +149,22 @@ int main(int argc, char **argv) {
         DENY(recvmsg), DENY(recvmmsg), DENY(pidfd_getfd), DENY(ptrace),
         DENY(process_vm_readv), DENY(process_vm_writev), DENY(io_uring_setup),
         DENY(io_uring_enter), DENY(io_uring_register), DENY(setns), DENY(unshare),
+        // Landlock does not mediate these metadata mutations. Refuse them
+        // even when the node and renderer have the same numeric owner.
+        DENY(chmod), DENY(fchmod), DENY(fchmodat), DENY(fchmodat2),
+        DENY(chown), DENY(fchown), DENY(lchown), DENY(fchownat),
+        DENY(setxattr), DENY(lsetxattr), DENY(fsetxattr), DENY(setxattrat),
+        DENY(removexattr), DENY(lremovexattr), DENY(fremovexattr), DENY(removexattrat),
+        DENY(utime), DENY(utimes), DENY(futimesat), DENY(utimensat),
+        DENY(fallocate),
         BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
     };
     struct sock_fprog program = { .len = sizeof(rules) / sizeof(rules[0]), .filter = rules };
-    if (prctl(PR_SET_NO_NEW_PRIVS, 1L, 0L, 0L, 0L) != 0 ||
-        syscall(SYS_seccomp, SECCOMP_SET_MODE_FILTER, 0U, &program) != 0) {
+    if (syscall(SYS_seccomp, SECCOMP_SET_MODE_FILTER, 0U, &program) != 0) {
         fputs("Could not enforce renderer socket isolation.\n", stderr);
         return 125;
     }
-    execv(argv[1], argv + 1);
+    execv(argv[4], argv + 4);
+    fputs("Could not execute the isolated renderer.\n", stderr);
     return 126;
 }

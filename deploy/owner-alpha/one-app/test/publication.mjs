@@ -24,12 +24,8 @@ const out = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
 try {
   switch (command) {
     case 'enroll': {
-      const enrollPort = Number(process.env.ONE_APP_TEST_PORT ?? 4317) + 2;
-      const page = await fetch(`http://127.0.0.1:${enrollPort}/enroll`, { signal: AbortSignal.timeout(3000) });
-      if (!page.ok) throw new Error('enrollment-page-denied');
-      const html = await page.text();
-      const code = /Or type this code: <strong[^>]*>([A-Z0-9-]+)<\/strong>/u.exec(html)?.[1];
-      if (!code) throw new Error('enrollment-page-missing-code');
+      const code = readFileSync(0, 'utf8').trim();
+      if (!/^[A-Z0-9]{4}(?:-[A-Z0-9]{4}){7}$/u.test(code)) throw new Error('enrollment-code-missing');
       const device = createDevice({ keyId, label: 'Synthetic signing device' });
       await enroll(device, { socketPath, code });
       writeFileSync(state, JSON.stringify({ seed: device.seed.toString('base64'), publisher: device.publisher }), { mode: 0o600, flag: 'wx' });
