@@ -1,0 +1,9 @@
+---
+title: Renderer workspaces and upgrade gate
+---
+
+A renderer's writable working files are disposable. Source-checkout dependency bootstrap uses a fresh directory that is never an isolated build's write root. Installed and configured renderer trees stay outside that grant. The node refuses overlapping job-store, site and cache trees before building, and native upgrades probe the staged launcher before stopping the previous services.
+
+Native assembled Quartz built from a disposable copy, emitted private provenance, and left the installed patch targets unchanged. The restricted runtime uses Bun and exact diff application without chmod or xattr operations; the renderer filter was not loosened. Targeted tests: 171 passed, three skipped, zero failed (1,648 assertions). The local kernel reported Landlock ABI 9. The launcher reaped 24 exited fixture helpers while their leader remained alive, and passed the separate detached-child timeout check.
+
+The release gate is an offline local rehearsal against a disposable private vault, followed separately by an appliance-specific Landlock and profile preflight. Neither stage grants real install or publishing authority.

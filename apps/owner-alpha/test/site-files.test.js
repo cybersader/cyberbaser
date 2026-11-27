@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { link, mkdir, mkdtemp, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { chmod, link, mkdir, mkdtemp, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { copySiteOutput, readSiteFile } from '../src/site-files.js';
@@ -88,4 +88,20 @@ test('reader never follows an ancestor swapped to a symlink during a read', asyn
   }
   await Promise.all([swaps(), reads(), reads()]);
   expect((await readSiteFile(staging, ['assets', 'page.html'])).toString()).toBe('approved site bytes');
+});
+
+
+test('opens a site under a search-only ancestor and rejects a non-searchable ancestor', async () => {
+  const { root, staging } = await fixture();
+  await writeFile(path.join(staging, 'page.html'), 'approved site bytes');
+  await chmod(root, 0o111);
+  try {
+    expect((await readSiteFile(staging, ['page.html'])).toString()).toBe('approved site bytes');
+    if (process.getuid() !== 0) {
+      await chmod(root, 0o400);
+      await expect(readSiteFile(staging, ['page.html'])).rejects.toHaveProperty('code', 'EACCES');
+    }
+  } finally {
+    await chmod(root, 0o700);
+  }
 });

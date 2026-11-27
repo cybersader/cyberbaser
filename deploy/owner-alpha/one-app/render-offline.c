@@ -96,12 +96,15 @@ static int allow_null_sink(int ruleset) {
     return result;
 }
 
-static int restrict_renderer(const char *workspace, const char *output, const char *cache) {
+static long landlock_abi(void) {
+    return syscall(SYS_landlock_create_ruleset, NULL, 0U, LANDLOCK_CREATE_RULESET_VERSION);
+}
+
+static int restrict_renderer(const char *workspace, const char *output) {
     // v3 covers truncate; v6 adds cross-domain signal and abstract socket
     // scoping. Landlock also denies ptrace across the boundary (including
     // procfs task-memory access), independently of the Yama setting.
-    int abi = syscall(SYS_landlock_create_ruleset, NULL, 0U, LANDLOCK_CREATE_RULESET_VERSION);
-    if (abi < 6) return -1;
+    if (landlock_abi() < 6) return -1;
     const uint64_t write_tree = LANDLOCK_ACCESS_FS_WRITE_FILE | LANDLOCK_ACCESS_FS_REMOVE_DIR
         | LANDLOCK_ACCESS_FS_REMOVE_FILE | LANDLOCK_ACCESS_FS_MAKE_DIR | LANDLOCK_ACCESS_FS_MAKE_REG
         | LANDLOCK_ACCESS_FS_MAKE_FIFO | LANDLOCK_ACCESS_FS_MAKE_SYM | LANDLOCK_ACCESS_FS_REFER
@@ -119,14 +122,14 @@ static int restrict_renderer(const char *workspace, const char *output, const ch
     if (ruleset < 0) return -1;
     int result = -1;
     if (writable_tree(ruleset, workspace, write_tree) == 0 && writable_tree(ruleset, output, write_tree) == 0
-        && (!cache || writable_tree(ruleset, cache, write_tree) == 0) && allow_null_sink(ruleset) == 0) {
+        && allow_null_sink(ruleset) == 0) {
         result = syscall(SYS_landlock_restrict_self, ruleset, 0U);
     }
     close(ruleset);
     return result;
 }
 
-static int render(char **command, const char *workspace, const char *output, const char *cache) {
+static int render(char **command, const char *workspace, const char *output) {
     for (int fd = 0; fd < 3; fd++) {
         struct stat st;
         if (fstat(fd, &st) != 0) {
@@ -141,7 +144,7 @@ static int render(char **command, const char *workspace, const char *output, con
         }
     }
     if (syscall(SYS_close_range, 3U, ~0U, 0U) != 0) return 125;
-    if (prctl(PR_SET_NO_NEW_PRIVS, 1L, 0L, 0L, 0L) != 0 || restrict_renderer(workspace, output, cache) != 0) {
+    if (prctl(PR_SET_NO_NEW_PRIVS, 1L, 0L, 0L, 0L) != 0 || restrict_renderer(workspace, output) != 0) {
         fputs("Could not enforce renderer Landlock isolation (ABI 6 and default-profile syscall access required).\n", stderr);
         return 125;
     }
@@ -243,15 +246,27 @@ static int finish_tree(pid_t leader) {
     return -1;
 }
 
-int main(int argc, char **argv) {
-    // Only the trusted node supplies the workspace and output. An optional
-    // native custom renderer cache grant is disjoint from the node's trees.
-    int command = 4;
-    const char *cache = NULL;
-    if (argc >= 7 && strcmp(argv[3], "--renderer-cache") == 0) {
-        cache = argv[4];
-        command = 6;
+static int reap_helpers(pid_t leader) {
+    FILE *children = fopen("/proc/thread-self/children", "re");
+    if (!children) return -1;
+    int pid;
+    while (fscanf(children, "%d", &pid) == 1 && pid > 0) {
+        if (pid != leader) (void)waitpid((pid_t)pid, NULL, WNOHANG | __WALL);
     }
+    const int result = ferror(children) ? -1 : 0;
+    fclose(children);
+    return result;
+}
+
+int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "--landlock-abi") == 0) {
+        const long abi = landlock_abi();
+        if (abi < 0) { perror("Landlock ABI probe"); return 125; }
+        printf("%ld\n", abi);
+        return abi >= 6 ? 0 : 125;
+    }
+    // Only the trusted node supplies the disposable workspace and output.
+    const int command = 4;
     if (argc <= command || strcmp(argv[command - 1], "--") != 0 || argv[command][0] != '/') return 125;
 
     // Refuse a procfs mounted for a different PID namespace. Cleanup must
@@ -277,7 +292,7 @@ int main(int argc, char **argv) {
     if (leader == 0) {
         if (setpgid(0, 0) || prctl(PR_SET_PDEATHSIG, (long)SIGKILL, 0L, 0L, 0L)
             || getppid() != supervisor) _exit(125);
-        _exit(render(argv + command, argv[1], argv[2], cache));
+        _exit(render(argv + command, argv[1], argv[2]));
     }
     alarm(RENDER_TIMEOUT_SECONDS);
     siginfo_t info = {0};
@@ -292,6 +307,9 @@ int main(int argc, char **argv) {
             break;
         }
         if (info.si_pid == leader) break;
+        // Preserve the leader's PID/status while draining adopted exits.
+        // A child missed by procfs this pass is retried on the next pass.
+        if (reap_helpers(leader) != 0) { wait_error = 1; break; }
         (void)nanosleep(&pause_time, NULL);
     }
     alarm(0);

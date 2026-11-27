@@ -208,8 +208,36 @@ function ensureAccounts() {
   };
 }
 
+// Use the node's identity and security profile, but only temporary write
+// paths. The probe must not open ports, mount live data, or edit old units.
+async function probeStagedRenderer(fresh, custom) {
+  const unit = (await unitTexts())[UNITS[0]];
+  const properties = unit.split('\n').filter((line) =>
+    /^(User|Group|UMask|InaccessiblePaths|RestrictNamespaces)=/u.test(line));
+  const { HARDENING } = await import('../units.js');
+  properties.push(...HARDENING.trim().split('\n').filter((line) => /^[A-Za-z]+=/.test(line)));
+  const scratch = path.join(fresh, '.renderer-probe');
+  await mkdir(scratch, { mode: 0o700 });
+  try {
+    const workspace = path.join(scratch, 'build');
+    const output = path.join(scratch, 'output');
+    for (const dir of [scratch, workspace, output]) {
+      if (dir !== scratch) await mkdir(dir, { mode: 0o700 });
+      await chown(dir, userEntry(ACCOUNTS.node).id, groupEntry(ACCOUNTS.group).id);
+    }
+    const launcher = path.join(fresh, 'libexec', 'render-offline');
+    run('systemd-run', ['--quiet', '--wait', '--pipe', '--collect',
+      ...properties.flatMap((property) => ['-p', property]),
+      '-p', `ReadWritePaths=${scratch}`, '-p', 'RuntimeMaxSec=20s', '-p', 'TimeoutStopSec=5s', '--',
+      ...(custom ? ['/usr/bin/unshare', '--user', '--map-root-user', '--net', '--'] : []),
+      launcher, workspace, output, '--', '/usr/bin/true']);
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
+}
+
 // Build the new program tree beside the old one, then swap it in whole.
-async function installProgram(programPath, seed) {
+async function installProgram(programPath, seed, { beforeSwap, custom }) {
   const fresh = `${LAYOUT.appRoot}.new-${randomBytes(4).toString('hex')}`;
   const previous = `${LAYOUT.appRoot}.old-${randomBytes(4).toString('hex')}`;
   await mkdir(fresh, { mode: 0o755 });
@@ -236,12 +264,18 @@ async function installProgram(programPath, seed) {
       await unpackSeed(seed, staging);
       seedNote = 'renderer bundle installed and verified';
     } else if (exists(path.join(LAYOUT.appRoot, 'vendor', 'quartz'))) {
-      await rename(path.join(LAYOUT.appRoot, 'vendor', 'quartz'), path.join(fresh, 'vendor', 'quartz'));
       seedNote = 'renderer bundle kept';
     } else {
       seedNote = 'renderer bundle missing: the private site cannot build until you run install again with --quartz-seed <file>';
     }
     run('chmod', ['-R', 'a+rX,go-w', fresh]);
+    try { await probeStagedRenderer(fresh, custom); } catch (error) {
+      throw new Error(`Renderer preflight failed (Landlock ABI 6 or newer and a compatible node service profile are required); the running install was not changed. ${error.message}`);
+    }
+    await beforeSwap();
+    if (seedNote === 'renderer bundle kept') {
+      await rename(path.join(LAYOUT.appRoot, 'vendor', 'quartz'), path.join(fresh, 'vendor', 'quartz'));
+    }
     if (exists(LAYOUT.appRoot)) await rename(LAYOUT.appRoot, previous);
     await rename(fresh, LAYOUT.appRoot);
     await rm(previous, { recursive: true, force: true });
@@ -378,7 +412,7 @@ export async function install(args, { programPath, compiled }) {
   if (!compiled) { process.stderr.write('Install runs from the built program (bun packaging/build.js).\n'); return 1; }
   if (process.getuid() !== 0) return elevate('install', args, programPath);
   if (!exists('/run/systemd/system')) { process.stderr.write('This machine does not run systemd; use the container image instead.\n'); return 1; }
-  const missing = ['systemctl', 'journalctl', 'useradd', 'groupadd', 'usermod', 'git', 'flock', 'rsync', 'bash', 'tar',
+  const missing = ['systemctl', 'systemd-run', 'journalctl', 'useradd', 'groupadd', 'usermod', 'git', 'flock', 'rsync', 'bash', 'tar',
     ...(options.seed ? ['zstd'] : []),
     // A renderer's build runs offline in its own network namespace, and the
     // Quartz renderers apply their patches with patch(1).
@@ -438,9 +472,15 @@ export async function install(args, { programPath, compiled }) {
       startedAt: new Date().toISOString() });
   }
   const since = new Date().toISOString().replace('T', ' ').slice(0, 19);
-  if (updating) systemctl('stop', ...UNITS);
-  const ids = ensureAccounts();
-  const seedNote = await installProgram(programPath, options.seed);
+  const currentConfig = exists(LAYOUT.config) ? await Bun.file(LAYOUT.config).json() : null;
+  const custom = currentConfig ? Boolean(currentConfig.renderer) : Boolean(rendererRequest ?? record?.renderer);
+  let ids = updating ? null : ensureAccounts();
+  const seedNote = await installProgram(programPath, options.seed, { custom, beforeSwap() {
+    if (updating) {
+      ids = ensureAccounts();
+      systemctl('stop', ...UNITS);
+    }
+  } });
   let renderer = record?.renderer ?? null;
   if (rendererRequest !== null) {
     await ensureDirectory(LAYOUT.nodeHome, { owner: ids.node, group: ids.share, mode: 0o700 });

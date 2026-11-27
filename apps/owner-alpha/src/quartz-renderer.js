@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { lstat, mkdir, realpath, rm } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -70,13 +70,12 @@ export async function offlineSeedEnvironment(seed = PINNED_QUARTZ_SEED_DIR) {
   }
 }
 
-async function runFixed(args, options, code, workspace, output, restricted = true) {
+async function runFixed(args, options, code, isolation = null) {
   try {
     const execOptions = { encoding: 'utf8', maxBuffer: MAX_COMMAND_OUTPUT_BYTES, ...options };
-    const launcher = restricted ? await rendererLauncher() : null;
-    const result = restricted
-      ? await withIsolatedRenderer({ workspace, output, env: options.env }, (policy, env) =>
-        execFileAsync(launcher, [...policy, '/usr/bin/bash', ...args], { ...execOptions, env }))
+    const result = isolation
+      ? await withIsolatedRenderer({ ...isolation, env: options.env }, (policy, env) =>
+        execFileAsync(isolation.launcher, [...policy, '/usr/bin/bash', ...args], { ...execOptions, env }))
       // Source-checkout dependency bootstrap only (no vault or output input).
       : await execFileAsync('/usr/bin/bash', args, { ...execOptions, timeout: 600_000 });
     return {
@@ -171,63 +170,79 @@ export async function renderPinnedQuartz({ contentDir, outputDir, workspaceDir, 
   const workspace = absoluteDirectory(workspaceDir, 'workspaceDir');
   validatePrivateNetworkHttpOrigin(ownerOrigin, 'ownerOrigin');
   const formEnvironment = suggestionEnvironment(suggestions);
-  const quartzDir = path.join(workspace, 'quartz');
+  const launcher = await rendererLauncher();
   const seedEnvironment = await offlineSeedEnvironment();
-
   await mkdir(workspace, { recursive: true });
-  const reportEnvironment = await provenanceReportEnvironment(workspace, formEnvironment);
-  const setup = await runFixed(
-    [SETUP_SCRIPT, quartzDir],
-    {
-      env: commandEnvironment({
-        QUARTZ_REPO: PINNED_QUARTZ_REPOSITORY,
-        QUARTZ_REF: PINNED_QUARTZ_REF,
-        QUARTZ_COMMIT: PINNED_QUARTZ_COMMIT,
-        QUARTZ_LOCK_SHA256: PINNED_QUARTZ_LOCK_SHA256,
-        QUARTZ_INSTALL_SHA256: PINNED_QUARTZ_INSTALL_SHA256,
-        ...seedEnvironment,
-        ...(formEnvironment.CYBERBASER_SOURCE_PROVENANCE
-          ? { CYBERBASER_SOURCE_PROVENANCE: formEnvironment.CYBERBASER_SOURCE_PROVENANCE }
-          : {}),
-      }),
-    },
-    'quartz-setup-failed', workspace, output, seedEnvironment.QUARTZ_OFFLINE === '1',
-  );
-  const build = await runFixed(
-    [BUILD_SCRIPT, content, quartzDir],
-    {
-      env: commandEnvironment({
-        COPY_CONTENT: '1',
-        OUTPUT_DIR: output,
-        CYBERBASER_EDIT_LINK_MODE: 'owner',
-        CYBERBASER_OWNER_ORIGIN: ownerOrigin,
-        ...(siteConfigPath ? { CYBERBASER_SITE_CONFIG: siteConfigPath } : {}),
-        // Read-only: dates for notes without frontmatter dates come from its git history.
-        ...(sourceCheckout ? { CYBERBASER_SOURCE_CHECKOUT: sourceCheckout } : {}),
-        ...formEnvironment,
-        ...reportEnvironment,
-      }),
-    },
-    'quartz-build-failed', workspace, output,
-  );
-  const provenanceSkipped = await readProvenanceReport(reportEnvironment);
+  // The invocation parent and bootstrap seed are never writable by the
+  // renderer. In particular no trusted Git/npm command ever runs in a tree
+  // that a previous renderer could have populated.
+  const invocation = await mkdtemp(path.join(workspace, 'quartz-build-'));
+  try {
+    const buildWorkspace = path.join(invocation, 'build');
+    const quartzDir = path.join(buildWorkspace, 'quartz');
+    const setupEnvironment = commandEnvironment({
+      QUARTZ_REPO: PINNED_QUARTZ_REPOSITORY,
+      QUARTZ_REF: PINNED_QUARTZ_REF,
+      QUARTZ_COMMIT: PINNED_QUARTZ_COMMIT,
+      QUARTZ_LOCK_SHA256: PINNED_QUARTZ_LOCK_SHA256,
+      QUARTZ_INSTALL_SHA256: PINNED_QUARTZ_INSTALL_SHA256,
+      ...seedEnvironment,
+    });
+    if (setupEnvironment.QUARTZ_OFFLINE === '0') {
+      const seed = path.join(invocation, 'seed');
+      await runFixed([SETUP_SCRIPT, seed], {
+        cwd: invocation, env: { ...setupEnvironment, QUARTZ_BOOTSTRAP_ONLY: '1' },
+      }, 'quartz-setup-failed');
+      setupEnvironment.QUARTZ_SEED_DIR = seed;
+      setupEnvironment.QUARTZ_OFFLINE = '1';
+    }
+    await mkdir(buildWorkspace, { mode: 0o700 });
+    const reportEnvironment = await provenanceReportEnvironment(buildWorkspace, formEnvironment);
+    const setup = await runFixed([SETUP_SCRIPT, quartzDir], {
+      cwd: buildWorkspace,
+      env: { ...setupEnvironment,
+        CYBERBASER_SOURCE_PROVENANCE: formEnvironment.CYBERBASER_SOURCE_PROVENANCE ?? 'disabled',
+      },
+    }, 'quartz-setup-failed', { launcher, workspace: buildWorkspace, output });
+    const build = await runFixed(
+      [BUILD_SCRIPT, content, quartzDir],
+      {
+        cwd: buildWorkspace,
+        env: commandEnvironment({
+          COPY_CONTENT: '1',
+          OUTPUT_DIR: output,
+          CYBERBASER_EDIT_LINK_MODE: 'owner',
+          CYBERBASER_OWNER_ORIGIN: ownerOrigin,
+          ...(siteConfigPath ? { CYBERBASER_SITE_CONFIG: siteConfigPath } : {}),
+          // Read-only: dates for notes without frontmatter dates come from its git history.
+          ...(sourceCheckout ? { CYBERBASER_SOURCE_CHECKOUT: sourceCheckout } : {}),
+          ...formEnvironment,
+          ...reportEnvironment,
+        }),
+      },
+      'quartz-build-failed', { launcher, workspace: buildWorkspace, output },
+    );
+    const provenanceSkipped = await readProvenanceReport(reportEnvironment);
 
-  return {
-    renderer: 'quartz-cyberbase',
-    revision: PINNED_QUARTZ_COMMIT,
-    tag: PINNED_QUARTZ_REF,
-    outputDir: output,
-    suggestionForm: formEnvironment.CYBERBASER_ACCOUNT_FREE_INTAKE === 'enabled',
-    provenanceSkipped,
-    commands: {
-      setup: ['bash', SETUP_SCRIPT, quartzDir],
-      build: ['bash', BUILD_SCRIPT, content, quartzDir],
-    },
-    logs: {
-      setupStdoutTail: setup.stdout.slice(-4_000),
-      setupStderrTail: setup.stderr.slice(-4_000),
-      buildStdoutTail: build.stdout.slice(-4_000),
-      buildStderrTail: build.stderr.slice(-4_000),
-    },
-  };
+    return {
+      renderer: 'quartz-cyberbase',
+      revision: PINNED_QUARTZ_COMMIT,
+      tag: PINNED_QUARTZ_REF,
+      outputDir: output,
+      suggestionForm: formEnvironment.CYBERBASER_ACCOUNT_FREE_INTAKE === 'enabled',
+      provenanceSkipped,
+      commands: {
+        setup: ['bash', SETUP_SCRIPT, quartzDir],
+        build: ['bash', BUILD_SCRIPT, content, quartzDir],
+      },
+      logs: {
+        setupStdoutTail: setup.stdout.slice(-4_000),
+        setupStderrTail: setup.stderr.slice(-4_000),
+        buildStdoutTail: build.stdout.slice(-4_000),
+        buildStderrTail: build.stderr.slice(-4_000),
+      },
+    };
+  } finally {
+    await rm(invocation, { recursive: true, force: true });
+  }
 }

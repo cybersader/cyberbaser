@@ -6,8 +6,8 @@ import { mkdir, open, opendir } from 'node:fs/promises';
 import path from 'node:path';
 import { fail, OwnerAlphaError } from './errors.js';
 
-const DIRECTORY_FLAGS = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
 const O_PATH = 0o10000000; // Linux UAPI, not exposed in node:fs.constants.
+const DIRECTORY_HANDLE = O_PATH | constants.O_DIRECTORY | constants.O_NOFOLLOW;
 export const MAX_SITE_FILE_BYTES = 64 * 1024 * 1024;
 const SITE_LIMITS = Object.freeze({ fileBytes: MAX_SITE_FILE_BYTES, bytes: 1024 ** 3, entries: 50_000, depth: 64 });
 
@@ -22,10 +22,10 @@ function fdPath(handle, name) {
 
 async function openDirectory(absolute, segments = []) {
   if (process.platform !== 'linux' || !path.isAbsolute(absolute) || path.normalize(absolute) !== absolute) throw invalidEntry();
-  let handle = await open('/', DIRECTORY_FLAGS);
+  let handle = await open('/', DIRECTORY_HANDLE);
   try {
     for (const name of [...absolute.split('/').filter(Boolean), ...segments]) {
-      const next = await open(fdPath(handle, name), DIRECTORY_FLAGS);
+      const next = await open(fdPath(handle, name), DIRECTORY_HANDLE);
       await handle.close();
       handle = next;
     }
@@ -105,7 +105,7 @@ export async function copySiteOutput(staging, candidate, limits = SITE_LIMITS) {
       const child = fdPath(source, entry.name);
       const destination = path.join(target, entry.name);
       if (entry.isDirectory()) {
-        const directory = await open(child, DIRECTORY_FLAGS);
+        const directory = await open(child, DIRECTORY_HANDLE);
         try {
           await mkdir(destination, { mode: 0o700 });
           await visit(directory, destination, depth + 1);

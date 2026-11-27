@@ -7,7 +7,7 @@
 // owned by this user and not writable by anyone else. Builds run offline
 // and one at a time per directory.
 import { execFile } from 'node:child_process';
-import { lstat, mkdir, realpath, rm } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fail } from './errors.js';
@@ -87,7 +87,7 @@ export async function assertRendererDirectory(renderer) {
   return directory;
 }
 
-// One build at a time per renderer directory (the native slot cache is shared).
+// One build at a time per renderer directory.
 const queues = new Map();
 async function exclusive(key, task) {
   const previous = queues.get(key) ?? Promise.resolve();
@@ -157,11 +157,15 @@ export function createConfiguredRenderer(renderer, { launcher } = {}) {
       const report = path.join(workspace, PROVENANCE_REPORT_FILE);
       await rm(report, { force: true });
       const reportEnvironment = { CYBERBASER_PROVENANCE_REPORT: report };
-      const build = path.join(directory, RENDERER_BUILD_FILE);
-      const args = [build, content, output];
+      const copy = await mkdtemp(path.join(workspace, 'renderer-copy-'));
       let command;
       let result;
       try {
+        // The installed tree is read only to every renderer. Preserve safe
+        // dependency links and executable bits, and never reuse a built copy.
+        await execFileAsync('/usr/bin/rsync', ['-rlp', '--safe-links', '--chmod=u+rwX', '--exclude=/.quartz-cache',
+          '--exclude=/quartz/.quartz-cache', '--', `${directory}/`, `${copy}/`]);
+        const args = [path.join(copy, RENDERER_BUILD_FILE), content, output];
         const env = buildEnvironment({
           CYBERBASER_SOURCE_PROVENANCE: 'enabled', CYBERBASER_EDIT_LINK_MODE: 'owner',
           CYBERBASER_OWNER_ORIGIN: ownerOrigin, ...reportEnvironment,
@@ -169,8 +173,7 @@ export function createConfiguredRenderer(renderer, { launcher } = {}) {
         const options = { cwd: workspace, encoding: 'utf8', maxBuffer: MAX_COMMAND_OUTPUT_BYTES, env };
         const executable = launcher ?? await rendererLauncher();
         const native = !containerRendererIsolation();
-        const cache = native ? path.join(directory, '.quartz-cache') : undefined;
-        result = await withIsolatedRenderer({ workspace, output, outputWriteRoot: writeRoot, cache, env }, (policy, isolatedEnv) => {
+        result = await withIsolatedRenderer({ workspace, output, outputWriteRoot: writeRoot, env }, (policy, isolatedEnv) => {
           const isolated = [executable, ...policy, ...args];
           command = native ? [OFFLINE_NAMESPACE, '--user', '--map-root-user', '--net', '--', ...isolated] : isolated;
           return execFileAsync(command[0], command.slice(1), { ...options, env: isolatedEnv });
@@ -181,6 +184,8 @@ export function createConfiguredRenderer(renderer, { launcher } = {}) {
           stdout: String(error?.stdout ?? '').slice(-4_000),
           stderr: String(error?.stderr ?? '').slice(-4_000),
         });
+      } finally {
+        await rm(copy, { recursive: true, force: true });
       }
       return {
         renderer: identity.name,

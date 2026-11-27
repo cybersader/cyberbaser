@@ -1,0 +1,5 @@
+#!/usr/bin/bash
+# Use the node application's bundled Bun runtime, as the installed wrappers do.
+set -euo pipefail
+export BUN_BE_BUN=1
+exec "${CYBERBASER_RENDER_BUN:?missing renderer runtime}" "$@"

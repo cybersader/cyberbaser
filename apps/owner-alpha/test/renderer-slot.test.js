@@ -3,9 +3,10 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmod, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { computePolicyRevision, validateOwnerAlphaConfig } from '../src/config.js';
 import { OwnerAlphaError } from '../src/errors.js';
 import { PINNED_QUARTZ_COMMIT, PINNED_QUARTZ_REF, PINNED_QUARTZ_REPOSITORY } from '../src/quartz-renderer.js';
@@ -20,7 +21,7 @@ let launcher;
 beforeAll(async () => {
   launcherRoot = await mkdtemp(path.join(os.tmpdir(), 'owner-alpha-launcher-'));
   launcher = path.join(launcherRoot, 'render-offline');
-  const source = new URL('../../../deploy/owner-alpha/one-app/render-offline.c', import.meta.url).pathname;
+  const source = fileURLToPath(new URL('../../../deploy/owner-alpha/one-app/render-offline.c', import.meta.url));
   const result = spawnSync('cc', ['-std=c11', '-O2', '-Wall', '-Wextra', '-Werror', source, '-o', launcher]);
   if (result.status !== 0) throw new Error(String(result.stderr || result.error));
 });
@@ -303,12 +304,21 @@ exit 1
     expect(await readFile(path.join(siteRootOf(setup), 'sentinel.txt'), 'utf8')).toBe('previous site');
   });
 
-  test('a build cannot rewrite its fingerprinted files', async () => {
+  test('the working renderer can patch files without changing the installed fingerprint', async () => {
     const setup = await fixture('self-modifying');
-    await writeFile(path.join(setup.rendererRoot, 'build'), `${BUILD}echo changed >> "$(dirname "$0")/quartz.config.ts"\n`);
-    await expectCode(() => ensureOwnerSite({ config: setup.config, projectRoot: setup.projectRoot, renderer: configured(setup) },
-      { assertCheckoutReady: ready(setup.checkout), createBuildId: () => 'build-self' }), 'renderer-build-failed');
-    expect(await readFile(path.join(siteRootOf(setup), OWNER_SITE_MANIFEST_FILENAME), 'utf8').catch(() => null)).toBeNull();
+    const original = path.join(setup.rendererRoot, 'quartz.config.ts');
+    const bytes = await readFile(original);
+    await writeFile(path.join(setup.rendererRoot, 'build'), `${BUILD}
+copy="$(dirname "$0")"
+mkdir -p "$copy/quartz/.quartz-cache"
+printf 'patch applied' >> "$copy/quartz.config.ts"
+`);
+    const site = await ensureOwnerSite({ config: setup.config, projectRoot: setup.projectRoot, renderer: configured(setup) },
+      { assertCheckoutReady: ready(setup.checkout), createBuildId: () => 'build-self' });
+    expect(site.ok).toBe(true);
+    expect(await readFile(original)).toEqual(bytes);
+    await expect(lstat(path.join(setup.rendererRoot, 'quartz', '.quartz-cache'))).rejects.toHaveProperty('code', 'ENOENT');
+    expect((await readdir(site.rendererWorkspace)).filter((name) => name.startsWith('renderer-copy-'))).toEqual([]);
   });
 
   test('the renderer directory may not sit inside the project or its workspace, and the form needs the bundled renderer', async () => {

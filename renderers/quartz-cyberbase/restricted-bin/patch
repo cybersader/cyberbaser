@@ -1,0 +1,15 @@
+#!/usr/bin/bash
+# The pinned Quartz provenance adapter takes this exact GNU patch form.
+# GNU patch preserves metadata through chmod/xattr, which the renderer may
+# not use. Git applies the exact diff without those metadata operations.
+set -euo pipefail
+if [[ $# == 8 && $1 == --batch && ( $2 == --forward || $2 == --reverse ) &&
+      $3 == --fuzz=0 && $4 == -p1 && $5 == --directory && $6 == /* &&
+      $7 == --input && $8 == /* ]]; then
+  reverse=()
+  if [[ $2 == --reverse ]]; then reverse=(--reverse); fi
+  export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+  exec /usr/bin/git -C "$6" apply --no-index --whitespace=nowarn "${reverse[@]}" -p1 -- "$8"
+fi
+# Other configured builds keep the system patch utility under the same filter.
+exec /usr/bin/patch "$@"

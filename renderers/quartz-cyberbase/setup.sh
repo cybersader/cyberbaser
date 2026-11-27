@@ -117,6 +117,9 @@ case "$QUARTZ_OFFLINE" in
     ;;
 esac
 
+# Source startup can provision a seed without applying any renderer overlays.
+if [ "${QUARTZ_BOOTSTRAP_ONLY:-0}" = 1 ]; then exit 0; fi
+
 copy_renderer() {
   if [ "${CYBERBASER_RESTRICTED_RENDER:-0}" = 1 ]; then
     node "$HERE/copy-render-tree.mjs" "$1" "$2" merge

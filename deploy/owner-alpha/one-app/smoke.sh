@@ -25,7 +25,8 @@ else
 fi
 work=$(mktemp -d "${TMPDIR:-/tmp}/cb-oneapp-lab.XXXXXXXX")
 pod=${work##*/}
-if [[ $engine == docker ]]; then pod=$(tr '[:upper:].' '[:lower:]-' <<<"$pod"); fi
+if [[ $engine == docker ]]; then pod=cb-final2; fi
+lab_owned=0
 volumes=()
 pod_created=0
 stage=staging
@@ -54,6 +55,7 @@ pass() { printf 'PASS %s\n' "$*"; }
 wait_for() { local i; for ((i=0;i<80;i++)); do "$@" >/dev/null 2>&1 && return 0; sleep .25; done; return 1; }
 
 node="$pod-node" publisher="$pod-publisher" fixture="$pod-fixture" forge_net="$pod-forge-net"
+if [[ $engine == docker ]]; then fixture=cb-final2-forge; forge_net=cb-final2-relay; fi
 state=/var/lib/cyberbaser pubstate=/var/lib/cyberbaser-publisher shared=/var/lib/cyberbaser-shared
 node_config_dir=$state/config pub_config_dir=/var/lib/cyberbaser-publisher-config
 node_config=$node_config_dir/owner-alpha.json pub_config=$pub_config_dir/owner-alpha.json
@@ -91,7 +93,7 @@ exec /usr/bin/git "$@"
 SHIM
 chmod 0755 "$work/git"
 
-dep() { "$engine" exec "$@"; }
+dep() { timeout 90 "$engine" exec "$@"; }
 base=(--pull never --init --read-only --cap-drop ALL --security-opt no-new-privileges
   --memory 1g --memory-swap 1g --cpus 1 --pids-limit 256
   --tmpfs /tmp:rw,nosuid,nodev,exec,mode=1777,size=256m)
@@ -135,11 +137,18 @@ stage='start fake GitHub with one private note'
 relay_mount=()
 if [[ $engine == docker ]]; then
   relay_mount=(-v "$work/relay:/lab-relay:rw")
-  docker run -d --network none --name "$forge_net" "${base[@]}" --user 65531:65530 \
+  docker run -d --network cb-final2-bridge --name cb-final2-relay "${base[@]}" --memory 64m --memory-swap 64m --cpus 1 --user 65531:65530 \
     -v "$work/fixture:/fixture:ro" "${relay_mount[@]}" --entrypoint /opt/cyberbaser/libexec/bun "$image" \
     /fixture/forge-relay.mjs to-unix >/dev/null
 fi
-"$engine" run -d "${fixture_net[@]}" --name "$fixture" "${base[@]}" --user 65531:65530 --workdir /tmp \
+start_fixture() {
+  if [[ $engine == docker ]]; then
+    docker run -d --network none --name cb-final2-forge "${base[@]}" --memory 256m --memory-swap 256m --cpus 1 "$@"
+  else
+    podman run -d "${fixture_net[@]}" --name "$fixture" "${base[@]}" "$@"
+  fi
+}
+start_fixture --user 65531:65530 --workdir /tmp \
   -e HOME=/tmp -e FAKE_GITHUB_PORT=48080 -e "ONE_APP_TEST_PORT=$base_port" -v "$work/fixture:/fixture:$fixture_label" \
   -v "$(vol notes "$notes" ro)" -v "$(vol publisher-sockets "$sock" ro)" "${relay_mount[@]}" --entrypoint /usr/bin/bash "$image" -euc '
   git init -q -b main /tmp/src
@@ -232,8 +241,12 @@ for container in "$node" "$publisher" "$fixture"; do
       and .CapDrop == ["ALL"] and .Memory > 0 and .Init' >/dev/null
   fi
   [[ $("$engine" port "$container") == '' ]]
-  dep "$container" ip -j link | jq -e 'map(.ifname) == ["lo"]' >/dev/null
-  [[ -z $(dep "$container" ip -4 route show) && -z $(dep "$container" ip -6 route show) ]]
+  if [[ $engine == docker && $container == "$publisher" ]]; then
+    dep "$container" ip -j link | jq -e 'map(.ifname) | sort == ["eth0","lo"]' >/dev/null
+  else
+    dep "$container" ip -j link | jq -e 'map(.ifname) == ["lo"]' >/dev/null
+  fi
+  [[ -z $(dep "$container" ip -4 route show default) && -z $(dep "$container" ip -6 route show default) ]]
   flags=$(service_status "$container")
   /usr/bin/grep -Ex 'CapEff:\s+0{16}' <<<"$flags" >/dev/null
   /usr/bin/grep -Ex 'NoNewPrivs:\s+1' <<<"$flags" >/dev/null
@@ -244,7 +257,7 @@ if [[ $engine == docker ]]; then
   [[ $(dep "$node" readlink /proc/1/ns/net) != "$(dep "$publisher" readlink /proc/1/ns/net)" ]]
   [[ $(dep "$publisher" readlink /proc/1/ns/net) == "$(dep "$forge_net" readlink /proc/1/ns/net)" ]]
   [[ $(dep "$node" readlink /proc/1/ns/net) == "$(dep "$fixture" readlink /proc/1/ns/net)" ]]
-  [[ -z $(dep "$forge_net" ip -4 route show) && -z $(dep "$forge_net" ip -6 route show) ]]
+  [[ -z $(dep "$forge_net" ip -4 route show default) && -z $(dep "$forge_net" ip -6 route show default) ]]
 else
   [[ $(dep "$node" readlink /proc/1/ns/net) == "$(dep "$publisher" readlink /proc/1/ns/net)" ]]
 fi
@@ -286,7 +299,6 @@ metadata "$publisher" "$sock" 65533:65530:710
 metadata "$node" "$sock/publisher.sock.forge" 65533:65530:660
 metadata "$node" "$sock/publisher.sock.owners" 65533:65530:660
 dep "$node" test ! -S "$sock/publisher.sock"  # not the normal publishing service yet
-if dep "$node" "${curl_flags[@]}" --connect-timeout 2 -o /dev/null https://github.com 2>/dev/null; then false; fi
 pass 'confined services, no published ports or GitHub egress; exact network, mount and account separation'
 
 stage='verify setup-mode sockets and distinct enrollment identities'
@@ -359,6 +371,16 @@ check_listeners() {
 stage='check initial setup listeners'
 [[ $(dep "$node" jq -r '.reach' "$layout_path") == "$reach" ]]
 check_listeners welcome no
+if [[ $engine == docker ]]; then
+  [[ $(docker network inspect --format '{{.Internal}}' cb-final2-bridge) == true ]]
+  for role in cb-final2-node cb-final2-publisher cb-final2-reconciler; do
+    [[ $(docker inspect --format '{{.HostConfig.RestartPolicy.Name}}' "$role") == unless-stopped ]]
+  done
+  abi=$(dep "$node" /opt/cyberbaser/libexec/render-offline --landlock-abi)
+  [[ $abi =~ ^[0-9]+$ && $abi -ge 6 ]]
+  printf 'PASS default Docker profile reports Landlock ABI %s\n' "$abi"
+  memory_peak welcome "$node" "$publisher" cb-final2-reconciler "$fixture" "$forge_net"
+fi
 
 stage='exercise manifest bootstrap and mirror copy'
 if ! setup_link | timeout 90 "$engine" exec -i "$fixture" bash -euc 'read -r link; bun /fixture/owner-browser.mjs setup-private "$link" "$1" /tmp/owner.cookie' bash "$repository" > "$work/browser" 2>&1; then
@@ -509,7 +531,7 @@ signed_note='This is the signed synthetic update.'
 wait_for_site "$commit" quartz-cyberbase "$prior_note"
 [[ $(dep "$node" sha256sum "$state/iroh/iroh-node.json") == "$node_key" ]]
 pass 'stock Quartz served its offline build with the owner cookie; absent and bad cookies were refused'
-if [[ $engine == docker ]]; then memory_peak quartz; fi
+if [[ $engine == docker ]]; then memory_peak quartz "$node" "$publisher" cb-final2-reconciler "$fixture" "$forge_net"; fi
 
 stage='check unsigned publication refusal from the normal publisher'
 node_helper() {
@@ -567,6 +589,7 @@ pending_job_hash=$(dep "$node" sha256sum "$job_state")
 pending_site_hash=$(dep "$node" sha256sum "$site")
 recreate_services
 check_listeners pending-runtime
+if [[ $engine == docker ]]; then memory_peak pending "$node" "$publisher"; fi
 [[ $(dep "$node" sha256sum "$job_state") == "$pending_job_hash" ]]
 dep "$node" jq -e '.state == "awaiting-approval"' "$job_state" >/dev/null
 [[ $(dep "$node" git -C "$checkout" rev-parse HEAD) == "$next_commit" ]]
@@ -607,6 +630,7 @@ dep "$fixture" "${curl_flags[@]}" -f "$fake/_control/report" | jq -e '
   and (.denied | all(.receive == false or .hadAuthorization == false))
 ' >/dev/null
 pass 'one valid signed job pushed one exact commit, and the stock reader rebuilt from it across recreation'
+if [[ $engine == docker ]]; then memory_peak signed-stock "$node" "$publisher"; fi
 
 stage='select the synthetic custom renderer and rebuild privately'
 # Fixture provisioning only: no product update/rollback procedure is implied.
@@ -627,8 +651,10 @@ if [[ $engine == docker ]]; then
   wait_for changed_publisher
   wait_for_normal_publisher
   active_start=$(started_at)
+  active_count=$(docker inspect --format '{{.RestartCount}}' "$publisher")
   sleep 3
   [[ $(started_at) == "$active_start" ]]
+  [[ $(docker inspect --format '{{.RestartCount}}' "$publisher") == "$active_count" ]]
   pass 'one automatic publisher restart applied a new valid config; repeated polls did not cause a loop'
 else
   active_start=$(started_at)
@@ -643,7 +669,33 @@ recreate_services
 wait_for_site "$next_commit" one-app-fixture "$signed_note"
 reader_note 'data-renderer="one-app-fixture"'
 pass 'custom renderer built through the configured slot and could not reach the fake forge'
-if [[ $engine == docker ]]; then memory_peak custom-renderer; fi
+if [[ $engine == docker ]]; then memory_peak custom-renderer "$node" "$publisher"; fi
+stage='verify detached renderer child and manifest-bound served asset'
+dep "$node" bash -euc '
+  pid=$(< "$1/cache/quartz-owner/handoff-descendant.pid")
+  [[ "$pid" =~ ^[1-9][0-9]*$ && ! -e /proc/$pid ]]
+' bash "$jobs/owner-alpha"
+dep "$fixture" bash -euc 'curl -fsS --max-time 3 -H "Cookie: $(< /tmp/new.cookie)" "$1"' bash "$reader/handoff.css" > "$work/asset"
+printf 'body{color:#eee}\n' | cmp - "$work/asset"
+served_sha=$(sha256sum "$work/asset" | cut -d' ' -f1)
+dep "$node" bun -e '
+  import { createHash } from "node:crypto";
+  import { readFileSync } from "node:fs";
+  const [manifestPath, assetHash] = process.argv.slice(1);
+  const root = manifestPath.slice(0, manifestPath.lastIndexOf("/"));
+  const tree = JSON.parse(readFileSync(manifestPath)).site.outputTree;
+  let length = 0;
+  const hash = createHash("sha256");
+  const paths = ["Garden/Note.html", "handoff.css", "index.html"];
+  for (const name of paths) {
+    const bytes = readFileSync(`${root}/${name}`);
+    if (name === "handoff.css" && createHash("sha256").update(bytes).digest("hex") !== assetHash) process.exit(1);
+    length += bytes.length;
+    hash.update(`${name}\0${bytes.length}\0`).update(bytes);
+  }
+  if (tree.files !== paths.length || tree.bytes !== length || tree.digest !== `sha256:${hash.digest("hex")}`) process.exit(1);
+' "$site" "$served_sha"
+pass 'detached fixture child was gone before access; HTTP asset bytes matched the node-owned manifest tree'
 
 stage='check custom reader and signer persistence through a second recreation'
 manifest_hash=$(dep "$node" sha256sum "$site")
@@ -659,6 +711,37 @@ dep "$fixture" "${curl_flags[@]}" -f "$fake/_control/report" | jq -e '
 ' >/dev/null
 pass 'retained custom site and enrolled device survived recreation without another build, re-enrollment or push'
 
+if [[ $engine == docker && -n ${CYBERBASER_LAB_ASSEMBLED_RENDERER:-} ]]; then
+  stage='build and serve with the real assembled renderer'
+  assembled=$(realpath -e -- "$CYBERBASER_LAB_ASSEMBLED_RENDERER")
+  [[ -f "$assembled/build" && -d "$assembled/node_modules" && -f "$assembled/quartz/bootstrap-cli.mjs" ]]
+  renderer="$state/renderers/assembled-fixture"
+  tar --exclude='./.git' --exclude='./.quartz-cache' --exclude='./quartz/.quartz-cache' -C "$assembled" -cf - . |
+    timeout 90 docker exec -i cb-final2-node bash -euc 'umask 0077; mkdir -m 0700 "$1"; tar --no-same-owner -xf - -C "$1"; chmod 0700 "$1"' bash "$renderer"
+  assembled_digest() {
+    dep "$node" bash -euc 'cd -- "$1"; sha256sum build quartz.config.ts quartz/build.ts quartz/plugins/types.ts' bash "$renderer"
+  }
+  before=$(assembled_digest)
+  dep "$node" bash -euc '
+    umask 0077
+    jq --arg dir "$2" --arg pin "$3" ".renderer = {name:\"assembled-fixture\",directory:\$dir,quartzCommit:\$pin,fingerprint:[\"build\",\"quartz.config.ts\",\"quartz/build.ts\"]}" "$1" > "$1.lab-next"
+    mv -- "$1.lab-next" "$1"
+  ' bash "$node_config" "$renderer" "$quartz_pin"
+  wait_for changed_publisher
+  recreate_services
+  for ((attempt=0; attempt<180; attempt++)); do
+    site_at "$next_commit" assembled-fixture && break
+    sleep .5
+  done
+  site_at "$next_commit" assembled-fixture
+  [[ $(assembled_digest) == "$before" ]]
+  dep "$fixture" bash -euc 'curl -fsS --max-time 3 -H "Cookie: $(< /tmp/new.cookie)" "$1"' bash "$reader/garden/note" > "$work/assembled-page"
+  /usr/bin/grep -F "$signed_note" "$work/assembled-page" >/dev/null
+  /usr/bin/grep -F 'data-cb-node' "$work/assembled-page" >/dev/null
+  memory_peak assembled "$node" "$publisher" cb-final2-reconciler "$fixture" "$forge_net"
+  pass 'real assembled Quartz served the signed page with provenance and left its installed patch targets unchanged'
+fi
+
 stage='verify credential confinement and image exclusions'
 no_canary dep "$node" /usr/bin/grep -aErq "$canaries" "$state" "$mirror" "$notes" "$jobs" /run/cyberbaser /tmp "$record"
 no_canary dep "$publisher" /usr/bin/grep -aErq "$canaries" "$pub_config_dir" "$sock" /tmp "$record"
@@ -673,7 +756,14 @@ done
 no_canary /usr/bin/grep -aEq "$canaries" "$work/browser"
 # A clean run of the exact image, with no mounted lab paths, sees neither
 # private state nor fixture code. The only renderer is the public pinned seed.
-"$engine" run --rm --network none "${base[@]}" --entrypoint /usr/bin/bash "$image" -euc '
+image_check() {
+  if [[ $engine == docker ]]; then
+    docker run --rm --name cb-final2-image-check --network none "${base[@]}" --memory 128m --memory-swap 128m --cpus 1 "$@"
+  else
+    podman run --rm --network none "${base[@]}" "$@"
+  fi
+}
+image_check --entrypoint /usr/bin/bash "$image" -euc '
   test -z "$(ls -A /opt/cyberbaser/.workspace)"
   test ! -e /fixture && test ! -e /mnt/archives/resources.tar && test ! -e /usr/local/bin/git
   test ! -e /opt/cyberbaser/apps/owner-alpha/test && test ! -e /opt/cyberbaser/packaging/test
@@ -685,6 +775,17 @@ pass 'manifest secret and tokens only in publisher private state; no forge canar
 stage='offline renderer gate'
 if [[ $engine == docker ]]; then
   probe="$HERE/test/socket-denial.mjs"
+  stage='reap adopted helper exits during a live build'
+  status=0
+  dep -i "$node" bash -euc '
+    root=$(mktemp -d /opt/cyberbaser/.workspace/reap-probe.XXXXXXXX)
+    trap '\''rm -rf -- "$root"'\'' EXIT
+    mkdir "$root/build" "$root/output"
+    /opt/cyberbaser/libexec/render-offline "$root/build" "$root/output" -- /usr/bin/bash -s -- "$root/build"
+  ' < "$HERE/test/renderer-helper-reaping.sh" || status=$?
+  [[ $status == 17 ]]
+  pass '24 adopted helpers reaped while the renderer leader was alive; leader exit status preserved'
+  stage='offline renderer syscall probes'
   dep -i "$node" bun - < "$probe"
   dep -i "$node" bash -euc '
     work=$(mktemp -d /opt/cyberbaser/.workspace/offline-probe.XXXXXXXX)

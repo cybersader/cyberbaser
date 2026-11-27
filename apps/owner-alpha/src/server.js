@@ -3083,6 +3083,8 @@ if (import.meta.main) {
   process.once('SIGINT', () => { void stopForSignal(); });
 
   try {
+    const { rendererLauncher } = await import('./renderer-isolation.js');
+    await rendererLauncher();
     runtime = await runOwnerAlphaServer({ configFile });
     if (runtime.upstream?.current().state === 'unreachable') console.log('GitHub: cannot reach it now; serving your notes as last copied.');
     // The sign-in link is printed before job recovery finishes: a job waiting

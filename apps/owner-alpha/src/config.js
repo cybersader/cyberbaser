@@ -565,8 +565,10 @@ function validateWorkspace(value) {
     }
     return [key, candidate];
   }));
-  if (new Set(Object.values(children)).size !== Object.keys(children).length) {
-    fail('invalid-config-path', '$.workspace.store, site, and cache must be distinct paths');
+  const directories = Object.values(children);
+  if (directories.some((a, i) => directories.slice(i + 1).some((b) =>
+    a === b || isStrictlyWithin(a, b) || isStrictlyWithin(b, a)))) {
+    fail('invalid-config-path', '$.workspace.store, site, and cache must be disjoint directory trees');
   }
   return { root, ...children };
 }

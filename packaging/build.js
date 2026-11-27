@@ -21,6 +21,7 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--target' && argv[i + 1]) options.target = argv[++i];
     else if (argv[i] === '--outfile' && argv[i + 1]) options.outfile = path.resolve(argv[++i]);
+    else if (argv[i] === '--renderer-launcher-only') options.launcherOnly = true;
     else if (argv[i] === '--entry' && argv[i + 1]) options.entry = path.resolve(argv[++i]);
     else throw new Error(`unknown argument: ${argv[i]}`);
   }
@@ -80,13 +81,18 @@ export async function packResources(file = RESOURCES_TAR) {
   return { file, files: names.length + 1 };
 }
 
-export async function buildProgram({ target = null, outfile, entry = ENTRY } = {}) {
-  await mkdir(path.dirname(outfile), { recursive: true });
+export async function buildRendererLauncher() {
   await mkdir(path.dirname(RENDER_LAUNCHER), { recursive: true });
   const compiler = Bun.spawnSync(['cc', '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror', '-fPIE', '-pie',
     '-fstack-protector-strong', '-Wl,-z,relro,-z,now',
     path.join(REPO, 'deploy/owner-alpha/one-app/render-offline.c'), '-o', RENDER_LAUNCHER], { stderr: 'inherit' });
   if (compiler.exitCode !== 0) throw new Error('renderer launcher compile failed');
+  return RENDER_LAUNCHER;
+}
+
+export async function buildProgram({ target = null, outfile, entry = ENTRY } = {}) {
+  await mkdir(path.dirname(outfile), { recursive: true });
+  await buildRendererLauncher();
   await packResources();
   const started = performance.now();
   const result = await Bun.build({
@@ -106,6 +112,10 @@ export async function buildProgram({ target = null, outfile, entry = ENTRY } = {
 
 if (import.meta.main) {
   const options = parseArgs(process.argv.slice(2));
+  if (options.launcherOnly) {
+    console.log(`built ${path.relative(process.cwd(), await buildRendererLauncher())}`);
+    process.exit(0);
+  }
   const { outfile, milliseconds } = await buildProgram(options);
   const written = existsSync(outfile) ? outfile : `${outfile}.exe`;
   const size = Bun.file(written).size;

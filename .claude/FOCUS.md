@@ -2,7 +2,9 @@
 
 > Update when direction changes, milestones complete, or priorities shift.
 
-**Private site renderer handoff hardened, 2026-11-26:** native and container builds reap the renderer tree before the node copies bounded regular files to private inodes for validation and promotion. Private reads use pinned directory descriptors. This is local fixture evidence; no updated image or install has been exercised. Record: `agent-context/zz-log/2026-11-26-renderer-output-handoff.mdx`.
+**Private renderer workspaces hardened, 2026-11-26:** bundled and configured renderers build in disposable copies; source-only dependency bootstrap and native upgrade probing stay outside renderer write grants and run before touching installed services. Store, site and cache must be disjoint. Native assembled Quartz and targeted tests passed locally. The release and appliance gates are separate. Record: `agent-context/zz-log/2026-11-26-renderer-workspace-isolation.mdx`.
+
+**Private site renderer handoff hardened, 2026-11-26:** native and container builds reap the renderer tree before the node copies bounded regular files to private inodes for validation and promotion. Private reads use pinned directory descriptors. Historical local fixture checkpoint: `agent-context/zz-log/2026-11-26-renderer-output-handoff.mdx`.
 
 **TrueNAS release hardening, 2026-11-26:** publisher enrollment is UID-allowlisted and never logged; the TrueNAS publisher uses its own bridge and an admin-only code handoff. The offline renderer requires Landlock ABI 6 in addition to seccomp, and the private reader requires the owner session. The actual appliance must pass the operator preflight before install. Record: `agent-context/zz-log/2026-11-26-truenas-release-hardening.mdx`.
 

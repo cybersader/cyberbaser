@@ -23,3 +23,18 @@ await mkdir(path.join(out, 'Garden'), { recursive: true });
 await writeFile(path.join(out, 'index.html'), html('<a href="./Garden/Note">Lab note</a>'));
 await writeFile(path.join(out, 'Garden/Note.html'), html(`<h1>Lab note</h1><p>${Bun.escapeHTML(text.split('\n').at(-1))}</p>`));
 JS
+
+# The detached fixture does no writes after publishing its PID. The harness
+# checks that it was reaped before serving the manifest-bound asset bytes.
+printf 'body{color:#eee}\n' > "$2/handoff.css"
+witness="$PWD/handoff-descendant.pid"
+rm -f -- "$witness"
+/usr/bin/setsid /usr/bin/bash -euc '
+  printf "%s\n" "$$" > "$1"
+  exec /usr/bin/sleep 30
+' fixture "$witness" </dev/null >/dev/null 2>&1 &
+for ((i=0; i<200; i++)); do
+  if [[ -s "$witness" ]]; then exit 0; fi
+  /usr/bin/sleep .01
+done
+exit 1
